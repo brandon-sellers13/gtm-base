@@ -1,6 +1,8 @@
 # Changelog
 
-## 0.1.0
+## 0.1.1 (2026-09-06)
+
+- The refusal sentence shows the plugin's own fixed phrases as written; only file names taken from a diff are sanitized (the live gate had printed "the?command").
 
 - Manifest no longer names hooks/hooks.json; Claude Code loads that file on its own and refused the plugin when it was named twice (found on the first live install, 2026-09-06). The offer and the join guide now say to type the answer as the first message.
 
@@ -44,7 +46,7 @@ Correctness review fixes (C1, C2, C3, C4, C5, C6, C7, and SEC-5).
   boundary a document put off for now uses; and a joined base cannot be pointed
   at a folder another base already claims.
 
-## 0.1.0
+## 0.1.0 (2026-09-05)
 
 Security review fixes (SEC-1, SEC-2, SEC-3, SEC-4, SEC-6, SEC-7, SEC-8, SEC-9,
 SEC-10, SEC-11, SEC-12, and C8): the check that reads a command now strips
@@ -100,7 +102,6 @@ session asks.
 - The question the hook adds to a session now names the script and says the
   confirmations folder is never written by hand.
 
-## 0.1.0
 
 Unit 9b, the stale check a person runs and the four week report.
 
@@ -148,7 +149,6 @@ Unit 9b, the stale check a person runs and the four week report.
   prepares anything ask the same question in one place, so they cannot disagree
   about whether the first send from a base has been reviewed.
 
-## 0.1.0
 
 Unit 7, turning a staged change into a review the team can read.
 
@@ -183,7 +183,6 @@ Unit 7, turning a staged change into a review the team can read.
 - Added the decision itself to `templates/proposal-staging.md`, which carried
   only its settings before and so could never have produced a usable entry.
 
-## 0.1.0
 
 Unit 3, what happens at the start of a session.
 

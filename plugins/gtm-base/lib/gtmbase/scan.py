@@ -52,13 +52,19 @@ ALLOWLIST_REJECTED = "allowlist-rejected"
 class Hit(object):
     """One thing the scan refuses, named by class and by where it was found."""
 
-    __slots__ = ("pattern_class", "label", "line_number", "context")
+    __slots__ = ("pattern_class", "label", "line_number", "context", "is_path")
 
-    def __init__(self, pattern_class: str, line_number: int, context: str):
+    def __init__(
+        self, pattern_class: str, line_number: int, context: str, is_path: bool = False
+    ):
         self.pattern_class = pattern_class
         self.label = redaction_patterns.label_for(pattern_class)
         self.line_number = line_number
         self.context = context
+        # A context taken from a file name in a diff is repository-controlled
+        # and is sanitized before it is repeated back. A fixed phrase the
+        # plugin wrote itself ("the command") is shown as it is.
+        self.is_path = is_path
 
     def __repr__(self) -> str:
         return "Hit(class=%r, context=%r, line=%r)" % (
@@ -69,7 +75,10 @@ class Hit(object):
 
     def sentence(self) -> str:
         """The one sentence a person is shown. It never holds the value."""
-        where = safe_path(self.context) if self.context else "the command"
+        if self.is_path:
+            where = safe_path(self.context)
+        else:
+            where = self.context or "the command"
         if self.pattern_class == redaction_patterns.TRANSIENT_FOLDER:
             return (
                 "GTM Base stopped this because %s is %s." % (where, self.label)
@@ -238,7 +247,7 @@ def scan_diff_added_lines(
             exempt = _exempt_classes_for(path)
             is_markdown = path.endswith(".md")
             if transient:
-                hits.append(Hit(redaction_patterns.TRANSIENT_FOLDER, 0, path))
+                hits.append(Hit(redaction_patterns.TRANSIENT_FOLDER, 0, path, True))
             continue
         if raw.startswith("--- "):
             continue
@@ -259,9 +268,11 @@ def scan_diff_added_lines(
                 and _OWNER_LINE.match(content)
             ):
                 line_exempt = tuple(line_exempt) + (redaction_patterns.EMAIL,)
-            hits.extend(
-                _scan_line(content, line_number, path or "the change", allowlist, line_exempt)
-            )
+            for hit in _scan_line(
+                content, line_number, path or "the change", allowlist, line_exempt
+            ):
+                hit.is_path = path is not None
+                hits.append(hit)
             continue
         if raw.startswith("-"):
             continue
