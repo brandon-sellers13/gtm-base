@@ -7,7 +7,7 @@ it is still right.
 
 ## Status
 
-Version 0.1.2 is the scaffold plus the check that runs before anything leaves
+Version 0.1.3 is the scaffold plus the check that runs before anything leaves
 the computer. `hooks/hooks.json` declares the check on the command tool and the
 work done at the start of a session; no skills or agents ship yet, and the
 manifest declares no MCP servers by design. The plugin never connects to a

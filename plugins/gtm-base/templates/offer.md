@@ -13,14 +13,23 @@ answer here as your first message.
 Say "set up my company base" whenever you are ready.
 
 [[block: context]]
-GTM Base has just shown this person a setup offer on screen. Read their next
-answer as the answer to that offer.
+GTM Base is installed on this computer and no company base exists yet. The
+person may or may not have seen the setup offer below on screen, so their
+first message decides what to do.
 
 - A plain yes, or "set up", means they want a company base of their own.
 - "join" means someone sent them a link to a base that already exists.
-- "not now", or no answer at all, means they do not want it now. Say exactly
-  this sentence back to them and nothing more:
+- "not now" means they do not want it now. Say exactly this sentence back to
+  them and nothing more:
   Say "set up my company base" whenever you are ready.
+- Anything else (a greeting, a question, ordinary work) means they have not
+  seen the offer. Say this to them first, in these words, then help with
+  whatever they asked:
+  GTM Base is installed. It can set up a company base for you, which is one
+  folder holding your strategy, your numbers, and the decisions behind them, in
+  a form your AI can read at the start of every session. Say yes and it will
+  walk you through it, tell it you have an invite link and it will join the
+  base someone else already made, or say not now and it will stay quiet.
 
 Setting up a base is not part of this release yet. If they say yes, tell them
 plainly that setup arrives with the next release and that nothing on their

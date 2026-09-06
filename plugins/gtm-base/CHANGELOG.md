@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.1.3 (2026-09-06)
+
+- Live finding: the desktop app renders neither a hook's combined output nor its systemMessage alone; only the assistant's context arrives. A first message that is not an answer to the offer (a greeting, a question) now gets the offer text in the reply instead of the restart sentence. The on-screen half of J1 is recorded as a platform limitation for now.
+
 ## 0.1.2 (2026-09-06)
 
 - The check now follows a command that moves itself into another folder before it sends anything: a folder change before a send, or a send from a folder that is not a base at all, was not read. What a send would carry is read in the folder in force at that point, a folder change the check cannot follow refuses everything after it, and a send whose folder cannot be read is refused rather than allowed.
