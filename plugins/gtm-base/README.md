@@ -23,11 +23,11 @@ in your own client.
 
 ## Note on the repository field
 
-The manifest's `repository` value points at
-`https://github.com/brandon-sellers13/gtm-base`. That address is a placeholder. The
-remote repository has not been created yet, so the link does not resolve. It is
-recorded now so the manifest, the marketplace entry, and the pinned settings
-file in `templates/company-base/.claude/settings.json` all name the same place.
+The manifest's `repository` value, the marketplace entry, and the pinned settings
+file in `templates/company-base/.claude/settings.json` all name the same public
+repository, `https://github.com/brandon-sellers13/gtm-base`. The settings file
+pins one exact version by its 40-character id; the release step replaces the
+placeholder id with a real one.
 
 ## Library
 
