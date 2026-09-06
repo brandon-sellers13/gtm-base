@@ -290,12 +290,74 @@ class TestReadingASend(unittest.TestCase):
         class the command line itself is not read for.
         """
         with Sandbox() as box:
+            root, _base_id = box.base(name="Users/me/base")
+            self.assertIn("/Users/me/base", root)
+            git(["checkout", "-q", "-b", "feature"], cwd=root)
+            commit(root, "context/metrics/notes.md", [CLEAN_LINE])
+            self.assertIsNone(
+                check("cd %s && git push origin feature" % root, box.path)
+            )
+
+    def test_a_send_after_a_folder_change_is_read_in_that_folder(self):
+        with Sandbox() as box:
+            root, _base_id = box.base()
+            commit(root, "context/metrics/notes.md", ["mail jane@acme.com"])
+            reason = check("cd %s && git push origin main" % root, box.path)
+            self.assertIn("an email address", reason or "")
+            self.assertNotIn("jane@acme.com", reason)
+
+    def test_a_folder_change_written_the_short_way_is_followed_too(self):
+        with Sandbox() as box:
+            root, _base_id = box.base()
+            commit(root, "context/metrics/notes.md", ["mail jane@acme.com"])
+            self.assertEqual(os.path.join(box.path, "base"), root)
+            reason = check("cd base && git push origin main", box.path)
+            self.assertIn("an email address", reason or "")
+
+    def test_a_folder_change_holds_for_every_part_after_it(self):
+        with Sandbox() as box:
+            root, _base_id = box.base()
+            commit(root, "context/metrics/notes.md", ["mail jane@acme.com"])
+            command = "cd %s && git status && git push origin main" % root
+            self.assertIn("an email address", check(command, box.path) or "")
+
+    def test_a_send_from_a_folder_that_is_not_a_base_at_all_is_refused(self):
+        with Sandbox() as box:
+            plain = os.path.join(box.path, "plain")
+            os.makedirs(plain)
+            self.assertEqual(
+                gate.sentence_for(gate.REASON_UNREADABLE),
+                check("git push origin main", plain),
+            )
+
+    def test_a_folder_change_the_check_cannot_follow_is_refused(self):
+        with Sandbox() as box:
+            root, _base_id = box.base()
+            commit(root, "context/metrics/notes.md", [CLEAN_LINE])
+            for command in (
+                "cd - && git push origin main",
+                "cd $HOME/base && git push origin main",
+                "cd one two && git push origin main",
+            ):
+                self.assertIn(
+                    "could not tell what this command does",
+                    check(command, root) or "",
+                    command,
+                )
+
+    def test_a_clean_send_after_a_folder_change_is_allowed(self):
+        with Sandbox() as box:
             root, _base_id = box.base()
             git(["checkout", "-q", "-b", "feature"], cwd=root)
             commit(root, "context/metrics/notes.md", [CLEAN_LINE])
             self.assertIsNone(
-                check("cd /Users/me/base && git push origin feature", root)
+                check("cd %s && git push origin feature" % root, box.path)
             )
+
+    def test_a_folder_change_on_its_own_is_left_alone(self):
+        with Sandbox() as box:
+            root, _base_id = box.base()
+            self.assertIsNone(check("cd %s" % root, box.path))
 
     def test_a_send_from_a_working_folder_under_the_seat_folder_is_allowed(self):
         with Sandbox() as box:
@@ -516,6 +578,7 @@ class TestTheSessionConditions(unittest.TestCase):
 class TestTheSizeCaps(unittest.TestCase):
     def test_a_change_larger_than_the_cap_is_refused_without_being_read(self):
         runner = FakeGitRunner()
+        runner.add(["rev-parse", "--show-toplevel"], stdout="/base\n")
         runner.add(
             ["diff", "%s..HEAD" % gate.EMPTY_TREE, "--stat", "--no-color"],
             stdout=" a file | 2 +\n 1 file changed, 900000 insertions(+), 5 deletions(-)\n",
@@ -530,6 +593,7 @@ class TestTheSizeCaps(unittest.TestCase):
 
     def test_more_saved_work_than_the_check_can_read_is_refused(self):
         runner = FakeGitRunner()
+        runner.add(["rev-parse", "--show-toplevel"], stdout="/base\n")
         runner.add(
             [
                 "rev-list",

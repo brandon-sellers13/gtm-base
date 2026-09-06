@@ -2,6 +2,8 @@
 
 ## 0.1.1 (2026-09-06)
 
+- The check now follows a command that moves itself into another folder before it sends anything: a folder change before a send, or a send from a folder that is not a base at all, was not read. What a send would carry is read in the folder in force at that point, a folder change the check cannot follow refuses everything after it, and a send whose folder cannot be read is refused rather than allowed.
+
 - The refusal sentence shows the plugin's own fixed phrases as written; only file names taken from a diff are sanitized (the live gate had printed "the?command").
 
 - Manifest no longer names hooks/hooks.json; Claude Code loads that file on its own and refused the plugin when it was named twice (found on the first live install, 2026-09-06). The offer and the join guide now say to type the answer as the first message.

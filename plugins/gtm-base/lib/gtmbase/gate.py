@@ -45,6 +45,7 @@ MODE_GIT_HOOK = "git-hook"
 
 # The reasons a refusal can carry. The gate never invents free text.
 REASON_UNTOKENIZABLE = "untokenizable"
+REASON_UNREADABLE = "unreadable-range"
 REASON_DENIED_COMMAND = "denied-command"
 REASON_NO_VERIFY = "no-verify"
 REASON_FORCE_DEFAULT = "force-to-default-branch"
@@ -64,6 +65,10 @@ SENTENCES = {
     REASON_UNTOKENIZABLE: (
         "GTM Base could not tell what this command does with the shared copy, "
         "so it was not run."
+    ),
+    REASON_UNREADABLE: (
+        "GTM Base could not read what this command would send, so it was not "
+        "run."
     ),
     REASON_SEAT_FOLDER: (
         "GTM Base keeps its own records in a folder that commands are not "
@@ -161,10 +166,12 @@ _QUOTING = re.compile(r"[\\'\"]")
 # The words a part of a command may start with without being read any further.
 # Anything outside this set, in a command that names git or GitHub, is refused.
 _INERT_WORDS = (
-    "echo", "printf", "cat", "ls", "cd", "pwd", "test", "[", "true", "false",
-    "head", "tail", "grep", "wc", "sort", "sed", "awk", "mkdir", "touch",
-    "cp", "mv",
+    "echo", "printf", "cat", "ls", "cd", "pushd", "pwd", "test", "[", "true",
+    "false", "head", "tail", "grep", "wc", "sort", "sed", "awk", "mkdir",
+    "touch", "cp", "mv",
 )
+# The words that move the rest of the command line into another folder.
+_FOLDER_WORDS = ("cd", "pushd")
 # The two interpreters, allowed only when they are handed a file to run and
 # nothing after that file names git or GitHub.
 _INTERPRETERS = ("python3", "python")
@@ -304,15 +311,21 @@ class PushSpec(object):
 
     __slots__ = (
         "remote", "refspecs", "force", "delete", "all_refs", "tags", "source",
-        "directory",
+        "directory", "folder",
     )
 
     def __init__(self, remote=None, refspecs=None, force=False, delete=False,
-                 all_refs=False, tags=False, source="git-push", directory=None):
+                 all_refs=False, tags=False, source="git-push", directory=None,
+                 folder=None):
         # The folder the send would run in, when the command named one of its
         # own. It starts as the text the command held and is replaced by the
         # real folder once that folder has been checked.
         self.directory = directory
+        # The folder this part of the command line runs in, when an earlier
+        # part moved out of the folder the command was typed in. It is not
+        # named by the send itself, so it is not checked the same way: it is
+        # simply where the send would be read from.
+        self.folder = folder
         self.remote = remote
         self.refspecs = list(refspecs or [])
         self.force = force
@@ -355,6 +368,65 @@ class Classification(object):
             len(self.pushes),
             len(self.gh_writes),
         )
+
+
+class _Folder(object):
+    """The folder each part of one command line would run in.
+
+    A command line can move itself before it sends anything, so the folder a
+    send runs in is not always the folder the command was typed in. This walks
+    that along: it starts where the request said the person is, and every part
+    that changes folder changes it. A change this cannot follow, such as one
+    written with a variable or one that goes back to wherever the last change
+    came from, leaves the folder unknown, and a send from an unknown folder is
+    refused rather than read against the wrong folder.
+    """
+
+    __slots__ = ("path", "start", "unknown")
+
+    def __init__(self, path: Optional[str] = None):
+        self.path = path
+        self.start = path
+        self.unknown = False
+
+    @property
+    def moved(self) -> bool:
+        """Whether the command line has left the folder it was typed in."""
+        return not self.unknown and self.path is not None and self.path != self.start
+
+    def here(self) -> Optional[str]:
+        """The folder to read a send against, or None to use the typed-in one."""
+        return self.path if self.moved else None
+
+    def resolve(self, raw: str) -> str:
+        """One folder name a command held, as a whole path where we can."""
+        candidate = os.path.expanduser(raw)
+        if os.path.isabs(candidate):
+            return os.path.normpath(candidate)
+        if self.path:
+            return os.path.normpath(os.path.join(self.path, candidate))
+        return candidate
+
+    def follow(self, tokens: Sequence[str], has_substitution: bool) -> None:
+        """Read one folder change and move with it, or lose track of it."""
+        word = os.path.basename(tokens[0])
+        arguments = list(tokens[1:])
+        if has_substitution or any("$" in argument for argument in arguments):
+            self.unknown = True
+            return
+        if not arguments:
+            if word == "pushd":
+                # With nothing named it swaps two folders we never saw.
+                self.unknown = True
+                return
+            self.path = os.path.expanduser("~")
+            self.unknown = False
+            return
+        if len(arguments) > 1 or arguments[0] == "-":
+            self.unknown = True
+            return
+        self.path = self.resolve(arguments[0])
+        self.unknown = False
 
 
 def _strip_prefixes(tokens: List[str]) -> Tuple[List[str], List[str]]:
@@ -511,7 +583,10 @@ def _shell_script_argument(tokens: List[str]) -> Optional[str]:
 
 
 def _classify_git(
-    tokens: List[str], result: Classification, directory: Optional[str] = None
+    tokens: List[str],
+    result: Classification,
+    directory: Optional[str] = None,
+    folder: Optional["_Folder"] = None,
 ) -> None:
     result.has_git = True
     index = 1
@@ -565,7 +640,8 @@ def _classify_git(
     if subcommand not in ("push", "send-pack"):
         return
     push = _parse_push(rest, result)
-    push.directory = directory
+    push.directory = folder.resolve(directory) if (directory and folder) else directory
+    push.folder = folder.here() if folder else None
     result.pushes.append(push)
 
 
@@ -677,31 +753,43 @@ def _classify_gh(tokens: List[str], result: Classification) -> None:
         return
 
 
-def classify(command: str, depth: int = 0) -> Classification:
+def classify(
+    command: str, depth: int = 0, cwd: Optional[str] = None
+) -> Classification:
     """Work out what a command line would send, or refuse to guess.
 
     A command that never names git or GitHub is left alone. Once it does name
     one of them, every part of it has to be accounted for: a part whose first
     word is neither of them and is not on the short harmless list is refused,
     rather than read as though it did nothing.
+
+    The parts are read in the order they run, because a part that changes
+    folder changes where every part after it would send from.
     """
     result = Classification()
     if depth > 3:
         result.deny(REASON_UNTOKENIZABLE)
         return result
     strict = mentions_git_or_gh(command)
+    folder = _Folder(cwd)
     for segment in split_segments(command):
-        _classify_segment(segment, result, depth, strict)
+        _classify_segment(segment, result, depth, strict, folder)
     return result
 
 
 def _classify_segment(
-    segment: str, result: Classification, depth: int, strict: bool
+    segment: str,
+    result: Classification,
+    depth: int,
+    strict: bool,
+    folder: Optional["_Folder"] = None,
 ) -> None:
     """Read one simple command, and every command written inside it."""
+    if folder is None:
+        folder = _Folder(None)
     bodies, remainder = _substitution_bodies(segment)
     for body in bodies:
-        _merge(result, classify(body, depth + 1))
+        _merge(result, classify(body, depth + 1, cwd=folder.path))
     try:
         tokens = shlex.split(remainder, posix=True)
     except ValueError:
@@ -714,17 +802,29 @@ def _classify_segment(
         return
     script = _shell_script_argument(tokens)
     if script is not None:
-        _merge(result, classify(script, depth + 1))
+        # A shell of its own starts where this part does and ends there too,
+        # so a folder change inside it is not carried out to what follows.
+        _merge(result, classify(script, depth + 1, cwd=folder.path))
         return
     tokens = _strip_xargs(tokens)
     if not tokens:
         return
     word = os.path.basename(tokens[0])
-    if word == "git":
-        _classify_git(tokens, result, directory)
-    elif word == "gh":
-        _classify_gh(tokens, result)
-    elif strict and not _is_inert(tokens):
+    if word in _FOLDER_WORDS:
+        folder.follow(tokens, bool(bodies))
+        return
+    if word in ("git", "gh"):
+        if folder.unknown:
+            # We lost track of the folder, so we cannot read what this would
+            # send. It is refused rather than read against the wrong folder.
+            result.deny(REASON_UNTOKENIZABLE)
+            return
+        if word == "git":
+            _classify_git(tokens, result, directory, folder)
+        else:
+            _classify_gh(tokens, result)
+        return
+    if strict and not _is_inert(tokens):
         result.deny(REASON_UNTOKENIZABLE)
 
 
@@ -839,7 +939,8 @@ def _stat_estimate_bytes(git: GitRunner, cwd: str, start: str, end: str) -> int:
     return lines * ESTIMATED_BYTES_PER_LINE
 
 
-def _diff_text(git: GitRunner, cwd: str, start: str, end: str) -> str:
+def _diff_text(git: GitRunner, cwd: str, start: str, end: str) -> Optional[str]:
+    """The change one range would send, or None when git could not read it."""
     result = git.run(
         [
             "diff",
@@ -862,17 +963,18 @@ def _diff_text(git: GitRunner, cwd: str, start: str, end: str) -> str:
             ],
             cwd=cwd,
         )
-    return result.stdout if result.ok else ""
+    return result.stdout if result.ok else None
 
 
-def _messages_text(git: GitRunner, cwd: str, start: str, end: str) -> str:
+def _messages_text(git: GitRunner, cwd: str, start: str, end: str) -> Optional[str]:
+    """The saved notes one range would send, or None when they cannot be read."""
     if start == EMPTY_TREE:
         result = git.run(
             ["log", end, "--format=%B", "--max-count=%d" % MAX_PUSH_COMMITS], cwd=cwd
         )
     else:
         result = git.run(["log", "%s..%s" % (start, end), "--format=%B"], cwd=cwd)
-    return result.stdout if result.ok else ""
+    return result.stdout if result.ok else None
 
 
 def _commit_count(git: GitRunner, cwd: str, start: str, end: str) -> int:
@@ -1052,7 +1154,7 @@ def check_command(
         if names_the_seat_folder(command):
             return sentence_for(REASON_SEAT_FOLDER)
         return None
-    result = classify(command)
+    result = classify(command, cwd=cwd)
     accepted, refused_folder = _resolve_push_folders(result, cwd, runner)
     if names_the_seat_folder(command, accepted):
         return sentence_for(REASON_SEAT_FOLDER)
@@ -1102,8 +1204,14 @@ def check_command(
 
     for push in result.pushes:
         # A send that named a folder of its own is read against that folder,
-        # not against the folder the command was typed in.
-        where = push.directory or cwd
+        # and a send an earlier part of the command line moved into is read
+        # against the folder it was moved into, not against the folder the
+        # command was typed in.
+        where = push.directory or push.folder or cwd
+        if paths.git_root(where, runner=runner) is None:
+            # Nothing here to read the send against, so there is no way to
+            # know what it would send.
+            return sentence_for(REASON_UNREADABLE)
         branch_now = _current_branch(runner, where)
         if _forces_default_branch(runner, where, push, branch_now):
             return sentence_for(REASON_FORCE_DEFAULT)
@@ -1129,12 +1237,16 @@ def scan_range(
     if _stat_estimate_bytes(git, cwd, start, end) > constants.MAX_DIFF_BYTES:
         return sentence_for(REASON_TOO_LARGE)
     diff = _diff_text(git, cwd, start, end)
+    if diff is None:
+        return sentence_for(REASON_UNREADABLE)
     if len(diff.encode("utf-8", "replace")) > constants.MAX_DIFF_BYTES:
         return sentence_for(REASON_TOO_LARGE)
     hits = scan.scan_diff_added_lines(diff, allowlist)
     if hits:
         return hits[0].sentence()
     messages = _messages_text(git, cwd, start, end)
+    if messages is None:
+        return sentence_for(REASON_UNREADABLE)
     hits = scan.scan_text(messages, allowlist, "a saved note on your work")
     if hits:
         return hits[0].sentence()
