@@ -1,0 +1,32 @@
+{
+  "source_id": "src-f9b4fc4d3b3d46561948ee51",
+  "item_path": "work/inbox/src-f9b4fc4d3b3d46561948ee51.md",
+  "mode": "decision",
+  "rule_change": false,
+  "decision": {
+    "id": "stg-0d15637d82690cc7",
+    "kind": "decision",
+    "decided_on": "2026-01-12",
+    "written_on": "2026-01-12",
+    "decided_by": "owner@example.com",
+    "source": "src-f9b4fc4d3b3d46561948ee51",
+    "affects": [
+      "context/strategy/icp.md"
+    ],
+    "review_by": "2026-04-12",
+    "origin": "inbox",
+    "status": "open",
+    "body": "We sell to companies of twenty to two hundred people."
+  },
+  "edits": [
+    {
+      "path": "context/strategy/icp.md",
+      "heading": "## Firmographics",
+      "op": "replace",
+      "text": "Companies of twenty to two hundred people, with a marketing team of one to five.\n"
+    }
+  ],
+  "raw_span": "so from now on we are only going after companies between twenty and two hundred people",
+  "redacted_excerpt": "so from now on we are only going after companies between twenty and two hundred people",
+  "confidence": "high"
+}

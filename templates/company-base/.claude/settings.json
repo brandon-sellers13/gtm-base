@@ -1,0 +1,14 @@
+{
+  "extraKnownMarketplaces": {
+    "gtm-base": {
+      "source": {
+        "source": "github",
+        "repo": "brandon-sellers13/gtm-base",
+        "sha": "0000000000000000000000000000000000000000"
+      }
+    }
+  },
+  "enabledPlugins": {
+    "gtm-base@gtm-base": true
+  }
+}

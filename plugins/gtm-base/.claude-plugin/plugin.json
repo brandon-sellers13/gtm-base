@@ -1,0 +1,19 @@
+{
+  "name": "gtm-base",
+  "version": "0.1.0",
+  "description": "Keep a company's marketing context current: an inbox for meeting notes, proposals with evidence, a decisions ledger, and owner confirmations.",
+  "author": {
+    "name": "Brandon Sellers"
+  },
+  "repository": "https://github.com/brandon-sellers13/gtm-base",
+  "license": "MIT",
+  "keywords": [
+    "gtm",
+    "marketing",
+    "context",
+    "proposals",
+    "confirmations",
+    "ai-native-marketing"
+  ],
+  "hooks": "./hooks/hooks.json"
+}

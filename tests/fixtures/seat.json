@@ -1,0 +1,14 @@
+{
+  "client": "claude",
+  "first_push_reviewed": true,
+  "first_run_path": "/Users/example/Acme/gtm-base",
+  "git_hook_code": null,
+  "git_hook_installed": true,
+  "last_seen_commit": "9f2c1b0a9f2c1b0a9f2c1b0a9f2c1b0a9f2c1b0a",
+  "pending_confirmation": null,
+  "pending_confirmation_line": null,
+  "schema": 1,
+  "session_id": "6f1c2d34-5678-4abc-9def-0123456789ab",
+  "slice_cursor": "2026-01-12T00:00:00Z",
+  "vendor_substring": "fireflies"
+}

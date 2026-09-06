@@ -1,0 +1,27 @@
+{
+  "name": "gtm-base",
+  "owner": {
+    "name": "Brandon Sellers"
+  },
+  "metadata": {
+    "description": "Marketplace for the GTM Base plugin."
+  },
+  "plugins": [
+    {
+      "name": "gtm-base",
+      "source": "./plugins/gtm-base",
+      "description": "Keep a company's marketing context current: an inbox for meeting notes, proposals with evidence, a decisions ledger, and owner confirmations.",
+      "version": "0.1.0",
+      "author": {
+        "name": "Brandon Sellers"
+      },
+      "tags": [
+        "gtm",
+        "marketing",
+        "context",
+        "proposals",
+        "confirmations"
+      ]
+    }
+  ]
+}

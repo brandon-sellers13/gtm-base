@@ -1,0 +1,15 @@
+{
+  "joined": [
+    {
+      "base_id": "0123456789abcdef0123456789abcdef",
+      "remote": "https://github.com/acme/gtm-base",
+      "root": "/Users/example/Acme/gtm-base"
+    }
+  ],
+  "offer": {
+    "answer": "set-up",
+    "shown_at": "2026-01-05T17:02:00Z",
+    "shown_session_id": "6f1c2d34-5678-4abc-9def-0123456789ab"
+  },
+  "schema": 1
+}

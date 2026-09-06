@@ -1,0 +1,90 @@
+#!/usr/bin/env python3
+"""A stand-in for the GitHub command line tool.
+
+Records every invocation as one JSON line and prints canned output. It never
+reaches the network. Tests point GH_FAKE_LOG at a file inside a temporary
+directory, and may point GH_FAKE_RESPONSES at a directory of canned responses
+named after the subcommand words joined by a dash, for example pr-create.json.
+"""
+
+import json
+import os
+import sys
+
+
+DEFAULT_LOG_NAME = "gh-calls.jsonl"
+
+DEFAULT_RESPONSES = {
+    "pr-list": "[]",
+    "api": "{}",
+    "pr-create": '{"number": 1, "url": "https://github.com/example/example/pull/1"}',
+}
+
+
+def subcommand_words(argv):
+    """The leading plain words of the invocation, for example ["pr", "create"]."""
+    words = []
+    for arg in argv:
+        if arg.startswith("-"):
+            break
+        if not arg.replace("-", "").isalnum():
+            break
+        words.append(arg)
+    return words
+
+
+def read_stdin():
+    if sys.stdin is None or sys.stdin.isatty():
+        return ""
+    try:
+        return sys.stdin.read()
+    except Exception:
+        return ""
+
+
+def record(argv, stdin_text):
+    log_path = os.environ.get("GH_FAKE_LOG")
+    if not log_path:
+        log_path = os.path.join(os.getcwd(), DEFAULT_LOG_NAME)
+    entry = {"argv": argv, "cwd": os.getcwd(), "stdin": stdin_text}
+    try:
+        with open(log_path, "a") as handle:
+            handle.write(json.dumps(entry, sort_keys=True) + "\n")
+    except Exception:
+        pass
+
+
+def canned_output(key):
+    directory = os.environ.get("GH_FAKE_RESPONSES")
+    if directory and key:
+        candidate = os.path.join(directory, key + ".json")
+        if os.path.isfile(candidate):
+            with open(candidate) as handle:
+                return handle.read()
+    return DEFAULT_RESPONSES.get(key, "")
+
+
+def main():
+    argv = sys.argv[1:]
+    stdin_text = read_stdin()
+    record(argv, stdin_text)
+
+    words = subcommand_words(argv)
+    key = "-".join(words)
+    output = canned_output(key)
+    if output == "" and len(words) > 1:
+        output = canned_output(words[0])
+    if output:
+        sys.stdout.write(output)
+        if not output.endswith("\n"):
+            sys.stdout.write("\n")
+
+    try:
+        code = int(os.environ.get("GH_FAKE_EXIT", "0"))
+    except ValueError:
+        code = 0
+    return code
+
+
+if __name__ == "__main__":
+    sys.exit(main())

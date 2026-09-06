@@ -1,0 +1,14 @@
+# Files listed here need the owner's review before a change to them is accepted.
+# Replace @owner-handle with the account that owns this base.
+# Nothing under work/decisions or work/confirmations is listed, because those
+# folders are appended to by everyone on the team.
+
+context/** @owner-handle
+corrections/** @owner-handle
+plugins/** @owner-handle
+.claude/** @owner-handle
+CLAUDE.md @owner-handle
+AGENTS.md @owner-handle
+.gitignore @owner-handle
+gate-allowlist.txt @owner-handle
+CODEOWNERS @owner-handle

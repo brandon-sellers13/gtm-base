@@ -1,0 +1,295 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Ideation: GTM Base and MICW Brand System</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@500;600;700&amp;display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --paper: #f4f1e8;
+      --sheet: #fffdf8;
+      --ink: #18231d;
+      --ink-soft: #4f5b54;
+      --line: #c9c8bd;
+      --line-strong: #8f968e;
+      --source: #355f7d;
+      --current: #2d6a52;
+      --proposed: #a9651d;
+      --drifted: #a6403a;
+      --soft-source: #e5edf2;
+      --soft-current: #e2eee7;
+      --soft-proposed: #f4e9d8;
+      --soft-drifted: #f4e1df;
+      --shadow: 0 18px 50px rgba(30, 38, 32, 0.08);
+    }
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      margin: 0;
+      color: var(--ink);
+      background:
+        linear-gradient(rgba(24,35,29,.025) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(24,35,29,.025) 1px, transparent 1px),
+        var(--paper);
+      background-size: 24px 24px;
+      font-family: "DM Sans", Arial, sans-serif;
+      line-height: 1.58;
+    }
+    a { color: inherit; }
+    .page { width: min(1120px, calc(100% - 32px)); margin: 24px auto 72px; }
+    .sheet { background: var(--sheet); border: 1px solid var(--line); box-shadow: var(--shadow); }
+    .masthead { display: grid; grid-template-columns: 140px 1fr; min-height: 410px; }
+    .rail { border-right: 1px solid var(--line); padding: 24px 18px; display: flex; flex-direction: column; justify-content: space-between; }
+    .rail-label, .eyebrow, dt, th, .chip, .jump-list a, .meta-row {
+      font-family: "JetBrains Mono", monospace;
+      text-transform: uppercase;
+      letter-spacing: .095em;
+      font-size: 10px;
+      font-weight: 700;
+    }
+    .rail-stack { display: grid; gap: 9px; }
+    .rail-label { color: var(--ink-soft); }
+    .reg-mark { width: 78px; height: 78px; }
+    .hero { padding: 60px clamp(28px, 7vw, 78px) 48px; display: grid; align-content: space-between; }
+    .hero h1 { margin: 18px 0 20px; max-width: 760px; font-size: clamp(42px, 7vw, 78px); line-height: .98; letter-spacing: -.055em; }
+    .hero p { max-width: 700px; margin: 0; color: var(--ink-soft); font-size: 18px; }
+    .hero-rule { margin-top: 52px; padding-top: 18px; border-top: 1px solid var(--line-strong); display: flex; gap: 10px; flex-wrap: wrap; }
+    .chip { display: inline-flex; align-items: center; min-height: 27px; padding: 5px 9px; border: 1px solid currentColor; border-radius: 999px; letter-spacing: .045em; }
+    .source { color: var(--source); background: var(--soft-source); }
+    .current { color: var(--current); background: var(--soft-current); }
+    .proposed { color: var(--proposed); background: var(--soft-proposed); }
+    .drifted { color: var(--drifted); background: var(--soft-drifted); }
+    .metadata { margin: 18px 0 42px; padding: 14px 18px; border: 1px solid var(--line); background: rgba(255,253,248,.72); display: flex; flex-wrap: wrap; gap: 12px 28px; }
+    .meta-row { color: var(--ink-soft); }
+    .meta-row strong { color: var(--ink); font-weight: 700; }
+    main { display: grid; gap: 28px; }
+    section { scroll-margin-top: 24px; }
+    .content-section { padding: clamp(28px, 5vw, 58px); }
+    .section-head { display: grid; grid-template-columns: 140px 1fr; gap: 22px; margin-bottom: 28px; }
+    .section-head h2 { margin: 0; font-size: clamp(28px, 4vw, 44px); line-height: 1.05; letter-spacing: -.04em; }
+    .section-head p { margin: 7px 0 0; max-width: 70ch; color: var(--ink-soft); }
+    .thesis-grid { display: grid; grid-template-columns: repeat(3, 1fr); border: 1px solid var(--line); }
+    .thesis-cell { min-height: 180px; padding: 22px; border-right: 1px solid var(--line); }
+    .thesis-cell:last-child { border-right: 0; }
+    .thesis-cell h3 { margin: 16px 0 7px; font-size: 21px; }
+    .thesis-cell p { margin: 0; color: var(--ink-soft); }
+    .axes { display: grid; grid-template-columns: repeat(5, 1fr); border: 1px solid var(--line); }
+    .axis { min-height: 170px; padding: 18px; border-right: 1px solid var(--line); }
+    .axis:last-child { border-right: 0; }
+    .axis-num { font-family: "JetBrains Mono", monospace; font-weight: 700; font-size: 25px; }
+    .axis h3 { font-size: 15px; line-height: 1.25; margin: 28px 0 6px; }
+    .axis p { font-size: 13px; line-height: 1.45; color: var(--ink-soft); margin: 0; }
+    .jump-list { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 24px; }
+    .jump-list a { text-decoration: none; border: 1px solid var(--line); padding: 7px 10px; background: var(--paper); }
+    .idea-list { display: grid; gap: 18px; }
+    .idea { border: 1px solid var(--line); background: var(--sheet); }
+    .idea-top { display: grid; grid-template-columns: 90px 1fr; border-bottom: 1px solid var(--line); }
+    .rank { display: grid; place-items: center; min-height: 92px; border-right: 1px solid var(--line); font: 700 34px/1 "JetBrains Mono", monospace; }
+    .idea-title { padding: 19px 22px; }
+    .idea-title h3 { margin: 2px 0 0; font-size: 27px; letter-spacing: -.025em; }
+    .idea-body { display: grid; grid-template-columns: minmax(0, 1fr) 250px; }
+    .idea-copy { padding: 24px; }
+    .idea-copy p { max-width: 72ch; margin: 0 0 17px; }
+    .idea-copy dl { display: grid; grid-template-columns: 90px 1fr; gap: 10px 16px; margin: 0; }
+    .idea-copy dt { color: var(--ink-soft); }
+    .idea-copy dd { margin: 0; font-size: 14px; }
+    .idea-side { border-left: 1px solid var(--line); padding: 22px; background: var(--paper); }
+    .idea-side dl { margin: 0; display: grid; gap: 18px; }
+    .idea-side dd { margin: 4px 0 0; }
+    .idea-visual { margin: 0 24px 24px; padding: 18px; border: 1px solid var(--line); background: var(--paper); }
+    .idea-visual svg { width: 100%; height: auto; display: block; }
+    .idea-visual figcaption { margin-top: 10px; color: var(--ink-soft); font-size: 12px; }
+    .rejections { width: 100%; border-collapse: collapse; }
+    .rejections th, .rejections td { text-align: left; vertical-align: top; padding: 13px 14px; border: 1px solid var(--line); }
+    .rejections th { background: var(--ink); color: var(--sheet); }
+    .rejections td:first-child { width: 210px; font-weight: 700; }
+    .sources-list { columns: 2; column-gap: 40px; padding-left: 20px; }
+    .sources-list li { break-inside: avoid; margin: 0 0 10px; }
+    .composition-signal { margin-top: 28px; padding: 18px 0; color: var(--ink-soft); font: 500 11px/1.5 "JetBrains Mono", monospace; }
+    @media (max-width: 800px) {
+      .masthead, .section-head, .idea-body { grid-template-columns: 1fr; }
+      .rail { border-right: 0; border-bottom: 1px solid var(--line); flex-direction: row; align-items: center; }
+      .reg-mark { width: 52px; height: 52px; }
+      .thesis-grid, .axes { grid-template-columns: 1fr; }
+      .thesis-cell, .axis { border-right: 0; border-bottom: 1px solid var(--line); }
+      .thesis-cell:last-child, .axis:last-child { border-bottom: 0; }
+      .idea-side { border-left: 0; border-top: 1px solid var(--line); }
+      .sources-list { columns: 1; }
+    }
+  </style>
+</head>
+<body>
+  <div class="page">
+    <header class="masthead sheet">
+      <aside class="rail">
+        <svg class="reg-mark" viewBox="0 0 80 80" role="img" aria-label="Four context surfaces joining at a registered coordinate">
+          <path d="M8 18H31V38H39" fill="none" stroke="#355f7d" stroke-width="5"/>
+          <path d="M72 18H49V38H41" fill="none" stroke="#a9651d" stroke-width="5"/>
+          <path d="M8 62H31V42H39" fill="none" stroke="#2d6a52" stroke-width="5"/>
+          <path d="M72 62H49V42H41" fill="none" stroke="#a6403a" stroke-width="5"/>
+          <rect x="36" y="36" width="8" height="8" fill="#18231d"/>
+        </svg>
+        <div class="rail-stack">
+          <span class="rail-label">Brand system</span>
+          <span class="rail-label">Direction set 01</span>
+          <span class="rail-label">Current 2026-09-05</span>
+        </div>
+      </aside>
+      <div class="hero">
+        <div>
+          <span class="eyebrow">Ideation</span>
+          <h1>Build the brand from the operating model.</h1>
+          <p>GTM Base and Marketing in the Context Window should look like one maintained system, not two polished AI products wearing the same gradient.</p>
+        </div>
+        <div class="hero-rule">
+          <span class="chip source">4 surfaces joined</span>
+          <span class="chip current">Human approved</span>
+          <span class="chip proposed">Change proposed</span>
+          <span class="chip drifted">Context drifted</span>
+        </div>
+      </div>
+    </header>
+
+    <div class="metadata" aria-label="Document metadata">
+      <span class="meta-row">Date <strong>2026-09-05</strong></span>
+      <span class="meta-row">Topic <strong>gtm-base-micw-brand-system</strong></span>
+      <span class="meta-row">Focus <strong>Profile Base evolution</strong></span>
+      <span class="meta-row">Mode <strong>Product and editorial brand system</strong></span>
+    </div>
+
+    <main>
+      <section id="topic-context" class="content-section sheet">
+        <div class="section-head">
+          <span class="eyebrow">01</span>
+          <div><h2>Topic Context</h2><p>The current system is coherent, but its recognition comes from common AI and SaaS conventions. The opportunity is to make the brand express how the product actually works.</p></div>
+        </div>
+        <div class="thesis-grid">
+          <article class="thesis-cell"><span class="chip drifted">Current limitation</span><h3>Consistent, not ownable</h3><p>Warm white, rounded cards, mono labels, and blue-purple gradients are well executed but widely used.</p></article>
+          <article class="thesis-cell"><span class="chip source">Product truth</span><h3>Context has a shape</h3><p>Files, maps, joins, sources, approvals, versions, drift, and corrections provide a native visual vocabulary.</p></article>
+          <article class="thesis-cell"><span class="chip current">Family role</span><h3>System plus record</h3><p>GTM Base maintains the operating context. MICW shows the real builds, failures, and changes in public.</p></article>
+        </div>
+      </section>
+
+      <section id="topic-axes" class="content-section sheet">
+        <div class="section-head"><span class="eyebrow">02</span><div><h2>Topic Axes</h2><p>Five independent decisions must work together. A logo alone cannot solve them.</p></div></div>
+        <div class="axes">
+          <article class="axis"><span class="axis-num">01</span><h3>Family architecture</h3><p>Who owns, publishes, and signs each artifact.</p></article>
+          <article class="axis"><span class="axis-num">02</span><h3>Identity primitive</h3><p>The compact mark and repeatable motif.</p></article>
+          <article class="axis"><span class="axis-num">03</span><h3>Visual grammar</h3><p>Type, color, grid, spacing, and object rules.</p></article>
+          <article class="axis"><span class="axis-num">04</span><h3>Evidence language</h3><p>How sources, freshness, approvals, and corrections appear.</p></article>
+          <article class="axis"><span class="axis-num">05</span><h3>Surface expression</h3><p>How one system changes across product, editorial, docs, and social.</p></article>
+        </div>
+      </section>
+
+      <section id="ranked-ideas" class="content-section sheet">
+        <div class="section-head"><span class="eyebrow">03</span><div><h2>Ranked Ideas</h2><p>Six survivors from 36 raw candidates. The top idea is the umbrella direction. The remaining five make it concrete.</p></div></div>
+        <nav class="jump-list" aria-label="Ranked idea navigation">
+          <a href="#idea-1">1 Working Atlas</a><a href="#idea-2">2 Registered Join</a><a href="#idea-3">3 Operating Record</a><a href="#idea-4">4 Evidence Legend</a><a href="#idea-5">5 Correction Cover</a><a href="#idea-6">6 Four Reading Speeds</a>
+        </nav>
+        <div class="idea-list">
+          <article class="idea" id="idea-1">
+            <div class="idea-top"><div class="rank">01</div><div class="idea-title"><span class="eyebrow">Visual grammar</span><h3>1. The Working Atlas</h3></div></div>
+            <div class="idea-body"><div class="idea-copy"><p><strong>Description:</strong> Keep the warm paper and two-type foundation, then replace soft SaaS polish with atlas plates, coordinate margins, strong rules, metadata rails, high contrast, and semantic inks. Every object follows a governed-record order: name, owner or source, version and date, state, then content.</p><dl><dt>Basis</dt><dd><strong>Direct:</strong> The current system is warm and typography-led, but the gradient and cards are generic and faint text has a known contrast problem. <strong>External:</strong> Atlases organize dense evidence through hierarchy, legends, and annotation.</dd><dt>Rationale</dt><dd>A map-based visual grammar matches a product that joins multiple company surfaces into one navigable base.</dd><dt>Downsides</dt><dd>Precision can become cold or overly technical. Editorial layouts need more whitespace and human texture than product screens.</dd></dl></div><aside class="idea-side"><dl><div><dt>Confidence</dt><dd>94%</dd></div><div><dt>Complexity</dt><dd>Medium</dd></div><div><dt>Role</dt><dd>Recommended umbrella direction</dd></div></dl></aside></div>
+            <figure class="idea-visual">
+              <svg viewBox="0 0 900 230" role="img" aria-label="Illustrative working atlas layout with provenance rail and semantic states">
+                <rect x="1" y="1" width="898" height="228" fill="#fffdf8" stroke="#8f968e"/>
+                <rect x="1" y="1" width="145" height="228" fill="#f4f1e8" stroke="#8f968e"/>
+                <text x="22" y="35" font-family="JetBrains Mono" font-size="12" font-weight="700" fill="#18231d">CONTEXT / 04</text>
+                <text x="22" y="72" font-family="JetBrains Mono" font-size="10" fill="#4f5b54">OWNER</text><text x="22" y="90" font-family="DM Sans" font-size="13" fill="#18231d">Marketing</text>
+                <text x="22" y="125" font-family="JetBrains Mono" font-size="10" fill="#4f5b54">CURRENT</text><text x="22" y="143" font-family="DM Sans" font-size="13" fill="#18231d">2026-09-05</text>
+                <text x="180" y="48" font-family="DM Sans" font-size="30" font-weight="700" fill="#18231d">Positioning</text>
+                <line x1="180" y1="66" x2="864" y2="66" stroke="#c9c8bd"/>
+                <rect x="180" y="92" width="112" height="30" rx="15" fill="#e2eee7" stroke="#2d6a52"/><text x="203" y="112" font-family="JetBrains Mono" font-size="10" font-weight="700" fill="#2d6a52">APPROVED</text>
+                <rect x="304" y="92" width="114" height="30" rx="15" fill="#e5edf2" stroke="#355f7d"/><text x="329" y="112" font-family="JetBrains Mono" font-size="10" font-weight="700" fill="#355f7d">3 SOURCES</text>
+                <text x="180" y="161" font-family="DM Sans" font-size="16" fill="#18231d">One shared record. Visible source. Visible state.</text>
+                <text x="180" y="190" font-family="DM Sans" font-size="14" fill="#4f5b54">Color describes what happened. The grid carries the identity.</text>
+              </svg>
+              <figcaption>Illustrative direction only. The ledger structure is the system, not this exact layout.</figcaption>
+            </figure>
+          </article>
+
+          <article class="idea" id="idea-2">
+            <div class="idea-top"><div class="rank">02</div><div class="idea-title"><span class="eyebrow">Identity primitive</span><h3>2. The Registered Join</h3></div></div>
+            <div class="idea-body"><div class="idea-copy"><p><strong>Description:</strong> Replace the gradient user icon with a compact registration mark in which four context surfaces align at one shared coordinate or seam. The geometry can separate, drift, propose, and realign in product states and motion.</p><dl><dt>Basis</dt><dd><strong>Direct:</strong> Map, layers, joins, drift, files, and currentness are native GTM Base concepts. <strong>External:</strong> Cartographic registration marks align independently produced layers.</dd><dt>Rationale</dt><dd>The product operation becomes the recognition device, which is more defensible than abstract AI symbolism.</dd><dt>Downsides</dt><dd>Four inputs can become visually busy at very small sizes. The final mark needs optical testing at 16, 24, and 32 pixels.</dd></dl></div><aside class="idea-side"><dl><div><dt>Confidence</dt><dd>91%</dd></div><div><dt>Complexity</dt><dd>Medium</dd></div><div><dt>Role</dt><dd>Primary mark and motion seed</dd></div></dl></aside></div>
+            <figure class="idea-visual"><svg viewBox="0 0 900 170" role="img" aria-label="Four context surfaces align into one registered coordinate">
+              <text x="32" y="32" font-family="JetBrains Mono" font-size="11" font-weight="700" fill="#355f7d">DATA</text><path d="M40 48H305V82H430" fill="none" stroke="#355f7d" stroke-width="5"/>
+              <text x="32" y="145" font-family="JetBrains Mono" font-size="11" font-weight="700" fill="#2d6a52">PLAN</text><path d="M40 126H305V88H430" fill="none" stroke="#2d6a52" stroke-width="5"/>
+              <text x="790" y="32" font-family="JetBrains Mono" font-size="11" font-weight="700" fill="#a9651d">STRATEGY</text><path d="M860 48H595V82H470" fill="none" stroke="#a9651d" stroke-width="5"/>
+              <text x="820" y="145" font-family="JetBrains Mono" font-size="11" font-weight="700" fill="#a6403a">WORK</text><path d="M860 126H595V88H470" fill="none" stroke="#a6403a" stroke-width="5"/>
+              <rect x="430" y="70" width="40" height="30" fill="#18231d"/><text x="510" y="90" font-family="DM Sans" font-size="16" font-weight="700" fill="#18231d">one governed context</text>
+            </svg><figcaption>One mark can become a favicon, join diagram, loading behavior, and drift state.</figcaption></figure>
+          </article>
+
+          <article class="idea" id="idea-3">
+            <div class="idea-top"><div class="rank">03</div><div class="idea-title"><span class="eyebrow">Family architecture</span><h3>3. The Operating Record</h3></div></div>
+            <div class="idea-body"><div class="idea-copy"><p><strong>Description:</strong> GTM Base is the maintained system, MICW is its public implementation record, and Brandon Sellers is the accountable builder and editor. A compact provenance signature with module, version, effective date, and state links the family more honestly than matching logos.</p><dl><dt>Basis</dt><dd><strong>Direct:</strong> GTM Base maintains versioned, approvable context. MICW ships a working module per issue. <strong>External:</strong> Stripe Press shows that editorial can own a distinct premise while retaining parent attribution.</dd><dt>Rationale</dt><dd>Every issue becomes checkable product evidence instead of content marketing adjacent to the product.</dd><dt>Downsides</dt><dd>The relationship needs disciplined naming. Brandon should sign the work without becoming a visual mascot or competing master brand.</dd></dl></div><aside class="idea-side"><dl><div><dt>Confidence</dt><dd>93%</dd></div><div><dt>Complexity</dt><dd>Low</dd></div><div><dt>Role</dt><dd>Brand architecture</dd></div></dl></aside></div>
+            <figure class="idea-visual"><svg viewBox="0 0 900 150" role="img" aria-label="GTM Base maintained system connected to MICW public implementation record, both signed by Brandon Sellers">
+              <rect x="30" y="28" width="260" height="78" fill="#e2eee7" stroke="#2d6a52"/><text x="52" y="60" font-family="JetBrains Mono" font-size="11" font-weight="700" fill="#2d6a52">MAINTAINED SYSTEM</text><text x="52" y="86" font-family="DM Sans" font-size="24" font-weight="700" fill="#18231d">GTM Base</text>
+              <path d="M290 67H610" stroke="#18231d" stroke-width="2"/><text x="377" y="55" font-family="JetBrains Mono" font-size="10" fill="#4f5b54">BUILDS / CORRECTIONS</text>
+              <rect x="610" y="28" width="260" height="78" fill="#f4e9d8" stroke="#a9651d"/><text x="632" y="60" font-family="JetBrains Mono" font-size="11" font-weight="700" fill="#a9651d">PUBLIC RECORD</text><text x="632" y="86" font-family="DM Sans" font-size="24" font-weight="700" fill="#18231d">MICW</text>
+              <text x="334" y="130" font-family="JetBrains Mono" font-size="11" font-weight="700" fill="#18231d">BUILT AND EDITED BY BRANDON SELLERS</text>
+            </svg><figcaption>The relationship is carried by provenance and reciprocal evidence, not identical page design.</figcaption></figure>
+          </article>
+
+          <article class="idea" id="idea-4">
+            <div class="idea-top"><div class="rank">04</div><div class="idea-title"><span class="eyebrow">Evidence language</span><h3>4. The Evidence Legend</h3></div></div>
+            <div class="idea-body"><div class="idea-copy"><p><strong>Description:</strong> Establish one visual syntax for sources, joins, freshness, AI-produced work, human approval, drift, and corrections. Product screens, documentation, issues, and social cards all use the same legend and proof rail.</p><dl><dt>Basis</dt><dd><strong>Direct:</strong> Joined surfaces and traceable sources explain the product's value. <strong>External:</strong> Cartography makes complex representations trustworthy through shared legends.</dd><dt>Rationale</dt><dd>Repeated evidence syntax can become the identity itself while teaching people how to evaluate an output.</dd><dt>Downsides</dt><dd>The legend must stay small. Too many states or icons will create a compliance manual instead of a usable language.</dd></dl></div><aside class="idea-side"><dl><div><dt>Confidence</dt><dd>89%</dd></div><div><dt>Complexity</dt><dd>Medium</dd></div><div><dt>Role</dt><dd>Diagram and state system</dd></div></dl></aside></div>
+          </article>
+
+          <article class="idea" id="idea-5">
+            <div class="idea-top"><div class="rank">05</div><div class="idea-title"><span class="eyebrow">Evidence language</span><h3>5. The Correction Is the Cover</h3></div></div>
+            <div class="idea-body"><div class="idea-copy"><p><strong>Description:</strong> The recurring proof object shows what the system believed, what new evidence conflicted, what changed, who approved it, and which current version resulted. GTM Base uses it operationally, while MICW publishes the most instructive sanitized correction as the issue cover.</p><dl><dt>Basis</dt><dd><strong>Direct:</strong> The decisive AI-native test is whether the system can be wrong and know it. MICW promises honest accounts of what broke. <strong>External:</strong> Cloudflare Radar turns real operational data into public brand objects.</dd><dt>Rationale</dt><dd>Real corrections are more credible and harder to copy than abstract AI illustrations or invented dashboards.</dd><dt>Downsides</dt><dd>Some weeks will not produce a visually compelling correction. The system needs a fallback evidence object, usually the context map or release diff.</dd></dl></div><aside class="idea-side"><dl><div><dt>Confidence</dt><dd>90%</dd></div><div><dt>Complexity</dt><dd>Low</dd></div><div><dt>Role</dt><dd>Signature editorial proof</dd></div></dl></aside></div>
+            <figure class="idea-visual"><svg viewBox="0 0 900 190" role="img" aria-label="Correction sequence from prior context to conflict, human approval, and current context">
+              <rect x="20" y="45" width="190" height="92" fill="#fffdf8" stroke="#8f968e"/><text x="38" y="70" font-family="JetBrains Mono" font-size="10" fill="#4f5b54">BELIEVED</text><text x="38" y="101" font-family="DM Sans" font-size="18" font-weight="700" fill="#18231d">Old ICP rule</text><text x="38" y="123" font-family="DM Sans" font-size="12" fill="#4f5b54">Current since Aug 12</text>
+              <path d="M210 91H260" stroke="#a6403a" stroke-width="2"/><rect x="260" y="45" width="190" height="92" fill="#f4e1df" stroke="#a6403a"/><text x="278" y="70" font-family="JetBrains Mono" font-size="10" font-weight="700" fill="#a6403a">CONFLICT</text><text x="278" y="101" font-family="DM Sans" font-size="18" font-weight="700" fill="#18231d">New evidence</text><text x="278" y="123" font-family="DM Sans" font-size="12" fill="#4f5b54">Source: Sep 3 call</text>
+              <path d="M450 91H500" stroke="#a9651d" stroke-width="2"/><rect x="500" y="45" width="150" height="92" fill="#f4e9d8" stroke="#a9651d"/><text x="518" y="70" font-family="JetBrains Mono" font-size="10" font-weight="700" fill="#a9651d">APPROVED</text><text x="518" y="101" font-family="DM Sans" font-size="18" font-weight="700" fill="#18231d">Human</text><text x="518" y="123" font-family="DM Sans" font-size="12" fill="#4f5b54">Sep 5</text>
+              <path d="M650 91H700" stroke="#2d6a52" stroke-width="2"/><rect x="700" y="45" width="180" height="92" fill="#e2eee7" stroke="#2d6a52"/><text x="718" y="70" font-family="JetBrains Mono" font-size="10" font-weight="700" fill="#2d6a52">CURRENT</text><text x="718" y="101" font-family="DM Sans" font-size="18" font-weight="700" fill="#18231d">Updated rule</text><text x="718" y="123" font-family="DM Sans" font-size="12" fill="#4f5b54">Version 1.7</text>
+            </svg><figcaption>A correction can function as product UI, article evidence, and launch imagery.</figcaption></figure>
+          </article>
+
+          <article class="idea" id="idea-6">
+            <div class="idea-top"><div class="rank">06</div><div class="idea-title"><span class="eyebrow">Surface expression</span><h3>6. One Network, Four Reading Speeds</h3></div></div>
+            <div class="idea-body"><div class="idea-copy"><p><strong>Description:</strong> Treat product, documentation, MICW, and social as different map scales and reading speeds. They share nouns, type roles, semantic colors, join geometry, and evidence syntax, but product is dense, docs procedural, MICW narrative, and social compressed.</p><dl><dt>Basis</dt><dd><strong>Direct:</strong> The identity must work across surfaces with genuinely different jobs. <strong>External:</strong> GitHub, IBM, and transit systems retain one network while adapting expression to context and scale.</dd><dt>Rationale</dt><dd>MICW can feel editorial and GTM Base operational without splitting into unrelated brands.</dd><dt>Downsides</dt><dd>Requires examples, not only token documentation. Otherwise teams will collapse back to one generic card system.</dd></dl></div><aside class="idea-side"><dl><div><dt>Confidence</dt><dd>88%</dd></div><div><dt>Complexity</dt><dd>Medium</dd></div><div><dt>Role</dt><dd>Cross-surface governance</dd></div></dl></aside></div>
+          </article>
+        </div>
+      </section>
+
+      <section id="rejection-summary" class="content-section sheet">
+        <div class="section-head"><span class="eyebrow">04</span><div><h2>Rejection Summary</h2><p>Every cut either claimed more than the product has earned, duplicated a stronger direction, or pushed into premature automation.</p></div></div>
+        <table class="rejections"><thead><tr><th>Candidate</th><th>Reason rejected or absorbed</th></tr></thead><tbody>
+          <tr><td>The Maintained Standard</td><td>Rejected. “Standard” implies authority GTM Base has not earned, and generic status labels will not create recognition alone.</td></tr>
+          <tr><td>The Accession Mark</td><td>Absorbed into The Operating Record. Module codes and editions belong in the provenance signature, not as a second identity system.</td></tr>
+          <tr><td>The Context Ledger</td><td>Absorbed into The Working Atlas as the construction rule for every object.</td></tr>
+          <tr><td>The Brand Compiler</td><td>Deferred. Generating outward assets from approved metadata is a strong future behavior, but the required structured fields do not yet exist.</td></tr>
+          <tr><td>Editioned Instruments</td><td>Absorbed into the governed-record grammar. Its claim that the catalog reveals every missing operating job was not supported.</td></tr>
+          <tr><td>Approval as the primary mark</td><td>Cut as too narrow. Approval is one important state inside the Evidence Legend, not the whole product identity.</td></tr>
+          <tr><td>Generic editorial imprint</td><td>Cut as incomplete. The imprint analogy explains hierarchy but does not create an ownable visual or evidence system.</td></tr>
+        </tbody></table>
+      </section>
+
+      <section id="sources" class="content-section sheet">
+        <div class="section-head"><span class="eyebrow">05</span><div><h2>Sources</h2><p>Local product truth and primary-source brand systems used to ground the directions.</p></div></div>
+        <ul class="sources-list">
+          <li><code>/Users/brandonsellers/Build/profile-base-app/DESIGN.md</code></li>
+          <li><code>/Users/brandonsellers/Build/profile-base-app/src/components/app-nav.tsx</code></li>
+          <li><code>/Users/brandonsellers/Build/profile-base-app/src/app/(public)/landing-page.tsx</code></li>
+          <li><code>/Users/brandonsellers/Obsidian/Vault/Work/GTM-Base/2026-09-04-gtm-base-scope-v1.md</code></li>
+          <li><code>/Users/brandonsellers/Personal/Brandon_Sellers_Website/newsletter.html</code></li>
+          <li><code>/Users/brandonsellers/Personal/tasks/micw-cornerstone-sequence.md</code></li>
+          <li><a href="https://brand.github.com/">GitHub Brand Toolkit</a></li>
+          <li><a href="https://vercel.com/font">Vercel Geist</a></li>
+          <li><a href="https://press.stripe.com/">Stripe Press</a></li>
+          <li><a href="https://radar.cloudflare.com/about">Cloudflare Radar</a></li>
+          <li><a href="https://www.ibm.com/design/language/typography/typeface/">IBM typography</a></li>
+          <li><a href="https://atlassian.design/foundations/typography/">Atlassian typography</a></li>
+          <li><a href="https://linear.app/brand">Linear brand guidelines</a></li>
+        </ul>
+      </section>
+    </main>
+    <footer class="composition-signal">Composed 2026-09-05T23:30:00Z by ce-ideate from the current Profile Base, GTM Base, and MICW project context.</footer>
+  </div>
+</body>
+</html>
