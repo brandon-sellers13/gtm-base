@@ -331,6 +331,10 @@ SEAT_DEFAULTS = {
     "last_pull_refusal": None,
     "last_pull_refusal_code": None,
     "last_pull_refusal_path_hashes": None,
+    # One fixed code the next session shows on screen and then clears. The
+    # part of the session start that prints what a person reads writes
+    # nothing, so a sentence it could not work out for itself is left here.
+    "pending_visible_note": None,
     "first_push_reviewed": False,
     "git_hook_installed": False,
     "git_hook_code": None,
@@ -401,7 +405,12 @@ def load_seat(base_id: str) -> Tuple[dict, List[str]]:
         if not isinstance(seat[name], bool):
             seat[name] = False
             problems.append("bad-value")
-    for name in ("pending_confirmation", "git_hook_code", "last_pull_refusal_code"):
+    for name in (
+        "pending_confirmation",
+        "git_hook_code",
+        "last_pull_refusal_code",
+        "pending_visible_note",
+    ):
         if seat[name] is not None and seat[name] not in CODES:
             seat[name] = None
             problems.append("bad-value")
@@ -442,6 +451,7 @@ def save_seat(base_id: str, seat: dict) -> dict:
     check_code(cleaned["pending_confirmation"])
     check_code(cleaned["git_hook_code"])
     check_code(cleaned["last_pull_refusal_code"])
+    check_code(cleaned["pending_visible_note"])
     atomic_write_json(_path(base_id, SEAT_FILE), cleaned)
     return cleaned
 

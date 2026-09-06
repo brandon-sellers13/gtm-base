@@ -7,12 +7,30 @@ it is still right.
 
 ## Status
 
-Version 0.1.0 is the scaffold plus the check that runs before anything leaves
-the computer. `hooks/hooks.json` declares two hooks, the check on the command
-tool and the work done at the start of a session; no skills or agents ship yet, and the manifest declares no MCP servers by
-design. The plugin never connects to a
+Version 0.1.2 is the scaffold plus the check that runs before anything leaves
+the computer. `hooks/hooks.json` declares the check on the command tool and the
+work done at the start of a session; no skills or agents ship yet, and the
+manifest declares no MCP servers by design. The plugin never connects to a
 vendor; the sources reach the base through the tools you already have connected
 in your own client.
+
+## How the session-start hook prints what it has to say
+
+A client reads a hook's output either as one JSON object or as plain text, by
+its first character, and never as both. So the work at the start of a session is
+declared as two entries running the same script, `session-start.sh claude
+visible` and `session-start.sh claude context`. The first prints one object
+holding the sentence the person reads and writes nothing at all: no session
+record, no offer record, no question id, and nothing over the network. The
+second prints the plain text the assistant reads and is the one that records the
+session, brings the base up to date, issues the question id, and installs the
+safeguard. Both work the same decision out from the same inputs.
+
+The client runs the two entries at the same time rather than one after the
+other, so neither waits on the other. The one sentence that cannot be worked out
+without reaching the shared copy, the one saying an update carried files GTM
+Base does not take on its own, is left as a fixed code in this seat's own
+settings and said at the start of the next session.
 
 ## Layout
 

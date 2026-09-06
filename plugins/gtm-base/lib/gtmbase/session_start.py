@@ -17,6 +17,30 @@ Four things can happen here, and exactly one of them happens per session.
 Everything a person sees is fixed text held in `templates/`, so the words can
 be reviewed in one place. Nothing here ever prints an address that carries a
 sign in, an option a person typed, or anything git wrote to its error stream.
+
+The work is done in two parts, because a client reads a hook's output either as
+one JSON object or as plain text and never as both. The first part prints only
+the sentence the person sees, as one object holding that message. It writes
+nothing at all and reaches nothing over the network. The second part prints
+only the text the assistant reads, as plain text, and it is the one that
+records the session, brings the base up to date, issues the question id, and
+installs the safeguard. Both parts work the same decision out from the same
+inputs, so what the person is told and what the assistant is primed with always
+agree.
+
+The client runs the two parts at the same time rather than one after the other,
+so neither part may rely on the other having finished. That is why the part
+that prints what a person sees decides the setup offer from the kind of session
+this is: a session that started fresh has not been offered anything yet,
+whatever the other part has written down by the time this one looks.
+
+One sentence cannot be worked out without reaching the shared copy: the one
+saying an update carried files GTM Base does not take on its own. The part that
+reaches out records a fixed code in this seat's own settings when that happens,
+and the first part of the next session says the sentence while the second part
+clears the code once its own work is done. That sentence therefore arrives one
+session late, which is the price of never reaching the network before a person
+is shown anything.
 """
 
 from __future__ import annotations
@@ -26,7 +50,7 @@ import json
 import os
 import re
 import sys
-from typing import Any, Dict, List, Optional, Sequence
+from typing import Any, Dict, List, Optional, Sequence, Union
 
 from . import (
     base_reader,
@@ -45,6 +69,16 @@ from .gitcmd import GitRunner, runner_or_default
 
 # The two sources that mean a person is starting work, not continuing a turn.
 WORKING_SOURCES = ("startup", "resume")
+
+# The source that means this session has only just begun. A session id sees it
+# once, which is what lets the part that prints what a person sees decide the
+# offer without waiting on the part that writes the record.
+FRESH_SOURCE = "startup"
+
+# The two halves of the session start. The first prints only what the person
+# sees; the second prints only what the assistant reads and is the one of the
+# two that writes anything down.
+SESSION_START_PARTS = ("visible", "context")
 
 # How long a local git call inside the hook may take.
 LOCAL_TIMEOUT_SECONDS = 5
@@ -110,13 +144,12 @@ _BLAME_HEADER = re.compile(r"^[0-9a-f]{7,40} \d+ (\d+)(?: \d+)?$")
 def render_output(
     context_text: Optional[str], visible_text: Optional[str]
 ) -> Optional[Dict[str, Any]]:
-    """Build the one object this hook is allowed to print, or nothing at all.
+    """Build the combined object, or nothing at all.
 
-    UNVERIFIED ASSUMPTION: that one SessionStart hook may return both the text
-    the assistant reads and the text the person sees, in one object. It has not
-    been seen render in a real session yet. If it does not, the fallback is two
-    hook entries, the first printing only the visible message and the second
-    printing only the context, and this function is the one place that changes.
+    The combined form carries both halves in one object. It was tried live on
+    2026-09-06 and the message never appeared on screen, so the plugin ships
+    the two parts below instead. This is kept for a client that renders it, and
+    is what the default part still produces.
     """
     payload: Dict[str, Any] = {}
     if context_text:
@@ -127,6 +160,53 @@ def render_output(
     if visible_text:
         payload["systemMessage"] = visible_text
     return payload or None
+
+
+class _Part(object):
+    """Which half of the session start this run is doing.
+
+    "visible" prints only the sentence the person reads and writes nothing at
+    all: no session record, no offer record, no question id, no asked line, no
+    update from the shared copy, and no safeguard installed. "context" prints
+    only the text the assistant reads and does everything that is written down.
+    "both" is the combined form above, and is what a caller naming no part gets.
+    """
+
+    __slots__ = ("name",)
+
+    def __init__(self, name: Optional[str] = None):
+        self.name = name if name in SESSION_START_PARTS + ("both",) else "both"
+
+    @property
+    def writes(self) -> bool:
+        """Whether this part may write anything down."""
+        return self.name != "visible"
+
+    @property
+    def reaches_out(self) -> bool:
+        """Whether this part may reach the shared copy."""
+        return self.name != "visible"
+
+    def __repr__(self) -> str:
+        return "_Part(%r)" % (self.name,)
+
+
+def _render(
+    part: _Part, context_text: Optional[str], visible_text: Optional[str]
+) -> Union[Dict[str, Any], str, None]:
+    """What this part prints, which is at most one of the two halves.
+
+    The visible part prints one object holding the message. The context part
+    prints plain text, because a client reads a hook's output as one object or
+    as plain text by its first character, and never as both.
+    """
+    if part.name == "visible":
+        return {"systemMessage": visible_text} if visible_text else None
+    if part.name == "context":
+        if not context_text:
+            return None
+        return context_text[: constants.MAX_INJECTION_CHARS]
+    return render_output(context_text, visible_text)
 
 
 # --- Templates --------------------------------------------------------------
@@ -173,13 +253,22 @@ def fill(text: str, values: Dict[str, Any]) -> str:
 
 
 def main(argv: Sequence[str]) -> int:
-    """Read the session from standard input and print at most one object."""
+    """Read the session from standard input and print at most one thing.
+
+    The two hook entries pass "visible" and "context". The visible one prints
+    one JSON object holding the message; the context one prints plain text.
+    """
     client = "claude"
+    part = "both"
     args = list(argv or [])
     if "--client" in args:
         position = args.index("--client")
         if position + 1 < len(args):
             client = args[position + 1]
+    if "--part" in args:
+        position = args.index("--part")
+        if position + 1 < len(args):
+            part = args[position + 1]
     if client not in constants.CLIENTS:
         client = "claude"
     try:
@@ -193,10 +282,12 @@ def main(argv: Sequence[str]) -> int:
     if not isinstance(payload, dict):
         return 0
     try:
-        result = run(payload, client=client)
+        result = run(payload, client=client, part=part)
     except Exception:
         return 0
-    if result:
+    if isinstance(result, str):
+        sys.stdout.write(result + "\n")
+    elif result:
         sys.stdout.write(json.dumps(result, ensure_ascii=False) + "\n")
     return 0
 
@@ -230,8 +321,13 @@ def run(
     runner: Optional[GitRunner] = None,
     plugin_root: Optional[str] = None,
     env: Optional[Dict[str, str]] = None,
-) -> Optional[Dict[str, Any]]:
-    """Everything the hook decides, from values the caller hands in."""
+    part: str = "both",
+) -> Union[Dict[str, Any], str, None]:
+    """Everything the hook decides, from values the caller hands in.
+
+    An object comes back for the visible part and for the combined form, plain
+    text for the context part, and nothing at all when there is nothing to say.
+    """
     with _Environment(env):
         return _run(
             payload,
@@ -239,10 +335,11 @@ def run(
             now or state.now_utc(),
             runner_or_default(runner),
             find_plugin_root(plugin_root),
+            _Part(part),
         )
 
 
-def _run(payload, client, now, git, root_of_plugin):
+def _run(payload, client, now, git, root_of_plugin, part):
     session_id = payload.get("session_id")
     source = payload.get("source")
     cwd = payload.get("cwd")
@@ -260,14 +357,21 @@ def _run(payload, client, now, git, root_of_plugin):
         names = _child_base_names(cwd)
         first = names[0] if names else "gtm-base"
         second = names[1] if len(names) > 1 else "gtm-base"
-        return render_output(None, MULTIPLE_CHILDREN % (first, second))
+        return _render(part, None, MULTIPLE_CHILDREN % (first, second))
 
     if resolution.code == paths.CODE_JOINED:
-        state.update_seat(resolution.base_id, session_id=session_id, client=client)
+        if part.writes:
+            state.update_seat(resolution.base_id, session_id=session_id, client=client)
         if source not in WORKING_SOURCES:
             return None
         return _daily_block(
-            resolution.root, resolution.base_id, session_id, now, git, root_of_plugin
+            resolution.root,
+            resolution.base_id,
+            session_id,
+            now,
+            git,
+            root_of_plugin,
+            part,
         )
 
     if resolution.code in (paths.CODE_BASE_SHAPED, paths.CODE_UNJOINED):
@@ -276,13 +380,13 @@ def _run(payload, client, now, git, root_of_plugin):
         # again here and the session it belongs to has to be recorded whatever
         # started the session.
         return _base_shaped(
-            resolution.root, client, session_id, now, git, root_of_plugin, source
+            resolution.root, client, session_id, now, git, root_of_plugin, source, part
         )
 
     if source not in WORKING_SOURCES:
         return None
 
-    return _offer(cwd, account, session_id, now, git, root_of_plugin)
+    return _offer(cwd, account, session_id, source, now, git, root_of_plugin, part)
 
 
 # --- The folder that looks like a base --------------------------------------
@@ -322,13 +426,13 @@ def _repo_email(root: str, git: GitRunner) -> Optional[str]:
     return base_reader.repo_email(root, git)
 
 
-def _base_shaped(root, client, session_id, now, git, root_of_plugin, source):
+def _base_shaped(root, client, session_id, now, git, root_of_plugin, source, part):
     working = source in WORKING_SOURCES
     verdict = trust_surface.check(root, runner=git)
     if not verdict.ok:
         if not working:
             return None
-        return render_output(None, TRUST_FAILED % trust_surface.describe(verdict.codes))
+        return _render(part, None, TRUST_FAILED % trust_surface.describe(verdict.codes))
 
     base_id = paths.read_base_id(root, runner=git)
     if base_id:
@@ -338,14 +442,15 @@ def _base_shaped(root, client, session_id, now, git, root_of_plugin, source):
             old_root = entry.get("root")
             known = bool(old_root) and os.path.isdir(old_root)
             if known and os.path.realpath(old_root) != os.path.realpath(root):
-                return render_output(None, COPY_FOUND % old_root) if working else None
+                return _render(part, None, COPY_FOUND % old_root) if working else None
             if not known:
-                machine.rewrite_joined_root(base_id, root)
-                state.update_seat(base_id, session_id=session_id, client=client)
+                if part.writes:
+                    machine.rewrite_joined_root(base_id, root)
+                    state.update_seat(base_id, session_id=session_id, client=client)
                 if not working:
                     return None
                 return _daily_block(
-                    root, base_id, session_id, now, git, root_of_plugin
+                    root, base_id, session_id, now, git, root_of_plugin, part
                 )
 
     if not working:
@@ -358,8 +463,10 @@ def _base_shaped(root, client, session_id, now, git, root_of_plugin, source):
         "origin": safe_origin(paths.remote_url(root, runner=git)),
         "email": _repo_email(root, git) or NO_EMAIL_TEXT,
     }
-    return render_output(
-        fill(blocks.get("context", ""), values), fill(blocks.get("visible", ""), values)
+    return _render(
+        part,
+        fill(blocks.get("context", ""), values),
+        fill(blocks.get("visible", ""), values),
     )
 
 
@@ -374,25 +481,46 @@ def _folder_is_empty(cwd: str) -> bool:
     return not [name for name in entries if name != ".DS_Store"]
 
 
-def _offer(cwd, account, session_id, now, git, root_of_plugin):
+def _offer(cwd, account, session_id, source, now, git, root_of_plugin, part):
     if account.joined:
         return None
     if account.answer in ("set-up", "join"):
         return None
-    if machine.offer_was_shown_this_session(account, session_id):
-        return None
-    shown_before = bool(account.offer.get("shown_at"))
-    if account.answer == "unset" and not shown_before:
+    if _other_part_is_offering(account, session_id, source, part):
         show = True
+    elif machine.offer_was_shown_this_session(account, session_id):
+        return None
     else:
-        show = _folder_is_empty(cwd)
+        shown_before = bool(account.offer.get("shown_at"))
+        if account.answer == "unset" and not shown_before:
+            show = True
+        else:
+            show = _folder_is_empty(cwd)
     if not show:
         return None
     blocks = load_blocks(root_of_plugin, "offer.md")
     if not blocks:
         return None
-    machine.record_offer_shown(session_id, now)
-    return render_output(blocks.get("context", ""), blocks.get("visible", ""))
+    if part.writes:
+        machine.record_offer_shown(session_id, now)
+    return _render(part, blocks.get("context", ""), blocks.get("visible", ""))
+
+
+def _other_part_is_offering(account, session_id, source, part):
+    """Whether the part that writes is making the offer in this same session.
+
+    The client runs the two parts at the same time, so the part that prints
+    what a person sees cannot tell a record left by an earlier session from one
+    the other part left a moment ago, and going quiet on the second would mean
+    the offer never appears at all. It does not have to tell them apart. This
+    session's own record is only ever written by a run that decided to make the
+    offer, and a session id sees exactly one fresh start, so a record carrying
+    this session id on a fresh start means the offer is being made right now and
+    this part is the half of it the person reads.
+    """
+    if part.writes or source != FRESH_SOURCE:
+        return False
+    return machine.offer_was_shown_this_session(account, session_id)
 
 
 # --- The daily block --------------------------------------------------------
@@ -464,18 +592,36 @@ def _incoming_symlinks(root: str, target: str, git: GitRunner) -> List[str]:
     return found
 
 
-def _record_pull_refusal(base_id: str, refused: Sequence[str], today: datetime.date):
+def _record_pull_refusal(
+    base_id: str,
+    refused: Sequence[str],
+    today: datetime.date,
+    part: _Part,
+    left_again: List[str],
+):
     """Record that an update was refused, in this seat's own settings.
 
     The day, one fixed code, and the refused paths as hashes. The paths
     themselves are never written down, because a path can name a customer.
+
+    Only the part that reaches the shared copy can find this out, and that part
+    prints nothing a person sees, so it also leaves a note for the other part of
+    the next session to say out loud. The combined form says it there and then,
+    so it leaves no note. `left_again` tells the caller a note was left by this
+    run, so a note said last session is not cleared while the update behind it
+    is still being refused.
     """
     hashes = sorted(ids.path_hash(path) for path in refused)
+    note = {}
+    if part.name == "context":
+        note["pending_visible_note"] = CODE_PULL_REFUSED
+        left_again.append(CODE_PULL_REFUSED)
     state.update_seat(
         base_id,
         last_pull_refusal=today.isoformat(),
         last_pull_refusal_code=CODE_PULL_REFUSED,
         last_pull_refusal_path_hashes=hashes,
+        **note
     )
     return {
         "date": today.isoformat(),
@@ -499,15 +645,44 @@ def _retry_pending(base_id: str, root: str, git: GitRunner) -> None:
         return
 
 
-def _daily_block(root, base_id, session_id, now, git, root_of_plugin):
+def _daily_block(root, base_id, session_id, now, git, root_of_plugin, part):
+    """The whole of a joined base's session start, for one part of it.
+
+    The note left by an earlier session is said here and cleared only once this
+    run's own work is finished, because the two parts run at the same time and
+    clearing it first could take it away before the other part had read it.
+    """
     seat, _problems = state.load_seat(base_id)
-    if not seat.get("git_hook_installed"):
+    pending = seat.get("pending_visible_note")
+    if part.name == "visible" and pending == CODE_PULL_REFUSED:
+        return _render(part, None, PULL_REFUSED)
+
+    left_again: List[str] = []
+    result = _daily_work(
+        root, base_id, session_id, now, git, root_of_plugin, part, seat, left_again
+    )
+
+    if pending and part.writes and not left_again:
         try:
-            install_git_hook.install(root, root_of_plugin, runner=git, base_id=base_id)
+            state.update_seat(base_id, pending_visible_note=None)
         except Exception:
             pass
-    if seat.get("pending_confirmation"):
-        _retry_pending(base_id, root, git)
+    return result
+
+
+def _daily_work(
+    root, base_id, session_id, now, git, root_of_plugin, part, seat, left_again
+):
+    if part.writes:
+        if not seat.get("git_hook_installed"):
+            try:
+                install_git_hook.install(
+                    root, root_of_plugin, runner=git, base_id=base_id
+                )
+            except Exception:
+                pass
+        if seat.get("pending_confirmation"):
+            _retry_pending(base_id, root, git)
 
     blocks = load_blocks(root_of_plugin, "injection.md")
     if not blocks:
@@ -515,20 +690,44 @@ def _daily_block(root, base_id, session_id, now, git, root_of_plugin):
 
     on_default, _code = paths.head_is_default_branch(root, runner=git)
     if not on_default:
-        return _stalled(blocks, root, git, NOT_DEFAULT_BRANCH)
+        return _stalled(blocks, root, git, NOT_DEFAULT_BRANCH, part)
 
     status = git.run(
         ["status", "--porcelain"], cwd=root, timeout=LOCAL_TIMEOUT_SECONDS
     )
     if not status.ok or status.out():
-        return _stalled(blocks, root, git, DIRTY_TREE)
+        return _stalled(blocks, root, git, DIRTY_TREE, part)
+
+    has_remote = paths.remote_url(root, runner=git) is not None
+
+    if not part.reaches_out:
+        # This part never reaches the shared copy and never records where the
+        # base stood, so everything below is not its work. The one thing left
+        # for it to say is the offer to finish a setup that stopped halfway,
+        # and the base itself answers that.
+        return _render(
+            part,
+            None,
+            _question_text(
+                root,
+                base_id,
+                session_id,
+                now,
+                git,
+                blocks,
+                _settings_of(_map_text(root)),
+                has_remote,
+                root_of_plugin,
+                part,
+            ).visible
+            or None,
+        )
 
     branch = git.run(
         ["symbolic-ref", "--quiet", "--short", "HEAD"],
         cwd=root,
         timeout=LOCAL_TIMEOUT_SECONDS,
     ).out()
-    has_remote = paths.remote_url(root, runner=git) is not None
     changes = 0
 
     if has_remote:
@@ -538,7 +737,7 @@ def _daily_block(root, base_id, session_id, now, git, root_of_plugin):
             timeout=constants.FETCH_TIMEOUT_SECONDS,
         )
         if not fetched.ok:
-            return _stalled(blocks, root, git, UNREACHABLE % _as_of(root, git))
+            return _stalled(blocks, root, git, UNREACHABLE % _as_of(root, git), part)
         target = "origin/" + branch
         incoming = git.run(
             ["diff", "--name-only", "HEAD.." + target],
@@ -546,15 +745,15 @@ def _daily_block(root, base_id, session_id, now, git, root_of_plugin):
             timeout=LOCAL_TIMEOUT_SECONDS,
         )
         if not incoming.ok:
-            return _stalled(blocks, root, git, UNREACHABLE % _as_of(root, git))
+            return _stalled(blocks, root, git, UNREACHABLE % _as_of(root, git), part)
         names = [line.strip() for line in incoming.stdout.split("\n") if line.strip()]
         refused = [name for name in names if _is_refused_path(name)]
         refused.extend(
             name for name in _incoming_symlinks(root, target, git) if name not in refused
         )
         if refused:
-            _record_pull_refusal(base_id, refused, now.date())
-            return _stalled(blocks, root, git, PULL_REFUSED)
+            _record_pull_refusal(base_id, refused, now.date(), part, left_again)
+            return _stalled(blocks, root, git, PULL_REFUSED, part)
         if names:
             before = git.run(
                 ["rev-parse", "HEAD"], cwd=root, timeout=LOCAL_TIMEOUT_SECONDS
@@ -565,7 +764,9 @@ def _daily_block(root, base_id, session_id, now, git, root_of_plugin):
                 timeout=constants.FETCH_TIMEOUT_SECONDS,
             )
             if not merged.ok:
-                return _stalled(blocks, root, git, COULD_NOT_UPDATE % _as_of(root, git))
+                return _stalled(
+                    blocks, root, git, COULD_NOT_UPDATE % _as_of(root, git), part
+                )
             after = git.run(
                 ["rev-parse", "HEAD"], cwd=root, timeout=LOCAL_TIMEOUT_SECONDS
             ).out()
@@ -581,7 +782,7 @@ def _daily_block(root, base_id, session_id, now, git, root_of_plugin):
             state.update_seat(base_id, last_seen_commit=after)
             trust_note = _trust_after_update(root, base_id, now.date(), git)
             if trust_note:
-                return _stalled(blocks, root, git, trust_note)
+                return _stalled(blocks, root, git, trust_note, part)
         else:
             head = git.run(
                 ["rev-parse", "HEAD"], cwd=root, timeout=LOCAL_TIMEOUT_SECONDS
@@ -598,10 +799,19 @@ def _daily_block(root, base_id, session_id, now, git, root_of_plugin):
     map_text = _map_text(root)
     settings = _settings_of(map_text)
     question = _question_text(
-        root, base_id, session_id, now, git, blocks, settings, has_remote, root_of_plugin
+        root,
+        base_id,
+        session_id,
+        now,
+        git,
+        blocks,
+        settings,
+        has_remote,
+        root_of_plugin,
+        part,
     )
     context = _fill_main(blocks, map_text, settings, changes, "", question.context)
-    return render_output(context, question.visible or None)
+    return _render(part, context, question.visible or None)
 
 
 def _trust_after_update(root, base_id, today, git) -> Optional[str]:
@@ -640,13 +850,15 @@ class _Question(object):
         self.visible = visible
 
 
-def _stalled(blocks, root, git, sentence):
+def _stalled(blocks, root, git, sentence, part):
     """Say the one sentence, add the map as it stands, and ask nothing."""
+    if part.name == "visible":
+        return _render(part, None, sentence)
     map_text = _map_text(root)
     settings = _settings_of(map_text)
     note = AS_OF % _as_of(root, git)
     context = _fill_main(blocks, map_text, settings, 0, note, "")
-    return render_output(context, sentence)
+    return _render(part, context, sentence)
 
 
 def fence_for(text: str) -> str:
@@ -716,9 +928,26 @@ def _missing_required(files: Dict[str, stale.ContextFileInfo]) -> List[str]:
 
 
 def _question_text(
-    root, base_id, session_id, now, git, blocks, settings, has_remote, root_of_plugin
+    root,
+    base_id,
+    session_id,
+    now,
+    git,
+    blocks,
+    settings,
+    has_remote,
+    root_of_plugin,
+    part,
 ) -> _Question:
-    """The one question this session asks, or the reason it asks none."""
+    """The one question this session asks, or the reason it asks none.
+
+    Only one thing here is ever said out loud, which is the offer to finish a
+    setup that stopped halfway, so the part that prints what a person sees works
+    that out from the same files and then stops. Which file is asked about is
+    text the assistant reads, and settling it reads the base line by line and
+    issues an id that may be issued once, so neither belongs in a part that must
+    write nothing.
+    """
     today = state.today(now)
     files = _context_files(root)
     ledger = _ledger(root, base_id, today)
@@ -733,6 +962,9 @@ def _question_text(
             fill(setup.get("context", ""), {"missing": named}),
             fill(setup.get("visible", ""), {"missing": named}),
         )
+
+    if not part.writes:
+        return _Question("", "")
 
     email = _repo_email(root, git)
     owned = [path for path, info in by_path.items() if email and email in info.owners]

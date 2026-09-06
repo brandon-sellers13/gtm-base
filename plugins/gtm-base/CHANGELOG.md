@@ -1,12 +1,16 @@
 # Changelog
 
-## 0.1.1 (2026-09-06)
+## 0.1.2 (2026-09-06)
 
 - The check now follows a command that moves itself into another folder before it sends anything: a folder change before a send, or a send from a folder that is not a base at all, was not read. What a send would carry is read in the folder in force at that point, a folder change the check cannot follow refuses everything after it, and a send whose folder cannot be read is refused rather than allowed.
 
 - The refusal sentence shows the plugin's own fixed phrases as written; only file names taken from a diff are sanitized (the live gate had printed "the?command").
 
 - Manifest no longer names hooks/hooks.json; Claude Code loads that file on its own and refused the plugin when it was named twice (found on the first live install, 2026-09-06). The offer and the join guide now say to type the answer as the first message.
+
+- The work done at the start of a session is now declared as two hook entries rather than one, because the single object carrying both halves did not show the person anything. On the first live session (2026-09-06) the offer was recorded as shown, with the session it belonged to, and nothing appeared on screen. The first entry prints only the sentence the person reads, as one object holding that message, and writes nothing at all and reaches nothing over the network. The second prints only the text the assistant reads, as plain text, and is the one that records the session, brings the base up to date, issues the question id, and installs the safeguard. Both work the same decision out from the same inputs, and the combined form is kept for a client that renders it.
+
+- Claude Code runs the two entries at the same time rather than one after the other, so neither may wait on the other. The part that prints what a person sees takes a record carrying this session's own id, on a session that has only just begun, as the other part making the offer right now, and says its half of it. The one sentence that cannot be worked out without reaching the shared copy, the one saying an update carried files GTM Base does not take on its own, is left as a fixed code in this seat's own settings and said at the start of the next session, and the code is cleared only once a later run finds nothing left to refuse.
 
 - An owner accepting a prepared change now counts as that owner saying the
   affected document is right, on the day they accepted it, so the clock starts

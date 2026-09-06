@@ -20,7 +20,15 @@ for _path in (LIB_DIR, TESTS_DIR):
 
 import plain_language  # noqa: E402
 import support  # noqa: E402
-from gtmbase import constants, ids, machine, paths, session_start, state  # noqa: E402
+from gtmbase import (  # noqa: E402
+    constants,
+    gitcmd,
+    ids,
+    machine,
+    paths,
+    session_start,
+    state,
+)
 
 NOW = datetime.datetime(2026, 9, 5, 12, 0, 0)
 OWNER = "owner@example.com"
@@ -54,6 +62,26 @@ status: open
 We decided to sell to heads of marketing at companies of twenty to two hundred
 people.
 """
+
+
+class RecordingRunner(object):
+    """The real runner with every call written down, so a test can show that
+    the part which prints what a person sees never reached the shared copy."""
+
+    def __init__(self):
+        self.inner = gitcmd.GitRunner()
+        self.calls = []
+
+    def run(self, args, cwd=None, timeout=20, input=None):
+        self.calls.append(list(args))
+        return self.inner.run(args, cwd=cwd, timeout=timeout, input=input)
+
+    def check(self, args, cwd=None, timeout=20, input=None):
+        self.calls.append(list(args))
+        return self.inner.check(args, cwd=cwd, timeout=timeout, input=input)
+
+    def names(self):
+        return [call[0] for call in self.calls if call]
 
 
 def context_text(kind, owner=OWNER, status="draft"):
@@ -121,12 +149,16 @@ class SessionStartTest(unittest.TestCase):
 
     # --- running ------------------------------------------------------------
 
-    def run_hook(self, cwd, source="startup", session="s-1", now=None):
+    def run_hook(
+        self, cwd, source="startup", session="s-1", now=None, part="both", runner=None
+    ):
         return session_start.run(
             {"session_id": session, "source": source, "cwd": cwd},
             client="claude",
             now=now or NOW,
             plugin_root=PLUGIN_DIR,
+            part=part,
+            runner=runner,
         )
 
     def context_of(self, result):
@@ -140,6 +172,131 @@ class SessionStartTest(unittest.TestCase):
             for name in filenames:
                 found.append(os.path.join(dirpath, name))
         return found
+
+    def seat_snapshot(self):
+        """Every seat file and what is in it, so a run can be shown to write."""
+        snapshot = {}
+        for path in self.seat_files():
+            with open(path, "rb") as handle:
+                snapshot[path] = handle.read()
+        return snapshot
+
+    # --- the two parts ------------------------------------------------------
+
+    def test_the_visible_part_reaches_nothing_and_writes_nothing(self):
+        root, _base_id = self.joined_base()
+        self.add_files(root)
+        other = self.working_copy(root)
+        support.commit(
+            other,
+            "context/notes/note.md",
+            ["---", "kind: note", "owner: " + OWNER, "---", "", "words"],
+            "a note",
+        )
+        support.git(["push", "-q", "origin", "main"], cwd=other)
+        before = support.head_of(root)
+        untouched = self.seat_snapshot()
+
+        watched = RecordingRunner()
+        self.assertIsNone(self.run_hook(root, part="visible", runner=watched))
+
+        self.assertEqual([], [name for name in watched.names() if name == "fetch"])
+        self.assertEqual([], [name for name in watched.names() if name == "merge"])
+        self.assertEqual(before, support.head_of(root))
+        self.assertEqual(untouched, self.seat_snapshot())
+
+    def test_the_context_part_pulls_and_prints_the_map_as_plain_text(self):
+        root, base_id = self.joined_base()
+        self.add_files(root)
+        other = self.working_copy(root)
+        support.commit(
+            other,
+            "context/notes/note.md",
+            ["---", "kind: note", "owner: " + OWNER, "---", "", "words"],
+            "a note",
+        )
+        support.git(["push", "-q", "origin", "main"], cwd=other)
+
+        result = self.run_hook(root, part="context")
+
+        self.assertIsInstance(result, str)
+        self.assertFalse(result.lstrip().startswith("{"), result[:80])
+        self.assertIn("since your last session: 1 changes", result)
+        self.assertIn("# Map", result)
+        self.assertIn("The question id for this session:", result)
+        self.assertEqual(support.head_of(other), support.head_of(root))
+
+        seat, _problems = state.load_seat(base_id)
+        self.assertEqual("s-1", seat["session_id"])
+
+    def test_a_setup_that_stopped_halfway_is_said_in_both_parts(self):
+        root, base_id = self.joined_base(remote=False)
+        self.add_files(root, positioning=False)
+
+        shown = self.run_hook(root, part="visible")
+        self.assertEqual(["systemMessage"], list(shown.keys()))
+        self.assertIn("context/strategy/positioning.md", shown["systemMessage"])
+        self.assertIn(constants.RESTART_SENTENCE, shown["systemMessage"])
+        records, _problems = state.load_question_ids(base_id)
+        self.assertEqual([], records)
+
+        primed = self.run_hook(root, part="context")
+        self.assertIsInstance(primed, str)
+        self.assertIn("Setup is not finished", primed)
+        self.assertIn("context/strategy/positioning.md", primed)
+        self.assertIn(constants.RESTART_SENTENCE, primed)
+
+    def test_a_refused_update_is_said_out_loud_by_the_next_session(self):
+        root, base_id = self.joined_base()
+        self.add_files(root)
+        other = self.working_copy(root)
+        support.commit(other, ".claude/settings.local.json", ["hello"], "a change")
+        support.git(["push", "-q", "origin", "main"], cwd=other)
+        before = support.head_of(root)
+
+        # The part that reaches the shared copy is the only one that can find
+        # this out, and it says nothing on screen, so it leaves a note.
+        primed = self.run_hook(root, part="context")
+        self.assertIsInstance(primed, str)
+        self.assertNotIn(session_start.PULL_REFUSED, primed)
+        self.assertEqual(before, support.head_of(root))
+        seat, problems = state.load_seat(base_id)
+        self.assertEqual([], problems)
+        self.assertEqual(
+            session_start.CODE_PULL_REFUSED, seat["pending_visible_note"]
+        )
+
+        # The next session says it, and does not clear it while saying it.
+        shown = self.run_hook(root, part="visible", session="s-2")
+        self.assertEqual(session_start.PULL_REFUSED, shown["systemMessage"])
+        seat, _problems = state.load_seat(base_id)
+        self.assertEqual(
+            session_start.CODE_PULL_REFUSED, seat["pending_visible_note"]
+        )
+
+        # Once the shared copy no longer carries it, the note is cleared and
+        # the sentence is not said again.
+        support.git(["push", "-q", "-f", "origin", "HEAD:main"], cwd=root)
+        self.run_hook(root, part="context", session="s-2")
+        seat, _problems = state.load_seat(base_id)
+        self.assertIsNone(seat["pending_visible_note"])
+        self.assertIsNone(self.run_hook(root, part="visible", session="s-3"))
+
+    def test_a_refusal_that_is_still_there_is_not_quietly_cleared(self):
+        root, base_id = self.joined_base()
+        self.add_files(root)
+        other = self.working_copy(root)
+        support.commit(other, ".claude/settings.local.json", ["hello"], "a change")
+        support.git(["push", "-q", "origin", "main"], cwd=other)
+
+        self.run_hook(root, part="context")
+        self.run_hook(root, part="visible", session="s-2")
+        self.run_hook(root, part="context", session="s-2")
+
+        seat, _problems = state.load_seat(base_id)
+        self.assertEqual(
+            session_start.CODE_PULL_REFUSED, seat["pending_visible_note"]
+        )
 
     # --- the happy path -----------------------------------------------------
 
@@ -719,14 +876,21 @@ class WrapperTest(unittest.TestCase):
         os.chmod(path, 0o755)
         return path
 
-    def call(self, payload, extra_path=True, environment=None):
+    def call(self, payload, extra_path=True, environment=None, part=None):
         env = dict(os.environ)
         env["CLAUDE_PLUGIN_ROOT"] = PLUGIN_DIR
         if extra_path:
             env["PATH"] = self.bin + os.pathsep + env.get("PATH", "")
         env.update(environment or {})
+        command = [
+            "sh",
+            os.path.join(PLUGIN_DIR, "hooks", "session-start.sh"),
+            "claude",
+        ]
+        if part is not None:
+            command.append(part)
         finished = subprocess.run(
-            ["sh", os.path.join(PLUGIN_DIR, "hooks", "session-start.sh"), "claude"],
+            command,
             input=json.dumps(payload).encode("utf-8"),
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
@@ -796,6 +960,27 @@ class WrapperTest(unittest.TestCase):
             "The question id for this session:",
             payload["hookSpecificOutput"]["additionalContext"],
         )
+
+    def test_the_wrapper_runs_each_part_on_its_own(self):
+        root = os.path.join(self.sandbox.path, "half-made")
+        base_id = ids.base_id_random()
+        support.make_base(root, base_id=base_id)
+        machine.append_joined(root=root, base_id=base_id)
+        session = {"session_id": "s-1", "source": "startup", "cwd": root}
+
+        shown = self.call(session, extra_path=False, part="visible")
+        self.assertEqual(0, shown.returncode)
+        self.assertEqual(b"", shown.stderr)
+        message = json.loads(shown.stdout.decode("utf-8"))
+        self.assertEqual(["systemMessage"], list(message.keys()))
+        self.assertIn(constants.RESTART_SENTENCE, message["systemMessage"])
+
+        primed = self.call(session, extra_path=False, part="context")
+        self.assertEqual(0, primed.returncode)
+        self.assertEqual(b"", primed.stderr)
+        text = primed.stdout.decode("utf-8")
+        self.assertFalse(text.lstrip().startswith("{"), text[:80])
+        self.assertIn("Setup is not finished", text)
 
 
 if __name__ == "__main__":

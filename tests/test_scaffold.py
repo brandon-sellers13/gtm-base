@@ -17,7 +17,7 @@ for _path in (LIB_DIR, TESTS_DIR):
     if _path not in sys.path:
         sys.path.insert(0, _path)
 
-from gtmbase import constants  # noqa: E402
+from gtmbase import constants, session_start  # noqa: E402
 import plain_language  # noqa: E402
 
 
@@ -134,7 +134,7 @@ class TestManifests(unittest.TestCase):
         )
 
         self.assertEqual("gtm-base", plugin["name"])
-        self.assertEqual("0.1.1", plugin["version"])
+        self.assertEqual("0.1.2", plugin["version"])
         self.assertEqual("Brandon Sellers", plugin["author"]["name"])
         self.assertEqual("MIT", plugin["license"])
         self.assertTrue(plugin["keywords"])
@@ -163,17 +163,30 @@ class TestManifests(unittest.TestCase):
         self.assertIn("${CLAUDE_PLUGIN_ROOT}", declared["command"])
         self.assertTrue(declared["command"].endswith("/hooks/pre-push-gate.sh claude"))
 
+        # Two entries: the first prints only what the person sees, the second
+        # only what the assistant reads, because a client reads a hook's output
+        # as one object or as plain text and never as both.
         at_session_start = hooks["hooks"]["SessionStart"]
-        self.assertEqual(1, len(at_session_start))
-        # No matcher, so every kind of session start is seen.
-        self.assertNotIn("matcher", at_session_start[0])
-        self.assertEqual(1, len(at_session_start[0]["hooks"]))
+        self.assertEqual(2, len(at_session_start))
+        self.assertEqual(("visible", "context"), session_start.SESSION_START_PARTS)
 
-        session = at_session_start[0]["hooks"][0]
-        self.assertEqual("command", session["type"])
-        self.assertEqual(constants.SESSION_START_TIMEOUT_SECONDS, session["timeout"])
-        self.assertIn("${CLAUDE_PLUGIN_ROOT}", session["command"])
-        self.assertTrue(session["command"].endswith("/hooks/session-start.sh claude"))
+        for entry, part in zip(at_session_start, session_start.SESSION_START_PARTS):
+            # No matcher, so every kind of session start is seen.
+            self.assertNotIn("matcher", entry)
+            self.assertEqual(1, len(entry["hooks"]))
+
+            session = entry["hooks"][0]
+            self.assertEqual("command", session["type"])
+            self.assertEqual(
+                constants.SESSION_START_TIMEOUT_SECONDS, session["timeout"]
+            )
+            self.assertIn("${CLAUDE_PLUGIN_ROOT}", session["command"])
+            self.assertTrue(
+                session["command"].endswith(
+                    "/hooks/session-start.sh claude %s" % part
+                ),
+                session["command"],
+            )
 
         for name in ("pre-push-gate.sh", "session-start.sh"):
             script = os.path.join(PLUGIN_DIR, "hooks", name)
@@ -356,7 +369,7 @@ class TestFakeGh(unittest.TestCase):
 
 class TestConstants(unittest.TestCase):
     def test_constants_import_and_every_path_is_relative(self):
-        self.assertEqual("0.1.1", __import__("gtmbase").__version__)
+        self.assertEqual("0.1.2", __import__("gtmbase").__version__)
         for name in dir(constants):
             if name.startswith("_"):
                 continue

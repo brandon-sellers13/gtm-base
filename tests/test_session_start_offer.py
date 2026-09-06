@@ -35,13 +35,64 @@ class OfferTest(unittest.TestCase):
         self.empty = os.path.join(self.sandbox.path, "an-empty-folder")
         os.makedirs(self.empty)
 
-    def run_hook(self, cwd, source="startup", session="s-1", now=None):
+    def run_hook(self, cwd, source="startup", session="s-1", now=None, part="both"):
         return session_start.run(
             {"session_id": session, "source": source, "cwd": cwd},
             client="claude",
             now=now or NOW,
             plugin_root=PLUGIN_DIR,
+            part=part,
         )
+
+    def seat_files(self):
+        """Every file this seat wrote, for the checks that read all of them."""
+        found = []
+        for dirpath, _dirnames, filenames in os.walk(os.environ["GTM_BASE_HOME"]):
+            for name in filenames:
+                found.append(os.path.join(dirpath, name))
+        return found
+
+    # --- the two parts ------------------------------------------------------
+
+    def test_the_visible_part_offers_a_base_and_writes_nothing(self):
+        result = self.run_hook(self.elsewhere, part="visible")
+        self.assertEqual(["systemMessage"], list(result.keys()))
+        self.assertIn("GTM Base is installed", result["systemMessage"])
+        self.assertIn(constants.RESTART_SENTENCE, result["systemMessage"])
+
+        self.assertEqual([], self.seat_files())
+        self.assertIsNone(machine.load_machine_state().offer["shown_at"])
+
+    def test_the_context_part_primes_the_assistant_as_plain_text_and_records(self):
+        self.run_hook(self.elsewhere, part="visible")
+        result = self.run_hook(self.elsewhere, part="context")
+
+        self.assertIsInstance(result, str)
+        self.assertFalse(result.lstrip().startswith("{"), result[:80])
+        self.assertIn("setup offer", result)
+        self.assertLessEqual(len(result), constants.MAX_INJECTION_CHARS)
+
+        state = machine.load_machine_state()
+        self.assertEqual("s-1", state.offer["shown_session_id"])
+        self.assertTrue(state.offer["shown_at"])
+        self.assertEqual("unset", state.answer)
+
+    def test_a_second_pair_in_the_same_session_says_nothing_in_either_part(self):
+        self.run_hook(self.elsewhere, part="visible")
+        self.run_hook(self.elsewhere, part="context")
+
+        for part in ("visible", "context"):
+            self.assertIsNone(
+                self.run_hook(self.elsewhere, source="resume", part=part), part
+            )
+
+    def test_the_offer_is_shown_whichever_part_the_client_runs_first(self):
+        """The client runs the two parts at the same time rather than one after
+        the other, so the part that prints what a person sees must not go quiet
+        because the other part recorded this session a moment earlier."""
+        self.run_hook(self.elsewhere, part="context")
+        result = self.run_hook(self.elsewhere, part="visible")
+        self.assertIn("GTM Base is installed", result["systemMessage"])
 
     # --- the first session --------------------------------------------------
 
