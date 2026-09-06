@@ -2,6 +2,8 @@
 
 ## 0.1.0
 
+- Manifest no longer names hooks/hooks.json; Claude Code loads that file on its own and refused the plugin when it was named twice (found on the first live install, 2026-09-06). The offer and the join guide now say to type the answer as the first message.
+
 - An owner accepting a prepared change now counts as that owner saying the
   affected document is right, on the day they accepted it, so the clock starts
   again rather than the same document being asked about next session. When the

@@ -145,7 +145,9 @@ class TestManifests(unittest.TestCase):
     def test_no_mcp_servers_and_both_hooks_point_at_scripts_that_are_there(self):
         plugin = read_json(PLUGIN_MANIFEST_PATH)
         self.assertNotIn("mcpServers", plugin)
-        self.assertEqual("./hooks/hooks.json", plugin["hooks"])
+        # Claude Code loads hooks/hooks.json on its own; naming it in the
+        # manifest as well makes the plugin fail to load (seen live 2026-09-06).
+        self.assertNotIn("hooks", plugin)
 
         hooks = read_json(HOOKS_PATH)
         self.assertEqual({"PreToolUse", "SessionStart"}, set(hooks["hooks"].keys()))

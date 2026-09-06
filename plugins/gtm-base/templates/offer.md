@@ -8,7 +8,8 @@ GTM Base is installed. It can set up a company base for you, which is one
 folder holding your strategy, your numbers, and the decisions behind them, in a
 form your AI can read at the start of every session. Say yes and it will walk
 you through it, tell it you have an invite link and it will join the base
-someone else already made, or say not now and it will stay quiet.
+someone else already made, or say not now and it will stay quiet. Type your
+answer here as your first message.
 Say "set up my company base" whenever you are ready.
 
 [[block: context]]

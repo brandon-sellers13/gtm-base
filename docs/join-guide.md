@@ -27,12 +27,14 @@ claude plugin install gtm-base@gtm-base
 
 ## Open Claude Code and answer the offer
 
-Open Claude Code in any folder. The plugin notices that you have not set up a
-base yet and offers to make one for you. You answer in plain words. Say yes to
-set one up, say that you have an invitation link if a teammate already made one
-and sent you a link to it, or say not now if this is a bad moment. If you say
-not now, nothing asks you again until you ask for it, and the message tells you
-the exact sentence that starts setup again whenever you are ready.
+Open Claude Code in any folder. Before you type anything, a short message
+appears in the chat. The plugin has noticed that you have not set up a base yet
+and is offering to make one for you. Nothing happens until you reply, so type
+your answer into the chat as your first message, in plain words. Type yes to
+set one up, say that you have an invitation link if a teammate already made a
+base and sent you a link to it, or type not now if this is a bad moment. If you
+say not now, nothing asks you again until you ask for it, and the reply tells
+you the exact sentence that starts setup again whenever you are ready.
 
 ## What setting up does
 
