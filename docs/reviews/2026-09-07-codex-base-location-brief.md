@@ -1,0 +1,23 @@
+You are stress-testing one product design decision for GTM Base, a Claude Code plugin at this repository root. Read only; change nothing. Your output is a written critique, not code.
+
+## Read first
+- docs/plans/2026-09-05-001-feat-join-and-onboarding-plan.md, especially the Key Technical Decisions rows on "Company name asked once at the location step", "paths.resolve_base is the sole resolver", "Base creation builds everything in a sibling partial folder", and the Amendment r2.2 at the end.
+- docs/brainstorms/2026-09-05-join-and-onboarding-requirements.md, requirements J14, J15, J16, J19, and the Key Decisions bullet "Folder-scoped with the parent-folder rule, no global writes".
+- docs/brainstorms/2026-09-04-current-without-integrations-requirements.md, R5 (the inbox lives inside the working folder, is excluded from version control, and is never synced).
+- plugins/gtm-base/lib/gtmbase/location.py (propose_target, describe, check_parent) and plugins/gtm-base/lib/gtmbase/paths.py (resolve_base, is_base_shaped).
+- plugins/gtm-base/lib/gtmbase/machine.py (the joined entry: root, base_id, remote).
+
+## The question
+Where should a person's company base folder (always named `gtm-base`) live on their computer, and what should the plugin propose by default?
+
+Today's rule: propose `<content folder>/gtm-base` beside the marketing material the person named; when that content folder is itself a git repository, refuse nesting and propose `~/GTM Bases/<Company>/gtm-base` instead (this second fallback landed tonight after the home-path fallback `~/<Company>` collided with the content folder for a company named Gridwise whose folder is `~/Gridwise`). The base is active only when Claude Code is opened in the base folder or in the folder that directly contains it (resolve_base checks cwd and cwd/gtm-base against the joined list).
+
+## The candidate change I want you to attack
+Make `~/GTM Bases/<Company>/gtm-base` the default for everyone, not only for repository parents, and record the content folder the person named on the joined entry as `content_root` so that opening Claude Code in the content folder still activates the base (resolve_base would also match cwd == content_root). Reasons claimed: (1) a base nested inside a cloud-synced content folder (iCloud Drive, Google Drive, Dropbox, OneDrive) would sync the base's `.git` and its gitignored `work/inbox/` raw transcripts to the cloud, breaking R5's "never synced" and corrupting git state; (2) nesting a repository inside a repository makes the parent's tooling see it (embedded-repository warnings, `git add -A` gitlinks, a second Claude Code trust prompt); (3) a consultant with several clients gets all bases in one place; (4) the person never has to know where the base is because the link does the activation. Costs claimed: the base is not visible beside the content in Finder; two locations to explain in the guide; J14 and J15 must be amended; resolve_base and the joined entry schema change.
+
+## What I want from you
+1. Attack the candidate: concrete failure modes, with the file and line where the current code would break or the plan's promise would be violated. Consider: renaming or moving the content folder after creation; two companies whose content folders are the same; a content folder on an external drive that is unmounted; the content folder being deleted; two people on one machine account; the base-shaped question in session_start when someone opens Claude Code inside `~/GTM Bases/<Company>/`; the trust prompt Claude Code shows for a new git root; iCloud "Desktop and Documents" syncing, which silently makes `~/Desktop` and `~/Documents` cloud folders on many Macs (does `~/GTM Bases` escape that, and what if the person's home itself is synced); Time Machine and backups of the seat directory versus the base; how the pinned settings file and the trust-surface check interact with a base outside the content folder; how release two's backup and invite flows (a private remote, a second seat cloning to a folder they name) interact with the link idea.
+2. Then argue the strongest case for the opposite: keep the base beside the content by default, nest even inside a git repository, and handle sync and nesting by warning rather than relocating.
+3. Give a recommendation with the trade-offs stated, and the smallest set of changes to the plan and code that implements it, including the exact sentence the plugin should say when proposing the location. The reader is a marketing lead, so every sentence the plugin says must be plain language with no git vocabulary (the plan bans: commit, branch, pull request, merge, rebase, clone) and no em dashes.
+
+Write the critique as markdown with those three sections. Be specific and adversarial; do not pad.
