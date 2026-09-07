@@ -7,12 +7,15 @@ it is still right.
 
 ## Status
 
-Version 0.1.3 is the scaffold plus the check that runs before anything leaves
+Version 0.1.4 is the scaffold plus the check that runs before anything leaves
 the computer. `hooks/hooks.json` declares the check on the command tool and the
 work done at the start of a session; no skills or agents ship yet, and the
 manifest declares no MCP servers by design. The plugin never connects to a
 vendor; the sources reach the base through the tools you already have connected
-in your own client.
+in your own client. The check reads what a send would carry only when the send
+comes from a base you have joined or from a working folder GTM Base made for
+itself; every other repository on the machine is left alone, apart from the few
+refusals that need nothing read.
 
 ## How the session-start hook prints what it has to say
 
@@ -74,7 +77,10 @@ placeholder id with a real one.
   marker line that names a proposal wherever it ends up.
 - `shim.py` documents and implements the loader every script copies.
 - `gate.py` reads any command holding `git` or `gh`, works out whether it would
-  send anything, and refuses when what it would send should not leave.
+  send anything, and refuses when what it would send should not leave. It reads
+  what a send carries only from a base you have joined, from a folder inside
+  one, or from a working folder of its own; a send from any other repository is
+  left alone, apart from the refusals that need nothing read.
 - `scan.py` reads the added lines of a change, the notes saved with it, and any
   file a GitHub command would send, and reports what it found by class only.
 - `redaction_patterns.py` holds those classes: addresses, phone numbers, key

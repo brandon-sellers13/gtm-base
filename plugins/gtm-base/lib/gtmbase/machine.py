@@ -275,7 +275,12 @@ def save_machine_state(
 def record_offer_shown(
     session_id: str, now: Optional[datetime.datetime] = None, runner=None
 ) -> MachineState:
-    """Record that the offer was shown, so it is shown once per session."""
+    """Record that the offer was shown, which holds it to once a session.
+
+    This is a note of what happened, never an answer. Showing the offer and
+    hearing nothing back leaves the answer where it was, so a later session in
+    any folder offers again until the person says set up, join, or not now.
+    """
     from .state import iso_utc  # imported here to keep the import order simple
 
     state = load_machine_state_raw()
@@ -285,7 +290,12 @@ def record_offer_shown(
 
 
 def record_offer_answer(answer: str, runner=None) -> MachineState:
-    """Record an answer, never replacing a stronger one with a weaker one."""
+    """Record an answer, never replacing a stronger one with a weaker one.
+
+    Set up and join beat not now, not now beats unset, and nothing ever moves
+    an answer back down. Only these three words are answers; being shown the
+    offer is not one of them.
+    """
     if answer not in constants.OFFER_ANSWERS:
         raise StateError("that is not an answer we record", code="bad-value")
     state = load_machine_state_raw()

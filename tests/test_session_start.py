@@ -829,6 +829,30 @@ class SessionStartTest(unittest.TestCase):
         self.assertTrue(os.path.isdir(elsewhere))
         del base_id
 
+    def test_the_offer_keeps_asking_across_projects_until_it_is_answered(self):
+        """Amendment r2.1: reading the offer and moving on is not an answer, so
+        the next session in any folder asks again, and only the words set up,
+        join, or not now stop it."""
+        folders = []
+        for name in ("one-project", "another-project", "a-third-project"):
+            path = os.path.join(self.sandbox.path, name)
+            support.write(os.path.join(path, "notes.txt"), "hello\n")
+            folders.append(path)
+
+        for number, folder in enumerate(folders, start=1):
+            session = "s-%d" % number
+            result = self.run_hook(folder, session=session)
+            self.assertIn(
+                constants.RESTART_SENTENCE, result["systemMessage"], folder
+            )
+            self.assertIn("setup offer", self.context_of(result), folder)
+            self.assertEqual(
+                session, machine.load_machine_state().offer["shown_session_id"]
+            )
+
+        machine.record_offer_answer("not-now")
+        self.assertIsNone(self.run_hook(folders[0], session="s-4"))
+
     def test_the_output_is_capped(self):
         root, _base_id = self.joined_base(remote=False)
         self.add_files(root)

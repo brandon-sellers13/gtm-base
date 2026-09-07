@@ -504,3 +504,28 @@ Starts after one real user-one session has been observed and `docs/walkthroughs/
 - 2026-09-05 r1: written from the origin and research.
 - 2026-09-05 deepened: architecture, security, and data-integrity passes (40 findings).
 - 2026-09-05 r2: plan review by coherence, feasibility, security, and scope-guardian reviewers (33 findings; the adversarial reviewer did not complete). Cuts: the brief pipeline, `.docx` and `.pptx` parsing, the kept-names list, seat-directory merging, re-migration, not-now expiry, the shipped sha allowlist. Fixes: release line after Unit 5; `xcode-select` prerequisite check; two-entry hook fallback; run id carried on committed artifacts for the same-run exemption; drafted mode appends and stages without committing so one commit holds file and line; `git init -b main`; owner stamped with the repo-local email; completeness by `status`; copies not adopted; partial clone beside the destination; user two identity step; source dates only when a source carries one; contact-detail screening of drafts; trust surface widened (case folding, NFC, whole tree, pull refusal set, `plugins/`); `gh` deny list and widened push classification; first-push review as a gate condition on every push path; collaborator write-access disclosure; token lifecycle and sign-out; `/cd` advice without a version gate; account state as the only joined record; SC5 scope clarified; J21 amendment stated in full.
+- 2026-09-06 r2.1: amended after the first live sessions on the desktop app. The offer is the assistant's first reply rather than an on-screen notice, and an offer shown and never answered no longer counts as not now. See Amendment r2.1 below.
+
+## Amendment r2.1 (2026-09-06): what the desktop app can show, and how long the offer keeps asking
+
+Recorded from live sessions on 2026-09-06, after Unit 1 and the two-entry hook shape shipped in 0.1.2 and 0.1.3.
+
+**What was observed.**
+
+1. The Claude Code desktop app renders no session-start hook output on screen. Not the combined object carrying both `systemMessage` and `additionalContext`, and not `systemMessage` on its own. Only the assistant's context arrives, and only as plain text on its own hook entry. So the offer can reach a person in one way only, as part of the assistant's first reply, after they have typed something.
+2. Hook entries for one event run at the same time as each other, not in the order they are declared. That was found on 2026-09-06 and the code already accounts for it (0.1.2): neither half may wait on the other, and the half that prints what a person sees treats a record carrying this session's own id on a session that has only just begun as the other half making the offer right now.
+3. With the r2 rule that an offer shown and never answered counts as not now, a person who typed hello, read the offer inside the reply, and moved on never saw the offer again in any of their project folders, and the reply carried no restart sentence. Brandon saw exactly this on his own machine.
+
+**Amendment to J1 (the offer is shown on screen).** J1 is met by the assistant's first reply, not by an on-screen notice. The visible hook entry stays in the code and keeps printing its object, because a client that does render it costs nothing to keep serving and the command line client has not been checked either way. Nothing in the plan may claim the person sees the offer before they type. The two-entry hook shape is no longer a fallback; it is the shipped form.
+
+**Amendment to J2 and to the Key Technical Decisions row "Set up is recorded only when".** The clause "an offer shown and never answered counts as not now" is withdrawn. The rule is now:
+
+- The offer is made once a session, as part of the first reply, in any folder, for as long as the recorded answer is unset.
+- Only three things are answers: set up, join, and not now. Being shown the offer is not one of them, and the shown-at record with its session id is history plus the once-a-session guard, never a substitute for an answer.
+- After an explicit not now, the offer stays out of unrelated projects and comes back only in an empty folder or in a folder that already looks like a base. That part of J2 is unchanged, and so is SC7.
+- Every not-now reply carries the restart sentence, and the reply version of the offer ends with the restart sentence too, so a person who reads the offer and does nothing still has the way back in front of them.
+- Nothing changes for a joined base (the daily block) or for a folder that already looks like a base (the question, not the offer).
+
+**Effect on the Unit 1 test scenarios.** The scenario "offer shown and unanswered, second session elsewhere: nothing" is replaced by "offer shown and unanswered, a later session with a different session id elsewhere: the offer again." The rest of that line stands: a second start or a resume inside the same session shows nothing, an empty folder shows the offer, a folder that looks like a base shows the question, and after not now an unrelated folder a month later shows nothing.
+
+**Where this is implemented.** `plugins/gtm-base/lib/gtmbase/session_start.py` (`_offer`), `plugins/gtm-base/templates/offer.md` (the context block), and `docs/join-guide.md`. Shipped in 0.1.4.

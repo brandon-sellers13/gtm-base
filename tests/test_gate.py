@@ -23,6 +23,51 @@ def check(command, cwd, session_id="session-1", git_runner=None):
     return gate.check_command(command, cwd, session_id, git=git_runner)
 
 
+def plain_repository(
+    box,
+    name="plain-repo",
+    line="mail jane@acme.com",
+    message="ask jane@acme.com about it",
+):
+    """A repository of the person's own: not a base, and never joined.
+
+    It has a shared copy of its own and one saved change that has not reached
+    it yet, and that change carries the two things the gate refuses inside a
+    base: an address in a line being added, and an address in the note saved
+    with the work. So a send from here is allowed only because it was never
+    read, not because there was nothing in it to find.
+    """
+    root = os.path.join(box.path, name)
+    remote = os.path.join(box.path, name + "-origin.git")
+    git(["init", "--bare", "-q", "-b", "main", remote], cwd=box.path)
+    os.makedirs(root)
+    git(["init", "-b", "main", "-q"], cwd=root)
+    git(["config", "--local", "user.email", "owner@example.com"], cwd=root)
+    git(["config", "--local", "user.name", "Test Owner"], cwd=root)
+    git(["remote", "add", "origin", remote], cwd=root)
+    write(os.path.join(root, "readme.md"), "a repository of my own\n")
+    git(["add", "-A"], cwd=root)
+    git(["commit", "-q", "-m", "first"], cwd=root)
+    git(["push", "-q", "-u", "origin", "main"], cwd=root)
+    write(os.path.join(root, "notes.md"), line + "\n")
+    git(["add", "-A"], cwd=root)
+    git(["commit", "-q", "-m", message], cwd=root)
+    return root
+
+
+def a_working_folder():
+    """A folder shaped like the ones this seat makes to prepare a change in.
+
+    The gate reads a send from one of these, so a test that needs the reading
+    to happen without a real base runs from here.
+    """
+    from gtmbase import ids, paths
+
+    folder = os.path.join(paths.worktrees_dir(ids.base_id_random()), "w")
+    os.makedirs(folder)
+    return folder
+
+
 # --- What a command is -------------------------------------------------------
 
 
@@ -321,13 +366,20 @@ class TestReadingASend(unittest.TestCase):
             command = "cd %s && git status && git push origin main" % root
             self.assertIn("an email address", check(command, box.path) or "")
 
-    def test_a_send_from_a_folder_that_is_not_a_base_at_all_is_refused(self):
+    def test_a_send_from_a_folder_that_is_not_a_base_at_all_is_left_alone(self):
+        """A folder that is no repository cannot be a base, so it is not read."""
         with Sandbox() as box:
             plain = os.path.join(box.path, "plain")
             os.makedirs(plain)
+            self.assertIsNone(check("git push origin main", plain))
+
+    def test_a_send_from_a_working_folder_with_no_repository_is_refused(self):
+        """Inside the seat's own folder the send is read, so it must be readable."""
+        with Sandbox() as box:
+            empty = a_working_folder()
             self.assertEqual(
                 gate.sentence_for(gate.REASON_UNREADABLE),
-                check("git push origin main", plain),
+                check("git push origin main", empty),
             )
 
     def test_a_folder_change_the_check_cannot_follow_is_refused(self):
@@ -383,19 +435,18 @@ class TestReadingASend(unittest.TestCase):
             command = "git -C %s push origin proposal/stg-2" % work
             self.assertIn("an email address", check(command, root))
 
-    def test_a_send_from_a_folder_this_account_never_joined_is_refused(self):
+    def test_a_send_from_a_folder_this_account_never_joined_is_left_alone(self):
+        """A named folder that is not a base is outside what the gate reads.
+
+        It used to be refused outright. Refusing it stopped ordinary work in
+        every other repository on the machine, so the send is now allowed and
+        git reports anything wrong with the folder itself.
+        """
         with Sandbox() as box:
             root, _base_id = box.base()
-            other = os.path.join(box.path, "elsewhere")
-            os.makedirs(other)
-            self.assertIn(
-                "nothing GTM Base does needs that command",
-                check("git -C %s push origin main" % other, root),
-            )
-            self.assertIn(
-                "nothing GTM Base does needs that command",
-                check("GIT_DIR=%s git push origin main" % other, root),
-            )
+            other = plain_repository(box, "elsewhere")
+            self.assertIsNone(check("git -C %s push origin main" % other, root))
+            self.assertIsNone(check("GIT_DIR=%s git push origin main" % other, root))
 
     def test_a_command_that_touches_the_seat_folder_is_refused(self):
         with Sandbox() as box:
@@ -521,6 +572,126 @@ class TestReadingAGitHubCall(unittest.TestCase):
             self.assertIsNone(check("gh pr create --body-file body.md", root))
 
 
+# --- Where the gate reads, and where it does not -----------------------------
+
+
+class TestWhereTheGateReads(unittest.TestCase):
+    """What a send would carry is read out of a base, and nowhere else.
+
+    A joined base, any folder inside one, and the working folders this seat
+    makes for itself are read. Every other repository on the machine is left
+    alone, because the thing being stopped is a company's own writing leaving
+    its base. Brandon's decision of 2026-09-06.
+    """
+
+    def test_a_send_from_a_plain_repository_is_not_read(self):
+        with Sandbox() as box:
+            other = plain_repository(box)
+            self.assertIsNone(check("git push origin main", other))
+
+    def test_the_same_send_from_a_joined_base_is_still_refused(self):
+        with Sandbox() as box:
+            root, _base_id = box.base()
+            commit(root, "context/metrics/notes.md", ["mail jane@acme.com"])
+            reason = check("git push", root)
+            self.assertIn("an email address", reason or "")
+            self.assertNotIn("jane@acme.com", reason)
+
+    def test_a_send_from_a_folder_inside_a_joined_base_is_still_refused(self):
+        with Sandbox() as box:
+            root, _base_id = box.base()
+            commit(root, "context/metrics/notes.md", ["mail jane@acme.com"])
+            inside = os.path.join(root, "context", "metrics")
+            self.assertIn("an email address", check("git push", inside) or "")
+
+    def test_a_send_from_a_working_folder_of_our_own_is_still_refused(self):
+        with Sandbox() as box:
+            from gtmbase import paths
+
+            root, base_id = box.base()
+            work = os.path.join(paths.worktrees_dir(base_id), "w")
+            git(["worktree", "add", "-q", "-b", "proposal/stg-9", work], cwd=root)
+            commit(work, "context/metrics/notes.md", ["mail jane@acme.com"])
+            self.assertIn(
+                "an email address",
+                check("git push origin proposal/stg-9", work) or "",
+            )
+
+    def test_a_github_body_from_a_plain_repository_is_not_read(self):
+        with Sandbox() as box:
+            other = plain_repository(box)
+            write(os.path.join(other, "body.md"), "Please mail jane@acme.com.\n")
+            self.assertIsNone(check("gh pr create --body-file body.md", other))
+            self.assertIsNone(check('gh pr edit 4 --body "mail jane@acme.com"', other))
+
+    def test_the_github_commands_no_skill_uses_are_still_refused(self):
+        with Sandbox() as box:
+            other = plain_repository(box)
+            for command in ("gh repo edit --visibility public", "gh auth token"):
+                self.assertIn(
+                    "nothing GTM Base does needs that command",
+                    check(command, other) or "",
+                    command,
+                )
+
+    def test_the_refusals_that_read_nothing_still_hold(self):
+        with Sandbox() as box:
+            other = plain_repository(box)
+            self.assertIn(
+                "skip the safety check", check("git push --no-verify", other) or ""
+            )
+            self.assertIn(
+                "a different set of safeguards",
+                check("git -c core.hooksPath=/tmp push", other) or "",
+            )
+            self.assertIn(
+                "nothing GTM Base does needs that command",
+                check("GIT_SSH_COMMAND=/tmp/x git push", other) or "",
+            )
+            self.assertIn(
+                "overwrite the shared history",
+                check("git push --force origin main", other) or "",
+            )
+
+    def test_the_seat_folder_rule_still_holds(self):
+        with Sandbox() as box:
+            other = plain_repository(box)
+            seat = os.environ["GTM_BASE_HOME"]
+            for command in ("rm -rf %s" % seat, "cat %s/machine.json" % seat):
+                self.assertIn(
+                    "GTM Base keeps its own records",
+                    check(command, other) or "",
+                    command,
+                )
+
+    def test_a_folder_change_into_a_plain_repository_is_not_read(self):
+        with Sandbox() as box:
+            other = plain_repository(box)
+            self.assertIsNone(
+                check("cd %s && git push origin main" % other, box.path)
+            )
+
+    def test_a_folder_change_into_a_base_is_read(self):
+        with Sandbox() as box:
+            root, _base_id = box.base()
+            commit(root, "context/metrics/notes.md", ["mail jane@acme.com"])
+            self.assertIn(
+                "an email address",
+                check("cd %s && git push origin main" % root, box.path) or "",
+            )
+
+    def test_reading_the_persons_own_files_still_stops_a_plain_repository(self):
+        with Sandbox() as box:
+            other = plain_repository(box)
+            marker.write_sources_read_marker("session-1")
+            for command in ("git push", "gh auth login"):
+                self.assertIn(
+                    "read your own documents",
+                    check(command, other, session_id="session-1") or "",
+                    command,
+                )
+
+
 # --- The two session conditions ---------------------------------------------
 
 
@@ -584,8 +755,7 @@ class TestTheSizeCaps(unittest.TestCase):
             stdout=" a file | 2 +\n 1 file changed, 900000 insertions(+), 5 deletions(-)\n",
         )
         with Sandbox() as box:
-            folder = os.path.join(box.path, "plain")
-            os.makedirs(folder)
+            folder = a_working_folder()
             reason = gate.check_command("git push", folder, "session-1", git=runner)
             self.assertIn("larger than the check can read", reason)
             for call in runner.calls:
@@ -604,8 +774,7 @@ class TestTheSizeCaps(unittest.TestCase):
             stdout="%d\n" % (gate.MAX_PUSH_COMMITS + 1),
         )
         with Sandbox() as box:
-            folder = os.path.join(box.path, "plain")
-            os.makedirs(folder)
+            folder = a_working_folder()
             reason = gate.check_command("git push", folder, "session-1", git=runner)
             self.assertIn("more saved work", reason)
 

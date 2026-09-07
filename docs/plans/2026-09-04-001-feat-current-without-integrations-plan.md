@@ -689,6 +689,7 @@ Phase A1 is Units 1, 2, 9a, 4, 3, 7, 9b, 10. SC1 and SC5 must pass end to end on
 
 - 2026-09-04 r1: written from the origin; deepened the same day (architecture, security, data integrity).
 - 2026-09-04 r2: plan review by five reviewers, 41 findings. Fixed: provenance by byte offsets replaced with a raw-span sidecar and a faithful-redaction diff in Python; path guard made plugin-level and keyed on `agent_type`, extended to Grep and Glob, fail closed with a 5-second timeout; session id recorded by the hook on every source and read by scripts; all seat state moved to `~/.gtm-base/`; owner identity defined as a git author email; shim loader given an environment fallback; skill and fork boundary defined; git work moved to worktrees; `core.hooksPath` and existing-hook handling; gate extended to commit messages, whole-command scanning, the wider `gh` set, tokenizer bypasses, and an allowlist with fixed grammar; corrections-file confirmation requires co-modification and a hash match and `corrections/` is gated; session-start pull refuses code and instruction paths; bases must be joined; frontmatter and hidden-content rejection; fork return is a status line; marker expiry constant and request-keyed capture; question ids single-use and session-bound with an asked log for the yes rate; pending confirmation retry; approval checks the branch hash; stable file ids, `merge=union`, sibling ordering, and text-derived staging ids removed; dependency graph reordered so the ledger path (Phase A1) ships before the transcript pipeline; connected intake split into its own Tier B unit; stale-check split into library and skill; decision-mode live test relabeled manual; Codex visibility of the confirm skill and the Bash-gate event doubt recorded.
+- 2026-09-06 r2.4: one-line pointer added so Unit 3's offer behavior follows the join plan's Amendment r2.1.
 
 ## Amendment r2.1 (2026-09-04): onboarding must start on its own
 
@@ -714,3 +715,7 @@ The join requirements (docs/brainstorms/2026-09-05-join-and-onboarding-requireme
 ## Amendment r2.3 (2026-09-05): the v2 hosted layer is a web app
 
 Brandon's decision: the first hosted piece is a web app in the shape of Product Map's (GitHub OAuth, a GitHub App that creates and seeds the repository, a file view, proposals shown as accept or discard), not a Slack button. Nothing in Phases A or B changes. The proposal body remains the single artifact so the app renders it unchanged, and `corrections/` plus the machine-readable marker remain the app's source for proposal state. The app is out of this plan and will get its own brainstorm after the first real base has run for four weeks.
+
+## Amendment r2.4 (2026-09-06): the offer follows the join plan
+
+Unit 3's setup-offer behavior follows Amendment r2.1 of `docs/plans/2026-09-05-001-feat-join-and-onboarding-plan.md`: the offer reaches the person as part of the assistant's first reply, it is made once a session in any folder until they answer in words, and only after an explicit not now does it fall back to empty and base-shaped folders.

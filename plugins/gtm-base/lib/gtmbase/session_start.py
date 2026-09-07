@@ -12,7 +12,8 @@ Four things can happen here, and exactly one of them happens per session.
    run on trusting it, and only then is the person asked whether this is their
    company's base.
 3. The folder holds more than one base folder. One sentence says so.
-4. Nothing here is a base. The person is offered a base of their own, once.
+4. Nothing here is a base. The person is offered a base of their own, once a
+   session, and again next session until they answer in words.
 
 Everything a person sees is fixed text held in `templates/`, so the words can
 be reviewed in one place. Nothing here ever prints an address that carries a
@@ -482,6 +483,20 @@ def _folder_is_empty(cwd: str) -> bool:
 
 
 def _offer(cwd, account, session_id, source, now, git, root_of_plugin, part):
+    """Whether the setup offer belongs here, and the two halves of it if so.
+
+    The offer is made in any folder, once a session, until the person answers
+    in words. Showing it and hearing nothing back is not an answer, because
+    the app they use puts nothing on screen before their first message and the
+    offer reaches them inside the reply. Once they have said not now, the
+    offer stays out of the folders they work in and comes back only in an
+    empty folder or in a folder that already looks like a base, which is
+    another branch of this hook.
+
+    The half a person reads is still printed even though the desktop app
+    throws it away, because a client that does render it costs nothing to keep
+    serving. Whether the command line client renders it has not been checked.
+    """
     if account.joined:
         return None
     if account.answer in ("set-up", "join"):
@@ -490,12 +505,10 @@ def _offer(cwd, account, session_id, source, now, git, root_of_plugin, part):
         show = True
     elif machine.offer_was_shown_this_session(account, session_id):
         return None
+    elif account.answer == "unset":
+        show = True
     else:
-        shown_before = bool(account.offer.get("shown_at"))
-        if account.answer == "unset" and not shown_before:
-            show = True
-        else:
-            show = _folder_is_empty(cwd)
+        show = _folder_is_empty(cwd)
     if not show:
         return None
     blocks = load_blocks(root_of_plugin, "offer.md")

@@ -111,9 +111,34 @@ class OfferTest(unittest.TestCase):
 
         self.assertIsNone(self.run_hook(self.elsewhere, source="resume"))
 
-    def test_an_unanswered_offer_does_not_follow_the_person_around(self):
+    def test_an_unanswered_offer_is_made_again_in_the_next_session(self):
+        """Amendment r2.1: only three words are an answer, and being shown the
+        offer is not one of them, because the app puts nothing on screen before
+        the person types and the offer reaches them inside the reply."""
         self.run_hook(self.elsewhere)
-        self.assertIsNone(self.run_hook(self.elsewhere, session="s-2"))
+        another = os.path.join(self.sandbox.path, "a-second-unrelated-project")
+        support.write(os.path.join(another, "plan.txt"), "hello\n")
+
+        result = self.run_hook(another, session="s-2", now=A_MONTH_LATER)
+        self.assertIn("GTM Base is installed", result["systemMessage"])
+        self.assertIn("setup offer", result["hookSpecificOutput"]["additionalContext"])
+
+        state = machine.load_machine_state()
+        self.assertEqual("s-2", state.offer["shown_session_id"])
+        self.assertEqual("unset", state.answer)
+
+    def test_the_same_session_is_offered_nothing_a_second_time(self):
+        self.run_hook(self.elsewhere)
+        self.assertIsNone(self.run_hook(self.elsewhere, source="resume"))
+        self.assertIsNone(self.run_hook(self.elsewhere, source="startup"))
+        self.assertEqual("s-1", machine.load_machine_state().offer["shown_session_id"])
+
+    def test_after_set_up_or_join_nothing_is_offered_anywhere(self):
+        for answer in ("set-up", "join"):
+            with self.subTest(answer=answer):
+                machine.record_offer_answer(answer)
+                self.assertIsNone(self.run_hook(self.elsewhere, session="s-9"))
+                self.assertIsNone(self.run_hook(self.empty, session="s-10"))
 
     def test_an_unanswered_offer_comes_back_in_an_empty_folder(self):
         self.run_hook(self.elsewhere)
@@ -187,6 +212,45 @@ class OfferTest(unittest.TestCase):
         self.assertEqual(1, len(after.joined))
 
     # --- what the person reads ----------------------------------------------
+
+    def test_both_branches_of_the_context_end_with_the_restart_sentence(self):
+        """The person who says not now and the person who says something else
+        both need the one sentence that starts setup again."""
+        result = self.run_hook(self.elsewhere)
+        context = result["hookSpecificOutput"]["additionalContext"]
+        self.assertEqual(2, context.count(constants.RESTART_SENTENCE), context)
+
+        opening, _, rest = context.partition('- "not now"')
+        self.assertTrue(rest, context)
+        not_now_branch, _, else_branch = rest.partition("- Anything else")
+        self.assertNotIn(constants.RESTART_SENTENCE, opening)
+        self.assertIn(constants.RESTART_SENTENCE, not_now_branch)
+        self.assertIn(constants.RESTART_SENTENCE, else_branch)
+
+        offer_line = "or say not now and it will stay quiet."
+        self.assertIn(offer_line, else_branch)
+        self.assertLess(
+            else_branch.index(offer_line),
+            else_branch.index(constants.RESTART_SENTENCE),
+            else_branch,
+        )
+
+    def test_the_context_tells_the_assistant_not_to_repeat_the_offer(self):
+        context = self.run_hook(self.elsewhere)["hookSpecificOutput"][
+            "additionalContext"
+        ]
+        self.assertIn("Say the offer once.", context)
+        self.assertIn("later messages in this same session", context)
+
+    def test_the_join_guide_describes_the_offer_as_it_now_works(self):
+        guide = os.path.join(REPO_ROOT, "docs", "join-guide.md")
+        plain_language.assert_plain(self, guide)
+        with open(guide, encoding="utf-8") as handle:
+            text = handle.read()
+        self.assertIn("type anything", text)
+        self.assertIn("The reply opens with the offer", " ".join(text.split()))
+        self.assertIn(constants.RESTART_SENTENCE, text)
+        self.assertIn("an empty folder", text)
 
     def test_the_offer_reads_plainly_and_carries_no_web_address(self):
         result = self.run_hook(self.elsewhere)

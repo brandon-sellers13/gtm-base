@@ -11,7 +11,7 @@
       "name": "gtm-base",
       "source": "./plugins/gtm-base",
       "description": "Keep a company's marketing context current: an inbox for meeting notes, proposals with evidence, a decisions ledger, and owner confirmations.",
-      "version": "0.1.3",
+      "version": "0.1.4",
       "author": {
         "name": "Brandon Sellers"
       },

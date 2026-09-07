@@ -20,6 +20,29 @@ Once a command does name git or GitHub, every part of it has to be accounted
 for. A part whose first word is not git, not GitHub, and not one of the small
 set of harmless words listed below is refused rather than assumed to be
 harmless, because a word this check does not know can carry a send inside it.
+
+What the gate reads, and where
+------------------------------
+
+The thing this check is here to stop is a company's own writing leaving a
+base, so what a send would carry is only read when the send comes from a base
+this account has joined, from a folder inside one, or from a working folder
+this seat made under its own folder. That is the whole of what
+`folder_is_in_scope` answers, and it is decided once for each command.
+
+Everywhere else on the machine, which is every other repository the person
+works in, the send is not read at all: not the change, not the notes saved
+with it, not the file a GitHub command would send, not the command line
+itself, and not the folders that belong to one seat alone. A push from a
+repository that is not a base is left alone by decision (Brandon, 2026-09-06),
+because reading every repository on a consultant's machine refused ordinary
+work, and a check people turn off protects nothing.
+
+The refusals that need nothing read stay everywhere: the GitHub commands no
+skill uses, skipping the safeguard, forcing over the branch the team shares,
+pointing git at other safeguards, handing git another program to run, naming
+the seat's own folder, a command that cannot be read at all, and the rule that
+nothing may leave a session that has read the person's own documents.
 """
 
 from __future__ import annotations
@@ -1054,22 +1077,35 @@ def first_push_is_unreviewed(cwd: str, git: Optional[GitRunner] = None) -> bool:
     return push_conditions.first_push_unreviewed(resolution.base_id)
 
 
+def named_folder_path(raw: str, cwd: str) -> str:
+    """The whole path one folder name in a command points at.
+
+    A name written relative to somewhere is joined onto the folder the command
+    runs in, and the folder git keeps its own records in is read as the folder
+    holding it, so `--git-dir` and `-C` end at the same place.
+    """
+    candidate = os.path.expanduser(raw)
+    if not os.path.isabs(candidate):
+        candidate = os.path.join(cwd, candidate)
+    real = os.path.realpath(candidate)
+    if os.path.basename(real) == ".git":
+        real = os.path.dirname(real)
+    return real
+
+
 def resolve_working_folder(
     raw: str, cwd: str, git: Optional[GitRunner] = None
 ) -> Optional[str]:
-    """The real folder a command named, when it is one a send may run in.
+    """The real folder a command named, when it is one the gate knows.
 
-    A send may only name a base this account has joined, or a folder inside
-    this seat's own folder, which is where the plugin does its git work.
-    Anything else is not a folder any skill needs, so it gets no answer.
+    The two it knows are a base this account has joined and a folder inside
+    this seat's own folder, which is where the plugin does its git work. Any
+    other folder gets no answer here: it is a repository of the person's own,
+    the send from it is not read, and it is not taken out of the text the seat
+    folder rule reads.
     """
     try:
-        candidate = os.path.expanduser(raw)
-        if not os.path.isabs(candidate):
-            candidate = os.path.join(cwd, candidate)
-        real = os.path.realpath(candidate)
-        if os.path.basename(real) == ".git":
-            real = os.path.dirname(real)
+        real = named_folder_path(raw, cwd)
         if not os.path.isdir(real):
             return None
         seat = os.path.realpath(paths.seat_home_path())
@@ -1087,23 +1123,88 @@ def resolve_working_folder(
 
 def _resolve_push_folders(
     result: Classification, cwd: str, git: Optional[GitRunner]
-) -> Tuple[List[str], bool]:
-    """Check every folder a send named. Return the text of the ones we accept
-    and whether any of them was one we do not."""
+) -> List[str]:
+    """Point every send at the folder it would really run in.
+
+    The text of the folders the gate knows comes back, so the seat folder rule
+    can leave those names alone. A folder it does not know is still filled in,
+    because the scope question below is asked of the folder each send would
+    run in, and a send from a folder outside the gate's reach is allowed.
+    """
     accepted: List[str] = []
-    refused = False
     for push in result.pushes:
         raw = push.directory
         if not raw:
             continue
         real = resolve_working_folder(raw, cwd, git)
         if real is None:
-            refused = True
-            push.directory = None
+            try:
+                push.directory = named_folder_path(raw, cwd)
+            except Exception:
+                push.directory = None
             continue
         accepted.append(raw)
         push.directory = real
-    return accepted, refused
+    return accepted
+
+
+def _is_a_working_folder(real: str) -> bool:
+    """Whether a path sits inside the git work folders this seat makes.
+
+    The shape is `<seat folder>/bases/<base>/worktrees/<folder>`. It is read as
+    a path rather than looked up in the seat's records, so asking the question
+    never brings the seat folder into being.
+    """
+    try:
+        seat = os.path.realpath(paths.seat_home_path())
+    except Exception:
+        return False
+    bases = os.path.join(seat, "bases") + os.sep
+    if not real.startswith(bases):
+        return False
+    parts = real[len(bases) :].split(os.sep)
+    return len(parts) > 2 and parts[1] == "worktrees"
+
+
+def folder_is_in_scope(folder: str, runner: Optional[GitRunner] = None) -> bool:
+    """Whether what a send from this folder would carry is read at all.
+
+    Two answers are yes. A base this account has joined, including any folder
+    inside it, because that is where the company's own writing lives. And a
+    working folder under this seat's own folder, because that is where the
+    plugin prepares a change before it is sent. Every other folder on the
+    machine belongs to work that is not a base, and none of it is read.
+    """
+    try:
+        real = os.path.realpath(folder or "")
+        if _is_a_working_folder(real):
+            return True
+        account = machine.load_machine_state(runner=runner)
+        if paths.resolve_base(real, account, runner=runner).joined:
+            return True
+        root = paths.git_root(real, runner=runner)
+        if root and root != real:
+            return bool(paths.resolve_base(root, account, runner=runner).joined)
+    except Exception:
+        return False
+    return False
+
+
+def _scope_by_folder(result: Classification, cwd: str, runner: Optional[GitRunner]):
+    """For every folder this command would send from, whether the gate reads it.
+
+    A GitHub command names no folder of its own, so it is read against the
+    folder the command was typed in, which is also the folder the file holding
+    its text is looked for in.
+    """
+    answers = {}
+    for push in result.pushes:
+        folder = push.directory or push.folder or cwd
+        if folder not in answers:
+            answers[folder] = folder_is_in_scope(folder, runner)
+    if result.gh_writes and cwd not in answers:
+        answers[cwd] = folder_is_in_scope(cwd, runner)
+    return answers
 
 
 def names_the_seat_folder(command: str, accepted: Sequence[str] = ()) -> bool:
@@ -1155,16 +1256,18 @@ def check_command(
             return sentence_for(REASON_SEAT_FOLDER)
         return None
     result = classify(command, cwd=cwd)
-    accepted, refused_folder = _resolve_push_folders(result, cwd, runner)
+    accepted = _resolve_push_folders(result, cwd, runner)
     if names_the_seat_folder(command, accepted):
         return sentence_for(REASON_SEAT_FOLDER)
-    if refused_folder:
-        return sentence_for(REASON_DENIED_COMMAND)
 
     if result.deny_reason == REASON_UNTOKENIZABLE:
-        hits = scan.scan_command(command, None)
-        if hits:
-            return hits[0].sentence()
+        # The command is refused either way. Saying which class it holds means
+        # reading the command line as content, so that is only done where the
+        # gate reads content at all.
+        if folder_is_in_scope(cwd, runner):
+            hits = scan.scan_command(command, None)
+            if hits:
+                return hits[0].sentence()
         return sentence_for(REASON_UNTOKENIZABLE)
     if result.deny_reason:
         return sentence_for(result.deny_reason)
@@ -1175,32 +1278,39 @@ def check_command(
     if not result.needs_scan:
         return None
 
-    if first_push_is_unreviewed(cwd, git=runner):
-        return sentence_for(REASON_FIRST_PUSH)
+    # Whether each folder this command would send from is one the gate reads,
+    # worked out once, because the answer costs a look at the base's records.
+    scope = _scope_by_folder(result, cwd, runner)
+    reads_something = any(scope.values())
 
-    allowlist, _code = scan.load_allowlist(base_root_for(cwd, git=runner))
+    allowlist = None
+    if reads_something:
+        if first_push_is_unreviewed(cwd, git=runner):
+            return sentence_for(REASON_FIRST_PUSH)
 
-    hits = scan.scan_command(command, allowlist)
-    if hits:
-        return hits[0].sentence()
+        allowlist, _code = scan.load_allowlist(base_root_for(cwd, git=runner))
 
-    for tokens in result.gh_writes:
-        files, from_stdin = body_files(tokens)
-        if from_stdin:
-            return sentence_for(REASON_STDIN_BODY)
-        for name in files:
-            path = name if os.path.isabs(name) else os.path.join(cwd, name)
-            text = None
-            try:
-                with open(path, encoding="utf-8", errors="replace") as handle:
-                    text = handle.read(constants.MAX_ARTIFACT_BYTES + 1)
-            except OSError:
-                return sentence_for(REASON_MISSING_FILE)
-            if len(text.encode("utf-8", "replace")) > constants.MAX_ARTIFACT_BYTES:
-                return sentence_for(REASON_TOO_LARGE)
-            found = scan.scan_text(text, allowlist, name)
-            if found:
-                return found[0].sentence()
+        hits = scan.scan_command(command, allowlist)
+        if hits:
+            return hits[0].sentence()
+
+        for tokens in result.gh_writes:
+            files, from_stdin = body_files(tokens)
+            if from_stdin:
+                return sentence_for(REASON_STDIN_BODY)
+            for name in files:
+                path = name if os.path.isabs(name) else os.path.join(cwd, name)
+                text = None
+                try:
+                    with open(path, encoding="utf-8", errors="replace") as handle:
+                        text = handle.read(constants.MAX_ARTIFACT_BYTES + 1)
+                except OSError:
+                    return sentence_for(REASON_MISSING_FILE)
+                if len(text.encode("utf-8", "replace")) > constants.MAX_ARTIFACT_BYTES:
+                    return sentence_for(REASON_TOO_LARGE)
+                found = scan.scan_text(text, allowlist, name)
+                if found:
+                    return found[0].sentence()
 
     for push in result.pushes:
         # A send that named a folder of its own is read against that folder,
@@ -1208,14 +1318,21 @@ def check_command(
         # against the folder it was moved into, not against the folder the
         # command was typed in.
         where = push.directory or push.folder or cwd
+        reads_this_one = scope.get(where, False)
         if paths.git_root(where, runner=runner) is None:
-            # Nothing here to read the send against, so there is no way to
-            # know what it would send.
-            return sentence_for(REASON_UNREADABLE)
+            if reads_this_one:
+                # Nothing here to read the send against, so there is no way to
+                # know what it would send.
+                return sentence_for(REASON_UNREADABLE)
+            # Outside the gate's reach and not a repository either. Git says so
+            # itself, and nothing here has to be read to let it.
+            continue
         branch_now = _current_branch(runner, where)
+        # Overwriting the branch the team shares is refused wherever it is run,
+        # because knowing what it would undo takes nothing being read.
         if _forces_default_branch(runner, where, push, branch_now):
             return sentence_for(REASON_FORCE_DEFAULT)
-        if push.delete:
+        if push.delete or not reads_this_one:
             continue
         for start, end in ranges_for_push(runner, where, push):
             reason = scan_range(runner, where, start, end, allowlist)

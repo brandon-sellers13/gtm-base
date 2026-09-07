@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.1.4 (2026-09-06)
+
+- The setup offer now keeps asking until the person answers in words. It is made once a session, as part of the first reply, in whatever folder they are working in, for as long as the answer is unset. Being shown the offer and hearing nothing back used to count as "not now", which meant a person who read the offer inside a reply and carried on with their day never saw it again anywhere. Brandon's decision of 2026-09-06.
+
+- Only three things are an answer: set up, join, and not now. After an explicit not now nothing changes from before, so the offer stays out of the projects the person works in and comes back only in an empty folder or in a folder that already looks like a base. Nothing changes for a base already joined or for the question a base-shaped folder asks.
+
+- Every reply to "not now" carries the one sentence that starts setup again, and the offer inside a reply now ends with that sentence too, so a person who reads it and does nothing still has the way back in front of them. The text the assistant is given also tells it to say the offer once and not to repeat it later in the same session.
+
+- The join guide is rewritten around what the app actually does: open Claude Code anywhere, type anything at all, and the reply opens with the offer.
+
+- The check that reads what a command would send now only reads it when the send comes from a base you have joined, from a folder inside one, or from a working folder GTM Base made for itself. In every other repository on the machine the change, the notes saved with it, the file a GitHub command would send, and the command line itself are no longer read at all. Reading every repository refused ordinary work, including work on this plugin, whose own test files carry addresses and whose commit notes name a second author, and a check people turn off protects nothing. The refusals that need nothing read still hold everywhere: the GitHub commands no skill uses, skipping the safeguard, overwriting the branch the team shares, pointing git at other safeguards, handing git another program to run, naming GTM Base's own records folder, a command that cannot be read, and the rule that nothing may leave a session that has read your own documents. A folder named with `-C` or `--git-dir` that is not a base is no longer refused outright; it is simply not read. Brandon's decision of 2026-09-06.
+
 ## 0.1.3 (2026-09-06)
 
 - Live finding: the desktop app renders neither a hook's combined output nor its systemMessage alone; only the assistant's context arrives. A first message that is not an answer to the offer (a greeting, a question) now gets the offer text in the reply instead of the restart sentence. The on-screen half of J1 is recorded as a platform limitation for now.

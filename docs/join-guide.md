@@ -1,8 +1,10 @@
 # Joining GTM Base
 
-Status: written for the designed flow. As of the 0.1.0 scaffold, the automatic
-offer and the set-up flow are not yet built; this guide is updated as each piece
-lands.
+Status: written for the designed flow. As of version 0.1.4 the offer described
+below is live and arrives in the first reply of a session. Setting a base up is
+not built yet, so saying yes gets you a plain note that setup arrives with a
+later release and that nothing has been changed. This guide is updated as each
+piece lands.
 
 ## What you need before you start
 
@@ -27,14 +29,29 @@ claude plugin install gtm-base@gtm-base
 
 ## Open Claude Code and answer the offer
 
-Open Claude Code in any folder. Before you type anything, a short message
-appears in the chat. The plugin has noticed that you have not set up a base yet
-and is offering to make one for you. Nothing happens until you reply, so type
-your answer into the chat as your first message, in plain words. Type yes to
-set one up, say that you have an invitation link if a teammate already made a
-base and sent you a link to it, or type not now if this is a bad moment. If you
-say not now, nothing asks you again until you ask for it, and the reply tells
-you the exact sentence that starts setup again whenever you are ready.
+Open Claude Code in any folder and type anything at all, even hello. The reply
+opens with the offer, because the plugin has noticed that you have not set up a
+base yet and is offering to make one for you. Nothing on your computer is
+touched until you answer.
+
+Answer in plain words in your next message. Say yes to set a base up, say that
+you have an invitation link if a teammate already made a base and sent you a
+link to it, or say not now if this is a bad moment.
+
+If you say not now, the reply gives you back the one sentence that starts setup
+again whenever you are ready, and that sentence is this one.
+
+Say "set up my company base" whenever you are ready.
+
+After a not now, the offer stays out of the projects you work in. It comes back
+only when you open Claude Code in an empty folder or in a folder that already
+looks like a base, because those are the two places where you probably do want
+one.
+
+Until you give one of those three answers, the offer appears again at the top
+of the first reply in each new session, wherever you are working. That is
+deliberate. Your app shows you nothing before your first message, so an offer
+you never read is an offer you were never really given.
 
 ## What setting up does
 

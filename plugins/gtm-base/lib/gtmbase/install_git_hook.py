@@ -9,6 +9,10 @@ way to run code on every teammate's laptop.
 An existing hook is moved aside and still runs after ours. When the folder
 cannot be written, nothing is written and a fixed code is recorded, so the
 person can be told the terminal layer is not in place.
+
+The hook only ever exists inside a base. `install` is called from the joined
+branch of the work done at the start of a session and from the join skill and
+from nowhere else, so the folder the hook reads is always one the gate reads.
 """
 
 from __future__ import annotations
