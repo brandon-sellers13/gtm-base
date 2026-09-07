@@ -25,6 +25,10 @@ REASON_BESIDE_CONTENT = "beside-your-content"
 # goes in a folder named for the company inside the person's home folder.
 REASON_HOME_FOLDER = "home-folder"
 
+# The folder named for the company was itself turned down, so the base goes in
+# a folder kept for bases alone inside the home folder.
+REASON_BASES_FOLDER = "bases-folder"
+
 # --- What the person is warned about -----------------------------------------
 
 # The folder they named is already looked after by another tool.
@@ -238,6 +242,14 @@ def propose_target(
     else:
         parent = os.path.join(home_path(), name)
         reason = REASON_HOME_FOLDER
+        # The folder named for the company may already exist and be the very
+        # folder just turned down (a company called Gridwise working in
+        # ~/Gridwise), or sit inside some other history. Then the base goes in
+        # a folder kept for bases alone, so the proposal never names the place
+        # it just refused.
+        if os.path.isdir(parent) and is_repository(parent, runner=git):
+            parent = os.path.join(home_path(), constants.BASES_FOLDER_NAME, name)
+            reason = REASON_BASES_FOLDER
 
     check_parent(parent, confirmed_home)
     target = os.path.join(
@@ -250,10 +262,21 @@ def propose_target(
 def describe(proposal: Proposal) -> str:
     """One sentence telling the person where their base is about to go."""
     if proposal.warning_code == WARNING_PARENT_IS_REPOSITORY:
+        where = (
+            "a folder kept for bases inside your home folder"
+            if proposal.reason_code == REASON_BASES_FOLDER
+            else "a folder named for your company inside your home folder"
+        )
         return (
-            "Your base will go in a new folder at %s, because the folder you "
-            "named is already looked after by another tool and a base inside "
-            "it would be swept up by that tool." % proposal.target_path
+            "The folder you named already keeps its own change history, and a "
+            "base inside it would get tangled up with that history. So your "
+            "base will go in a new folder at %s, which is %s. Nothing in the "
+            "folder you named will be changed." % (proposal.target_path, where)
+        )
+    if proposal.reason_code == REASON_BASES_FOLDER:
+        return (
+            "Your base will go in a new folder at %s, which is a folder kept "
+            "for bases inside your home folder." % proposal.target_path
         )
     if proposal.reason_code == REASON_HOME_FOLDER:
         return (

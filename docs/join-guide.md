@@ -1,6 +1,6 @@
 # Joining GTM Base
 
-Status: as of version 0.2.0 the offer and setting a base up are both live.
+Status: as of version 0.2.1 the offer and setting a base up are both live.
 Backing a base up somewhere off your computer, inviting a teammate, and joining
 a base from a link arrive with the next release, so those sections below
 describe what is coming rather than what works today. This guide is updated as

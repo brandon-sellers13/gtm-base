@@ -421,3 +421,8 @@ SOURCES_READ_REFUSAL = (
     "This session has read your own documents, so nothing leaves this computer "
     "until the session ends. Start a new session and ask again."
 )
+
+# The folder inside the home folder that holds bases when the folder named for
+# the company cannot be used (it is a repository already, or the very folder
+# the person named).
+BASES_FOLDER_NAME = "GTM Bases"

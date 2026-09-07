@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.2.1 (2026-09-06)
+
+- Location: when the folder named for the company is itself the folder just turned down (a company called Gridwise working in ~/Gridwise, which keeps its own history), the base goes to a folder kept for bases inside the home folder instead of the refused place. Found on Brandon's first real setup run. The sentence now says the folder keeps its own change history rather than that it is looked after by another tool.
+
 ## 0.2.0 (2026-09-06)
 
 - Setup now drafts your ideal customer profile, one decision entry, and your positioning, one at a time, and shows each one to you whole before anything is written. Each draft is a complete document rather than a set of questions, so you read it and say yes, change it, skip it, or ask what is wrong with it, and nothing is asked of you one field at a time. The profile always carries who these companies are, what they already know they need, what they do with the product, and what they use today; the four other sections appear only when what you named actually said something about them, because a heading with nothing behind it is worse than no heading.

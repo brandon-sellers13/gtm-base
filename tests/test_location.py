@@ -179,6 +179,33 @@ class TestWhereTheBaseGoes(unittest.TestCase):
             self.assertEqual(location.CODE_INSIDE_SEAT_HOME, caught.exception.code)
 
 
+    def test_a_company_whose_own_folder_is_the_one_turned_down_goes_to_the_bases_folder(self):
+        """Brandon's own case on 2026-09-06: a company called Gridwise, working in
+        ~/Gridwise, which keeps its own history. The folder named for the
+        company is the very folder just refused, so the base must go somewhere
+        else and the sentence must never name the refused folder."""
+        with support.Sandbox() as sandbox:
+            folder = self.content_folder(sandbox, "Gridwise")
+            support.git(["init", "-b", "main", "-q"], cwd=folder)
+
+            proposal = location.propose_target(folder, "Gridwise")
+
+            self.assertEqual(
+                location.WARNING_PARENT_IS_REPOSITORY, proposal.warning_code
+            )
+            self.assertEqual(location.REASON_BASES_FOLDER, proposal.reason_code)
+            self.assertEqual(
+                os.path.join(
+                    location.home_path(), constants.BASES_FOLDER_NAME, "Gridwise", "gtm-base"
+                ),
+                proposal.target_path,
+            )
+            sentence = location.describe(proposal)
+            self.assertNotIn(os.path.join(folder, "gtm-base"), sentence)
+            self.assertIn("change history", sentence)
+            self.assertEqual([], plain_language.find_banned(sentence), sentence)
+
+
 class TestTheSentenceThePersonReads(unittest.TestCase):
     """Every sentence this module produces is one a marketer can read."""
 
