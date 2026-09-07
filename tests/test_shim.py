@@ -15,6 +15,7 @@ from gtmbase import shim
 SCRIPTS_DIR = os.path.join(PLUGIN_DIR, "scripts")
 TEMPLATE_PATH = os.path.join(SCRIPTS_DIR, "_shim_template.py")
 VERSION_SCRIPT = os.path.join(SCRIPTS_DIR, "gtmbase_version.py")
+OFFER_ANSWER_SCRIPT = os.path.join(SCRIPTS_DIR, "offer_answer.py")
 LIB_DIR = os.path.join(PLUGIN_DIR, "lib")
 
 SENTENCE = (
@@ -51,8 +52,15 @@ class TestTheCopyableShim(unittest.TestCase):
         block = template[start:end]
         self.assertIn(block, read(VERSION_SCRIPT))
 
+    def test_the_answer_script_carries_the_template_block_unchanged(self):
+        template = read(TEMPLATE_PATH)
+        start = template.index("# --- gtm-base shim (copy from here) ---")
+        end = template.index("# --- end of shim ---") + len("# --- end of shim ---")
+        block = template[start:end]
+        self.assertIn(block, read(OFFER_ANSWER_SCRIPT))
+
     def test_the_shim_never_imports_the_library_before_it_finds_it(self):
-        for path in (TEMPLATE_PATH, VERSION_SCRIPT):
+        for path in (TEMPLATE_PATH, VERSION_SCRIPT, OFFER_ANSWER_SCRIPT):
             text = read(path)
             shim_end = text.index("# --- end of shim ---")
             for line in text[:shim_end].split("\n"):
@@ -82,20 +90,20 @@ class TestFindingTheLibrary(unittest.TestCase):
     def test_it_finds_the_library_beside_the_script_in_the_plugin(self):
         finished = run_script(VERSION_SCRIPT, bare_environment())
         self.assertEqual(0, finished.returncode, finished.stderr)
-        self.assertEqual("0.1.4", finished.stdout.decode().strip())
+        self.assertEqual("0.1.5", finished.stdout.decode().strip())
         self.assertEqual(b"", finished.stderr)
 
     def test_it_finds_the_library_through_the_plugin_folder_the_client_names(self):
         path = self.copied_script()
         finished = run_script(path, bare_environment(CLAUDE_PLUGIN_ROOT=PLUGIN_DIR))
         self.assertEqual(0, finished.returncode, finished.stderr)
-        self.assertEqual("0.1.4", finished.stdout.decode().strip())
+        self.assertEqual("0.1.5", finished.stdout.decode().strip())
 
     def test_it_finds_the_library_through_the_override(self):
         path = self.copied_script()
         finished = run_script(path, bare_environment(GTM_BASE_LIB=LIB_DIR))
         self.assertEqual(0, finished.returncode, finished.stderr)
-        self.assertEqual("0.1.4", finished.stdout.decode().strip())
+        self.assertEqual("0.1.5", finished.stdout.decode().strip())
 
     def test_with_none_of_the_three_it_says_one_sentence_and_stops(self):
         path = self.copied_script()

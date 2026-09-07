@@ -88,6 +88,11 @@ LOCAL_TIMEOUT_SECONDS = 5
 # names it, so the assistant runs it rather than writing the record itself.
 CONFIRM_SCRIPT = "scripts/confirm.py"
 
+# The one script allowed to write down the answer to the setup offer. The offer
+# is made in a reply and answered in words, so the priming names this script by
+# its full path and the assistant runs it once the person has answered.
+OFFER_SCRIPT_PARTS = ("scripts", "offer_answer.py")
+
 # What one seat records when the shared copy carried something it will not take.
 CODE_PULL_REFUSED = "pull-refused-paths"
 
@@ -222,6 +227,22 @@ def find_plugin_root(explicit: Optional[str] = None) -> str:
         return named
     here = os.path.dirname(os.path.abspath(__file__))
     return os.path.dirname(os.path.dirname(here))
+
+
+def offer_script_path(root_of_plugin: Optional[str] = None) -> str:
+    """The full path of the script that writes down a "not now" answer.
+
+    The hook is told where the plugin was installed, so that is the first place
+    looked at. When that folder does not hold the script, which happens when a
+    caller names a folder of its own, the answer is worked out from where this
+    file sits instead, because the library and the scripts ship together.
+    """
+    if root_of_plugin:
+        named = os.path.normpath(os.path.join(root_of_plugin, *OFFER_SCRIPT_PARTS))
+        if os.path.isfile(named):
+            return named
+    library = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    return os.path.normpath(os.path.join(library, "..", *OFFER_SCRIPT_PARTS))
 
 
 def load_blocks(root: str, name: str) -> Dict[str, str]:
@@ -493,6 +514,12 @@ def _offer(cwd, account, session_id, source, now, git, root_of_plugin, part):
     empty folder or in a folder that already looks like a base, which is
     another branch of this hook.
 
+    The answer arrives as words in a chat, which nothing here can see, so the
+    priming names the script that writes the answer down by its full path and
+    the assistant runs it. Without that the answer was never recorded and the
+    offer came back the next session, which is what happened live on
+    2026-09-06.
+
     The half a person reads is still printed even though the desktop app
     throws it away, because a client that does render it costs nothing to keep
     serving. Whether the command line client renders it has not been checked.
@@ -516,7 +543,11 @@ def _offer(cwd, account, session_id, source, now, git, root_of_plugin, part):
         return None
     if part.writes:
         machine.record_offer_shown(session_id, now)
-    return _render(part, blocks.get("context", ""), blocks.get("visible", ""))
+    context = fill(
+        blocks.get("context", ""),
+        {"offer_script": offer_script_path(root_of_plugin)},
+    )
+    return _render(part, context, blocks.get("visible", ""))
 
 
 def _other_part_is_offering(account, session_id, source, part):

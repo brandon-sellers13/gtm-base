@@ -1,6 +1,6 @@
 # Joining GTM Base
 
-Status: written for the designed flow. As of version 0.1.4 the offer described
+Status: written for the designed flow. As of version 0.1.5 the offer described
 below is live and arrives in the first reply of a session. Setting a base up is
 not built yet, so saying yes gets you a plain note that setup arrives with a
 later release and that nothing has been changed. This guide is updated as each
@@ -38,15 +38,23 @@ Answer in plain words in your next message. Say yes to set a base up, say that
 you have an invitation link if a teammate already made a base and sent you a
 link to it, or say not now if this is a bad moment.
 
-If you say not now, the reply gives you back the one sentence that starts setup
-again whenever you are ready, and that sentence is this one.
+If you say not now, the assistant writes that answer down for you and the reply
+gives you back the one sentence that starts setup again whenever you are ready,
+and that sentence is this one.
 
 Say "set up my company base" whenever you are ready.
 
-After a not now, the offer stays out of the projects you work in. It comes back
-only when you open Claude Code in an empty folder or in a folder that already
-looks like a base, because those are the two places where you probably do want
-one.
+Because the answer is written down, a not now holds. After a not now, the offer
+stays out of the projects you work in. It comes back only when you open Claude
+Code in an empty folder or in a folder that already looks like a base, because
+those are the two places where you probably do want one.
+
+If you say anything else, such as hello or a question about your work, the reply
+has three parts in this order. It opens with the offer, then gives you the one
+sentence that starts setup again, then says that this can wait and turns to
+what you actually asked, and the rest of the reply is the answer to your
+question. The offer is made once and does not come back later in that same
+session.
 
 Until you give one of those three answers, the offer appears again at the top
 of the first reply in each new session, wherever you are working. That is

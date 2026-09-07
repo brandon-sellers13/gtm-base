@@ -213,26 +213,116 @@ class OfferTest(unittest.TestCase):
 
     # --- what the person reads ----------------------------------------------
 
-    def test_both_branches_of_the_context_end_with_the_restart_sentence(self):
-        """The person who says not now and the person who says something else
-        both need the one sentence that starts setup again."""
-        result = self.run_hook(self.elsewhere)
-        context = result["hookSpecificOutput"]["additionalContext"]
-        self.assertEqual(2, context.count(constants.RESTART_SENTENCE), context)
+    def branches_of(self, context):
+        """The four answers the context handles, split apart by their bullets.
 
+        The opening comes back too, because the sentence that starts setup
+        again belongs in every branch and in none of the opening.
+        """
         opening, _, rest = context.partition('- "not now"')
         self.assertTrue(rest, context)
-        not_now_branch, _, else_branch = rest.partition("- Anything else")
-        self.assertNotIn(constants.RESTART_SENTENCE, opening)
-        self.assertIn(constants.RESTART_SENTENCE, not_now_branch)
-        self.assertIn(constants.RESTART_SENTENCE, else_branch)
+        not_now, _, after_not_now = rest.partition("- A plain yes")
+        self.assertTrue(after_not_now, context)
+        yes, _, after_yes = after_not_now.partition('- "join"')
+        self.assertTrue(after_yes, context)
+        join, _, anything_else = after_yes.partition("- Anything else")
+        self.assertTrue(anything_else, context)
+        return {
+            "opening": opening,
+            "not now": not_now,
+            "yes": yes,
+            "join": join,
+            "anything else": anything_else,
+        }
 
+    def script_command_in(self, text):
+        """The path the context tells the assistant to run, on its own."""
+        for line in text.split("\n"):
+            stripped = line.strip()
+            if stripped.startswith("python3 ") and stripped.endswith(
+                "--answer not-now"
+            ):
+                return stripped[len("python3 ") : -len(" --answer not-now")]
+        raise AssertionError("no command to record an answer in: %s" % text)
+
+    def test_every_branch_of_the_context_ends_with_the_restart_sentence(self):
+        """Whichever of the four things a person says, they need the one
+        sentence that starts setup again, and the opening never says it."""
+        result = self.run_hook(self.elsewhere)
+        context = result["hookSpecificOutput"]["additionalContext"]
+        branches = self.branches_of(context)
+
+        self.assertNotIn(constants.RESTART_SENTENCE, branches["opening"])
+        for name in ("not now", "yes", "join", "anything else"):
+            self.assertIn(constants.RESTART_SENTENCE, branches[name], name)
+
+        else_branch = branches["anything else"]
         offer_line = "or say not now and it will stay quiet."
         self.assertIn(offer_line, else_branch)
         self.assertLess(
             else_branch.index(offer_line),
             else_branch.index(constants.RESTART_SENTENCE),
             else_branch,
+        )
+
+    def test_the_not_now_branch_runs_the_script_that_records_the_answer(self):
+        """Live on 2026-09-06 the assistant said the right sentence and the
+        answer stayed unset, because nothing told it how to write one down."""
+        context = self.run_hook(self.elsewhere)["hookSpecificOutput"][
+            "additionalContext"
+        ]
+        branch = self.branches_of(context)["not now"]
+
+        self.assertEqual(
+            os.path.join(PLUGIN_DIR, "scripts", "offer_answer.py"),
+            self.script_command_in(branch),
+        )
+        self.assertIn(constants.RESTART_SENTENCE, branch)
+
+    def test_the_script_the_context_names_is_a_full_path_that_is_really_there(self):
+        context = self.run_hook(self.elsewhere)["hookSpecificOutput"][
+            "additionalContext"
+        ]
+        command = self.script_command_in(context)
+
+        self.assertTrue(os.path.isabs(command), command)
+        self.assertTrue(command.endswith(os.path.join("scripts", "offer_answer.py")))
+        self.assertTrue(os.path.isfile(command), command)
+
+    def test_a_plugin_folder_without_the_script_still_names_the_real_one(self):
+        """A caller can name a folder of its own, and the library and the
+        scripts ship together, so where the library sits settles it."""
+        elsewhere = os.path.join(self.sandbox.path, "another-plugin-folder")
+        support.write(
+            os.path.join(elsewhere, "templates", "offer.md"),
+            support.read(os.path.join(PLUGIN_DIR, "templates", "offer.md")),
+        )
+        result = session_start.run(
+            {"session_id": "s-7", "source": "startup", "cwd": self.elsewhere},
+            client="claude",
+            now=NOW,
+            plugin_root=elsewhere,
+            part="context",
+        )
+        command = self.script_command_in(result)
+
+        self.assertEqual(
+            os.path.join(PLUGIN_DIR, "scripts", "offer_answer.py"), command
+        )
+        self.assertTrue(os.path.isfile(command), command)
+
+    def test_the_context_bridges_from_the_offer_to_what_the_person_asked(self):
+        """Live on 2026-09-06 the reply read as two unrelated blocks, so the
+        branch for a greeting now turns to their message in one sentence."""
+        context = self.run_hook(self.elsewhere)["hookSpecificOutput"][
+            "additionalContext"
+        ]
+        branch = self.branches_of(context)["anything else"]
+        bridge = "That can wait, so here is what you asked for."
+
+        self.assertIn(bridge, branch)
+        self.assertLess(
+            branch.index(constants.RESTART_SENTENCE), branch.index(bridge), branch
         )
 
     def test_the_context_tells_the_assistant_not_to_repeat_the_offer(self):

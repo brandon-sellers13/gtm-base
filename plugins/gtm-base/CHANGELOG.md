@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.1.5 (2026-09-06)
+
+- Saying "not now" is now remembered. Seen live on 2026-09-06: the assistant said the right sentence back and the account still recorded no answer at all, so the offer returned the next session. The plan had put the recording step in the join skill, which is not built yet, so nothing in the shipped plugin could write the answer down. A new script, `scripts/offer_answer.py`, records it, and the text the assistant is given at the start of a session now names that script by its full path so it is run before the sentence is said. Set up and join are still left to the step that makes a base or joins one, because an account that said yes and then stopped halfway has not set anything up.
+
+- The reply to a greeting now reads as one reply rather than two unrelated blocks. Seen live on 2026-09-06: the offer, then the sentence that starts setup again, then "Hello. What are you working on today?" with nothing joining them. The branch for a greeting or a question now ends with one sentence that turns to what the person asked, which is "That can wait, so here is what you asked for," and the reply carries on from there.
+
 ## 0.1.4 (2026-09-06)
 
 - The setup offer now keeps asking until the person answers in words. It is made once a session, as part of the first reply, in whatever folder they are working in, for as long as the answer is unset. Being shown the offer and hearing nothing back used to count as "not now", which meant a person who read the offer inside a reply and carried on with their day never saw it again anywhere. Brandon's decision of 2026-09-06.

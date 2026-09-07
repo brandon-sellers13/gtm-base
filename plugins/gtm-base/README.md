@@ -7,7 +7,7 @@ it is still right.
 
 ## Status
 
-Version 0.1.4 is the scaffold plus the check that runs before anything leaves
+Version 0.1.5 is the scaffold plus the check that runs before anything leaves
 the computer. `hooks/hooks.json` declares the check on the command tool and the
 work done at the start of a session; no skills or agents ship yet, and the
 manifest declares no MCP servers by design. The plugin never connects to a
@@ -73,6 +73,9 @@ placeholder id with a real one.
   anything but fixed codes.
 - `machine.py` holds account state: the answer to the offer, and the one record
   of which bases this person joined.
+- `offer_answer.py` writes down a "not now" answer to the setup offer, which is
+  the only one of the three answers with nothing else to record it. Set up and
+  join are left to the step that makes a base or joins one.
 - `validate.py` checks the map's settings, owner addresses, file names, and the
   marker line that names a proposal wherever it ends up.
 - `shim.py` documents and implements the loader every script copies.
@@ -126,7 +129,10 @@ placeholder id with a real one.
   it can be.
 
 `templates/` holds one real example of each file format, and `scripts/` holds
-the copyable loader plus the smallest script that uses it.
+the copyable loader, the smallest script that uses it, and
+`offer_answer.py`, which the assistant runs to record a "not now" answer to the
+setup offer. The text the session start hands the assistant names that script by
+its full path.
 
 `skills/` holds the skills as they land. `propose-change` takes a staged change,
 or a change somebody made by hand, and raises it for review. `stale-check` works
