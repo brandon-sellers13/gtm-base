@@ -90,20 +90,20 @@ class TestFindingTheLibrary(unittest.TestCase):
     def test_it_finds_the_library_beside_the_script_in_the_plugin(self):
         finished = run_script(VERSION_SCRIPT, bare_environment())
         self.assertEqual(0, finished.returncode, finished.stderr)
-        self.assertEqual("0.2.2", finished.stdout.decode().strip())
+        self.assertEqual("0.2.3", finished.stdout.decode().strip())
         self.assertEqual(b"", finished.stderr)
 
     def test_it_finds_the_library_through_the_plugin_folder_the_client_names(self):
         path = self.copied_script()
         finished = run_script(path, bare_environment(CLAUDE_PLUGIN_ROOT=PLUGIN_DIR))
         self.assertEqual(0, finished.returncode, finished.stderr)
-        self.assertEqual("0.2.2", finished.stdout.decode().strip())
+        self.assertEqual("0.2.3", finished.stdout.decode().strip())
 
     def test_it_finds_the_library_through_the_override(self):
         path = self.copied_script()
         finished = run_script(path, bare_environment(GTM_BASE_LIB=LIB_DIR))
         self.assertEqual(0, finished.returncode, finished.stderr)
-        self.assertEqual("0.2.2", finished.stdout.decode().strip())
+        self.assertEqual("0.2.3", finished.stdout.decode().strip())
 
     def test_with_none_of_the_three_it_says_one_sentence_and_stops(self):
         path = self.copied_script()

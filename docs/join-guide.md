@@ -1,6 +1,6 @@
 # Joining GTM Base
 
-Status: as of version 0.2.2 the offer and setting a base up are both live.
+Status: as of version 0.2.3 the offer and setting a base up are both live.
 Backing a base up somewhere off your computer, inviting a teammate, and joining
 a base from a link arrive with the next release, so those sections below
 describe what is coming rather than what works today. This guide is updated as
@@ -66,9 +66,12 @@ you never read is an offer you were never really given.
 Setting up is a conversation, not a form. You are asked for your company name
 and where the base should live on your computer. You are asked whether there is
 a folder of existing material worth reading, and if there is, the assistant
-reads only the documents you approve and only from the folder you named. It then
-drafts three things for you, which are your ideal customer profile, one entry
-recording a real decision your team made, and your positioning. You read each
+reads only the documents you approve and only from the folder you named. Before
+each of the three drafts you are shown what that draft will read and what it
+will leave out, and you can narrow it to the files or the folder that matter for
+that one document, which is worth doing when the folder you named is large. It
+then drafts three things for you, which are your ideal customer profile, one
+entry recording a real decision your team made, and your positioning. You read each
 draft as a whole document and either approve it, edit it, or skip it. Nothing is
 saved until you approve it, and you can stop at any point and pick up where you
 left off.

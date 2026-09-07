@@ -101,6 +101,24 @@ _HIDDEN_CONTENT = re.compile(
     r"|<[a-zA-Z][^>]*>"
 )
 
+# The same three shapes again, one at a time, so a caller that takes hidden
+# content out of a piece of text can say how much of each kind it took out.
+# They are here rather than beside the caller because the class above is the
+# thing they have to stay in step with.
+
+# A comment, opening mark to closing mark, however many lines it runs over.
+HIDDEN_COMMENT = re.compile(r"<!--.*?-->", re.DOTALL)
+# An opening or closing comment mark with no partner, which is what is left
+# when comments were nested inside one another.
+HIDDEN_COMMENT_MARK = re.compile(r"<!--|-->")
+# Anything that reads as a tag rather than as words.
+HIDDEN_TAG = re.compile(r"<[a-zA-Z][^>]*>")
+# The characters no reader ever sees: the zero-width ones and the two sets
+# that reorder a line without changing a letter of it.
+HIDDEN_CHARACTER = re.compile(
+    r"[\u200b\u200c\u200d\u2060\ufeff\u202a-\u202e\u2066-\u2069]"
+)
+
 # The order a line is read in. A key is reported before an address, because it
 # is the more serious of the two and the message names one class.
 PATTERN_CLASSES: List[Tuple[str, "re.Pattern", str]] = [

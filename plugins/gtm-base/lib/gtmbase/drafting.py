@@ -141,19 +141,148 @@ PROGRESS = {
 class Assembly(object):
     """The text of one request, and what had to be left out to build it."""
 
-    __slots__ = ("text", "codes", "included_labels", "dropped_labels")
+    __slots__ = (
+        "text",
+        "codes",
+        "included_labels",
+        "dropped_labels",
+        "ordered_labels",
+    )
 
-    def __init__(self, text, codes=None, included_labels=None, dropped_labels=None):
+    def __init__(
+        self,
+        text,
+        codes=None,
+        included_labels=None,
+        dropped_labels=None,
+        ordered_labels=None,
+    ):
         self.text = text
         self.codes = list(codes or [])
         self.included_labels = list(included_labels or [])
         self.dropped_labels = list(dropped_labels or [])
+        # Every source this step was handed, in the order the step wanted
+        # them, whether it got to them or not.
+        self.ordered_labels = list(ordered_labels or [])
 
     def __repr__(self) -> str:
         return "Assembly(included=%r, dropped=%r)" % (
             self.included_labels,
             self.dropped_labels,
         )
+
+
+class SourcePlan(object):
+    """Which sources one step reads, in which order, and which it cannot."""
+
+    __slots__ = ("ordered", "included", "dropped", "fences")
+
+    def __init__(self, ordered, included, dropped, fences):
+        self.ordered = list(ordered)
+        self.included = list(included)
+        self.dropped = list(dropped)
+        self.fences = list(fences)
+
+    @property
+    def ordered_labels(self):
+        return [source_line(source) for source in self.ordered]
+
+    @property
+    def included_labels(self):
+        return [source_line(source) for source in self.included]
+
+    @property
+    def dropped_labels(self):
+        return [source_line(source) for source in self.dropped]
+
+    @property
+    def clamped(self) -> bool:
+        return any(getattr(source, "clamped", False) for source in self.included)
+
+    @property
+    def codes(self):
+        codes = [CODE_SOURCES_CAPPED] if self.dropped else []
+        if self.clamped:
+            codes.append(CODE_DATE_CLAMPED)
+        return codes
+
+    def __repr__(self) -> str:
+        return "SourcePlan(included=%d, dropped=%d)" % (
+            len(self.included),
+            len(self.dropped),
+        )
+
+
+# How far into a source the first heading is looked for. A heading further
+# down than this is not what the document is about.
+HEADING_SEARCH_LINES = 40
+
+
+def _first_heading(source) -> str:
+    """The first heading line of a source, or nothing when it has none."""
+    text = getattr(source, "text", "") or ""
+    for line in text.split("\n", HEADING_SEARCH_LINES)[:HEADING_SEARCH_LINES]:
+        stripped = line.strip()
+        if stripped.startswith("#"):
+            return stripped
+    return ""
+
+
+def _is_wanted_first(source, words) -> bool:
+    """Whether the name of a source, or its first heading, says it belongs."""
+    where = (str(getattr(source, "label", "")) + " " + _first_heading(source)).casefold()
+    return any(word in where for word in words)
+
+
+def order_sources(step: str, sources: Sequence["sources_module.Source"]):
+    """Put the sources this step most wants first, and keep the rest in order.
+
+    Nothing is dropped here. The cap is what drops things, and it drops from
+    the end, so the only job of this is to make sure the end is the material
+    the document being drafted has least to do with. The first real run showed
+    why: a folder was read in the order the folder happened to hold it, the cap
+    was reached, and every one of the fourteen files describing who the company
+    sells to sat past it while the profile was drafted from one file about
+    messaging.
+    """
+    listed = list(sources)
+    if step == STEP_LEDGER:
+        # What a decision entry wants first is the most recent material, so
+        # the dated sources lead, newest first, and the undated follow in the
+        # order they were listed.
+        dated = [source for source in listed if getattr(source, "date", None)]
+        undated = [source for source in listed if not getattr(source, "date", None)]
+        dated.sort(key=lambda source: str(source.date), reverse=True)
+        return dated + undated
+    words = constants.DRAFT_RELEVANCE.get(step, ())
+    if not words:
+        return listed
+    wanted = [source for source in listed if _is_wanted_first(source, words)]
+    rest = [source for source in listed if not _is_wanted_first(source, words)]
+    return wanted + rest
+
+
+def plan_sources(step: str, sources: Sequence["sources_module.Source"]) -> SourcePlan:
+    """Order the sources for one step and say which of them fit in a request.
+
+    Whole sources are dropped from the end of the ordered list, never the
+    middle of one, because half a document read is worse than a document not
+    read at all.
+    """
+    ordered = order_sources(step, sources)
+    included: List["sources_module.Source"] = []
+    dropped: List["sources_module.Source"] = []
+    fences: List[str] = []
+    used = 0
+    for source in ordered:
+        fenced = sources_module.fence(source)
+        if dropped or used + len(fenced) > constants.DRAFT_SOURCES_MAX_CHARS:
+            dropped.append(source)
+            continue
+        used += len(fenced)
+        fences.append(fenced)
+        included.append(source)
+    return SourcePlan(ordered, included, dropped, fences)
 
 
 def plugin_root_default() -> str:
@@ -199,8 +328,9 @@ def assemble(
 
     Every source is fenced, so the sentence saying that what follows is the
     person's own writing rather than instructions is said once per source and
-    said before the source says anything. When the sources together are longer
-    than the cap, whole sources are dropped from the end, never the middle of
+    said before the source says anything. The sources are put in the order this
+    step wants them first, and when they are together longer than the cap,
+    whole sources are dropped from the end of that order, never the middle of
     one, and the caller is handed the labels of the ones that went.
 
     The company name is checked here as well as where the base's folder is
@@ -215,28 +345,15 @@ def assemble(
     template = prompt_text(step, plugin_root)
     name = _checked_company(step, company)
 
-    included: List[str] = []
-    dropped: List[str] = []
-    fences: List[str] = []
-    clamped = False
-    used = 0
-    for source in sources:
-        fenced = sources_module.fence(source)
-        if dropped or used + len(fenced) > constants.DRAFT_SOURCES_MAX_CHARS:
-            dropped.append(source_line(source))
-            continue
-        used += len(fenced)
-        fences.append(fenced)
-        included.append(source_line(source))
-        if getattr(source, "clamped", False):
-            clamped = True
+    plan = plan_sources(step, sources)
+    included = plan.included_labels
 
-    if sources and not fences:
+    if sources and not plan.fences:
         raise DraftError(step, CODE_NO_SOURCES)
 
     listing = ["The sources you may read, with the date on each one that has a date:"]
     listing.extend("- " + line for line in included)
-    block = "\n".join(listing) + "\n\n" + "\n".join(fences)
+    block = "\n".join(listing) + "\n\n" + "\n".join(plan.fences)
 
     values = {
         "sources": block,
@@ -249,10 +366,9 @@ def assemble(
     for field, value in values.items():
         text = text.replace("{{%s}}" % field, value)
 
-    codes = [CODE_SOURCES_CAPPED] if dropped else []
-    if clamped:
-        codes.append(CODE_DATE_CLAMPED)
-    return Assembly(text, codes, included, dropped)
+    return Assembly(
+        text, plan.codes, included, plan.dropped_labels, plan.ordered_labels
+    )
 
 
 def _checked_company(step: str, company) -> str:

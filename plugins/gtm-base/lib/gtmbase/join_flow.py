@@ -99,10 +99,25 @@ CLOSING_MARKER = "## The closing message"
 class Assembled(object):
     """One request, written down, with what went into it and what did not."""
 
-    __slots__ = ("path", "step", "included_labels", "dropped_labels", "codes", "left_out")
+    __slots__ = (
+        "path",
+        "step",
+        "included_labels",
+        "dropped_labels",
+        "codes",
+        "left_out",
+        "removed",
+    )
 
     def __init__(
-        self, path, step, included_labels, dropped_labels, codes=None, left_out=None
+        self,
+        path,
+        step,
+        included_labels,
+        dropped_labels,
+        codes=None,
+        left_out=None,
+        removed=None,
     ):
         self.path = path
         self.step = step
@@ -112,11 +127,57 @@ class Assembled(object):
         # Pairs of the label and the reason, one for each source that could not
         # be used at all, as against the ones dropped for length.
         self.left_out = list(left_out or [])
+        # Pairs of the label and the counts of what was taken out of it.
+        self.removed = list(removed or [])
 
     def __repr__(self) -> str:
         return "Assembled(step=%r, included=%d)" % (
             self.step,
             len(self.included_labels),
+        )
+
+
+class Previewed(object):
+    """What one step would read, worked out without writing anything down."""
+
+    __slots__ = (
+        "step",
+        "included_labels",
+        "dropped_labels",
+        "ordered_labels",
+        "codes",
+        "left_out",
+        "removed",
+        "total",
+    )
+
+    def __init__(
+        self,
+        step,
+        included_labels,
+        dropped_labels,
+        ordered_labels,
+        codes=None,
+        left_out=None,
+        removed=None,
+    ):
+        self.step = step
+        self.included_labels = list(included_labels)
+        self.dropped_labels = list(dropped_labels)
+        self.ordered_labels = list(ordered_labels)
+        self.codes = list(codes or [])
+        self.left_out = list(left_out or [])
+        self.removed = list(removed or [])
+        # Every document named for this step, including the ones that could
+        # not be used at all, which is the number the person recognises as
+        # the size of their own folder.
+        self.total = len(self.ordered_labels) + len(self.left_out)
+
+    def __repr__(self) -> str:
+        return "Previewed(step=%r, included=%d, dropped=%d)" % (
+            self.step,
+            len(self.included_labels),
+            len(self.dropped_labels),
         )
 
 
@@ -371,10 +432,15 @@ def freeze_sources(folder: str, session_id: str, run_id: str, today=None):
     return consent
 
 
+def _consent_payload(run_id: str):
+    payload = read_json(os.path.join(scratch_dir(run_id), CONSENT_FILE))
+    return payload if isinstance(payload, dict) else None
+
+
 def load_consent(run_id: str):
     """The list of files this run was allowed to read, as it was frozen."""
-    payload = read_json(os.path.join(scratch_dir(run_id), CONSENT_FILE))
-    if not isinstance(payload, dict):
+    payload = _consent_payload(run_id)
+    if payload is None:
         return None
     wanted = payload.get("paths")
     if not isinstance(wanted, list):
@@ -386,16 +452,27 @@ def load_consent(run_id: str):
     )
 
 
+def consent_root(run_id: str) -> str:
+    """The folder the frozen list was taken from, which paths are named against."""
+    payload = _consent_payload(run_id)
+    if payload is None:
+        return ""
+    return str(payload.get("root") or "")
+
+
 class SourcesRead(object):
     """The text this run may draft from, and what had to be left out of it."""
 
-    __slots__ = ("sources", "left_out")
+    __slots__ = ("sources", "left_out", "removed")
 
-    def __init__(self, sources, left_out=None):
+    def __init__(self, sources, left_out=None, removed=None):
         self.sources = list(sources)
         # Pairs of the label and the short reason, one for each source that
         # could not be used.
         self.left_out = list(left_out or [])
+        # Pairs of the label and the counts of each kind of hidden thing that
+        # was taken out of it, one for each source something went from.
+        self.removed = list(removed or [])
 
     def __repr__(self) -> str:
         return "SourcesRead(sources=%d, left_out=%d)" % (
@@ -404,8 +481,60 @@ class SourcesRead(object):
         )
 
 
+# What a narrowing may name that the frozen list does not hold.
+CODE_NOT_CONSENTED = "not-consented"
+
+
+def _in_folder(path: str, root: str, wanted: str) -> bool:
+    """Whether one file sits inside a named folder of the list that was agreed."""
+    if not root:
+        return wanted in path.replace(os.sep, "/").split("/")[:-1]
+    try:
+        relative = os.path.relpath(path, root)
+    except ValueError:
+        return False
+    if relative.startswith(".."):
+        return False
+    return wanted in relative.replace(os.sep, "/").split("/")[:-1]
+
+
+def narrow(labelled, root: str = "", only=None, only_folder: Optional[str] = None):
+    """Keep only the part of the agreed list the person named for this draft.
+
+    This never widens what may be read. It takes the list they already said
+    yes to and keeps a part of it, so a name that is not on that list is
+    refused rather than looked for on the disk.
+    """
+    kept = list(labelled)
+    if only_folder:
+        wanted = str(only_folder).strip().strip("/").replace(os.sep, "/")
+        kept = [
+            pair for pair in kept if _in_folder(pair[1], root, wanted.split("/")[-1])
+        ]
+        if not kept:
+            raise ConsentError(
+                "that folder is not part of the list you agreed to",
+                code=CODE_NOT_CONSENTED,
+            )
+    if only:
+        asked = [str(name).strip() for name in only if str(name).strip()]
+        held = set(label for label, _path in kept)
+        for name in asked:
+            if name not in held:
+                raise ConsentError(
+                    "that file is not on the list you agreed to",
+                    code=CODE_NOT_CONSENTED,
+                )
+        kept = [pair for pair in kept if pair[0] in asked]
+    return kept
+
+
 def read_sources(
-    run_id: str, paste_files: Sequence[str] = (), today=None
+    run_id: str,
+    paste_files: Sequence[str] = (),
+    today=None,
+    only=None,
+    only_folder: Optional[str] = None,
 ) -> SourcesRead:
     """Every piece of text this run may draft from, screened and labelled.
 
@@ -419,49 +548,70 @@ def read_sources(
     turned a document the person could simply have been told about into a wall.
     What comes back instead is the sources that survived and, beside them, the
     label and the reason for every one that did not, so the person hears which
-    of their own documents was left out and why.
+    of their own documents was left out and why. Anything a reader of the file
+    would not have seen is taken out of the text rather than costing the whole
+    document, and the counts of what went come back beside the sources.
+
+    `only` and `only_folder` narrow what is read to a part of the list the
+    person already agreed to. They never widen it: a name that is not on the
+    frozen list is refused.
     """
     consent = load_consent(run_id)
     found: List["sources_module.Source"] = []
     left_out: List[tuple] = []
+    removed: List[tuple] = []
+
+    labelled = []
     if consent is not None:
-        for path in consent.paths:
-            real = sources_module.read_allowed(consent, path)
-            label = _label_for(real)
-            kind = constants.SOURCE_READABLE_SUFFIXES.get(
-                os.path.splitext(real)[1].lower()
-            )
-            if kind is None:
-                left_out.append((label, sources_module.CODE_UNSUPPORTED))
-                continue
-            try:
-                text, _notes = extract.extract(real, kind)
-                when = sources_module.date_for_file(real, today=today)
-                found.append(
-                    sources_module.make_source(
-                        label,
-                        text,
-                        kind,
-                        date=when.date,
-                        path=real,
-                        clamped=when.clamped,
-                    )
+        labelled = [(_label_for(path), path) for path in consent.paths]
+    for path in paste_files or ():
+        labelled.append((_label_for(path), path))
+    pastes = set(os.path.realpath(path) for path in (paste_files or ()))
+    labelled = narrow(labelled, consent_root(run_id), only, only_folder)
+
+    for label, path in labelled:
+        if os.path.realpath(path) in pastes:
+            text = read_text(path)
+            if text is None:
+                raise ConsentError(
+                    "that pasted text is not where it was said to be",
+                    code="no-paste-file",
                 )
+            try:
+                source = sources_module.paste_source(label, text)
             except SourceRejected as refusal:
                 left_out.append((label, refusal.code or "source-rejected"))
-    for path in paste_files or ():
-        text = read_text(path)
-        if text is None:
-            raise ConsentError(
-                "that pasted text is not where it was said to be",
-                code="no-paste-file",
-            )
-        label = _label_for(path)
+                continue
+            found.append(source)
+            if source.removed:
+                removed.append((source.label, dict(source.removed)))
+            continue
+
+        real = sources_module.read_allowed(consent, path)
+        kind = constants.SOURCE_READABLE_SUFFIXES.get(
+            os.path.splitext(real)[1].lower()
+        )
+        if kind is None:
+            left_out.append((label, sources_module.CODE_UNSUPPORTED))
+            continue
         try:
-            found.append(sources_module.paste_source(label, text))
+            text, _notes = extract.extract(real, kind)
+            when = sources_module.date_for_file(real, today=today)
+            source = sources_module.make_source(
+                label,
+                text,
+                kind,
+                date=when.date,
+                path=real,
+                clamped=when.clamped,
+            )
         except SourceRejected as refusal:
             left_out.append((label, refusal.code or "source-rejected"))
-    return SourcesRead(found, left_out)
+            continue
+        found.append(source)
+        if source.removed:
+            removed.append((source.label, dict(source.removed)))
+    return SourcesRead(found, left_out, removed)
 
 
 def _label_for(path: str) -> str:
@@ -477,6 +627,41 @@ def _label_for(path: str) -> str:
 # --- Building the request for one step ---------------------------------------
 
 
+def preview_step(
+    run_id: str,
+    step: str,
+    paste_files: Sequence[str] = (),
+    today=None,
+    only=None,
+    only_folder: Optional[str] = None,
+) -> Previewed:
+    """Say what one draft would read, and what it would leave out, writing nothing.
+
+    This is the step that goes in front of every draft. It does the reading,
+    the ordering, and the cap, and then stops, so the person can be shown what
+    is about to go in and can say that the documents for this one live in a
+    particular folder before anything is drafted from the wrong half of their
+    material.
+    """
+    day = today or state.today()
+    read = read_sources(
+        run_id, paste_files, today=day, only=only, only_folder=only_folder
+    )
+    plan = drafting.plan_sources(step, read.sources)
+    codes = list(plan.codes)
+    if read.sources and not plan.included:
+        codes.append(drafting.CODE_NO_SOURCES)
+    return Previewed(
+        step,
+        plan.included_labels,
+        plan.dropped_labels,
+        plan.ordered_labels,
+        codes,
+        read.left_out,
+        read.removed,
+    )
+
+
 def assemble_step(
     step: str,
     run_id: str,
@@ -485,6 +670,8 @@ def assemble_step(
     paste_files: Sequence[str] = (),
     today=None,
     plugin_root: Optional[str] = None,
+    only=None,
+    only_folder: Optional[str] = None,
 ) -> Assembled:
     """Build the request for one step and write it into the run's own folder.
 
@@ -493,7 +680,9 @@ def assemble_step(
     when nothing was left to draft from.
     """
     day = today or state.today()
-    read = read_sources(run_id, paste_files, today=day)
+    read = read_sources(
+        run_id, paste_files, today=day, only=only, only_folder=only_folder
+    )
     try:
         assembly = drafting.assemble(
             step,
@@ -515,6 +704,7 @@ def assemble_step(
         assembly.dropped_labels,
         assembly.codes,
         read.left_out,
+        read.removed,
     )
 
 

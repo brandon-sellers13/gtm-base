@@ -377,8 +377,47 @@ DRAFT_BANNED_WORDS = (
 )
 # Most source text one prompt may carry. Past this the sources at the end are
 # left out whole, one file at a time, and the person is told which ones went,
-# because half a document read is worse than a document not read at all.
-DRAFT_SOURCES_MAX_CHARS = 60000
+# because half a document read is worse than a document not read at all. The
+# first real run named a folder of a hundred and four documents, so the cap is
+# set high enough that an ordinary folder of somebody's marketing material goes
+# in whole and the ordering below only decides the rare case.
+DRAFT_SOURCES_MAX_CHARS = 240000
+# Which sources one step wants first, by the words in the file name or in the
+# first heading of the file. Whatever is left over keeps the order it was
+# listed in and goes after them, so nothing is thrown away by the ordering
+# itself: it only decides what the cap reaches last. The decision entry is not
+# here, because what it wants first is whatever is most recent, which is a date
+# rather than a word.
+DRAFT_RELEVANCE = {
+    "icp": (
+        "icp",
+        "ideal customer",
+        "persona",
+        "segment",
+        "customer",
+        "buyer",
+        "account",
+    ),
+    "positioning": (
+        "positioning",
+        "messaging",
+        "spine",
+        "voice",
+        "value",
+        "brand",
+        "narrative",
+    ),
+}
+# What a person is told when their folder holds more than one draft can read.
+# It says the numbers, names what is being left out, and asks them to narrow
+# it, because the answer to too much material is theirs to give and not ours
+# to guess.
+DRAFT_TOO_MUCH_MATERIAL = (
+    "Your folder holds more than one draft can read at once. This draft will "
+    "read %(read)d of the %(total)d files and leave out %(left)d. The ones "
+    "left out are: %(labels)s. Tell me which files or which folder matter most "
+    "for this document and I will draft from those instead."
+)
 
 # --- Setting a base up: the join skill (added by the join plan's Unit 5) ----
 

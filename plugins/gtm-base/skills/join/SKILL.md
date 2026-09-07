@@ -127,6 +127,12 @@ These are the documents I would read to draft your ideal customer profile, one d
 Ask it that way, as a question about reading, and never as a question about
 taking or importing the files.
 
+A document that holds a comment, a tag, or a character a reader of the file
+would never see is still read. Those parts are taken out of the text and
+counted, and the drafting step below prints one sentence for each document
+something was taken out of. Say that sentence when it appears. Nobody has to be
+told about it before it happens, because nothing is lost by it.
+
 On a plain yes, run:
 
 ```
@@ -169,7 +175,35 @@ whole, and that nothing is written until they say yes. The order is fixed: the
 ideal customer profile, then the decision, then the positioning.
 
 For each step in turn, with `<step>` being `icp`, then `ledger-entry`, then
-`positioning`:
+`positioning`, start by seeing what this one document would read:
+
+```
+python3 scripts/join.py preview --step <step> --run <run identifier>
+```
+
+This writes nothing at all. It prints `going-in=`, the number of files this
+draft would read, `left-out-count=`, the number it would not, and `total=`, the
+number named for this step. Then it prints the first twenty labels going in,
+and one line for each file left out, with `reason=over-the-cap` when there was
+no room for it and `reason=unusable:<code>` when it could not be read at all.
+
+Say those numbers to the person in plain words and name what is being left out.
+Then ask whether to draft from that or to narrow it to the files or the folder
+that matter for this document. If the command prints the sentence that begins
+"Your folder holds more than one draft can read at once", say that sentence as
+it is written. When everything but a handful of their files would be left out,
+say so plainly and suggest naming the folder that holds the documents for this
+draft.
+
+When they name files or a folder, run the preview again with
+`--only "<label>,<label>"` or with `--only-folder <folder>`, and show them the
+new numbers. Both of those narrow the list they already agreed to and neither
+widens it. A name that was not on that list is refused with
+`codes=not-consented`, and the answer to that is to ask them for one of the
+files or folders from the list they were shown.
+
+Only when they have said what to draft from, build the request, carrying the
+same narrowing if they gave one:
 
 ```
 python3 scripts/join.py assemble --step <step> --run <run identifier> --company "<name>" --email <their address>
@@ -180,11 +214,15 @@ command prints `prompt=<path>` along with the labels of what went in and what
 had to be left out. Read that file and follow it: it is the request you write
 the draft from. Write your draft to the file the command names as `draft=`.
 
-Three of its other lines need something said out loud.
+Four of its other lines need something said out loud.
 
 - Every line beginning `Left out:` names one of the person's own documents that
   could not be used at all, with the reason in brackets. Read those out. They
   named that material and they are entitled to know it did not go in.
+- Every line beginning `Hidden parts removed from` names one of their own
+  documents and says what was taken out of it, such as three comments in a
+  template. Read it out in one sentence and carry on. The document was used,
+  with those parts gone.
 - `note=date-clamped` means one of the sources says it was changed on a day
   still to come, so the date recorded for it is today. Say so.
 - When the command exits saying `codes=no-sources`, nothing survived and no

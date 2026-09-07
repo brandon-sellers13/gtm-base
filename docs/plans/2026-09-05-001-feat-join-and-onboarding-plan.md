@@ -504,6 +504,7 @@ Starts after one real user-one session has been observed and `docs/walkthroughs/
 - 2026-09-05 r1: written from the origin and research.
 - 2026-09-05 deepened: architecture, security, and data-integrity passes (40 findings).
 - 2026-09-05 r2: plan review by coherence, feasibility, security, and scope-guardian reviewers (33 findings; the adversarial reviewer did not complete). Cuts: the brief pipeline, `.docx` and `.pptx` parsing, the kept-names list, seat-directory merging, re-migration, not-now expiry, the shipped sha allowlist. Fixes: release line after Unit 5; `xcode-select` prerequisite check; two-entry hook fallback; run id carried on committed artifacts for the same-run exemption; drafted mode appends and stages without committing so one commit holds file and line; `git init -b main`; owner stamped with the repo-local email; completeness by `status`; copies not adopted; partial clone beside the destination; user two identity step; source dates only when a source carries one; contact-detail screening of drafts; trust surface widened (case folding, NFC, whole tree, pull refusal set, `plugins/`); `gh` deny list and widened push classification; first-push review as a gate condition on every push path; collaborator write-access disclosure; token lifecycle and sign-out; `/cd` advice without a version gate; account state as the only joined record; SC5 scope clarified; J21 amendment stated in full.
+- 2026-09-06 r2.2: amended after the first real setup run on a hundred and four files. Hidden content is removed from a source rather than costing the whole document, each step orders its sources before the cap is applied, the cap is raised, and a preview with a chance to narrow now runs in front of every draft. The deferred brief pipeline's trigger fired and the trigger is recorded as fired; the pipeline itself is still deferred. See Amendment r2.2 below.
 - 2026-09-06 r2.1: amended after the first live sessions on the desktop app. The offer is the assistant's first reply rather than an on-screen notice, and an offer shown and never answered no longer counts as not now. See Amendment r2.1 below.
 
 ## Amendment r2.1 (2026-09-06): what the desktop app can show, and how long the offer keeps asking
@@ -529,3 +530,75 @@ Recorded from live sessions on 2026-09-06, after Unit 1 and the two-entry hook s
 **Effect on the Unit 1 test scenarios.** The scenario "offer shown and unanswered, second session elsewhere: nothing" is replaced by "offer shown and unanswered, a later session with a different session id elsewhere: the offer again." The rest of that line stands: a second start or a resume inside the same session shows nothing, an empty folder shows the offer, a folder that looks like a base shows the question, and after not now an unrelated folder a month later shows nothing.
 
 **Where this is implemented.** `plugins/gtm-base/lib/gtmbase/session_start.py` (`_offer`), `plugins/gtm-base/templates/offer.md` (the context block), and `docs/join-guide.md`. Shipped in 0.1.4.
+
+## Amendment r2.2 (2026-09-06): what the first real run showed
+
+Recorded from the first real setup run, on a folder holding one hundred and four
+readable files, after 0.2.2 shipped.
+
+**What was observed.**
+
+1. Seven documents were refused outright, each with the reason `hidden-content`.
+   Every one of them was an ordinary marketing template holding comments the
+   author had written to themselves inside comment marks. `sources.make_source`
+   ran the hidden-content class over the whole text and refused the document if
+   it found anything, so a note somebody wrote to themselves in their own file
+   cost the whole file.
+2. Ninety-six of the one hundred and four files were dropped. `drafting.assemble`
+   capped the sources at sixty thousand characters by dropping whole sources from
+   the end of the list in the order the folder walk produced, which is folder
+   order. A file named `_spine.md` sorted first, filled the request on its own,
+   and everything after it went, including all fourteen files describing the
+   customer segments. The ideal customer profile was then drafted from one file
+   about messaging.
+
+**What this means for the deferred brief pipeline.** The trigger recorded under
+"Deferred to later releases, with triggers" for the conductor-and-specialist
+brief stage reads "when direct drafting fails on source volume in a walkthrough."
+That has now happened, and the trigger is recorded here as fired. The pipeline
+itself is still deferred and is not built by this amendment. Four smaller changes
+were made instead, because all four are worth having whether or not a brief stage
+is ever built, and together they answer what actually went wrong: nothing was
+dropped for being irrelevant, it was dropped for sorting late, and nobody was
+shown that it had happened.
+
+**The four changes.**
+
+1. **Hidden content is removed from a source, not fatal.** `make_source` takes
+   comments, tags, and the characters that show as nothing out of the text,
+   records how many of each kind went on the source, and never refuses a
+   document for holding them. The refusal for text that writes the fence's own
+   lines stands and now runs after the removal, so a fence line cannot be hidden
+   inside a tag and appear once the tag is gone. What went is reported per
+   document, and the skill says it in one sentence for each.
+2. **Per-step relevance ordering before the cap.** Each step puts the sources it
+   is about first and leaves the rest in the order they were listed, so the cap
+   reaches the least relevant material last rather than the alphabetically
+   latest. The word lists live in `constants.DRAFT_RELEVANCE`; the decision entry
+   orders by date, newest first. The cap itself is raised from sixty thousand to
+   two hundred and forty thousand characters, which holds a folder of this size
+   whole.
+3. **A preview before drafting, with a chance to narrow.** `preview` works out
+   the ordering and the cap and writes nothing. It reports how many files go in,
+   how many do not, the first twenty going in, and every one left out with its
+   reason. `--only` and `--only-folder`, on both `preview` and `assemble`,
+   narrow one draft to part of the list the person already agreed to. Neither
+   widens consent: a name that is not on the frozen list is refused with
+   `not-consented`.
+4. **The sentence the person reads.** The old sentence said that the sources
+   listed as dropped were left out whole, which told a person what had happened
+   and gave them nothing to do about it. The new one says how many of their
+   files this draft will read, how many it will leave out, which ones, and asks
+   which files or which folder matter most for this document.
+
+**Where this is implemented.** `plugins/gtm-base/lib/gtmbase/sources.py`
+(`strip_hidden`, `removed_sentence`, `make_source`),
+`plugins/gtm-base/lib/gtmbase/redaction_patterns.py` (the four removal
+patterns), `plugins/gtm-base/lib/gtmbase/drafting.py` (`order_sources`,
+`plan_sources`, `assemble`), `plugins/gtm-base/lib/gtmbase/constants.py`
+(`DRAFT_SOURCES_MAX_CHARS`, `DRAFT_RELEVANCE`, `DRAFT_TOO_MUCH_MATERIAL`),
+`plugins/gtm-base/lib/gtmbase/join_flow.py` (`read_sources`, `narrow`,
+`preview_step`, `assemble_step`), `plugins/gtm-base/skills/join/scripts/join.py`
+(the `preview` step and what it prints), `plugins/gtm-base/skills/join/SKILL.md`
+(steps 5 and 6), `plugins/gtm-base/skills/join/references/reading-rules.md`, and
+`docs/join-guide.md`. Shipped in 0.2.3.

@@ -56,12 +56,14 @@ if _lib not in sys.path:
 import argparse  # noqa: E402
 
 from gtmbase import (  # noqa: E402
+    constants,
     drafting,
     join_flow,
     location,
     machine,
     offer_answer,
     paths,
+    sources,
 )
 from gtmbase.errors import (  # noqa: E402
     ConsentError,
@@ -104,6 +106,15 @@ NO_LISTING_YET = (
     "No list has been shown for this run yet, so there is no yes to take. Run "
     "list-sources first."
 )
+NOT_ON_THE_LIST = (
+    "That is not on the list you agreed to, so nothing was read. Name one of "
+    "the files or folders from that list instead."
+)
+# Most labels the preview names one by one before it stops naming them.
+PREVIEW_LABELS_SHOWN = 20
+# Why a document is not going into this draft.
+REASON_OVER_THE_CAP = "over-the-cap"
+REASON_UNUSABLE = "unusable:%s"
 
 # Most characters one value on a name and value line may carry.
 VALUE_MAX = 300
@@ -126,6 +137,24 @@ def safe_value(value):
         text = text[:VALUE_MAX] + "..."
     if text == "" or any(mark in text for mark in (" ", "=", '"', "\\")):
         text = '"' + text.replace("\\", "\\\\").replace('"', '\\"') + '"'
+    return text
+
+
+def plain_value(value):
+    """One value, made safe to put inside a sentence a person reads.
+
+    It is the same treatment as a name and value line without the quotation
+    marks, because a sentence naming three of somebody's own documents reads
+    badly with quotation marks around each of them and there is no line for
+    them to break out of.
+    """
+    text = "" if value is None else str(value)
+    text = "".join(
+        CONTROL_STAND_IN if (ord(character) < 32 or ord(character) == 127) else character
+        for character in text
+    )
+    if len(text) > VALUE_MAX:
+        text = text[:VALUE_MAX] + "..."
     return text
 
 
@@ -152,6 +181,12 @@ def build_parser():
         help="text held for this run, once per piece",
     )
     parser.add_argument("--draft", help="the file the draft was written to")
+    parser.add_argument(
+        "--only", help="only these files from the list, separated by commas"
+    )
+    parser.add_argument(
+        "--only-folder", help="only the files in this folder of the list"
+    )
     parser.add_argument("--answer", help="what the person said, in their own words")
     parser.add_argument("--base", help="the base folder to write into")
     parser.add_argument("--parent", help="the folder the base will be created in")
@@ -299,12 +334,98 @@ def say_left_out(out, left_out):
         out.write("Left out: %s (%s)\n" % (safe_value(label), safe_value(reason)))
 
 
+def say_removed(out, removed):
+    """Say what was taken out of each document, in one sentence for each."""
+    for label, counts in removed or ():
+        sentence = sources.removed_sentence(label, counts)
+        if sentence:
+            out.write(sentence + "\n")
+
+
+def say_too_much(out, included_labels, dropped_labels, left_out):
+    """Say plainly that the folder holds more than one draft can read."""
+    if not dropped_labels:
+        return
+    total = len(included_labels) + len(dropped_labels) + len(left_out or [])
+    out.write(
+        constants.DRAFT_TOO_MUCH_MATERIAL
+        % {
+            "read": len(included_labels),
+            "total": total,
+            "left": len(dropped_labels),
+            "labels": ", ".join(plain_value(label) for label in dropped_labels),
+        }
+        + "\n"
+    )
+
+
+def narrowing(options):
+    """The two ways one draft may be narrowed to part of the agreed list."""
+    only = None
+    if options.only:
+        only = [piece.strip() for piece in options.only.split(",") if piece.strip()]
+    return only, options.only_folder
+
+
+def run_preview(options, out):
+    step = need(options, "step", out)
+    run_id = need(options, "run", out)
+    if not step or not run_id:
+        return EXIT_ERROR
+    only, only_folder = narrowing(options)
+    try:
+        previewed = join_flow.preview_step(
+            run_id,
+            step,
+            paste_files=options.paste_file,
+            only=only,
+            only_folder=only_folder,
+        )
+    except ConsentError as refusal:
+        if refusal.code != join_flow.CODE_NOT_CONSENTED:
+            raise
+        line(out, "codes", refusal.code)
+        out.write(NOT_ON_THE_LIST + "\n")
+        return EXIT_REFUSED
+    line(out, "step", previewed.step)
+    line(out, "going-in", len(previewed.included_labels))
+    line(
+        out,
+        "left-out-count",
+        len(previewed.dropped_labels) + len(previewed.left_out),
+    )
+    line(out, "total", previewed.total)
+    for label in previewed.included_labels[:PREVIEW_LABELS_SHOWN]:
+        line(out, "included", label)
+    for label in previewed.dropped_labels:
+        out.write(
+            "left-out=%s reason=%s\n"
+            % (safe_value(label), safe_value(REASON_OVER_THE_CAP))
+        )
+    for label, reason in previewed.left_out:
+        out.write(
+            "left-out=%s reason=%s\n"
+            % (safe_value(label), safe_value(REASON_UNUSABLE % reason))
+        )
+    for code in previewed.codes:
+        line(out, "note", code)
+    say_removed(out, previewed.removed)
+    say_too_much(
+        out,
+        previewed.included_labels,
+        previewed.dropped_labels,
+        previewed.left_out,
+    )
+    return EXIT_DONE
+
+
 def run_assemble(options, out):
     step = need(options, "step", out)
     run_id = need(options, "run", out)
     company = need(options, "company", out)
     if not step or not run_id or not company:
         return EXIT_ERROR
+    only, only_folder = narrowing(options)
     try:
         assembled = join_flow.assemble_step(
             step,
@@ -312,7 +433,15 @@ def run_assemble(options, out):
             company,
             options.email or "",
             paste_files=options.paste_file,
+            only=only,
+            only_folder=only_folder,
         )
+    except ConsentError as refusal:
+        if refusal.code != join_flow.CODE_NOT_CONSENTED:
+            raise
+        line(out, "codes", refusal.code)
+        out.write(NOT_ON_THE_LIST + "\n")
+        return EXIT_REFUSED
     except DraftError as refusal:
         if refusal.code != drafting.CODE_NO_SOURCES:
             raise
@@ -329,11 +458,13 @@ def run_assemble(options, out):
     for code in assembled.codes:
         line(out, "note", code)
     say_left_out(out, assembled.left_out)
-    if assembled.dropped_labels:
-        out.write(
-            "There was more material than one request holds, so the sources "
-            "listed as dropped were left out whole.\n"
-        )
+    say_removed(out, assembled.removed)
+    say_too_much(
+        out,
+        assembled.included_labels,
+        assembled.dropped_labels,
+        assembled.left_out,
+    )
     return EXIT_DONE
 
 
@@ -453,6 +584,7 @@ MODES = {
     "list-sources": run_list_sources,
     "freeze-sources": run_freeze_sources,
     "add-paste": run_add_paste,
+    "preview": run_preview,
     "assemble": run_assemble,
     "review": run_review,
     "what-is-wrong": run_what_is_wrong,

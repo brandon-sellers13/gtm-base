@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.2.3 (2026-09-06)
+
+- A document that holds a comment, a tag, or a character a reader of the file would never see is now read with those parts taken out of it, rather than turned away whole. Brandon's first real setup run named a folder of a hundred and four files and seven of them were refused outright, all of them ordinary marketing templates carrying notes the author had written to themselves inside comment marks. You are told which document something was taken out of and how much of each kind went, in one sentence for each document. Text that writes the wrapper's own lines is still refused, and that check now runs after the removal, so nothing can be hidden inside a tag and appear once the tag is gone.
+
+- Each draft now reads the documents it is actually about first. The material for one draft used to be read in whatever order the folder happened to hold it, so when there was more than one request could take, the files at the end were dropped whether or not they were the ones the document was about. On the first real run the file that sorted first filled the request on its own, ninety-six of the hundred and four were dropped, and all fourteen files describing who the company sells to were among them, so the ideal customer profile was drafted from one file about messaging. The profile now reads the files named or headed for customers, segments, personas, and buyers first, the positioning reads the ones about positioning, messaging, and voice first, and the decision entry reads the most recent material first. Nothing is thrown away by the ordering itself; it only decides what the cap reaches last.
+
+- How much material one draft can read has gone up fourfold, so an ordinary folder of somebody's marketing material now goes in whole and the ordering only decides the rare case.
+
+- Before each of the three drafts you are now shown what it will read and what it will leave out, by name, with the reason for each one. Nothing is written at that point. You are then asked whether to draft from that or to narrow it to the files or the folder that matter for that one document, and you can answer with either. Narrowing only ever takes part of the list you already agreed to; a file or folder that was not on that list is refused rather than looked for.
+
+- When there is more material than one draft can read, what you are told now says how many of your files it will read, how many it will leave out, which ones those are, and that you can name the files or the folder that matter most for this document instead. It used to say only that the sources listed as dropped were left out whole, which was true and gave you nothing to do about it.
+
 ## 0.2.2 (2026-09-06)
 
 - Join, the list of what will be read: the yes is asked as a yes to read those documents in order to draft the three files, saying that none is copied into the base or changed. It had read as a list of files about to be imported. Found on Brandon's first real setup run.

@@ -153,3 +153,48 @@ One thing worth knowing for the next change. On a computer that does not tell
 one letter case from another in a folder name, a parent already holding a
 folder called `GTM-Base` is refused as `target-exists` rather than
 `stray-base`. Both refusals are correct and the test accepts either.
+
+# 0.2.3: what the first real run on a hundred and four files showed
+
+Two defects, found on Brandon's own setup run on 2026-09-06 against a folder of
+one hundred and four readable files. Seven documents were refused outright for
+holding comments the author had written to themselves, and ninety-six were
+dropped because the cap was applied in folder order, which put all fourteen of
+the customer segment files past it.
+
+## Plan
+
+- [x] A. Hidden content is removed from a source and counted, never fatal. The
+      refusal for text that writes the fence's own lines stands and now runs
+      after the removal.
+- [x] B. Each step orders its sources before the cap: the profile reads the
+      customer files first, the positioning the messaging files, the decision
+      entry the newest. The cap goes from sixty thousand to two hundred and
+      forty thousand characters.
+- [x] C. A preview runs in front of every draft, writing nothing, and says what
+      goes in and what does not with the reason for each. `--only` and
+      `--only-folder` narrow one draft to part of the list already agreed to.
+- [x] D. The sentence a person reads says the numbers, names what is left out,
+      and asks which files or folder matter for this document.
+- [x] the amendment appended to the join plan as r2.2, with the deferred brief
+      pipeline's trigger recorded as fired and the pipeline still deferred
+- [x] `sh tests/run.sh` green, no long dashes in any touched file
+
+## Review
+
+Nine hundred and seventy seven tests pass, twenty eight of them new.
+
+Three existing tests changed because the behaviour they pinned was the
+behaviour being fixed. Two asserted that a hidden character and a comment
+refuse the whole source, and they now assert that the part goes and the
+document stays. The third pinned the shim reading out a source left out for
+hidden content, and it now uses a document that writes the fence's own lines,
+which is the reason that is left.
+
+Two decisions worth knowing about. The removal takes out exactly what the
+outgoing-content check calls hidden and nothing more, so a closing tag such as
+the one that ends a span is left in the text, because the check reads it as
+ordinary words and this module should not decide on its own what somebody meant
+to write down. And the version was moved to 0.2.3 in the manifest, the library,
+the guide, and the plugin README, because a changelog heading for a release the
+manifest does not name would be the first thing to go stale.

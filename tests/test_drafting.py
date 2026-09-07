@@ -240,6 +240,160 @@ class TestTheSourcesAreCappedByDroppingWholeOnes(unittest.TestCase):
         self.assertEqual([], assembly.codes)
 
 
+class SmallCap(object):
+    """The cap, made small for the length of one test.
+
+    The real cap holds a folder of somebody's marketing material whole, which
+    is the point of it, so a test about what happens past the cap sets it to a
+    size a handful of short documents can reach.
+    """
+
+    def __init__(self, chars):
+        self.chars = chars
+        self.previous = None
+
+    def __enter__(self):
+        self.previous = constants.DRAFT_SOURCES_MAX_CHARS
+        constants.DRAFT_SOURCES_MAX_CHARS = self.chars
+        return self
+
+    def __exit__(self, kind, value, trace):
+        constants.DRAFT_SOURCES_MAX_CHARS = self.previous
+        return False
+
+
+def labels_of(assembly):
+    """The labels, without the dates, of what one request took in."""
+    return [line.split(" (")[0] for line in assembly.included_labels]
+
+
+class TestEachStepReadsWhatItWantsFirst(unittest.TestCase):
+    """r2.2: the cap used to cut the folder in the order the folder held it.
+
+    On the first real run a hundred and four documents were named, the file
+    that sorted first filled the request on its own, and ninety-six were
+    dropped, all fourteen of the files describing who the company sells to
+    among them. The profile was then drafted from one file about messaging.
+    """
+
+    def fifteen(self):
+        """Fifteen documents, with the ones about customers sorting last."""
+        body = "Something the company wrote down about the business.\n" * 8
+        others = [
+            source(name, body)
+            for name in (
+                "a-notes.md",
+                "b-spine.md",
+                "c-pricing.md",
+                "d-launch.md",
+                "e-roadmap.md",
+                "f-hiring.md",
+                "g-events.md",
+                "h-website.md",
+                "i-support.md",
+                "j-team.md",
+                "k-tooling.md",
+            )
+        ]
+        wanted = [
+            source(name, body)
+            for name in (
+                "w-icp.md",
+                "x-segments.md",
+                "y-buyer-notes.md",
+                "z-ideal-customer.md",
+            )
+        ]
+        return others + wanted
+
+    def test_the_profile_reads_the_customer_files_and_drops_the_rest(self):
+        with SmallCap(2400):
+            assembly = drafting.assemble(
+                drafting.STEP_ICP,
+                self.fifteen(),
+                "Acme",
+                TODAY.isoformat(),
+                EMAIL,
+                plugin_root=support.PLUGIN_DIR,
+            )
+
+        self.assertEqual(
+            ["w-icp.md", "x-segments.md", "y-buyer-notes.md", "z-ideal-customer.md"],
+            labels_of(assembly)[:4],
+        )
+        self.assertEqual([drafting.CODE_SOURCES_CAPPED], assembly.codes)
+        self.assertIn("a-notes.md", assembly.dropped_labels)
+        self.assertEqual(15, len(assembly.ordered_labels))
+
+    def test_the_positioning_reads_the_messaging_files_first(self):
+        body = "Something the company wrote down.\n" * 8
+        sources_named = [
+            source(name, body)
+            for name in (
+                "a-hiring.md",
+                "b-events.md",
+                "c-support.md",
+                "z-messaging.md",
+                "z-value-story.md",
+            )
+        ]
+
+        with SmallCap(900):
+            assembly = drafting.assemble(
+                drafting.STEP_POSITIONING,
+                sources_named,
+                "Acme",
+                TODAY.isoformat(),
+                EMAIL,
+                plugin_root=support.PLUGIN_DIR,
+            )
+
+        self.assertEqual(
+            ["z-messaging.md", "z-value-story.md"], labels_of(assembly)[:2]
+        )
+        self.assertIn("a-hiring.md", assembly.dropped_labels)
+
+    def test_a_file_named_for_nothing_is_judged_by_its_first_heading(self):
+        plain = source("notes-two.md", "# Our ideal customer\n\nSmall teams.\n")
+        other = source("notes-one.md", "# Office move\n\nWe moved in June.\n")
+
+        ordered = drafting.order_sources(drafting.STEP_ICP, [other, plain])
+
+        self.assertEqual(["notes-two.md", "notes-one.md"], [item.label for item in ordered])
+
+    def test_the_decision_entry_reads_the_newest_material_first(self):
+        oldest = source("a-old.md", date="2026-01-04")
+        newest = source("b-new.md", date="2026-08-30")
+        middle = source("c-middle.md", date="2026-05-12")
+        undated = source("d-undated.md")
+
+        ordered = drafting.order_sources(
+            drafting.STEP_LEDGER, [oldest, newest, middle, undated]
+        )
+
+        self.assertEqual(
+            ["b-new.md", "c-middle.md", "a-old.md", "d-undated.md"],
+            [item.label for item in ordered],
+        )
+
+    def test_the_order_a_folder_was_listed_in_is_kept_inside_each_half(self):
+        first = source("m-customer-one.md")
+        second = source("a-customer-two.md")
+        other = source("b-office.md")
+
+        ordered = drafting.order_sources(
+            drafting.STEP_ICP, [first, other, second]
+        )
+
+        self.assertEqual(
+            ["m-customer-one.md", "a-customer-two.md", "b-office.md"],
+            [item.label for item in ordered],
+        )
+
+    def test_the_cap_is_large_enough_for_a_real_folder(self):
+        self.assertEqual(240000, constants.DRAFT_SOURCES_MAX_CHARS)
+
+
 class TestTheCompanyNameIsCheckedBeforeItReachesARequest(unittest.TestCase):
     """join-08: the name went into the request exactly as it was typed.
 

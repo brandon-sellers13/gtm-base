@@ -16,10 +16,10 @@ tells the safeguard nothing may leave this computer for the rest of the
 session.
 
 Fencing. Every piece of text, whether it came off the disk here or out of the
-assistant's own reader, is screened for anything a person reading the file
-would not see, and then wrapped in a fence that says what it is before it says
-anything else. Text inside the fence is what somebody wrote down. It is never
-a set of instructions to follow.
+assistant's own reader, has everything a person reading the file would not see
+taken out of it and counted, and is then wrapped in a fence that says what it
+is before it says anything else. Text inside the fence is what somebody wrote
+down. It is never a set of instructions to follow.
 """
 
 from __future__ import annotations
@@ -63,6 +63,15 @@ CODE_OUTSIDE_FOLDER = "outside-folder"
 CODE_FOLDER_TOO_LARGE = "folder-too-large"
 # The date on a file was in the future and was pulled back to today.
 CODE_DATE_CLAMPED = "date-clamped"
+# Something a reader would not have seen was taken out of the text.
+CODE_HIDDEN_REMOVED = "hidden-removed"
+
+# The three kinds of hidden thing, named as a person would name them. They are
+# the words that reach a sentence somebody reads, so they are singular here and
+# the sentence adds the letter s when there is more than one.
+REMOVED_COMMENT = "comment"
+REMOVED_TAG = "tag"
+REMOVED_HIDDEN_CHARACTER = "hidden character"
 
 # --- Small pieces of shape ---------------------------------------------------
 
@@ -543,10 +552,28 @@ def read_allowed(consent: Optional[Consent], path: str) -> str:
 class Source(object):
     """One piece of text, with everything needed to say where it came from."""
 
-    __slots__ = ("label", "text", "kind", "date", "path", "screened", "clamped")
+    __slots__ = (
+        "label",
+        "text",
+        "kind",
+        "date",
+        "path",
+        "screened",
+        "clamped",
+        "removed",
+        "codes",
+    )
 
     def __init__(
-        self, label, text, kind, date=None, path=None, screened=False, clamped=False
+        self,
+        label,
+        text,
+        kind,
+        date=None,
+        path=None,
+        screened=False,
+        clamped=False,
+        removed=None,
     ):
         self.label = label
         self.text = text
@@ -557,6 +584,10 @@ class Source(object):
         # True when the date on this source was in the future and was pulled
         # back to today, so the person can be told the date is not the file's.
         self.clamped = bool(clamped)
+        # How many of each kind of hidden thing were taken out of the text,
+        # so the person hears what was done to their own document.
+        self.removed = dict(removed or {})
+        self.codes = [CODE_HIDDEN_REMOVED] if self.removed else []
 
     def __repr__(self) -> str:
         return "Source(label=%r, kind=%r, date=%r)" % (
@@ -566,29 +597,94 @@ class Source(object):
         )
 
 
+# How many times the removal is run over one piece of text before it is taken
+# as done. One pass clears comments inside comments; the rest is safety.
+_STRIP_PASSES = 5
+
+
+def strip_hidden(text: str):
+    """Take out everything a reader of the file would not have seen.
+
+    What comes back is the text as the person would read it on the page, and a
+    count of each kind of thing that went. Nothing is refused here. A comment
+    in a template, a tag in a note pasted out of a web page, and a zero-width
+    character carried in from a word processor are all ordinary things to find
+    in somebody's own writing, and refusing the whole document over one of them
+    turned a document that could simply have been cleaned into a wall.
+    """
+    if not scan.scan_text(text, None, "a source", _EVERYTHING_ELSE):
+        return text, {}
+    removed: Dict[str, int] = {}
+    cleaned = text
+    for _pass in range(_STRIP_PASSES):
+        cleaned, counted = _strip_once(cleaned)
+        for kind, count in counted.items():
+            removed[kind] = removed.get(kind, 0) + count
+        if not scan.scan_text(cleaned, None, "a source", _EVERYTHING_ELSE):
+            break
+    return cleaned, removed
+
+
+def _strip_once(text: str):
+    """One pass of the removal, and what that pass took out."""
+    counted: Dict[str, int] = {}
+
+    def drop(pattern, kind, value):
+        cleaned, count = pattern.subn("", value)
+        if count:
+            counted[kind] = counted.get(kind, 0) + count
+        return cleaned
+
+    # Whole comments first, then any opening or closing mark left behind by a
+    # comment that had another one inside it, and both count as comments.
+    text = drop(redaction_patterns.HIDDEN_COMMENT, REMOVED_COMMENT, text)
+    text = drop(redaction_patterns.HIDDEN_COMMENT_MARK, REMOVED_COMMENT, text)
+    text = drop(redaction_patterns.HIDDEN_TAG, REMOVED_TAG, text)
+    text = drop(
+        redaction_patterns.HIDDEN_CHARACTER, REMOVED_HIDDEN_CHARACTER, text
+    )
+    return text, counted
+
+
+def removed_sentence(label: str, removed) -> str:
+    """The one sentence saying what was taken out of one of their documents."""
+    if not removed:
+        return ""
+    parts = []
+    for kind in (REMOVED_COMMENT, REMOVED_TAG, REMOVED_HIDDEN_CHARACTER):
+        count = int(removed.get(kind, 0))
+        if count:
+            parts.append("%d %s%s" % (count, kind, "" if count == 1 else "s"))
+    if len(parts) > 1:
+        listed = ", ".join(parts[:-1]) + " and " + parts[-1]
+    else:
+        listed = parts[0]
+    return "Hidden parts removed from %s: %s." % (label, listed)
+
+
 def make_source(
     label: str, text: str, kind: str, date=None, path=None, clamped: bool = False
 ) -> Source:
     """Screen a piece of text and turn it into something a prompt may hold.
 
-    Two things stop text here. Anything a person reading the file would not
-    see, which is the whole point of the hidden-content class: text nobody can
-    read is text nobody agreed to. And anything that writes the fence's own
+    Anything a person reading the file would not see is taken out and counted,
+    because text nobody can read is text nobody agreed to, and the person is
+    told what went rather than told their document could not be used at all.
+
+    One thing still stops text here: anything that writes the fence's own
     lines, which would let a document end its own fence and carry on as though
-    it were the assistant's own words.
+    it were the assistant's own words. That is checked after the removal, so a
+    document cannot hide one of those lines inside a tag and have it appear
+    once the tag is gone.
     """
     checked = _checked_label(label)
     if kind not in constants.SOURCE_KINDS:
         raise SourceRejected("this is not a kind of source", code="unknown-kind")
     if not isinstance(text, str):
         raise SourceRejected("this source is not text", code="unreadable")
-    _refuse_fence_markers(text)
-    if scan.scan_text(text, None, "a source", _EVERYTHING_ELSE):
-        raise SourceRejected(
-            "this text holds something a reader would not see",
-            code="hidden-content",
-        )
-    return Source(checked, text, kind, date, path, True, clamped)
+    cleaned, removed = strip_hidden(text)
+    _refuse_fence_markers(cleaned)
+    return Source(checked, cleaned, kind, date, path, True, clamped, removed)
 
 
 def paste_source(label: str, text: str) -> Source:
