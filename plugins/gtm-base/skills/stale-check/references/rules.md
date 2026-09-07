@@ -42,6 +42,12 @@ sitting, and both are written with the same run identifier. A confirmation whose
 reason is `drafted` and whose run identifier matches the decision's own run
 identifier does settle that decision, and only that decision.
 
+That exemption does not depend on the dates at all. A decision made in August
+and written down today, approved today alongside the document it affects, is
+settled by that document's own drafted line, because the person was shown the
+decision and the document together in one sitting. A drafted line whose run
+identifier is a different one is read by the ordinary rules above.
+
 A confirmation that names the decision by its identifier settles it whatever the
 dates say, because naming it is proof the person saw it.
 

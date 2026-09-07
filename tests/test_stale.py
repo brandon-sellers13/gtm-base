@@ -657,6 +657,40 @@ class TestDraftedLines(unittest.TestCase):
         self.assertEqual(1, len(report.file_flags))
         self.assertEqual([STG], report.file_flags[0].entry_ids)
 
+    def _old_decision(self, run_on_line):
+        """A decision made weeks ago, written down today, drafted today.
+
+        This is the shape every first setup run has: the person tells GTM Base
+        about something they decided weeks ago, the decision is written down
+        today, and the document it affects is drafted and approved in the same
+        sitting.
+        """
+        entry = make_entry(
+            origin="join",
+            run_id=RUN,
+            affects=[ICP],
+            decided_on="2026-04-10",
+            written_on=TODAY.isoformat(),
+        )
+        return run(
+            files=[make_file(ICP)],
+            ledger=[make_input(entry)],
+            confirmations=[
+                make_record(
+                    ICP, TODAY.isoformat(), trigger="drafted", run=run_on_line
+                )
+            ],
+        )
+
+    def test_the_same_run_confirms_a_decision_made_weeks_before_it(self):
+        self.assertEqual([], self._old_decision(RUN).file_flags)
+
+    def test_a_different_run_leaves_that_decision_open(self):
+        report = self._old_decision(OTHER_RUN)
+        self.assertEqual(1, len(report.file_flags))
+        self.assertEqual("ledger-newer", report.file_flags[0].reason)
+        self.assertEqual([STG], report.file_flags[0].entry_ids)
+
 
 class TestALineThatNamesTheDecision(unittest.TestCase):
     """The owner was shown the decision and the file together and said yes.

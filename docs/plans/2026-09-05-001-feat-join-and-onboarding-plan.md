@@ -222,7 +222,7 @@ flowchart TB
 
 ### Release one: user one, on a local base
 
-- [ ] **Unit 1: Account state, the trust surface, and the offer**
+- [x] **Unit 1: Account state, the trust surface, and the offer**
 
 **Goal:** The first session on an account shows the offer on screen once, remembers the answer safely, re-offers only where the origin allows, asks the base-shaped question with origin and the trust check, refuses to adopt a copy, and offers to continue a half-made base.
 
@@ -258,7 +258,7 @@ flowchart TB
 
 **Verification:** Installing the plugin on a clean account and opening Claude Code anywhere shows the offer as a message before the first prompt; declining is silent thereafter except in empty or base-shaped folders; a local-only base shows the daily block and a question.
 
-- [ ] **Unit 2: create_base, location, and migration**
+- [x] **Unit 2: create_base, location, and migration**
 
 **Goal:** Turn an approved first file into a joined base beside the person's content through a partial folder and a single rename, with repo-local identity, a base id in git config, template files, a first commit, and the hook installed; recognize and recover every partial state. The migration piece belongs to release two.
 
@@ -290,7 +290,7 @@ flowchart TB
 
 **Verification:** A person can stop after the first approved file, close the session, reopen in the folder, and be offered to continue; renaming the company folder does not orphan the base; copying it does not silently share state.
 
-- [ ] **Unit 3: Source intake**
+- [x] **Unit 3: Source intake**
 
 **Goal:** Turn what the person names into bounded, fenced, screened source text with a frozen consent list and a session marker the gate enforces.
 
@@ -320,7 +320,7 @@ flowchart TB
 
 **Verification:** The reading rules let the skill read a PDF, a website, and a Notion page with the client's tools in a manual walkthrough, and every text arrives fenced, labeled, and screened.
 
-- [ ] **Unit 4: Drafting and the review loop**
+- [x] **Unit 4: Drafting and the review loop**
 
 **Goal:** From fenced sources, produce whole-document drafts of the ICP, one ledger entry, and the positioning directly, each reviewed with approve, edit, skip, and "what is wrong with this?", screened before write, and written only on a yes with a drafted confirmation dated today.
 
@@ -349,7 +349,7 @@ flowchart TB
 
 **Verification:** On the fixture sources, a full pass yields three approved files, one entry, three drafted lines dated today with the run id, source dates in `sources` where known, and no contact details in any draft.
 
-- [ ] **Unit 5: The join skill, setup mode, and the closing**
+- [x] **Unit 5: The join skill, setup mode, and the closing**
 
 **Goal:** One skill that runs the whole first session for user one and closes with the deterministic finding, the learning line, and the way back.
 

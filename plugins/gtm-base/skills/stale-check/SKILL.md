@@ -47,7 +47,12 @@ From inside the base:
 - `python3 scripts/stale_check.py --dry-run` says what it would prepare and
   writes nothing at all. Use this when the person asks what you would flag.
 - `python3 scripts/stale_check.py --first-run` says the one honest thing a first
-  run can say, and prepares nothing. Use it at the end of setting a base up.
+  run can say, and prepares nothing. It takes the first of these that is true: a
+  document the person has not written yet, then no decision at all, then a
+  document written from material older than the decision it reflects, then the
+  plain statement that nothing is out of date yet with the first date it will
+  watch. Setting a base up runs this for you at the closing, so use it here only
+  when somebody asks for that one sentence on its own.
 - `python3 scripts/stale_check.py --dismiss-ledger-behind` stops the quiet
   ledger being mentioned for a while. Use it only after the person says nothing
   has been decided lately.

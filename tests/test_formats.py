@@ -476,10 +476,13 @@ class TestTemplates(unittest.TestCase):
     def test_no_template_holds_an_em_dash_or_an_en_dash(self):
         import plain_language
 
-        for name in os.listdir(TEMPLATES_DIR):
-            self.assertEqual(
-                [], plain_language.find_dashes(read(os.path.join(TEMPLATES_DIR, name))), name
-            )
+        # The folder now holds the whole template a new base is built from as
+        # well as the single files, so every file underneath it is read, not
+        # only the names sitting at the top.
+        for folder, _subfolders, filenames in os.walk(TEMPLATES_DIR):
+            for name in sorted(filenames):
+                path = os.path.join(folder, name)
+                self.assertEqual([], plain_language.find_dashes(read(path)), path)
 
 
 if __name__ == "__main__":

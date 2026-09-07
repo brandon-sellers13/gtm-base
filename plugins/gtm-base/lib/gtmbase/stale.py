@@ -718,20 +718,25 @@ def _line_confirms(line, entry) -> bool:
     day the decision was made proves nothing, because the answer could have
     been given before the decision existed. The one exception is setup, which
     writes the file and the answer in the same run and says so by carrying the
-    same run on both.
+    same run on both. That exception holds whatever the two dates are: a
+    decision made in August and written down today, with the file drafted and
+    approved today in the same run, was put in front of the owner alongside the
+    decision, so the base is never flagged as behind itself.
     """
     decided = _as_date(entry.decided_on)
     written = _as_date(entry.written_on)
     line_date = _as_date(line.date)
     if line.entry and line.entry == entry.id:
         return True
+    if (
+        line.trigger == TRIGGER_DRAFTED
+        and line.run
+        and entry.run_id
+        and line.run == entry.run_id
+    ):
+        return True
     if line_date == decided:
-        return bool(
-            line.trigger == TRIGGER_DRAFTED
-            and line.run
-            and entry.run_id
-            and line.run == entry.run_id
-        )
+        return False
     later = written if written > decided else decided
     return line_date > later
 

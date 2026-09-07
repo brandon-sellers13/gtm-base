@@ -1,0 +1,4 @@
+# Exact literals the outgoing-content scan is allowed to let through.
+# One literal per line. No patterns. Lines starting with # are ignored.
+# The base creation step replaces the address below with the owner's own.
+owner@example.com

@@ -7,10 +7,11 @@ it is still right.
 
 ## Status
 
-Version 0.1.5 is the scaffold plus the check that runs before anything leaves
-the computer. `hooks/hooks.json` declares the check on the command tool and the
-work done at the start of a session; no skills or agents ship yet, and the
-manifest declares no MCP servers by design. The plugin never connects to a
+Version 0.2.0 holds the ledger path (propose-change, stale-check, confirm),
+the join skill that sets up a base, the check that runs before anything leaves
+the computer, and the work done at the start of a session. `hooks/hooks.json`
+declares the check on the command tool and the session-start entries; no agents
+ship yet, and the manifest declares no MCP servers by design. The plugin never connects to a
 vendor; the sources reach the base through the tools you already have connected
 in your own client. The check reads what a send would carry only when the send
 comes from a base you have joined or from a working folder GTM Base made for

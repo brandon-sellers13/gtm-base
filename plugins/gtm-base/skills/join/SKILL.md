@@ -1,0 +1,286 @@
+---
+name: join
+description: Set up a company base for somebody who does not have one yet, reading the marketing material they name and drafting their ideal customer profile, one decision, and their positioning for approval. Use when the person says "set up my company base", asks to set up a company base, says they want to start a base, or answers yes to the setup offer. Say "set up my company base" whenever you are ready. Also handles "join a base from a link" and "back this up", both of which arrive with the next release and are refused today with one sentence.
+---
+
+# Set up a company base
+
+This skill runs the whole first session with somebody who has no base yet. You
+do the talking. Every step that touches their computer happens through
+`scripts/join.py`, and every sentence you say about what is about to happen is
+in this file or in `references/closing-rules.md`. Say those sentences as they
+are written.
+
+### What the script prints
+
+Every command prints two kinds of line. Whole sentences are for the person and
+you say them as they are. Lines of the form `name=value` are for you and you
+never read them out. In one of those lines, the name runs from the start of the
+line to the first equals sign, and everything after that sign is the value. A
+value that holds a space, an equals sign, or a quotation mark arrives inside
+quotation marks, with any quotation mark or backslash inside it marked off by a
+backslash. Read a quoted value by taking the quotation marks off and undoing
+those marks. A value is never longer than three hundred characters, and one
+that was longer ends in three full stops. A value never holds a line break, so
+one line is always one value.
+
+Three rules hold for the whole session.
+
+1. Say what is about to happen before it happens. Every step below starts with
+   the sentence that belongs to it.
+2. Never ask for one field at a time. Each of the three documents is drafted
+   whole and shown whole.
+3. Never say how long anything will take, and never reassure them about it.
+   Not as a number, not as a promise of speed, not as an aside.
+
+### Step 1. Say what setting up a base does
+
+Before running anything, say these three things and then the line about
+stopping. This is the first thing in the session and nothing else comes before
+it.
+
+- A company base is one folder on this computer holding your strategy, your
+  numbers, and the decisions behind them, in a form your AI can read at the
+  start of every session.
+- Setting it up means reading the marketing material you already have and
+  writing three documents from it: who you sell to, one decision you have
+  already made, and how you describe what you sell.
+- You see every document whole before anything is written down, and nothing is
+  written down until you say yes to it.
+
+Then say, word for word:
+
+You can stop at any time, and nothing you have not approved is kept. Say "set up my company base" whenever you are ready.
+
+When you are ready to begin, the run will need an identifier of its own, so
+start it with:
+
+```
+python3 scripts/join.py new-run
+```
+
+It prints `run=<identifier>`. Every later command in this session takes that
+same identifier.
+
+### Step 2. The sharing notice
+
+Say this once, before the first draft is written, and never again:
+
+Files you approve here may later be shared with everyone invited to this base.
+
+Nothing runs in this step. It is said so that the person deciding whether to
+approve a document already knows who may end up reading it.
+
+### Step 3. The one opening question
+
+Ask exactly one question, and ask it in these words:
+
+Where does your marketing context live today? It could be a folder on this computer, something you would rather paste in, or a tool you already have connected.
+
+Wait for the answer. Do not offer a list of examples beyond those three, and do
+not ask a second question before they have answered the first one.
+
+### Step 4. The company name, and where the base will go
+
+Ask for the company name, in one short question. Then say that GTM Base will
+propose a folder and that nothing will be created until they agree to it, and
+run:
+
+```
+python3 scripts/join.py propose-location --company "<name>"
+```
+
+Add `--content-folder <path>` when they named a folder that holds their
+material. The command creates nothing. It prints one sentence saying where the
+base would go, and the machine readable lines `target=` and `parent=`.
+
+Show them that sentence and ask whether that is the right place. If they want it
+somewhere else, run the command again with the folder they named. Only when they
+have said yes does anything get created, and that happens later, at the moment
+they approve the first document.
+
+### Step 5. What will be read, and the yes that fixes the list
+
+Say that GTM Base will show them everything it would read before it opens
+anything, and run:
+
+```
+python3 scripts/join.py list-sources --folder <path> --run <run identifier>
+```
+
+It prints the files that would be read, with a date on each one that has a date,
+and then what was left out, counted by the reason it was left out. Show them
+both halves. The command also writes that list down inside the run's own
+folder, which is what their yes is taken against. If it prints
+`note=date-clamped`, one of the files says it was changed on a day still to
+come, and the date shown for it is today rather than the day the file claims.
+Say so. If the command says a second yes is needed, or that the folder looks
+like it holds work for more than one company, follow
+`references/reading-rules.md` before going any further.
+
+Before asking for their yes, say this:
+
+Once you say yes, this list is fixed, and from that point nothing leaves this computer for the rest of this session. A file added to the folder afterwards will not be read until you are shown a new list.
+
+On a plain yes, run:
+
+```
+python3 scripts/join.py freeze-sources --folder <path> --session <session id> --run <run identifier>
+```
+
+This takes their yes against the list they were actually shown. It looks at the
+folder once more first, and if anything in it has changed since the list was
+shown it prints `codes=listing-changed` and refuses. That is not a failure and
+you do not treat it as one. Run `list-sources` again, show them the new list,
+say plainly that the folder changed while they were reading, and ask again.
+
+From the moment the yes is taken, nothing leaves this computer for the rest of
+the session, and you say so.
+
+Pastes, PDFs, web pages, and anything a connected tool hands back are read the
+way `references/reading-rules.md` sets out, with your own tools, one bounded
+read each. Every one of them, including anything a connector returned, is
+handed over the same way, and every piece of that text is held for the run
+with:
+
+```
+python3 scripts/join.py add-paste --run <run identifier> --label "<a short label>" --session <session id> --from <file you wrote it to>
+```
+
+Handing text over this way is also what tells the safeguard this session has
+read the person's own material, which is why the session identifier belongs on
+it. From the first one, nothing leaves this computer for the rest of the
+session, exactly as after a yes to a folder, and you say so.
+
+That folder is this person's own, readable by nobody else, and it is deleted at
+the closing. Nothing in it is ever written into the base. A run that stops part
+way is never closed, so the next run started on a later day clears away what it
+was holding.
+
+### Step 6. The three drafts, one at a time
+
+Say that GTM Base will now draft the first document, that they will see it
+whole, and that nothing is written until they say yes. The order is fixed: the
+ideal customer profile, then the decision, then the positioning.
+
+For each step in turn, with `<step>` being `icp`, then `ledger-entry`, then
+`positioning`:
+
+```
+python3 scripts/join.py assemble --step <step> --run <run identifier> --company "<name>" --email <their address>
+```
+
+Add `--paste-file <path>` once for each piece of text held in step 5. The
+command prints `prompt=<path>` along with the labels of what went in and what
+had to be left out. Read that file and follow it: it is the request you write
+the draft from. Write your draft to the file the command names as `draft=`.
+
+Three of its other lines need something said out loud.
+
+- Every line beginning `Left out:` names one of the person's own documents that
+  could not be used at all, with the reason in brackets. Read those out. They
+  named that material and they are entitled to know it did not go in.
+- `note=date-clamped` means one of the sources says it was changed on a day
+  still to come, so the date recorded for it is today. Say so.
+- When the command exits saying `codes=no-sources`, nothing survived and no
+  request was built. Read out the lines beginning `Left out:`, say plainly that
+  there was nothing left to draft from, and ask them for a shorter paste or a
+  narrower folder. Do not write a draft from nothing.
+
+Before each wait, say the line for that step, and say nothing else while the
+person is waiting:
+
+- Reading what you named.
+- Drafting your ideal customer profile.
+- Drafting the decision entry.
+- Drafting your positioning.
+- Saving that into the base.
+
+Then check the draft before showing it:
+
+```
+python3 scripts/join.py review --step <step> --draft <draft file>
+```
+
+It prints `ready`, or one line of `codes=` naming what it found. On any code,
+write the draft again from the same request and check it again. Never show the
+person a draft that has not come back ready, and never repeat a line of a
+refused draft to them.
+
+When it is ready, show them the whole document and offer the answers they
+actually have.
+
+On the first document, there are three: approve it, edit it themselves, or ask
+what is wrong with it. Skipping is not one of them. A skipped document is
+written into the base saying it was skipped, and until the first document is
+approved there is no base to write it into. From the second document onward
+there are four, with skip among them.
+
+- **What is wrong with this?** Take their answer and run
+  `python3 scripts/join.py what-is-wrong --step <step> --answer "<their words>"`.
+  It prints a note. Follow the note, write the whole document again, and show
+  them the new one. Their words go here and nowhere else.
+- **Edit.** Take their own wording, put it in the draft file, and check it again
+  with `review`.
+- **Approve.** For the first document they approve, which is the one that
+  creates the base:
+  `python3 scripts/join.py approve --step <step> --draft <draft file> --run <run identifier> --parent <the parent from step 4> --company "<name>"`.
+  Add `--email <address>` when they gave one. For every document after it:
+  `python3 scripts/join.py approve --step <step> --draft <draft file> --run <run identifier> --base <base folder>`.
+  The command prints `base=` and `file=`.
+  If it prints the sentence saying GTM Base needs their work email address,
+  this computer has no address recorded on it. Ask them for the address they
+  work under, then run the same approve again with `--email <address>`.
+  Nothing was written, so nothing has to be undone.
+- **Skip**, from the second document onward.
+  `python3 scripts/join.py skip --step <step> --base <base folder>`.
+  Say plainly that a skipped document is written down as skipped and that the
+  next session will offer to finish it.
+
+If a draft cannot be read back at all, go back to the same step and write it
+again. Do not move on to the next document and do not ask the person to fix it.
+
+### Step 7. The closing
+
+Say that GTM Base will now look at the base as a whole and tell them one true
+thing about it. Ask whether anything got in the way while they were setting it
+up, and say that what they say will be saved into the base itself so the next
+session can see it. Then run:
+
+```
+python3 scripts/join.py close --base <base folder> --run <run identifier>
+```
+
+Add `--got-in-the-way "<their words>"` when they said something. The command
+prints the finding first and then the closing message. Say both, in that order,
+in the words it printed, and add nothing to them.
+`references/closing-rules.md` holds the order the finding is worked out in, the
+rule that it never claims more than the dates show, and the closing message
+itself.
+
+## What this release does not do yet
+
+Three things reach this skill and are answered with one sentence each, said
+once, with no apology.
+
+- `python3 scripts/join.py backup` for keeping a copy of the base somewhere off
+  this computer.
+- `python3 scripts/join.py invite` for putting somebody else on the base.
+- `python3 scripts/join.py join-link` for joining a base somebody sent a link
+  to.
+
+Each prints the sentence to say. In a session that has already read the
+person's own documents, the sentence says instead that nothing leaves this
+computer until the session ends, which is the same rule they agreed to in step
+5.
+
+## When they say not now
+
+If the person answers the setup offer with "not now", run:
+
+```
+python3 scripts/join.py not-now
+```
+
+It writes their answer down and prints one sentence. Say that sentence and
+nothing more.

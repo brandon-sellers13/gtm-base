@@ -590,6 +590,27 @@ def finding_sentence(report, finding) -> str:
     return FINDING_NOTHING_YET % (finding.date, finding.entry_id)
 
 
+def first_run_text(result) -> str:
+    """The one sentence a first run has to say, ready to be read out loud.
+
+    It is the finding the run already worked out, in the fixed order: a file
+    the person did not write, then a document older than the decision it is
+    meant to reflect, then the plain statement that nothing is out of date yet
+    with the first date it will watch. When the run stopped before it could
+    look at anything, what comes back is the reason it stopped, because that is
+    the only honest thing there is to say.
+    """
+    sentence = getattr(result, "finding_sentence", None)
+    if sentence:
+        return sentence
+    report = getattr(result, "report", None)
+    finding = getattr(result, "finding", None)
+    if report is not None and finding is not None:
+        return finding_sentence(report, finding)
+    sentences = list(getattr(result, "sentences", []) or [])
+    return sentences[0] if sentences else ""
+
+
 # --- The run -----------------------------------------------------------------
 
 

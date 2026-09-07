@@ -1,10 +1,10 @@
 # Joining GTM Base
 
-Status: written for the designed flow. As of version 0.1.5 the offer described
-below is live and arrives in the first reply of a session. Setting a base up is
-not built yet, so saying yes gets you a plain note that setup arrives with a
-later release and that nothing has been changed. This guide is updated as each
-piece lands.
+Status: as of version 0.2.0 the offer and setting a base up are both live.
+Backing a base up somewhere off your computer, inviting a teammate, and joining
+a base from a link arrive with the next release, so those sections below
+describe what is coming rather than what works today. This guide is updated as
+each piece lands.
 
 ## What you need before you start
 
