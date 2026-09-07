@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.2.2 (2026-09-06)
+
+- Join, the list of what will be read: the yes is asked as a yes to read those documents in order to draft the three files, saying that none is copied into the base or changed. It had read as a list of files about to be imported. Found on Brandon's first real setup run.
+
 ## 0.2.1 (2026-09-06)
 
 - Location: when the folder named for the company is itself the folder just turned down (a company called Gridwise working in ~/Gridwise, which keeps its own history), the base goes to a folder kept for bases inside the home folder instead of the refused place. Found on Brandon's first real setup run. The sentence now says the folder keeps its own change history rather than that it is looked after by another tool.

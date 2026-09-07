@@ -134,7 +134,7 @@ class TestManifests(unittest.TestCase):
         )
 
         self.assertEqual("gtm-base", plugin["name"])
-        self.assertEqual("0.2.1", plugin["version"])
+        self.assertEqual("0.2.2", plugin["version"])
         self.assertEqual("Brandon Sellers", plugin["author"]["name"])
         self.assertEqual("MIT", plugin["license"])
         self.assertTrue(plugin["keywords"])
@@ -369,7 +369,7 @@ class TestFakeGh(unittest.TestCase):
 
 class TestConstants(unittest.TestCase):
     def test_constants_import_and_every_path_is_relative(self):
-        self.assertEqual("0.2.1", __import__("gtmbase").__version__)
+        self.assertEqual("0.2.2", __import__("gtmbase").__version__)
         for name in dir(constants):
             if name.startswith("_"):
                 continue

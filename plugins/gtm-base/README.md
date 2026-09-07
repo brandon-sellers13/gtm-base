@@ -7,7 +7,7 @@ it is still right.
 
 ## Status
 
-Version 0.2.1 holds the ledger path (propose-change, stale-check, confirm),
+Version 0.2.2 holds the ledger path (propose-change, stale-check, confirm),
 the join skill that sets up a base, the check that runs before anything leaves
 the computer, and the work done at the start of a session. `hooks/hooks.json`
 declares the check on the command tool and the session-start entries; no agents

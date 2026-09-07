@@ -118,9 +118,14 @@ Say so. If the command says a second yes is needed, or that the folder looks
 like it holds work for more than one company, follow
 `references/reading-rules.md` before going any further.
 
-Before asking for their yes, say this:
+Before asking for their yes, say what the yes is for, in these words, because
+the list can read as a list of files about to be copied somewhere, and it is
+not:
 
-Once you say yes, this list is fixed, and from that point nothing leaves this computer for the rest of this session. A file added to the folder afterwards will not be read until you are shown a new list.
+These are the documents I would read to draft your ideal customer profile, one decision, and your positioning. None of them is copied into the base or changed in any way. The base only ever gets the three drafts you approve, one at a time. Once you say yes, this list is fixed, and from that point nothing leaves this computer for the rest of this session. A file added to the folder afterwards will not be read until you are shown a new list. May I read these?
+
+Ask it that way, as a question about reading, and never as a question about
+taking or importing the files.
 
 On a plain yes, run:
 
