@@ -28,6 +28,9 @@ DRAFTS = os.path.join(support.FIXTURES_DIR, "drafts")
 SKILL_DIR = os.path.join(support.PLUGIN_DIR, "skills", "join")
 SHIM = os.path.join(SKILL_DIR, "scripts", "join.py")
 TODAY = datetime.date(2026, 9, 6)
+# The date a file written by a test carries is the day the test runs, so the
+# scenarios that read a label back out of the script build it from today.
+REAL_TODAY = datetime.date.today().isoformat()
 NOW = datetime.datetime(2026, 9, 6, 9, 15, 0)
 EMAIL = "dana@acme.test"
 ICP = "context/strategy/icp.md"
@@ -728,7 +731,8 @@ class TestThePreviewBeforeEachDraft(unittest.TestCase):
             printed = self.preview(setup.run).stdout.decode("utf-8")
 
             self.assertIn(
-                'left-out="b-also-huge.md (2026-09-06)" reason=over-the-cap', printed
+                'left-out="b-also-huge.md (%s)" reason=over-the-cap' % REAL_TODAY,
+                printed,
             )
             self.assertIn(
                 "left-out=hostile.md reason=unusable:fence-marker", printed
@@ -756,8 +760,8 @@ class TestThePreviewBeforeEachDraft(unittest.TestCase):
             )
             self.assertIn("will read 2 of the 4 files and leave out 2", printed)
             self.assertIn(
-                "The ones left out are: b-also-huge.md (2026-09-06), "
-                "pricing-notes.txt (2026-09-06).",
+                "The ones left out are: b-also-huge.md (%s), "
+                "pricing-notes.txt (%s)." % (REAL_TODAY, REAL_TODAY),
                 printed,
             )
             self.assertIn(
@@ -805,7 +809,7 @@ class TestThePreviewBeforeEachDraft(unittest.TestCase):
             self.assertIn(
                 "Your folder holds more than one draft can read at once.", printed
             )
-            self.assertIn('dropped="b-also-huge.md (2026-09-06)"', printed)
+            self.assertIn('dropped="b-also-huge.md (%s)"' % REAL_TODAY, printed)
 
     def test_the_old_sentence_about_dropped_sources_is_gone_from_the_tree(self):
         """It said what happened and never said what to do about it."""

@@ -504,6 +504,7 @@ Starts after one real user-one session has been observed and `docs/walkthroughs/
 - 2026-09-05 r1: written from the origin and research.
 - 2026-09-05 deepened: architecture, security, and data-integrity passes (40 findings).
 - 2026-09-05 r2: plan review by coherence, feasibility, security, and scope-guardian reviewers (33 findings; the adversarial reviewer did not complete). Cuts: the brief pipeline, `.docx` and `.pptx` parsing, the kept-names list, seat-directory merging, re-migration, not-now expiry, the shipped sha allowlist. Fixes: release line after Unit 5; `xcode-select` prerequisite check; two-entry hook fallback; run id carried on committed artifacts for the same-run exemption; drafted mode appends and stages without committing so one commit holds file and line; `git init -b main`; owner stamped with the repo-local email; completeness by `status`; copies not adopted; partial clone beside the destination; user two identity step; source dates only when a source carries one; contact-detail screening of drafts; trust surface widened (case folding, NFC, whole tree, pull refusal set, `plugins/`); `gh` deny list and widened push classification; first-push review as a gate condition on every push path; collaborator write-access disclosure; token lifecycle and sign-out; `/cd` advice without a version gate; account state as the only joined record; SC5 scope clarified; J21 amendment stated in full.
+- 2026-09-07 r2.3: amended after two reviews of the base location question by Codex. Every new base goes to `~/GTM Bases/<Company>/gtm-base` by default; a destination inside a repository or a known synced location is refused at proposal and again at creation; and the joined entry gains the folder the base belongs with plus enough evidence about that folder to tell a rename from a replacement. J14 and J15 are amended. See Amendment r2.3 below. Shipped in 0.2.4.
 - 2026-09-06 r2.2: amended after the first real setup run on a hundred and four files. Hidden content is removed from a source rather than costing the whole document, each step orders its sources before the cap is applied, the cap is raised, and a preview with a chance to narrow now runs in front of every draft. The deferred brief pipeline's trigger fired and the trigger is recorded as fired; the pipeline itself is still deferred. See Amendment r2.2 below.
 - 2026-09-06 r2.1: amended after the first live sessions on the desktop app. The offer is the assistant's first reply rather than an on-screen notice, and an offer shown and never answered no longer counts as not now. See Amendment r2.1 below.
 
@@ -602,3 +603,121 @@ patterns), `plugins/gtm-base/lib/gtmbase/drafting.py` (`order_sources`,
 (the `preview` step and what it prints), `plugins/gtm-base/skills/join/SKILL.md`
 (steps 5 and 6), `plugins/gtm-base/skills/join/references/reading-rules.md`, and
 `docs/join-guide.md`. Shipped in 0.2.3.
+
+## Amendment r2.3 (2026-09-07): where a base lives, and the link
+
+Recorded after two reviews of the base location question by Codex on 2026-09-07,
+saved at `docs/reviews/2026-09-07-codex-base-location-critique.md` and
+`docs/reviews/2026-09-07-codex-base-link-round-two.md`. Shipped in 0.2.4.
+
+### The decision
+
+Two things changed, and they are one decision taken together.
+
+**Where a base lives.** Every new base goes to `~/GTM Bases/<Company>/gtm-base`.
+It used to go inside the folder the person named, which is the folder their
+marketing material already lives in, and that folder is often already looked
+after by another tool and often already copied to cloud storage by a program
+nobody asked. A base holds raw notes and approved company context, so it is put
+somewhere the product can make a promise about instead. Beside the material is
+still available, but only when the person asks for it in words and only when the
+folder they named passes every check the central place passes.
+
+**The link.** The reason central placement was resisted for as long as it was is
+that the product's one job is to be present in the folder a person actually
+works in. Codex's first review recommended deferring the link and accepting that
+people must learn where their base is. That half of the recommendation was not
+accepted, because a base that is silent in the folder somebody opens has failed
+at the only thing it exists to do. So the joined entry now records the folder the
+base belongs with, and opening Claude Code in that folder runs the daily block
+against the base exactly as opening the base itself does.
+
+What made the link safe to build is the evidence beside the path. Codex's second
+review established that a path alone would activate the wrong company's base
+after a folder was deleted and rebuilt, and that device and inode alone are not a
+lifetime identity either. The record therefore carries the device number, the
+inode, the day the folder was created where the operating system records one, the
+mount point, the volume identifier where one can be read, and the address of the
+shared copy when the folder is itself the top of a repository. A path match
+without an identity match never activates anything.
+
+### The conditions Codex set, and where each one landed
+
+1. **One identity and ownership contract.** `lib/gtmbase/folder_identity.py`
+   takes and compares the record. The comparison answers with one of four words:
+   the same folder where it was, the same folder moved, a folder on a disk that
+   came back differently, or a different folder. A changed remote address is a
+   reason to stop, never a way to find a folder.
+2. **Registry mutations are transactional.** Reading, deciding, and writing the
+   account file all happen with the lock held, in `machine._locked_change`. A
+   rename is written only when the path still recorded is the one the run read.
+3. **The named folder is carried through creation.** `create_base.create` takes
+   it, records the link after the rename, and returns the finished base with the
+   code `link-failed` when only that last step did not work, so a retry connects
+   the folder rather than building a second base.
+4. **One read-only resolver.** `paths.resolve_base` collects every claim on a
+   folder before choosing any of them, refuses to choose when two bases claim
+   one folder, and works out a rename without writing it down.
+5. **A deadline and usable diagnostics.** Every version-tool call the session
+   start makes shares one budget. The sentences for two claims and for a folder
+   that is not the same folder any more reach both the person and the assistant,
+   because the way out of either is something the person says.
+6. **The return run.** A live session cannot be started from a test, so the
+   acceptance run is at the level below, in `tests/test_base_link.py`: build,
+   open the content folder, rename it, open it again, disconnect, open again,
+   connect again.
+
+### The amended requirements
+
+**J14 (amended).** The base lives in its own `gtm-base` folder. It is active when
+Claude Code is opened inside it, when Claude Code is opened inside the folder
+that directly contains it, and when Claude Code is opened in the folder the
+account has recorded the base as belonging with, provided that folder is still
+the folder that was recorded. Join writes nothing to the person's global
+configuration, and nothing at all into the folder the base belongs with, and
+proposes no such line.
+
+**J15 (amended).** Join proposes `~/GTM Bases/<Company>/gtm-base` and asks before
+creating it. It proposes the folder the person named instead only when they ask
+for that in words. Either way the destination is refused when its resolved
+ancestry is inside a repository, inside a folder known to be kept in cloud
+storage, inside a base this account has joined, or inside the folder the plugin
+keeps for itself, and the person is asked rather than told when cloud coverage
+cannot be established. Those checks run when the place is proposed and again at
+the moment the base is built, before any approved material is written. Several
+bases can exist on one machine, each in its own folder, each with its own owner
+email, and each belonging with at most one folder.
+
+**J16 (unchanged in intent).** The folder the person names is still read as a
+source under J7, and existing files are still never moved, renamed, edited, or
+deleted. What changed is that the base is built elsewhere and linked to that
+folder rather than built inside it.
+
+**J19 (amended).** At the end of user one's session the base is joined on this
+machine, the safeguard is installed in the base, and the next session opens with
+the daily block in three places rather than two: the base's own folder, the
+folder that directly contains it, and the folder the base was linked to. The
+closing message names the folder the person is expected to open, which is the
+folder they named when one was named, and it gives the base's own folder as well
+so nothing about where the base lives is hidden from them.
+
+**R5 (clarified, not weakened).** R5 said the inbox of raw transcripts lives
+inside the working folder, is kept out of shared history, and is never synced.
+The first two hold exactly as written: the inbox is inside the base, and the
+safeguard refuses any send that touches it. "Never synced" is clarified as what
+the product can actually enforce, which is that a base is never built in a place
+GTM Base can establish is copied off the computer by another program, and that a
+place it cannot establish either way is put to the person as a question rather
+than treated as safe. No folder convention can enforce more than that against
+backup software or a setting somebody changes later, and stating it as an
+absolute promise would make it a promise the product breaks silently. The
+enforceable boundary is the refusal list in J15.
+
+### What the link is not
+
+It does not change Claude Code's own working directory, workspace trust, or
+project settings; those belong to the folder the person opened. It does not
+extend the frozen list of documents from setup, and activation never reads a
+document. It is not carried by the shared copy, so a second person has no link
+until they name a folder at their own join. It cannot tell two people sharing one
+computer account apart, because nothing in the account file can.

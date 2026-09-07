@@ -51,6 +51,11 @@ CODE_GIT_FAILED = "git-failed"
 CODE_CONFIRMATION_REFUSED = "confirmation-refused"
 CODE_RENAME_FAILED = "rename-failed"
 
+# The base is built and joined, but the folder it was meant to belong with was
+# not recorded. The base is real and the person keeps it; connecting the folder
+# is a step that can be run again on its own.
+CODE_LINK_FAILED = "link-failed"
+
 # The answer the offer records the moment a base exists.
 OFFER_ANSWER_SET_UP = "set-up"
 
@@ -75,13 +80,16 @@ class ApprovedFile(object):
 class CreateResult(object):
     """What a finished base is: where it is, what it is called, who owns it."""
 
-    __slots__ = ("root", "base_id", "email", "codes")
+    __slots__ = ("root", "base_id", "email", "codes", "content_root")
 
-    def __init__(self, root, base_id, email, codes=None):
+    def __init__(self, root, base_id, email, codes=None, content_root=None):
         self.root = root
         self.base_id = base_id
         self.email = email
         self.codes: List[str] = list(codes or [])
+        # The folder this base was recorded as belonging with, when one was
+        # named and the record was written.
+        self.content_root = content_root
 
     def __repr__(self) -> str:
         return "CreateResult(root=%r, base_id=%r)" % (self.root, self.base_id)
@@ -263,6 +271,7 @@ def create(
     email: Optional[str] = None,
     name: Optional[str] = None,
     confirmed_home: bool = False,
+    content_root: Optional[str] = None,
 ) -> CreateResult:
     """Build a base from one approved file, and join this account to it.
 
@@ -275,7 +284,15 @@ def create(
     The folder the base is going into is checked here as well as when it was
     proposed. A place is proposed at one moment and approved at another, and
     the rules about where a base may go have to hold at the moment it is built
-    rather than at the moment somebody suggested it.
+    rather than at the moment somebody suggested it. That check runs before the
+    half built folder is made, so nothing the person approved is ever written
+    into a place the rules would turn down.
+
+    `content_root` is the folder the person named as the one their material
+    lives in. The base is recorded as belonging with it, so that opening Claude
+    Code there brings the base along. Recording it is the last step, after the
+    base is real, and a failure at that step leaves a finished base and a code
+    saying the one remaining step can be run again.
     """
     git = runner_or_default(runner)
     moment = now or state.now_utc()
@@ -289,7 +306,13 @@ def create(
     remove_stale_seat_dirs(machine.load_machine_state_raw(), runner=git)
 
     parent_folder = os.path.realpath(os.path.abspath(os.path.expanduser(parent)))
-    location.check_parent(parent_folder, confirmed_home)
+    location.check_parent(parent_folder, confirmed_home, runner=git)
+    if content_root:
+        # Asked before a single folder is made. A folder another base already
+        # belongs with, or one inside a base, is a refusal the person can act
+        # on, and hearing it after a base has been built for them would be
+        # hearing it too late.
+        machine.check_content_free(content_root, runner=git)
     if not os.path.isdir(parent_folder):
         os.makedirs(parent_folder)
         parent_folder = os.path.realpath(parent_folder)
@@ -313,7 +336,29 @@ def create(
 
     # From here the base exists. Nothing below is allowed to delete it, and a
     # failure below is repaired on the next run rather than undone.
-    machine.append_joined(root=target, base_id=base_id, remote=None)
+    codes: List[str] = []
+    linked_to = None
+    try:
+        _state, link_codes = machine.append_joined(
+            root=target,
+            base_id=base_id,
+            remote=None,
+            runner=git,
+            content_root=content_root or None,
+        )
+        if content_root and not link_codes:
+            linked_to = os.path.realpath(
+                os.path.abspath(os.path.expanduser(content_root))
+            )
+        elif content_root:
+            codes.append(CODE_LINK_FAILED)
+    except GtmBaseError:
+        # The folder could not be taken between the check above and this write.
+        # The base itself still has to be joined, because a base nothing has a
+        # record of is a base the person cannot get back to.
+        machine.append_joined(root=target, base_id=base_id, remote=None, runner=git)
+        if content_root:
+            codes.append(CODE_LINK_FAILED)
     # The answer to the offer is recorded here, at the moment the base exists,
     # rather than at the closing. A person who approves their first document
     # and then closes the window has set a base up, and the offer must not come
@@ -322,11 +367,10 @@ def create(
         machine.record_offer_answer(OFFER_ANSWER_SET_UP)
     except GtmBaseError:
         pass
-    codes: List[str] = []
     hook_code, _folder = install_git_hook.install(target, plugin_root, git, base_id)
     codes.append(hook_code)
     state.update_seat(base_id, first_push_reviewed=False, client="claude")
-    return CreateResult(target, base_id, address, codes)
+    return CreateResult(target, base_id, address, codes, linked_to)
 
 
 def _fill_partial(

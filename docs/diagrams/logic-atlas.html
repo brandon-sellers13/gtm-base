@@ -132,7 +132,7 @@
 
 <div class="page">
   <div class="text">
-    <p class="meta">GTM Base <b>logic atlas</b> · plugin 0.2.3 · updated 2026-09-07</p>
+    <p class="meta">GTM Base <b>logic atlas</b> · plugin 0.2.4 · updated 2026-09-07</p>
     <h1>GTM Base Logic Atlas</h1>
     <p class="lede">Every decision the plugin makes on your behalf, drawn once and kept current with the code. Each figure is one rule. The stamp under it says when the rule was decided and where it is written down.</p>
     <div class="key">
@@ -194,11 +194,11 @@
       <path d="M760,190 C760,250 460,250 460,190" class="edge dashed" marker-end="url(#a1)" style="color: var(--ink-mid)"/>
       <text x="612" y="250" class="lbl" text-anchor="middle">joined: where it is, its identity</text>
       <path d="M700,190 C700,275 150,275 150,190" class="edge dashed" marker-end="url(#a1)" style="color: var(--ink-mid)"/>
-      <text x="425" y="286" class="lbl" text-anchor="middle">belongs with: path plus folder identity (proposed)</text>
+      <text x="425" y="286" class="lbl" text-anchor="middle">belongs with: path plus folder identity</text>
     </svg>
     </div>
     <figcaption>Your folder is read once, at setup, with your permission. The base is written only through setup, a proposal, or a confirmation. The plugin's records point at both and hold nothing a teammate should see.
-      <span class="meta"><span class="stamp">decided 2026-09-07</span> join plan Key Decisions, first plan "three state stores" · <span class="stamp proposed">link agreed with Codex 2026-09-07, build pending</span></span></figcaption>
+      <span class="meta"><span class="stamp">decided 2026-09-07, built in 0.2.4</span> join plan Key Decisions, first plan "three state stores"</span></figcaption>
   </figure>
 
   <h2 id="start">2. What happens when a session opens</h2>
@@ -218,14 +218,14 @@
       <path d="M130,64 L130,104" class="edge" marker-end="url(#a2)" style="color: var(--ink-mid)"/>
 
       <rect x="20" y="196" width="300" height="52" rx="6" class="decision"/>
-      <text x="170" y="218" text-anchor="middle">Does exactly one joined base</text>
-      <text x="170" y="235" text-anchor="middle">belong with this folder? (path and identity)</text>
+      <text x="170" y="218" text-anchor="middle">Does it look like a base</text>
+      <text x="170" y="235" text-anchor="middle">that is not joined here?</text>
       <path d="M170,156 L170,196" class="edge" marker-end="url(#a2)" style="color: var(--ink-mid)"/>
       <text x="180" y="180" class="lbl">no</text>
 
       <rect x="20" y="288" width="300" height="52" rx="6" class="decision"/>
-      <text x="170" y="310" text-anchor="middle">Does it look like a base</text>
-      <text x="170" y="327" text-anchor="middle">that is not joined here?</text>
+      <text x="170" y="310" text-anchor="middle">Does exactly one joined base</text>
+      <text x="170" y="327" text-anchor="middle">belong with this folder? (path and identity)</text>
       <path d="M170,248 L170,288" class="edge" marker-end="url(#a2)" style="color: var(--ink-mid)"/>
       <text x="180" y="272" class="lbl">no</text>
 
@@ -240,23 +240,23 @@
       <text x="530" y="143" text-anchor="middle" class="lbl">figure 5</text>
       <path d="M320,130 L420,130" class="edge" marker-end="url(#a2)" style="color: var(--ink-mid)"/>
       <text x="370" y="122" class="lbl" text-anchor="middle">yes</text>
-      <path d="M320,222 C380,222 380,150 420,140" class="edge" marker-end="url(#a2)" style="color: var(--ink-mid)"/>
-      <text x="372" y="212" class="lbl" text-anchor="middle">yes, one</text>
+      <path d="M320,314 C380,314 380,160 420,145" class="edge" marker-end="url(#a2)" style="color: var(--ink-mid)"/>
+      <text x="372" y="304" class="lbl" text-anchor="middle">yes, one</text>
 
-      <rect x="420" y="196" width="220" height="52" rx="6" class="warnbox"/>
-      <text x="530" y="218" text-anchor="middle">More than one claims it:</text>
-      <text x="530" y="235" text-anchor="middle">say both, activate nothing</text>
-      <path d="M320,240 L420,236" class="edge" marker-end="url(#a2)" style="color: var(--ink-mid)"/>
+      <rect x="420" y="196" width="220" height="52" rx="6" class="box"/>
+      <text x="530" y="218" text-anchor="middle">Check its whole tree first,</text>
+      <text x="530" y="235" text-anchor="middle">then ask: treat this as your base?</text>
+      <path d="M320,222 L420,222" class="edge" marker-end="url(#a2)" style="color: var(--ink-mid)"/>
+      <text x="370" y="214" class="lbl" text-anchor="middle">yes</text>
+      <rect x="680" y="196" width="200" height="52" rx="6" class="warnbox"/>
+      <text x="780" y="218" text-anchor="middle">Holds a script, an instruction</text>
+      <text x="780" y="235" text-anchor="middle">file, or a link: refused</text>
+      <path d="M640,222 L680,222" class="edge dashed" marker-end="url(#a2)" style="color: var(--ink-mid)"/>
 
-      <rect x="420" y="288" width="220" height="52" rx="6" class="box"/>
-      <text x="530" y="310" text-anchor="middle">Check its whole tree first,</text>
-      <text x="530" y="327" text-anchor="middle">then ask: treat this as your base?</text>
-      <path d="M320,314 L420,314" class="edge" marker-end="url(#a2)" style="color: var(--ink-mid)"/>
-      <text x="370" y="306" class="lbl" text-anchor="middle">yes</text>
-      <rect x="680" y="288" width="200" height="52" rx="6" class="warnbox"/>
-      <text x="780" y="310" text-anchor="middle">Holds a script, an instruction</text>
-      <text x="780" y="327" text-anchor="middle">file, or a link: refused</text>
-      <path d="M640,314 L680,314" class="edge dashed" marker-end="url(#a2)" style="color: var(--ink-mid)"/>
+      <rect x="420" y="288" width="220" height="52" rx="6" class="warnbox"/>
+      <text x="530" y="310" text-anchor="middle">More than one claims it:</text>
+      <text x="530" y="327" text-anchor="middle">say both, activate nothing</text>
+      <path d="M320,330 L420,326" class="edge" marker-end="url(#a2)" style="color: var(--ink-mid)"/>
 
       <rect x="420" y="380" width="220" height="52" rx="6" class="box"/>
       <text x="530" y="402" text-anchor="middle">Not answered: the offer</text>
@@ -273,8 +273,8 @@
       <text x="36" y="520" class="lbl">The session id is recorded so scripts can find it. The hook exits within 15 seconds, prints nothing on failure, and never shows a token, an address with a login, or an option value.</text>
     </svg>
     </div>
-    <figcaption>The order matters: a physical base wins over a link, a link wins over "looks like a base," and the offer is last. Two bases claiming one folder is a stop, not a guess.
-      <span class="meta"><span class="stamp">decided 2026-09-05, amended 2026-09-06</span> first plan Unit 3, join plan Unit 1, Amendment r2.1 · <span class="stamp proposed">row two agreed, build pending</span></span></figcaption>
+    <figcaption>The order matters. A base you are standing in wins over everything, a folder that looks like a base is recognised as itself before any link is considered, and the offer is last. Two bases claiming one folder is a stop, not a guess.
+      <span class="meta"><span class="stamp">decided 2026-09-05, amended 2026-09-07</span> first plan Unit 3, join plan Unit 1, Amendments r2.1 and r2.3</span></figcaption>
   </figure>
 
   <h2 id="link">3. The link between your folder and the base</h2>
@@ -290,12 +290,12 @@
       <text x="36" y="78" class="mono">root      ~/GTM Bases/Gridwise/gtm-base</text>
       <text x="36" y="96" class="mono">base_id   a random id, also in the base</text>
       <text x="36" y="114" class="mono">content_root      ~/Gridwise</text>
-      <text x="36" y="132" class="mono">content_identity  device + inode (+ remote)</text>
-      <text x="36" y="150" class="lbl">written once, at creation, from the folder you named</text>
+      <text x="36" y="132" class="mono">content_identity  device, inode, day made, volume, address</text>
+      <text x="36" y="150" class="lbl">written at creation from the folder you named, or by linking later</text>
 
       <rect x="380" y="30" width="500" height="60" rx="6" class="box"/>
       <text x="396" y="52" class="title">Rule 1. Activation needs both the path and the identity</text>
-      <text x="396" y="72" class="lbl">A folder at the same path with a different identity was deleted and recreated. It does not wake the base.</text>
+      <text x="396" y="72" class="lbl">A folder at the same path with a different identity, or a different day it was made, was deleted and recreated. It does not wake the base.</text>
 
       <rect x="380" y="100" width="500" height="60" rx="6" class="box"/>
       <text x="396" y="122" class="title">Rule 2. Same identity, new path: the folder was renamed</text>
@@ -316,7 +316,7 @@
     </svg>
     </div>
     <figcaption>What Codex objected to in a bare path link, and the rule that answers each objection. A missing folder (unplugged drive) never invalidates the base; the link simply does not fire.
-      <span class="meta"><span class="stamp proposed">agreed with Codex 2026-09-07 on conditions, build pending</span> will amend join plan J14 and J15 · conditions: volume id in the identity, all identity matches counted before any path wins, one lock around register and repair, no link into another base or the plugin's records, a way to unlink by name, a return-session test</span></figcaption>
+      <span class="meta"><span class="stamp">decided 2026-09-07, built in 0.2.4</span> join plan Amendment r2.3, amending J14 and J15 · built with: volume id in the identity, all identity matches counted before any path wins, one lock around register and repair, no link into another base or the plugin's records, a way to unlink by name, a return-session test</span></figcaption>
   </figure>
 
   <h2 id="offer">4. When the setup offer appears</h2>

@@ -32,10 +32,17 @@ PROPOSAL_PATH_PREFIXES = (
 
 # The codes `resolve_base` can report.
 CODE_JOINED = "joined"
+CODE_LINKED = "linked"
 CODE_UNJOINED = "unjoined"
 CODE_BASE_SHAPED = "base-shaped"
 CODE_MULTIPLE_CHILDREN = "multiple-children"
+CODE_LINK_CONFLICT = "link-conflict"
+CODE_LINK_MISMATCH = "link-identity-mismatch"
+CODE_CONTENT_INSIDE_BASE = "content-inside-base"
 CODE_NONE = "none"
+
+# The two codes that mean a base is working in this session.
+ACTIVE_CODES = (CODE_JOINED, CODE_LINKED)
 
 # The codes `head_is_default_branch` can report.
 CODE_DEFAULT_BRANCH = "default-branch"
@@ -282,17 +289,49 @@ def is_base_shaped(directory: str) -> bool:
 class Resolution(object):
     """The answer to "which base is this session working in, if any"."""
 
-    __slots__ = ("root", "base_id", "code", "entry")
+    __slots__ = (
+        "root",
+        "base_id",
+        "code",
+        "entry",
+        "content_root",
+        "repair_root",
+        "conflict_roots",
+    )
 
-    def __init__(self, root=None, base_id=None, code=CODE_NONE, entry=None):
+    def __init__(
+        self,
+        root=None,
+        base_id=None,
+        code=CODE_NONE,
+        entry=None,
+        content_root=None,
+        repair_root=None,
+        conflict_roots=None,
+    ):
         self.root = root
         self.base_id = base_id
         self.code = code
         self.entry = entry
+        # The folder this base belongs with, when it was reached through one.
+        self.content_root = content_root
+        # The folder the record should be pointed at, when the folder a base
+        # belongs with turns out to have been renamed. Working this out is a
+        # question, so it happens here; writing it down is a change, so it
+        # happens in the one half of the session start that may write.
+        self.repair_root = repair_root
+        # The base folders of every base claiming this folder, when more than
+        # one of them does and nothing may therefore be opened.
+        self.conflict_roots = list(conflict_roots or [])
 
     @property
     def joined(self) -> bool:
         return self.code == CODE_JOINED
+
+    @property
+    def active(self) -> bool:
+        """Whether this session has a base to work in, however it was reached."""
+        return self.code in ACTIVE_CODES
 
     def __repr__(self) -> str:
         return "Resolution(code=%r, root=%r)" % (self.code, self.root)
@@ -315,13 +354,119 @@ def _child_bases(cwd: str) -> List[str]:
     return found
 
 
+def _linked(here: str, entries, git):
+    """The one base this folder belongs with, or the reason there is not one.
+
+    Every claim is collected before any of them is chosen. A folder that two
+    bases both claim is a stop rather than a guess, and picking the one whose
+    path happens to be current would hand a session opened for one company the
+    context of another.
+
+    A folder at a recorded path whose evidence no longer agrees was deleted and
+    built again, or is sitting on a disk that came back as a different disk.
+    Neither is the folder that was recorded, so neither opens a base, and both
+    are reported by their own code so the person can be told how to connect the
+    folder again.
+    """
+    from . import folder_identity  # imported here to keep the import order simple
+
+    linked = []
+    for entry in entries:
+        if not isinstance(entry, dict):
+            continue
+        recorded_root = entry.get("content_root")
+        recorded = folder_identity.clean(entry.get("content_identity"))
+        if isinstance(recorded_root, str) and recorded is not None:
+            linked.append((entry, recorded_root, recorded))
+    if not linked:
+        # Nothing on this account belongs with any folder, so there is nothing
+        # to compare this one against and no reason to look at it at all.
+        return None
+
+    # The disk's own identifier is only worth the wait when at least one record
+    # has one to compare against.
+    wants_volume = any(record.get("volume") is not None for _e, _r, record in linked)
+    try:
+        current = folder_identity.capture(here, runner=git, with_volume=wants_volume)
+    except StateError:
+        return None
+
+    claims = []
+    mismatched = False
+    for entry, recorded_root, recorded in linked:
+        verdict = folder_identity.matches(recorded, current, recorded_root)
+        if verdict in (folder_identity.SAME, folder_identity.MOVED):
+            claims.append((entry, verdict))
+            continue
+        if folder_identity.points_at(recorded_root, current) or (
+            os.path.exists(recorded_root)
+            and os.path.realpath(recorded_root) == current.path
+        ):
+            mismatched = True
+
+    if len(claims) > 1:
+        roots = sorted(
+            str(entry.get("root") or "") for entry, _verdict in claims
+        )
+        return Resolution(None, None, CODE_LINK_CONFLICT, None, conflict_roots=roots)
+    if not claims:
+        if mismatched:
+            return Resolution(None, None, CODE_LINK_MISMATCH, None)
+        return None
+
+    entry, verdict = claims[0]
+    root = entry.get("root")
+    if not isinstance(root, str) or not is_base_shaped(root):
+        return None
+    real = os.path.realpath(root)
+    # A folder that has since come to sit inside another base could hand one
+    # company's session the context of another, so it is checked again here
+    # rather than trusted because it passed when it was written down.
+    for other in entries:
+        if not isinstance(other, dict) or other is entry:
+            continue
+        other_root = other.get("root")
+        if not isinstance(other_root, str) or not os.path.isdir(other_root):
+            continue
+        other_real = os.path.realpath(other_root)
+        if current.path == other_real or current.path.startswith(
+            other_real.rstrip(os.sep) + os.sep
+        ):
+            return Resolution(None, None, CODE_CONTENT_INSIDE_BASE, None)
+
+    base_id = read_base_id(real, runner=git)
+    if base_id is None or base_id != entry.get("base_id"):
+        return None
+    return Resolution(
+        real,
+        base_id,
+        CODE_LINKED,
+        entry,
+        content_root=current.path,
+        repair_root=current.path if verdict == folder_identity.MOVED else None,
+    )
+
+
 def resolve_base(cwd: str, machine_state, runner: Optional[GitRunner] = None):
     """The only way any hook or skill decides which base it is working in.
 
-    The current folder is checked first, then a `gtm-base` folder inside it.
-    A base counts as joined only when this account's own record names that
-    folder and the identifier written in the folder matches the record, so a
-    copied folder or an invented record never activates anything.
+    Four questions, in this order, and the first one that answers wins.
+
+    The folder itself, or a `gtm-base` folder inside it. A base counts as joined
+    only when this account's own record names that folder and the identifier
+    written in the folder matches the record, so a copied folder or an invented
+    record never opens anything.
+
+    A folder that looks like a base but that this account has never opened. That
+    answer comes back before any association is looked at, so a base whose own
+    folder was renamed is recognised as itself rather than as somebody else's.
+
+    The folder a base belongs with. One base may claim it, and the folder has to
+    still be the folder that was recorded.
+
+    Nothing here, in which case the offer rules decide what happens.
+
+    Nothing in this function writes anything down.
     """
     git = runner_or_default(runner)
     here = os.path.realpath(cwd)
@@ -355,6 +500,10 @@ def resolve_base(cwd: str, machine_state, runner: Optional[GitRunner] = None):
             fallback = Resolution(real, base_id, code, None)
     if fallback is not None:
         return fallback
+
+    linked = _linked(here, entries, git)
+    if linked is not None:
+        return linked
     return Resolution(None, None, CODE_NONE, None)
 
 

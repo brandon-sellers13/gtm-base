@@ -134,7 +134,7 @@ class TestManifests(unittest.TestCase):
         )
 
         self.assertEqual("gtm-base", plugin["name"])
-        self.assertEqual("0.2.3", plugin["version"])
+        self.assertEqual("0.2.4", plugin["version"])
         self.assertEqual("Brandon Sellers", plugin["author"]["name"])
         self.assertEqual("MIT", plugin["license"])
         self.assertTrue(plugin["keywords"])
@@ -312,6 +312,20 @@ class TestPlainLanguage(unittest.TestCase):
         ):
             plain_language.assert_plain(self, path)
 
+    def test_the_drawn_rules_say_they_are_built_and_not_proposed(self):
+        """A figure marked proposed is a promise, and these are behaviour now."""
+        atlas = os.path.join(
+            os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+            "docs",
+            "diagrams",
+            "logic-atlas.html",
+        )
+        with open(atlas, encoding="utf-8") as handle:
+            text = handle.read()
+        self.assertNotIn("(proposed)", text)
+        self.assertIn("plugin 0.2.4", text)
+        self.assertIn("built in 0.2.4", text)
+
     def test_the_lint_itself_catches_what_it_should(self):
         text = "We merged the branch.\nThen cloning the pull requests.\n"
         found = plain_language.find_banned(text)
@@ -369,7 +383,7 @@ class TestFakeGh(unittest.TestCase):
 
 class TestConstants(unittest.TestCase):
     def test_constants_import_and_every_path_is_relative(self):
-        self.assertEqual("0.2.3", __import__("gtmbase").__version__)
+        self.assertEqual("0.2.4", __import__("gtmbase").__version__)
         for name in dir(constants):
             if name.startswith("_"):
                 continue

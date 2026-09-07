@@ -1,6 +1,6 @@
 ---
 name: join
-description: Set up a company base for somebody who does not have one yet, reading the marketing material they name and drafting their ideal customer profile, one decision, and their positioning for approval. Use when the person says "set up my company base", asks to set up a company base, says they want to start a base, or answers yes to the setup offer. Say "set up my company base" whenever you are ready. Also handles "join a base from a link" and "back this up", both of which arrive with the next release and are refused today with one sentence.
+description: Set up a company base for somebody who does not have one yet, reading the marketing material they name and drafting their ideal customer profile, one decision, and their positioning for approval. Use when the person says "set up my company base", asks to set up a company base, says they want to start a base, or answers yes to the setup offer. Say "set up my company base" whenever you are ready. Also handles "link this folder to my base", "unlink this folder from my base", and "show my linked folders", which connect a base to the folder somebody keeps their marketing material in. Also handles "join a base from a link" and "back this up", both of which arrive with the next release and are refused today with one sentence.
 ---
 
 # Set up a company base
@@ -91,13 +91,36 @@ python3 scripts/join.py propose-location --company "<name>"
 ```
 
 Add `--content-folder <path>` when they named a folder that holds their
-material. The command creates nothing. It prints one sentence saying where the
-base would go, and the machine readable lines `target=` and `parent=`.
+material. That folder is not where the base goes. It is the folder the base will
+be linked to, so that opening Claude Code there brings the base along. The
+command creates nothing. It prints one sentence saying where the base would go,
+and the machine readable lines `target=`, `parent=`, `reason=`, and, when they
+named a folder, `belongs-with=`.
 
-Show them that sentence and ask whether that is the right place. If they want it
-somewhere else, run the command again with the folder they named. Only when they
-have said yes does anything get created, and that happens later, at the moment
-they approve the first document.
+Every base goes in a folder kept for bases inside their home folder, one folder
+per company. Show them the sentence the command printed and ask whether that is
+the right place. The sentence names the folder they named as the one to open
+from then on, and that is the point to make: the base lives in its own folder,
+and it wakes up in theirs. Say as well that nothing in their folder is changed
+or read again.
+
+When the command prints `codes=company-folder-exists`, there is already a folder
+for a company of that name, so ask them for a name that tells the two apart and
+run the command again with it. Never build over a folder that is already there.
+
+If they say they would rather have the base sit inside the folder their material
+is in, run the command again with `--beside` as well as `--content-folder`. The
+same checks run on that folder, and it is refused when another tool already
+keeps a history for it, when another program copies it off the computer on its
+own, or when it is inside a base or inside the folder GTM Base keeps for itself.
+When the command says `sync-unknown`, ask them the question it could not answer:
+does any app automatically copy this folder, or your whole home folder, to cloud
+storage. If they say yes, do not build there.
+
+Only when they have said yes does anything get created, and that happens later,
+at the moment they approve the first document. Pass the same
+`--content-folder <path>` to `approve` on that first document, so the base is
+linked at the moment it comes into being.
 
 ### Step 5. What will be read, and the yes that fixes the list
 
@@ -298,8 +321,38 @@ Add `--got-in-the-way "<their words>"` when they said something. The command
 prints the finding first and then the closing message. Say both, in that order,
 in the words it printed, and add nothing to them.
 `references/closing-rules.md` holds the order the finding is worked out in, the
-rule that it never claims more than the dates show, and the closing message
-itself.
+rule that it never claims more than the dates show, and both closing messages.
+When the base was linked to a folder, the closing message names both folders. It
+says to open the folder they named and that the base will be there, and it gives
+the base's own folder as well. Say it exactly as printed, because which of the
+two messages is right depends on whether a folder was linked and the command has
+already worked that out.
+
+## Linking a folder
+
+Three sentences reach this skill at any time, from any session, and each one is
+one command. None of them needs a base to be open in the session, which matters,
+because the folder somebody wants to link is their own folder and is not a base.
+
+Say "link this folder to my base" and run
+`python3 scripts/join.py link --base <base folder or company name> --folder <path>`,
+using the folder they are working in when they did not name one. The base can be
+named by its folder or by the company it is for, so "link this folder to my Acme
+base" is enough, and `--base` can be left off altogether when there is only one
+base on the computer. When there is more than one and they named none, the
+command names the ones it could have meant and changes nothing, so ask which.
+It refuses a folder that already belongs with another base and names that base, a
+folder that is a base or sits inside one, and a folder that is not on the
+computer.
+
+Say "unlink this folder from my base" and run
+`python3 scripts/join.py unlink --base <base folder or company name>`. The base
+itself is not touched, and it still opens in its own folder.
+
+Say "show my linked folders" and run `python3 scripts/join.py links`, which
+prints one line per base with its name, its own folder, and the folder it belongs
+with, or `none`. Run this whenever a name they gave was not found, and show them
+the list so they can name one from it.
 
 ## What this release does not do yet
 

@@ -1,5 +1,31 @@
 # Changelog
 
+## 0.2.4 (2026-09-07)
+
+- Every new base now goes in one place, a folder called GTM Bases inside your home folder with one folder per company. It used to go inside the folder you named, which meant it landed wherever your material happens to live, and that is often a folder some other tool already looks after or some other program already copies to the internet on its own. A base holds raw notes and approved company context, so it is put somewhere GTM Base can make a promise about instead. You can still ask for it beside your material, and the same checks then run on the folder you named.
+
+- A folder GTM Base cannot make that promise about is now refused rather than warned about, because a warning does not stop an upload. Refused: anywhere inside a folder another tool already keeps a history for, the folders Apple's cloud storage keeps, the folders other cloud storage is connected through, any folder whose name starts with Google Drive, Dropbox, or OneDrive, anything inside a base you have already joined, and the folder GTM Base keeps for itself. When your Desktop or Documents folder might be kept in the cloud and it cannot be established either way, you are asked instead of being told. All of these run again at the moment the base is built, on the real folders the path leads to, before anything you approved is written anywhere.
+
+- Your base is now linked to the folder your marketing material lives in, so opening Claude Code in that folder brings the base with it: the map, the one question, and the day's update, exactly as if you had opened the base itself. The link is a record GTM Base keeps for itself. It never writes a thing into your folder and never reads your documents again.
+
+- The link survives you renaming or moving that folder, and it does not survive the folder being deleted and a different one being made in its place. It keeps enough about the folder itself, from the operating system, to tell those two apart. A folder on an external disk that comes back as a different disk is reported as that rather than guessed at, and you are asked to connect it again.
+
+- One folder belongs with one base. A folder another base already belongs with is refused, and you are told which base has it. If two bases somehow both claim one folder, neither is opened and both are named, so no company's context can arrive in a session opened for another.
+
+- Three new things you can say: link this folder to my base, unlink this folder from my base, and show my linked folders. You can name the base by the company it is for rather than by its folder, so "link this folder to my Acme base" is enough, and none of the three needs a base to be open, which matters because the folder you want to connect is your own folder and is never a base. Show my linked folders lists every base with its name, its folder, and the folder it belongs with.
+
+- When you are told where your base will go, the sentence now names the folder you named as the one to open from then on, so the two folders are put to you together rather than the base's own folder being the only one mentioned. The message that ends setting up does the same, and it gives the base's own folder as well so nothing about where it lives is hidden from you.
+
+- A company name that already has a folder in GTM Bases is now turned down with a request for a name that tells the two apart, rather than a second base being built where one already is.
+
+- Every way a place can be turned down now comes back as a sentence saying what to do next instead of a bare failure, including the one case GTM Base cannot settle on its own, where it asks you whether any app copies that folder to cloud storage automatically.
+
+- A folder that cannot be linked is now said so before your base is built rather than after, and when a base is built the base and the folder it belongs with are written down together in one go, so there is no moment where you have a base and no record of which folder it belongs with. If that one write is refused anyway, you keep the base and are told the single step that is left.
+
+- A base whose folder is not plugged in today keeps its link. A record of a link that cannot be read is switched off and reported on its own, and the base itself is kept.
+
+- Everything the session start does with the version tool now shares one time budget, so a slow network or a stuck lock ends in a sentence you can read rather than a start that hangs.
+
 ## 0.2.3 (2026-09-06)
 
 - A document that holds a comment, a tag, or a character a reader of the file would never see is now read with those parts taken out of it, rather than turned away whole. Brandon's first real setup run named a folder of a hundred and four files and seven of them were refused outright, all of them ordinary marketing templates carrying notes the author had written to themselves inside comment marks. You are told which document something was taken out of and how much of each kind went, in one sentence for each document. Text that writes the wrapper's own lines is still refused, and that check now runs after the removal, so nothing can be hidden inside a tag and appear once the tag is gone.

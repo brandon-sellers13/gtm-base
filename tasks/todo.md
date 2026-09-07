@@ -198,3 +198,91 @@ ordinary words and this module should not decide on its own what somebody meant
 to write down. And the version was moved to 0.2.3 in the manifest, the library,
 the guide, and the plugin README, because a changelog heading for a release the
 manifest does not name would be the first thing to go stale.
+
+# 0.2.4: where a base lives, and the folder it belongs with
+
+Two reviews by Codex on 2026-09-07 (`docs/reviews/2026-09-07-codex-base-location-critique.md`
+and `docs/reviews/2026-09-07-codex-base-link-round-two.md`) and Brandon's decision
+after them: every new base goes to `~/GTM Bases/<Company>/gtm-base`, and the base
+is linked to the folder the person's marketing material lives in so that opening
+Claude Code there brings the base with it.
+
+## Plan
+
+- [x] A. `folder_identity`: take and compare what makes one folder the same
+      folder, with the device number, the inode, the day it was made, the mount
+      point, the volume identifier, and the address of the shared copy when the
+      folder is itself the top of a repository.
+- [x] B. The joined entry gains the folder a base belongs with and the evidence
+      about it, read and written together, with every change to the account file
+      made with the lock held for the whole read, decide, write.
+- [x] C. Central placement, with a destination inside another tool's history, a
+      folder kept in cloud storage, a base, or GTM Base's own records refused at
+      the moment it is proposed and again at the moment the base is built.
+- [x] D. One read-only resolver that collects every claim on a folder before it
+      chooses any of them, and a session start that says both halves of what it
+      found and repairs a rename only in the half that may write.
+- [x] E. Three sentences in the join skill: link this folder, unlink this folder,
+      show my linked folders, each of them working with no base in the session
+      and taking the company name as well as the folder.
+- [x] F. The sentence at the location step and the message at the closing both
+      name the folder the person will open and the base's own folder.
+- [x] G. Amendment r2.3 in the join plan, with J14, J15, J16, J19 amended and R5
+      clarified; the join guide and the logic atlas brought up to date.
+- [x] `sh tests/run.sh` green, no long dashes in any touched file
+
+## Review
+
+One thousand and seventy seven tests pass, one hundred and twenty one of them
+new since 0.2.3. The whole run is `sh tests/run.sh`, and the summary line is
+"Ran 1077 tests in 210.539s" followed by OK.
+
+Six decisions worth knowing about, beyond what the plan already records.
+
+The comparison of one folder with another answers with four words rather than
+three. A folder that was renamed and a folder on a disk that came back as a
+different disk are not the same situation for a person: the first is followed
+without them being asked anything, and the second is a question. Folding them
+into one answer would have meant either following a disk that might be somebody
+else's or asking about a rename that needed no asking.
+
+The names of the folder record's parts are `Identity`, `capture`, `matches`,
+`as_dict`, and `clean` rather than the ones the brief sketched, and the codes
+are `content-taken`, `content-inside-base`, `link-conflict`,
+`link-identity-mismatch`, `identity-unstable`, and `link-failed`. They were
+already written and already tested under those names, and renaming them would
+have been churn with no reader better off. The case of a folder that a base
+sitting directly inside it would always shadow is refused under
+`content-inside-base` rather than under a code of its own, because the person is
+told the same thing either way.
+
+The three sentences about the link are "link this folder to my base", "unlink
+this folder from my base", and "show my linked folders". The brief proposed
+"this base belongs with this folder", and that phrasing was turned down for the
+reason Codex gave: it is at its most ambiguous exactly when nothing has been
+opened, which is when a person needs it. The chosen wording says which folder
+and which base without either being open.
+
+Naming the base is now optional. Connecting a folder happens from inside that
+folder, which is never a base, so the step cannot ask the resolver what base the
+session is in. A base can be named by its folder or by the company it is for,
+and on an account with one base it need not be named at all. With more than one
+and none named, both are named back and nothing is changed.
+
+The base and the folder it belongs with are written down together, under one
+lock, and the folder is asked about before a single folder is made. It used to
+be two writes with the base built in between, which left a moment where a window
+that closed produced a base with no record of the folder and nothing saying so.
+A refusal that arrives anyway still leaves the base joined, because a base
+nothing has a record of is a base the person cannot get back to.
+
+Figure 2 of the atlas was drawing the wrong order. It showed the link being
+considered before a folder that merely looks like a base, and the code does the
+opposite, so a base whose own folder was renamed is recognised as itself first.
+The figure and its caption now say what the code does.
+
+One thing that was left as it is. The closing message lives in
+`closing-rules.md` twice, once for a base with a linked folder and once for a
+base without one, rather than once with a line swapped into it. That file exists
+so a person can read the message as a message and edit it, and a template with a
+hole in the middle of it stops being readable as one.

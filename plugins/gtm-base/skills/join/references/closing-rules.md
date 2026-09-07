@@ -35,6 +35,11 @@ run produced no finding at all, say that plainly rather than inventing one.
 Say the finding once, in the words the command printed, before the closing
 message.
 
+There are two versions of the closing message, and which one is said depends on
+whether the base was linked to the folder the person's marketing material lives
+in. The command works that out and prints the right one. Both are below word for
+word, and neither is written fresh each time.
+
 ## The closing message
 
 Your base is set up. It lives in {{folder}}, on this computer, and nowhere
@@ -43,6 +48,24 @@ else. Nothing in it has left this machine.
 Open that folder the next time you want to work on your base. On recent
 versions of Claude Code you can move there right now by typing:
 /cd {{folder}}
+
+When you want a copy of your base kept somewhere off this computer, or you want
+somebody else on your team to work in it with you, say so and GTM Base will
+walk you through it. Both of those arrive with the next release, so today the
+base stays here with you.
+
+When you have a recording or a written record of a sales call, you will be able
+to hand it over and have GTM Base read what it says into the base. That arrives
+with a later release, and it is honestly not here yet.
+
+## The closing message when a folder is linked
+
+Your base is set up. It lives in {{folder}}, on this computer, and nowhere
+else. Nothing in it has left this machine.
+
+Open the folder you named, {{content}}, and your base will be there; you can
+also open the base's own folder at {{folder}}. Nothing was written into the
+folder you named and nothing in it was changed.
 
 When you want a copy of your base kept somewhere off this computer, or you want
 somebody else on your team to work in it with you, say so and GTM Base will

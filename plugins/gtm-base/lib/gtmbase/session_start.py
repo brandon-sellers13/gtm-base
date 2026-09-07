@@ -64,9 +64,10 @@ from . import (
     state,
     trust_surface,
 )
+from . import gitcmd
 from .errors import PathError, ValidationError
 from .fsutil import read_text
-from .gitcmd import GitRunner, runner_or_default
+from .gitcmd import GitRunner, runner_or_default  # noqa: F401
 
 # The two sources that mean a person is starting work, not continuing a turn.
 WORKING_SOURCES = ("startup", "resume")
@@ -83,6 +84,12 @@ SESSION_START_PARTS = ("visible", "context")
 
 # How long a local git call inside the hook may take.
 LOCAL_TIMEOUT_SECONDS = 5
+
+# How much of the hook's fifteen seconds all of its git calls may spend between
+# them. The rest is left for reading the base and building the text, so a run
+# that has already waited too long stops waiting rather than being cut off by
+# the client with nothing to show for it.
+GIT_BUDGET_SECONDS = 12
 
 # The one script allowed to write a confirmation line. The injected question
 # names it, so the assistant runs it rather than writing the record itself.
@@ -126,6 +133,19 @@ COPY_FOUND = (
 MULTIPLE_CHILDREN = (
     "This folder holds more than one base folder, named %s and %s, so GTM "
     "Base did nothing here."
+)
+LINK_CONFLICT = (
+    "Two bases are both recorded as belonging with this folder, the one at %s "
+    "and the one at %s, so GTM Base opened neither of them. Say: unlink this "
+    "folder from my base, and name the one that should let go."
+)
+LINK_MISMATCH = (
+    "This folder used to belong with a base, but it is not the same folder any "
+    "more. Say: link this folder to my base, to connect it again."
+)
+CONTENT_INSIDE_BASE = (
+    "This folder sits inside a base, so the base it is recorded as belonging "
+    "with was not opened here."
 )
 AS_OF = "You are seeing the base as of %s."
 TRUST_AFTER_UPDATE = (
@@ -355,7 +375,7 @@ def run(
             payload,
             client if client in constants.CLIENTS else "claude",
             now or state.now_utc(),
-            runner_or_default(runner),
+            gitcmd.with_deadline(runner, GIT_BUDGET_SECONDS),
             find_plugin_root(plugin_root),
             _Part(part),
         )
@@ -381,9 +401,24 @@ def _run(payload, client, now, git, root_of_plugin, part):
         second = names[1] if len(names) > 1 else "gtm-base"
         return _render(part, None, MULTIPLE_CHILDREN % (first, second))
 
-    if resolution.code == paths.CODE_JOINED:
+    if resolution.code == paths.CODE_LINK_CONFLICT:
+        roots = list(resolution.conflict_roots) + ["", ""]
+        sentence = LINK_CONFLICT % (roots[0], roots[1])
+        # Both halves say this. The person has to hear it, and the assistant has
+        # to know it too, because the way out of it is a sentence they say to
+        # the assistant and nothing on screen can act on their behalf.
+        return _render(part, sentence, sentence)
+
+    if resolution.code == paths.CODE_LINK_MISMATCH:
+        return _render(part, LINK_MISMATCH, LINK_MISMATCH)
+
+    if resolution.code == paths.CODE_CONTENT_INSIDE_BASE:
+        return _render(part, CONTENT_INSIDE_BASE, CONTENT_INSIDE_BASE)
+
+    if resolution.active:
         if part.writes:
             state.update_seat(resolution.base_id, session_id=session_id, client=client)
+            _repair_link(resolution)
         if source not in WORKING_SOURCES:
             return None
         return _daily_block(
@@ -409,6 +444,29 @@ def _run(payload, client, now, git, root_of_plugin, part):
         return None
 
     return _offer(cwd, account, session_id, source, now, git, root_of_plugin, part)
+
+
+def _repair_link(resolution) -> None:
+    """Follow the folder a base belongs with, once, after it was renamed.
+
+    Only the half of the session start that may write ever gets here, and the
+    write only lands if the record still points where this run read it. Another
+    window may have disconnected the folder or connected a different one while
+    this run was working the rename out, and a rename must never undo a choice
+    somebody has since made.
+    """
+    new_root = getattr(resolution, "repair_root", None)
+    entry = getattr(resolution, "entry", None)
+    if not new_root or not isinstance(entry, dict):
+        return
+    try:
+        machine.rewrite_content_root(
+            resolution.base_id,
+            new_root,
+            entry.get("content_root"),
+        )
+    except Exception:
+        return
 
 
 # --- The folder that looks like a base --------------------------------------

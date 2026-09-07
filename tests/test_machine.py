@@ -70,7 +70,7 @@ class TestEmptyAndBrokenState(MachineTestCase):
         state = machine.load_machine_state()
         self.assertEqual("join", state.answer)
         self.assertEqual(1, len(state.joined))
-        self.assertEqual({"root", "base_id", "remote"}, set(state.joined[0].keys()))
+        self.assertEqual(set(machine.JOINED_FIELDS), set(state.joined[0].keys()))
         self.assertIn(("unknown-key", -1), state.problems)
         self.assertIn(("unknown-key", 0), state.problems)
 
@@ -342,6 +342,348 @@ class TestTheLock(MachineTestCase):
         self.assertFalse(os.path.exists(self.lock_path()))
         machine.record_offer_answer("set-up")
         self.assertEqual("set-up", machine.load_machine_state().answer)
+
+
+class TestTheFolderABaseBelongsWith(MachineTestCase):
+    """One folder, one base, decided and written with the lock held."""
+
+    def content(self, name="marketing"):
+        path = os.path.join(self.work, name)
+        os.makedirs(path)
+        return os.path.realpath(path)
+
+    def test_a_folder_is_recorded_and_read_back(self):
+        root, base_id = self.base()
+        machine.append_joined(root, base_id)
+        folder = self.content()
+
+        machine.link_content(base_id, folder)
+
+        entry = machine.find_joined_by_id(machine.load_machine_state(), base_id)
+        self.assertEqual(folder, entry["content_root"])
+        self.assertEqual(os.stat(folder).st_ino, entry["content_identity"]["ino"])
+
+    def test_the_base_and_its_folder_are_written_in_one_move(self):
+        root, base_id = self.base()
+        folder = self.content()
+
+        _state, codes = machine.append_joined(root, base_id, content_root=folder)
+
+        self.assertEqual([], codes)
+        entry = machine.find_joined_by_id(machine.load_machine_state(), base_id)
+        self.assertEqual(folder, entry["content_root"])
+        self.assertEqual(os.stat(folder).st_ino, entry["content_identity"]["ino"])
+
+    def test_a_refused_folder_still_leaves_the_base_joined(self):
+        first_root, first_id = self.base("first")
+        second_root, second_id = self.base("second")
+        folder = self.content()
+        machine.append_joined(first_root, first_id, content_root=folder)
+
+        _state, codes = machine.append_joined(
+            second_root, second_id, content_root=folder
+        )
+
+        self.assertEqual([machine.CODE_CONTENT_TAKEN], codes)
+        entry = machine.find_joined_by_id(machine.load_machine_state(), second_id)
+        self.assertIsNotNone(entry)
+        self.assertIsNone(entry["content_root"])
+
+    def test_asking_first_says_no_without_writing_anything(self):
+        root, base_id = self.base()
+        folder = self.content()
+        machine.append_joined(root, base_id, content_root=folder)
+
+        with self.assertRaises(StateError) as caught:
+            machine.check_content_free(folder)
+
+        self.assertEqual(machine.CODE_CONTENT_TAKEN, caught.exception.code)
+        self.assertEqual(root, getattr(caught.exception, "other_root", None))
+
+    def test_asking_first_about_a_free_folder_says_nothing_at_all(self):
+        machine.check_content_free(self.content("free"))
+
+    def test_a_folder_can_be_let_go_and_taken_again(self):
+        root, base_id = self.base()
+        machine.append_joined(root, base_id)
+        first = self.content("first")
+        second = self.content("second")
+        machine.link_content(base_id, first)
+
+        machine.unlink_content(base_id)
+        entry = machine.find_joined_by_id(machine.load_machine_state(), base_id)
+        self.assertIsNone(entry["content_root"])
+        self.assertIsNone(entry["content_identity"])
+
+        machine.relink_content(base_id, second)
+        entry = machine.find_joined_by_id(machine.load_machine_state(), base_id)
+        self.assertEqual(second, entry["content_root"])
+
+    def test_a_folder_another_base_already_belongs_with_is_refused_by_name(self):
+        first, first_id = self.base("first")
+        second, second_id = self.base("second")
+        machine.append_joined(first, first_id)
+        machine.append_joined(second, second_id)
+        folder = self.content()
+        machine.link_content(first_id, folder)
+
+        with self.assertRaises(StateError) as caught:
+            machine.link_content(second_id, folder)
+
+        self.assertEqual(machine.CODE_CONTENT_TAKEN, caught.exception.code)
+        self.assertEqual(first, caught.exception.other_root)
+        entry = machine.find_joined_by_id(machine.load_machine_state(), second_id)
+        self.assertIsNone(entry["content_root"])
+
+    def test_a_folder_a_base_already_belongs_with_is_still_free_to_that_base(self):
+        root, base_id = self.base()
+        machine.append_joined(root, base_id)
+        folder = self.content()
+        machine.link_content(base_id, folder)
+
+        machine.link_content(base_id, folder)
+
+        entry = machine.find_joined_by_id(machine.load_machine_state(), base_id)
+        self.assertEqual(folder, entry["content_root"])
+
+    def test_a_base_a_folder_inside_one_and_our_own_records_are_all_refused(self):
+        root, base_id = self.base()
+        other, other_id = self.base("other")
+        machine.append_joined(root, base_id)
+        machine.append_joined(other, other_id)
+
+        for folder in (
+            other,
+            os.path.join(other, "context"),
+            paths.seat_home(),
+            paths.bases_dir(),
+        ):
+            with self.assertRaises(StateError, msg=folder) as caught:
+                machine.link_content(base_id, folder)
+            self.assertEqual(
+                machine.CODE_CONTENT_INSIDE_BASE, caught.exception.code, folder
+            )
+
+    def test_a_folder_another_base_sits_directly_inside_is_refused(self):
+        """An association that could never fire is refused rather than written."""
+        parent = os.path.join(self.work, "Acme")
+        os.makedirs(parent)
+        inner = os.path.realpath(
+            make_base(os.path.join(parent, "gtm-base"), base_id=ids.base_id_random())
+        )
+        inner_id = ids.base_id_random()
+        support.git(["config", "--local", "gtmbase.id", inner_id], cwd=inner)
+        machine.append_joined(inner, inner_id)
+        elsewhere, elsewhere_id = self.base("elsewhere")
+        machine.append_joined(elsewhere, elsewhere_id)
+
+        with self.assertRaises(StateError) as caught:
+            machine.link_content(elsewhere_id, parent)
+        self.assertEqual(machine.CODE_CONTENT_INSIDE_BASE, caught.exception.code)
+
+    def test_a_link_through_a_link_binds_the_folder_it_points_at(self):
+        root, base_id = self.base()
+        machine.append_joined(root, base_id)
+        real = self.content("real")
+        shortcut = os.path.join(self.work, "shortcut")
+        os.symlink(real, shortcut)
+
+        machine.link_content(base_id, shortcut)
+
+        entry = machine.find_joined_by_id(machine.load_machine_state(), base_id)
+        self.assertEqual(real, entry["content_root"])
+
+    def test_a_folder_that_is_not_there_is_refused(self):
+        root, base_id = self.base()
+        machine.append_joined(root, base_id)
+
+        with self.assertRaises(StateError) as caught:
+            machine.link_content(base_id, os.path.join(self.work, "nowhere"))
+        self.assertEqual("not-a-folder", caught.exception.code)
+
+    def test_a_base_this_account_never_joined_cannot_be_pointed_at_a_folder(self):
+        with self.assertRaises(StateError) as caught:
+            machine.link_content(ids.base_id_random(), self.work)
+        self.assertEqual("unknown-id", caught.exception.code)
+
+    def test_two_windows_cannot_both_claim_one_folder(self):
+        """The second writer waits for the lock, then sees the first one's claim."""
+        import threading
+
+        first, first_id = self.base("first")
+        second, second_id = self.base("second")
+        machine.append_joined(first, first_id)
+        machine.append_joined(second, second_id)
+        folder = self.content()
+
+        started = threading.Event()
+        release = threading.Event()
+        outcome = {}
+
+        def slow_writer():
+            handle = machine._acquire_lock()
+            started.set()
+            try:
+                release.wait(5)
+                state = machine._load(None, False)
+                entry = machine.find_joined_by_id(state, first_id)
+                taken = machine.folder_identity.capture(folder)
+                entry["content_root"] = taken.path
+                entry["content_identity"] = taken.as_dict()
+                machine._write_payload(machine._checked_payload(state))
+            finally:
+                machine._release_lock(handle)
+
+        worker = threading.Thread(target=slow_writer)
+        worker.start()
+        started.wait(5)
+        release.set()
+        worker.join(10)
+
+        try:
+            machine.link_content(second_id, folder)
+            outcome["code"] = None
+        except StateError as refusal:
+            outcome["code"] = refusal.code
+
+        self.assertEqual(machine.CODE_CONTENT_TAKEN, outcome["code"])
+        state = machine.load_machine_state()
+        holders = [
+            entry["base_id"]
+            for entry in state.joined
+            if entry.get("content_root") == folder
+        ]
+        self.assertEqual([first_id], holders)
+
+
+class TestFollowingAFolderThatWasRenamed(MachineTestCase):
+    def test_the_new_path_is_written_when_nothing_moved_underneath(self):
+        root, base_id = self.base()
+        machine.append_joined(root, base_id)
+        folder = os.path.join(self.work, "marketing")
+        os.makedirs(folder)
+        machine.link_content(base_id, folder)
+        moved = os.path.join(self.work, "renamed")
+        os.rename(folder, moved)
+
+        machine.rewrite_content_root(base_id, moved, os.path.realpath(folder))
+
+        entry = machine.find_joined_by_id(machine.load_machine_state(), base_id)
+        self.assertEqual(os.path.realpath(moved), entry["content_root"])
+
+    def test_a_rename_worked_out_from_stale_state_never_overwrites(self):
+        root, base_id = self.base()
+        machine.append_joined(root, base_id)
+        first = os.path.join(self.work, "first")
+        second = os.path.join(self.work, "second")
+        os.makedirs(first)
+        os.makedirs(second)
+        machine.link_content(base_id, first)
+        machine.relink_content(base_id, second)
+
+        with self.assertRaises(StateError) as caught:
+            machine.rewrite_content_root(
+                base_id, os.path.join(self.work, "third"), os.path.realpath(first)
+            )
+
+        self.assertEqual(machine.CODE_STALE_LINK, caught.exception.code)
+        entry = machine.find_joined_by_id(machine.load_machine_state(), base_id)
+        self.assertEqual(os.path.realpath(second), entry["content_root"])
+
+
+class TestALinkWeCannotRead(MachineTestCase):
+    def test_a_malformed_link_is_turned_off_and_the_base_is_kept(self):
+        root, base_id = self.base()
+        self.write_state(
+            {
+                "schema": 1,
+                "offer": {"answer": "set-up"},
+                "joined": [
+                    {
+                        "root": root,
+                        "base_id": base_id,
+                        "remote": None,
+                        "content_root": "/Users/example/Acme",
+                        "content_identity": {"dev": "one", "ino": 2},
+                    }
+                ],
+            }
+        )
+
+        state = machine.load_machine_state()
+
+        self.assertEqual(1, len(state.joined))
+        self.assertEqual(root, state.joined[0]["root"])
+        self.assertIsNone(state.joined[0]["content_root"])
+        self.assertIn(("bad-link", 0), state.problems)
+
+    def test_a_folder_with_no_evidence_beside_it_is_turned_off(self):
+        root, base_id = self.base()
+        self.write_state(
+            {
+                "schema": 1,
+                "offer": {"answer": "set-up"},
+                "joined": [
+                    {
+                        "root": root,
+                        "base_id": base_id,
+                        "remote": None,
+                        "content_root": "/Users/example/Acme",
+                    }
+                ],
+            }
+        )
+
+        state = machine.load_machine_state()
+
+        self.assertIsNone(state.joined[0]["content_root"])
+        self.assertIn(("bad-link", 0), state.problems)
+
+    def test_an_entry_from_before_this_release_loads_unchanged(self):
+        root, base_id = self.base()
+        self.write_state(
+            {
+                "schema": 1,
+                "offer": {"answer": "set-up"},
+                "joined": [{"root": root, "base_id": base_id, "remote": None}],
+            }
+        )
+
+        state = machine.load_machine_state()
+
+        self.assertEqual([], state.problems)
+        self.assertEqual(root, state.joined[0]["root"])
+        self.assertIsNone(state.joined[0]["content_root"])
+
+    def test_a_folder_that_is_not_plugged_in_survives_an_unrelated_write(self):
+        root, base_id = self.base()
+        machine.append_joined(root, base_id)
+        away = os.path.join(self.work, "on-a-drive")
+        os.makedirs(away)
+        machine.link_content(base_id, away)
+        shutil.rmtree(away)
+
+        machine.record_offer_answer("set-up")
+
+        entry = machine.find_joined_by_id(machine.load_machine_state(), base_id)
+        self.assertEqual(os.path.realpath(away), entry["content_root"])
+
+    def test_half_a_link_is_never_written_down(self):
+        root, base_id = self.base()
+        state = machine.MachineState(
+            joined=[
+                {
+                    "root": root,
+                    "base_id": base_id,
+                    "remote": None,
+                    "content_root": "/Users/example/Acme",
+                    "content_identity": None,
+                }
+            ]
+        )
+        with self.assertRaises(StateError) as caught:
+            machine.save_machine_state(state)
+        self.assertEqual("bad-value", caught.exception.code)
 
 
 class TestFixture(unittest.TestCase):

@@ -57,7 +57,9 @@ import argparse  # noqa: E402
 
 from gtmbase import (  # noqa: E402
     constants,
+    create_base,
     drafting,
+    folder_identity,
     join_flow,
     location,
     machine,
@@ -70,7 +72,9 @@ from gtmbase.errors import (  # noqa: E402
     DraftError,
     GtmBaseError,
     IdentityNeeded,
+    LocationError,
     ReviewError,
+    StateError,
 )
 
 EXIT_DONE = 0
@@ -110,6 +114,91 @@ NOT_ON_THE_LIST = (
     "That is not on the list you agreed to, so nothing was read. Name one of "
     "the files or folders from that list instead."
 )
+WILL_BE_LINKED = (
+    "Your base will be linked to %s, so opening Claude Code in that folder "
+    "brings the base with it."
+)
+LINKED = (
+    "That folder and your base are now linked. Opening Claude Code in that "
+    "folder brings the base with it."
+)
+UNLINKED = (
+    "That folder and your base are no longer linked. The base itself is exactly "
+    "as it was, and you can still open it in its own folder."
+)
+FOLDER_TAKEN = (
+    "That folder already belongs with the base at %s, and a folder can belong "
+    "with only one base. Name a different folder, or unlink that one first."
+)
+FOLDER_INSIDE_BASE = (
+    "That folder is a base, sits inside one, or is the folder GTM Base keeps "
+    "for itself, so it cannot be linked to a base. Name a folder of your own "
+    "instead."
+)
+FOLDER_MISSING = "That folder is not on this computer, so nothing was linked."
+NO_LINKS = "This account has no bases yet."
+NO_BASE_OF_THAT_NAME = (
+    "There is no base of that name on this computer. Say: show my linked "
+    "folders, to see every base there is and the folder each one belongs with, "
+    "then name one of those."
+)
+NO_BASE_AT_ALL = (
+    "There is no base on this computer yet, so there is nothing to connect a "
+    "folder to. Say: set up my company base, to make one."
+)
+MORE_THAN_ONE_BASE = (
+    "There is more than one base this could mean, the one at %s and the one at "
+    "%s, so nothing was changed. Name the base you want by the company it is "
+    "for, or by its folder."
+)
+NAME_ALREADY_USED = (
+    "There is already a folder for a company of that name, so a base built "
+    "there could write over one you already have. Give me a name that tells "
+    "the two apart and I will use that instead."
+)
+PLACE_KEEPS_HISTORY = (
+    "That folder already keeps its own change history, and a base inside it "
+    "would get tangled up with it, so the base cannot go there. Name a "
+    "different folder, or let the base go in the folder kept for bases inside "
+    "your home folder."
+)
+PLACE_IS_COPIED = (
+    "Another program copies that folder off this computer by itself, and a "
+    "base holds raw notes and the context you approve, so the base cannot go "
+    "there. Name a different folder, or let the base go in the folder kept for "
+    "bases inside your home folder."
+)
+PLACE_MIGHT_BE_COPIED = (
+    "GTM Base cannot tell whether that folder is copied off this computer. "
+    "Does any app copy this folder, or your whole home folder, to cloud "
+    "storage automatically? If it does, the base should go somewhere else."
+)
+PLACE_IS_A_BASE = (
+    "That folder is a base or sits inside one, so a second base cannot go "
+    "there. Name a folder of your own instead."
+)
+PLACE_TAKEN = (
+    "There is already something at that place, so nothing was built. Name a "
+    "different folder."
+)
+LINK_NOT_RECORDED = (
+    "Your base was built, but it was not linked to %s. The base is fine. Say: "
+    "link this folder to my base, to finish that one step."
+)
+# The one sentence said for each way a place can be turned down. A refusal the
+# person cannot act on is a dead end, so every one of these names what to do
+# next.
+PLACE_REFUSALS = {
+    location.CODE_COMPANY_FOLDER_EXISTS: NAME_ALREADY_USED,
+    location.CODE_INSIDE_REPOSITORY: PLACE_KEEPS_HISTORY,
+    location.CODE_SYNCED: PLACE_IS_COPIED,
+    location.CODE_SYNC_UNKNOWN: PLACE_MIGHT_BE_COPIED,
+    location.CODE_INSIDE_BASE: PLACE_IS_A_BASE,
+    location.CODE_INSIDE_SEAT_HOME: PLACE_IS_A_BASE,
+    location.CODE_TARGET_EXISTS: PLACE_TAKEN,
+    location.CODE_STRAY_BASE: PLACE_TAKEN,
+}
+
 # Most labels the preview names one by one before it stops naming them.
 PREVIEW_LABELS_SHOWN = 20
 # Why a document is not going into this draft.
@@ -200,6 +289,11 @@ def build_parser():
         action="store_true",
         help="they said yes a second time to their home folder",
     )
+    parser.add_argument(
+        "--beside",
+        action="store_true",
+        help="they asked for the base to sit inside the folder they named",
+    )
     return parser
 
 
@@ -220,7 +314,7 @@ def base_folder(options, out):
     """
     root = options.base or os.getcwd()
     resolution = paths.resolve_base(root, machine.load_machine_state())
-    if resolution.code != paths.CODE_JOINED or not resolution.root:
+    if not resolution.active or not resolution.root:
         out.write(NO_BASE_HERE + "\n")
         return None
     return resolution.root
@@ -237,14 +331,27 @@ def run_propose_location(options, out):
     company = need(options, "company", out)
     if not company:
         return EXIT_ERROR
-    proposal = join_flow.propose_location(
-        company,
-        content_folder=options.content_folder,
-        confirmed_home=options.confirmed_home,
-    )
+    try:
+        proposal = join_flow.propose_location(
+            company,
+            content_folder=options.content_folder,
+            confirmed_home=options.confirmed_home,
+            beside=options.beside,
+        )
+    except LocationError as refusal:
+        sentence = PLACE_REFUSALS.get(refusal.code)
+        if sentence is None:
+            raise
+        out.write(sentence + "\n")
+        line(out, "codes", refusal.code)
+        return EXIT_REFUSED
     out.write(location.describe(proposal) + "\n")
     line(out, "target", proposal.target_path)
     line(out, "parent", proposal.parent)
+    line(out, "reason", proposal.reason_code)
+    if options.content_folder and not options.beside:
+        line(out, "belongs-with", options.content_folder)
+        out.write(WILL_BE_LINKED % plain_value(options.content_folder) + "\n")
     if proposal.warning_code:
         line(out, "warning", proposal.warning_code)
     return EXIT_DONE
@@ -515,11 +622,15 @@ def run_approve(options, out):
         email=options.email,
         name=options.name,
         confirmed_home=options.confirmed_home,
+        content_folder=options.content_folder,
+        beside=options.beside,
     )
     line(out, "base", result.root)
     line(out, "file", result.path)
     for code in result.codes:
         line(out, "note", code)
+    if create_base.CODE_LINK_FAILED in (result.codes or []):
+        out.write(LINK_NOT_RECORDED % plain_value(options.content_folder) + "\n")
     out.write("That is written down, together with the record that you said yes.\n")
     return EXIT_DONE
 
@@ -566,6 +677,91 @@ def run_close(options, out):
     return EXIT_DONE
 
 
+def named_base(options, out):
+    """The base the person named, by its folder or by the company it is for.
+
+    Connecting a folder happens from the folder being connected, which is not a
+    base and never will be, so this step cannot ask the resolver what base the
+    session is in the way every other step does.
+    """
+    try:
+        return join_flow.find_base(options.base, cwd=os.getcwd())
+    except GtmBaseError as refusal:
+        if refusal.code == join_flow.MORE_THAN_ONE_BASE:
+            roots = list(getattr(refusal, "roots", []) or []) + ["", ""]
+            out.write(
+                MORE_THAN_ONE_BASE % (plain_value(roots[0]), plain_value(roots[1]))
+                + "\n"
+            )
+            line(out, "codes", refusal.code)
+            return None, None
+        out.write((NO_BASE_OF_THAT_NAME if options.base else NO_BASE_AT_ALL) + "\n")
+        line(out, "codes", join_flow.NO_SUCH_BASE)
+        return None, None
+
+
+def run_link(options, out):
+    folder = need(options, "folder", out)
+    if not folder:
+        return EXIT_ERROR
+    root, base_id = named_base(options, out)
+    if root is None:
+        return EXIT_REFUSED
+    try:
+        join_flow.link_folder(root, folder)
+    except StateError as refusal:
+        if refusal.code == machine.CODE_CONTENT_TAKEN:
+            out.write(FOLDER_TAKEN % plain_value(getattr(refusal, "other_root", "")) + "\n")
+            line(out, "codes", refusal.code)
+            return EXIT_REFUSED
+        if refusal.code == machine.CODE_CONTENT_INSIDE_BASE:
+            out.write(FOLDER_INSIDE_BASE + "\n")
+            line(out, "codes", refusal.code)
+            return EXIT_REFUSED
+        if refusal.code in (
+            folder_identity.CODE_NOT_A_FOLDER,
+            folder_identity.CODE_UNSTABLE,
+        ):
+            out.write(FOLDER_MISSING + "\n")
+            line(out, "codes", refusal.code)
+            return EXIT_REFUSED
+        raise
+    line(out, "base", root)
+    line(out, "belongs-with", folder)
+    out.write(LINKED + "\n")
+    return EXIT_DONE
+
+
+def run_unlink(options, out):
+    root, base_id = named_base(options, out)
+    if root is None:
+        return EXIT_REFUSED
+    join_flow.unlink_folder(root)
+    line(out, "base", root)
+    out.write(UNLINKED + "\n")
+    return EXIT_DONE
+
+
+def run_links(options, out):
+    listed = join_flow.linked_folders()
+    if not listed:
+        out.write(NO_LINKS + "\n")
+        return EXIT_DONE
+    for base_root, content_root in listed:
+        # The name is the folder the base sits in, which is the name the person
+        # can hand back to link or unlink without knowing any path at all.
+        name = os.path.basename(os.path.dirname(str(base_root or "").rstrip(os.sep)))
+        out.write(
+            "name=%s base=%s belongs-with=%s\n"
+            % (
+                safe_value(name),
+                safe_value(base_root),
+                safe_value(content_root or "none"),
+            )
+        )
+    return EXIT_DONE
+
+
 def run_not_now(options, out):
     return offer_answer.main(["--answer", offer_answer.NOT_NOW])
 
@@ -591,6 +787,9 @@ MODES = {
     "approve": run_approve,
     "skip": run_skip,
     "close": run_close,
+    "link": run_link,
+    "unlink": run_unlink,
+    "links": run_links,
     "not-now": run_not_now,
     "backup": run_refusal(join_flow.MODE_BACKUP),
     "invite": run_refusal(join_flow.MODE_INVITE),

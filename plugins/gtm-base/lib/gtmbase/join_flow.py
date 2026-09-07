@@ -94,6 +94,7 @@ NOTE_NOT_SAVED_MESSAGE = (
 # document a person can edit rather than strings scattered through code.
 CLOSING_RULES = os.path.join("skills", "join", "references", "closing-rules.md")
 CLOSING_MARKER = "## The closing message"
+CLOSING_LINKED_MARKER = "## The closing message when a folder is linked"
 
 
 class Assembled(object):
@@ -342,15 +343,136 @@ def propose_location(
     content_folder: Optional[str] = None,
     confirmed_home: bool = False,
     runner: Optional[GitRunner] = None,
+    beside: bool = False,
 ):
-    """Where this person's base would go, and the sentence that says so."""
+    """Where this person's base would go, and the sentence that says so.
+
+    The folder they named is not where the base goes. It is the folder the base
+    will be recorded as belonging with, so that opening Claude Code there brings
+    the base along. `beside` is them asking, in words, for the base to sit in
+    that folder after all.
+    """
     return location.propose_target(
         cwd or os.getcwd(),
         company,
         named_content_folder=content_folder,
         runner=runner,
         confirmed_home=confirmed_home,
+        beside=beside,
     )
+
+
+# --- The folder a base belongs with ------------------------------------------
+
+
+# Why a base could not be found from what the person called it.
+NO_SUCH_BASE = "no-base"
+MORE_THAN_ONE_BASE = "more-than-one-base"
+
+
+def _named_base(named: Optional[str], runner: Optional[GitRunner] = None):
+    """The one base this account has under this company name, or a refusal.
+
+    Connecting a folder has to work from a session that has no base in it at
+    all, which is the ordinary case: the person is sitting in their own folder
+    and that is exactly the folder they want to connect. So a base can be named
+    by the company it is for as well as by its folder. What is matched is the
+    folder the base sits in, which for every base built centrally is the folder
+    named for the company.
+    """
+    wanted = (named or "").strip().casefold()
+    if not wanted:
+        raise GtmBaseError("no base was named", NO_SUCH_BASE)
+    found = []
+    for entry in machine.load_machine_state_raw().joined:
+        root = entry.get("root")
+        if not isinstance(root, str):
+            continue
+        company = os.path.basename(os.path.dirname(root.rstrip(os.sep)))
+        if company.casefold() == wanted:
+            found.append(entry)
+    if not found:
+        raise GtmBaseError("no base of that name on this computer", NO_SUCH_BASE)
+    if len(found) > 1:
+        failure = GtmBaseError("more than one base of that name", MORE_THAN_ONE_BASE)
+        failure.roots = sorted(str(entry.get("root") or "") for entry in found)
+        raise failure
+    return found[0]
+
+
+def find_base(
+    named: Optional[str], cwd: Optional[str] = None, runner: Optional[GitRunner] = None
+):
+    """The base a person meant, whether they gave its folder, its name, or neither.
+
+    A folder is tried first, because a folder says exactly which base is meant.
+    What they gave is then read as the name of a company and looked up in the
+    list of bases.
+
+    When they named nothing at all, which is the ordinary case for somebody
+    sitting in their own folder saying to connect it, the folder they are in is
+    tried, and then the list itself: on an account with one base there is
+    nothing to be ambiguous about, and on an account with more than one they are
+    asked which, rather than one being picked for them.
+    """
+    git = runner_or_default(runner)
+    for folder in (named, None if named else cwd):
+        if folder and os.path.isdir(folder):
+            resolution = paths.resolve_base(
+                folder, machine.load_machine_state(git), git
+            )
+            if resolution.active and resolution.base_id and resolution.root:
+                return resolution.root, resolution.base_id
+    if named:
+        entry = _named_base(named, runner=git)
+        return entry.get("root"), entry.get("base_id")
+
+    joined = [
+        entry
+        for entry in machine.load_machine_state_raw().joined
+        if isinstance(entry.get("root"), str)
+    ]
+    if not joined:
+        raise GtmBaseError("there is no base on this computer yet", NO_SUCH_BASE)
+    if len(joined) > 1:
+        failure = GtmBaseError("more than one base on this computer", MORE_THAN_ONE_BASE)
+        failure.roots = sorted(str(entry.get("root") or "") for entry in joined)
+        raise failure
+    return joined[0].get("root"), joined[0].get("base_id")
+
+
+def link_folder(named: str, folder: str, runner: Optional[GitRunner] = None):
+    """Record that a base belongs with the folder a person works in.
+
+    The base is found the same way every other step finds it, so a folder that
+    merely looks like a base is never connected to anything.
+    """
+    git = runner_or_default(runner)
+    root, base_id = find_base(named, runner=git)
+    machine.link_content(base_id, folder, runner=git)
+    return root
+
+
+def unlink_folder(named: str, runner: Optional[GitRunner] = None):
+    """Forget the folder a base belongs with. The base itself is untouched."""
+    git = runner_or_default(runner)
+    root, base_id = find_base(named, runner=git)
+    machine.unlink_content(base_id)
+    return root
+
+
+def linked_folders(runner: Optional[GitRunner] = None):
+    """Every base this account has joined, with the folder it belongs with.
+
+    The list is taken without checking the folders, so a base on a drive that
+    is unplugged today is still listed rather than looking as though it was
+    never there.
+    """
+    state_now = machine.load_machine_state_raw()
+    listed = []
+    for entry in state_now.joined:
+        listed.append((entry.get("root"), entry.get("content_root")))
+    return listed
 
 
 # --- What would be read ------------------------------------------------------
@@ -787,6 +909,8 @@ def approve_step(
     now: Optional[datetime.datetime] = None,
     cwd: Optional[str] = None,
     confirmed_home: bool = False,
+    content_folder: Optional[str] = None,
+    beside: bool = False,
 ):
     """Write one approved draft down, building the base when it is the first.
 
@@ -797,6 +921,11 @@ def approve_step(
     What gets written into is the folder the resolver settled on, never the one
     the caller happened to name. A person working in the company folder names
     that folder, and the base is the `gtm-base` folder inside it.
+
+    `content_folder` is the folder the person named at the step where they were
+    told where the base would go. It is carried all the way here so that the
+    base is recorded as belonging with it at the moment the base first exists,
+    rather than in a later step that a closed window could skip.
     """
     git = runner_or_default(runner)
     reviewed = review_step(step, draft_file, base_root=base_root, email=email, runner=git)
@@ -809,7 +938,12 @@ def approve_step(
         if not company:
             raise ReviewError("no-parent", code="no-parent")
         where = propose_location(
-            company, cwd=cwd, confirmed_home=confirmed_home, runner=git
+            company,
+            cwd=cwd,
+            content_folder=content_folder,
+            confirmed_home=confirmed_home,
+            runner=git,
+            beside=beside,
         ).parent
     base_id = None
     root = base_root
@@ -831,6 +965,7 @@ def approve_step(
         email=email,
         name=name,
         confirmed_home=confirmed_home,
+        content_root=content_folder if first_file else None,
     )
 
 
@@ -861,16 +996,53 @@ def skip_step(
 # --- The closing -------------------------------------------------------------
 
 
-def closing_message(base_root: str, plugin_root: Optional[str] = None) -> str:
-    """The message that ends a first session, with the folder filled in."""
+def closing_message(
+    base_root: str,
+    plugin_root: Optional[str] = None,
+    content_root: Optional[str] = None,
+) -> str:
+    """The message that ends a first session, with the folders filled in.
+
+    There are two of them. A base that was linked to the folder a person's
+    material lives in has to name both folders, because the folder they will
+    open from then on is their own one and the base's own folder is the thing
+    they should not have to remember. A base with no folder linked names only
+    itself.
+    """
     root = plugin_root or drafting.plugin_root_default()
     text = read_text(os.path.join(root, CLOSING_RULES))
     if text is None:
         raise GtmBaseError("the closing message is missing", "no-closing-rules")
-    _before, marker_line, after = text.partition(CLOSING_MARKER)
+    marker = CLOSING_LINKED_MARKER if content_root else CLOSING_MARKER
+    _before, marker_line, after = text.partition(marker)
     if not marker_line:
         raise GtmBaseError("the closing message is missing", "no-closing-rules")
-    return after.strip("\n").replace("{{folder}}", base_root) + "\n"
+    if not content_root:
+        # The plain message ends where the next heading in the file starts.
+        after = after.split("\n## ")[0]
+    message = after.strip("\n").replace("{{folder}}", base_root)
+    if content_root:
+        message = message.replace("{{content}}", content_root)
+    return message + "\n"
+
+
+def _linked_folder_of(resolution) -> Optional[str]:
+    """The folder this base belongs with, taken from the record, or nothing.
+
+    It is read from the account's own record rather than from anything the
+    caller passed in, so the closing can only ever name a folder that is
+    actually written down as this base's.
+    """
+    entry = getattr(resolution, "entry", None)
+    if isinstance(entry, dict) and isinstance(entry.get("content_root"), str):
+        return entry["content_root"]
+    base_id = getattr(resolution, "base_id", None)
+    if not base_id:
+        return None
+    found = machine.find_joined_by_id(machine.load_machine_state_raw(), base_id)
+    if isinstance(found, dict) and isinstance(found.get("content_root"), str):
+        return found["content_root"]
+    return None
 
 
 def onboarding_note_path(base_root: str, day) -> str:
@@ -998,7 +1170,9 @@ def close_run(
     clear_scratch(run_id)
     return CloseResult(
         finding,
-        closing_message(resolution.root, plugin_root),
+        closing_message(
+            resolution.root, plugin_root, content_root=_linked_folder_of(resolution)
+        ),
         note_path,
         note_codes,
         recorded,

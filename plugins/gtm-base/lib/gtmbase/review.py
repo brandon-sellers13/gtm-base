@@ -380,6 +380,7 @@ def approve(
     email: Optional[str] = None,
     name: Optional[str] = None,
     confirmed_home: bool = False,
+    content_root: Optional[str] = None,
 ) -> ApproveResult:
     """Write an approved draft into the base, with the record of the yes.
 
@@ -432,6 +433,7 @@ def approve(
             email=email,
             name=name,
             confirmed_home=confirmed_home,
+            content_root=content_root,
         )
         head = git.run(["rev-parse", "HEAD"], cwd=result.root).out()
         return ApproveResult(

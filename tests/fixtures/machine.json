@@ -2,8 +2,17 @@
   "joined": [
     {
       "base_id": "0123456789abcdef0123456789abcdef",
+      "content_identity": {
+        "birth": 1757203200,
+        "dev": 16777232,
+        "ino": 84215045,
+        "mount": "/",
+        "remote": null,
+        "volume": "1A2B3C4D-5E6F-4A7B-8C9D-0E1F2A3B4C5D"
+      },
+      "content_root": "/Users/example/Acme",
       "remote": "https://github.com/acme/gtm-base",
-      "root": "/Users/example/Acme/gtm-base"
+      "root": "/Users/example/GTM Bases/Acme/gtm-base"
     }
   ],
   "offer": {

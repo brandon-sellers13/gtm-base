@@ -9,7 +9,7 @@ from unittest import mock
 import support
 from support import TempHome, git, make_base, write
 
-from gtmbase import constants, ids, paths
+from gtmbase import constants, folder_identity, ids, paths
 from gtmbase.errors import PathError, StateError
 from gtmbase.machine import MachineState
 
@@ -331,6 +331,201 @@ class TestResolveBase(unittest.TestCase):
             os.unlink(real)
             os.symlink(elsewhere, real)
             self.assertFalse(paths.is_base_shaped(root))
+
+
+class TestResolvingThroughTheFolderABaseBelongsWith(unittest.TestCase):
+    """Opening the folder your material lives in brings its base with it."""
+
+    def setUp(self):
+        self.sandbox = support.Sandbox()
+        self.sandbox.__enter__()
+        self.addCleanup(self.sandbox.__exit__, None, None, None)
+
+    def base(self, name="Acme"):
+        from gtmbase import machine
+
+        root = os.path.join(
+            os.environ["HOME"], "GTM Bases", name, "gtm-base"
+        )
+        base_id = ids.base_id_random()
+        make_base(root, base_id=base_id)
+        machine.append_joined(root=root, base_id=base_id)
+        return os.path.realpath(root), base_id
+
+    def content(self, name="marketing"):
+        folder = os.path.join(os.environ["HOME"], name)
+        os.makedirs(folder)
+        return os.path.realpath(folder)
+
+    def state(self):
+        from gtmbase import machine
+
+        return machine.load_machine_state()
+
+    def test_a_folder_a_base_belongs_with_opens_that_base(self):
+        from gtmbase import machine
+
+        root, base_id = self.base()
+        folder = self.content()
+        machine.link_content(base_id, folder)
+
+        answer = paths.resolve_base(folder, self.state())
+
+        self.assertEqual(paths.CODE_LINKED, answer.code)
+        self.assertTrue(answer.active)
+        self.assertFalse(answer.joined)
+        self.assertEqual(root, answer.root)
+        self.assertEqual(base_id, answer.base_id)
+        self.assertEqual(folder, answer.content_root)
+        self.assertIsNone(answer.repair_root)
+
+    def test_a_base_in_the_folder_itself_beats_any_association(self):
+        from gtmbase import machine
+
+        root, base_id = self.base()
+        other_root, other_id = self.base("Other")
+        parent = os.path.dirname(other_root)
+        # Registration refuses this, because the base sitting inside the folder
+        # would always win. So it is written by hand, to show that the resolver
+        # would refuse to be fooled by it too.
+        state = machine.load_machine_state_raw()
+        taken = folder_identity.capture(parent)
+        entry = machine.find_joined_by_id(state, base_id)
+        entry["content_root"] = taken.path
+        entry["content_identity"] = taken.as_dict()
+        machine.save_machine_state(state)
+
+        answer = paths.resolve_base(parent, self.state())
+
+        self.assertEqual(paths.CODE_JOINED, answer.code)
+        self.assertEqual(other_root, answer.root)
+
+    def test_two_base_folders_in_one_place_still_stop_everything_first(self):
+        from gtmbase import machine
+
+        root, base_id = self.base()
+        parent = os.path.join(os.environ["HOME"], "Acme-work")
+        os.makedirs(parent)
+        machine.link_content(base_id, parent)
+        make_base(os.path.join(parent, "gtm-base"))
+
+        with mock.patch("os.listdir", return_value=["gtm-base", "GTM-Base"]):
+            with mock.patch("os.path.isdir", return_value=True):
+                answer = paths.resolve_base(parent, self.state())
+
+        self.assertEqual(paths.CODE_MULTIPLE_CHILDREN, answer.code)
+
+    def test_a_renamed_folder_opens_the_base_and_asks_for_the_record_to_follow(self):
+        from gtmbase import machine
+
+        root, base_id = self.base()
+        folder = self.content()
+        machine.link_content(base_id, folder)
+        moved = os.path.join(os.environ["HOME"], "renamed")
+        os.rename(folder, moved)
+
+        answer = paths.resolve_base(moved, self.state())
+
+        self.assertEqual(paths.CODE_LINKED, answer.code)
+        self.assertEqual(root, answer.root)
+        self.assertEqual(os.path.realpath(moved), answer.repair_root)
+
+    def test_two_bases_claiming_one_folder_open_neither_and_name_both(self):
+        from gtmbase import machine
+
+        first, first_id = self.base("First")
+        second, second_id = self.base("Second")
+        folder = self.content()
+        machine.link_content(first_id, folder)
+        # The second claim is written straight into the file, because
+        # registration is what refuses it and this is the case where a file
+        # written by hand, or by an older release, holds two claims anyway.
+        state = machine.load_machine_state_raw()
+        taken = machine.find_joined_by_id(state, first_id)["content_identity"]
+        machine.find_joined_by_id(state, second_id)["content_root"] = folder
+        machine.find_joined_by_id(state, second_id)["content_identity"] = dict(taken)
+        machine.save_machine_state(state)
+
+        answer = paths.resolve_base(folder, self.state())
+
+        self.assertEqual(paths.CODE_LINK_CONFLICT, answer.code)
+        self.assertIsNone(answer.root)
+        self.assertEqual(sorted([first, second]), answer.conflict_roots)
+
+    def test_a_folder_built_again_at_the_same_path_opens_nothing(self):
+        from gtmbase import machine
+
+        root, base_id = self.base()
+        folder = self.content()
+        machine.link_content(base_id, folder)
+        shutil.rmtree(folder)
+        os.makedirs(folder)
+
+        answer = paths.resolve_base(folder, self.state())
+
+        self.assertEqual(paths.CODE_LINK_MISMATCH, answer.code)
+        self.assertIsNone(answer.root)
+
+    def test_a_folder_that_has_come_to_sit_inside_another_base_opens_nothing(self):
+        from gtmbase import machine
+
+        root, base_id = self.base()
+        other_root, _other_id = self.base("Other")
+        folder = os.path.join(os.environ["HOME"], "marketing")
+        os.makedirs(folder)
+        machine.link_content(base_id, folder)
+        moved = os.path.join(other_root, "context", "marketing")
+        os.rename(folder, moved)
+
+        answer = paths.resolve_base(moved, self.state())
+
+        self.assertEqual(paths.CODE_CONTENT_INSIDE_BASE, answer.code)
+        self.assertIsNone(answer.root)
+
+    def test_a_folder_nobody_claims_falls_through_to_the_offer_rules(self):
+        from gtmbase import machine
+
+        root, base_id = self.base()
+        machine.link_content(base_id, self.content())
+        elsewhere = self.content("Pictures")
+
+        answer = paths.resolve_base(elsewhere, self.state())
+
+        self.assertEqual(paths.CODE_NONE, answer.code)
+
+    def test_a_copy_of_a_base_is_still_a_copy_and_never_adopted_by_a_link(self):
+        from gtmbase import machine
+
+        root, base_id = self.base()
+        folder = self.content()
+        machine.link_content(base_id, folder)
+        copy = os.path.join(os.environ["HOME"], "copy-of-base")
+        shutil.copytree(root, copy, symlinks=True)
+
+        answer = paths.resolve_base(copy, self.state())
+
+        self.assertEqual(paths.CODE_UNJOINED, answer.code)
+        self.assertEqual(base_id, answer.base_id)
+
+    def test_only_the_base_that_was_chosen_is_asked_about(self):
+        """The hook has fifteen seconds, so it never checks every base it holds."""
+        from gtmbase import machine
+
+        root, base_id = self.base()
+        for name in ("B", "C", "D"):
+            self.base(name)
+        folder = self.content()
+        machine.link_content(base_id, folder)
+        state = self.state()
+
+        watched = support.CountingRunner()
+        answer = paths.resolve_base(folder, state, runner=watched)
+
+        self.assertEqual(paths.CODE_LINKED, answer.code)
+        looked_at = set(
+            call["cwd"] for call in watched.calls if call["cwd"] is not None
+        )
+        self.assertEqual({folder, root}, looked_at)
 
 
 class TestMigration(unittest.TestCase):

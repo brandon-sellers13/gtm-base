@@ -1,6 +1,7 @@
 # Joining GTM Base
 
-Status: as of version 0.2.3 the offer and setting a base up are both live.
+Status: as of version 0.2.4 the offer, setting a base up, and linking a base to
+the folder your material lives in are all live.
 Backing a base up somewhere off your computer, inviting a teammate, and joining
 a base from a link arrive with the next release, so those sections below
 describe what is coming rather than what works today. This guide is updated as
@@ -34,6 +35,12 @@ opens with the offer, because the plugin has noticed that you have not set up a
 base yet and is offering to make one for you. Nothing on your computer is
 touched until you answer.
 
+If you already have a folder your marketing material lives in, open Claude Code
+in that one. It is the folder you will be asked about, and your base will be
+linked to it afterwards, so opening it later brings the base with it. Any other
+folder works too, and you can name your material folder in the conversation
+instead.
+
 Answer in plain words in your next message. Say yes to set a base up, say that
 you have an invitation link if a teammate already made a base and sent you a
 link to it, or say not now if this is a bad moment.
@@ -63,9 +70,12 @@ you never read is an offer you were never really given.
 
 ## What setting up does
 
-Setting up is a conversation, not a form. You are asked for your company name
-and where the base should live on your computer. You are asked whether there is
-a folder of existing material worth reading, and if there is, the assistant
+Setting up is a conversation, not a form. You are asked for your company name,
+and you are told where the base will go, which is a folder kept for bases inside
+your home folder. You are asked whether there is a folder of existing material
+worth reading, and the folder you name there becomes the folder your base is
+linked to, so you open your own folder from then on and the base comes with it.
+When you name a folder of material, the assistant
 reads only the documents you approve and only from the folder you named. Before
 each of the three drafts you are shown what that draft will read and what it
 will leave out, and you can narrow it to the files or the folder that matter for
@@ -82,10 +92,53 @@ the date it will start watching.
 
 ## Where the base lives
 
-Your base lives in its own folder called `gtm-base`, inside the company folder
-you chose. The plugin is active when you open Claude Code in that folder, and
-also when you open Claude Code in the folder that contains it, so you can keep
-your other company material beside the base and everything still works.
+Your base lives in a folder called `gtm-base`, inside a folder named for your
+company, inside a folder called `GTM Bases` in your home folder. So a company
+called Acme gets `~/GTM Bases/Acme/gtm-base`. Every base goes there, and there
+is one folder per company.
+
+It goes there rather than into the folder your marketing material is already in,
+for two reasons. A folder you already work in is often a folder another tool
+already keeps a history for, and a base built inside one of those gets tangled
+up with it. It is also often a folder some other program copies to the internet
+on its own, and your base holds raw notes and the context you approved, which
+should not leave your computer that way. GTM Base refuses those places rather
+than warning you about them, because a warning does not stop an upload.
+
+If you would rather have the base sit beside your material anyway, say so and it
+will, as long as the folder you name passes the same checks.
+
+You do not have to remember where the base is in order to use it. When you set
+the base up you name the folder your marketing material lives in, and the base
+is linked to that folder. From then on, opening Claude Code in your own folder
+brings the base with it: the map, the one question for the day, and anything a
+teammate changed. Opening the base's own folder works too, and so does opening
+the folder that contains it.
+
+Three things you can say about that link at any time:
+
+1. Say "link this folder to my base" while you are in the folder you want to
+   connect. If you have more than one base, name the company it is for, as in
+   "link this folder to my Acme base". If another base already belongs with that
+   folder, you are told which one, because a folder can belong with only one
+   base.
+2. Say "unlink this folder from my base" to disconnect them. The base itself is
+   untouched, and you can still open it in its own folder.
+3. Say "show my linked folders" to see every base on this computer, its name,
+   and the folder each one belongs with.
+
+If you rename or move the folder your material is in, the link follows it and
+nothing is needed from you. If you delete that folder and make a new one with
+the same name, GTM Base can tell the two apart and will ask you to connect the
+new one, because a folder that happens to have the same name is not the folder
+you connected. The same thing happens when the folder is on an external disk
+that comes back looking like a different disk.
+
+The link is a record GTM Base keeps for itself, on this computer only. It never
+puts anything in your folder, it never changes anything in it, and connecting a
+folder does not give GTM Base permission to read your documents again. The
+documents it read while you were setting the base up were read once, from the
+list you agreed to, and that list ended when the session did.
 
 ## Your work email address
 

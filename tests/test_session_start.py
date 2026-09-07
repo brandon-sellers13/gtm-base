@@ -91,8 +91,12 @@ def context_text(kind, owner=OWNER, status="draft"):
     )
 
 
-class SessionStartTest(unittest.TestCase):
-    """Every test runs inside its own temporary home and seat folder."""
+class SessionStartHelpers(unittest.TestCase):
+    """The temporary home, the bases, and the way a scenario runs the hook.
+
+    This holds no scenarios of its own, so a class that needs the helpers can
+    take them without also running every scenario a second time.
+    """
 
     def setUp(self):
         self.sandbox = support.Sandbox()
@@ -180,6 +184,10 @@ class SessionStartTest(unittest.TestCase):
             with open(path, "rb") as handle:
                 snapshot[path] = handle.read()
         return snapshot
+
+
+class SessionStartTest(SessionStartHelpers):
+    """Every test runs inside its own temporary home and seat folder."""
 
     # --- the two parts ------------------------------------------------------
 
@@ -1005,6 +1013,143 @@ class WrapperTest(unittest.TestCase):
         text = primed.stdout.decode("utf-8")
         self.assertFalse(text.lstrip().startswith("{"), text[:80])
         self.assertIn("Setup is not finished", text)
+
+
+class OpeningTheFolderYourMaterialLivesIn(SessionStartHelpers):
+    """The base is in its own drawer, and opening your own folder brings it."""
+
+    def linked_base(self, name="base", content="marketing"):
+        root, base_id = self.joined_base(name)
+        self.add_files(root)
+        folder = os.path.join(self.sandbox.path, content)
+        os.makedirs(folder)
+        support.write(os.path.join(folder, "deck.md"), "# A deck\n")
+        machine.link_content(base_id, folder)
+        return root, base_id, os.path.realpath(folder)
+
+    def test_the_map_and_one_question_arrive_in_the_folder_you_opened(self):
+        root, base_id, folder = self.linked_base()
+        other = self.working_copy(root)
+        support.commit(
+            other,
+            "context/notes/note.md",
+            ["---", "kind: note", "owner: " + OWNER, "---", "", "words"],
+            "a note",
+        )
+        support.git(["push", "-q", "origin", "main"], cwd=other)
+
+        primed = self.run_hook(folder, part="context")
+
+        self.assertIsInstance(primed, str)
+        self.assertIn("# Map", primed)
+        self.assertIn("The question id for this session:", primed)
+        self.assertIn("since your last session: 1 changes", primed)
+        self.assertEqual(support.head_of(other), support.head_of(root))
+        seat, _problems = state.load_seat(base_id)
+        self.assertEqual("s-1", seat["session_id"])
+
+    def test_the_half_a_person_reads_writes_nothing_and_repairs_nothing(self):
+        root, base_id, folder = self.linked_base()
+        moved = os.path.join(self.sandbox.path, "renamed")
+        os.rename(folder, moved)
+        untouched = self.seat_snapshot()
+        before = machine.find_joined_by_id(machine.load_machine_state_raw(), base_id)
+
+        watched = RecordingRunner()
+        self.run_hook(moved, part="visible", runner=watched)
+
+        self.assertEqual([], [name for name in watched.names() if name == "fetch"])
+        self.assertEqual(untouched, self.seat_snapshot())
+        after = machine.find_joined_by_id(machine.load_machine_state_raw(), base_id)
+        self.assertEqual(before["content_root"], after["content_root"])
+
+    def test_the_half_that_writes_follows_the_folder_that_was_renamed(self):
+        root, base_id, folder = self.linked_base()
+        moved = os.path.realpath(os.path.join(self.sandbox.path, "renamed"))
+        os.rename(folder, moved)
+
+        primed = self.run_hook(moved, part="context")
+
+        self.assertIsInstance(primed, str)
+        self.assertIn("# Map", primed)
+        entry = machine.find_joined_by_id(machine.load_machine_state_raw(), base_id)
+        self.assertEqual(moved, entry["content_root"])
+
+    def test_a_rename_worked_out_from_stale_state_never_overwrites_a_newer_choice(self):
+        root, base_id, folder = self.linked_base()
+        elsewhere = os.path.join(self.sandbox.path, "elsewhere")
+        os.makedirs(elsewhere)
+
+        machine.relink_content(base_id, elsewhere)
+        with self.assertRaises(Exception) as caught:
+            machine.rewrite_content_root(base_id, folder, folder)
+
+        self.assertEqual(machine.CODE_STALE_LINK, getattr(caught.exception, "code", None))
+        entry = machine.find_joined_by_id(machine.load_machine_state_raw(), base_id)
+        self.assertEqual(os.path.realpath(elsewhere), entry["content_root"])
+
+    def test_two_bases_claiming_one_folder_are_said_in_both_halves(self):
+        first, first_id, folder = self.linked_base("first", "marketing")
+        second, second_id = self.joined_base("second")
+        self.add_files(second)
+        raw = machine.load_machine_state_raw()
+        taken = machine.find_joined_by_id(raw, first_id)["content_identity"]
+        entry = machine.find_joined_by_id(raw, second_id)
+        entry["content_root"] = folder
+        entry["content_identity"] = dict(taken)
+        machine.save_machine_state(raw)
+
+        shown = self.run_hook(folder, part="visible")
+        primed = self.run_hook(folder, part="context")
+
+        self.assertIn(first, shown["systemMessage"])
+        self.assertIn(second, shown["systemMessage"])
+        self.assertIn(first, primed)
+        self.assertIn(second, primed)
+        self.assertNotIn("# Map", primed)
+        self.assertEqual([], plain_language.find_banned(shown["systemMessage"]))
+        self.assertEqual([], plain_language.find_dashes(shown["systemMessage"]))
+
+    def test_a_folder_that_is_not_the_same_folder_says_how_to_connect_it_again(self):
+        root, base_id, folder = self.linked_base()
+        shutil.rmtree(folder)
+        os.makedirs(folder)
+
+        shown = self.run_hook(folder, part="visible")
+        primed = self.run_hook(folder, part="context")
+
+        self.assertEqual(session_start.LINK_MISMATCH, shown["systemMessage"])
+        self.assertEqual(session_start.LINK_MISMATCH, primed)
+        self.assertEqual([], plain_language.find_banned(session_start.LINK_MISMATCH))
+        self.assertEqual([], plain_language.find_dashes(session_start.LINK_MISMATCH))
+
+    def test_the_run_stops_inside_its_own_budget_when_git_is_slow(self):
+        """A slow answer is a sentence a person reads, never a hook that hangs."""
+        root, base_id, folder = self.linked_base()
+        slow = support.SlowRunner(seconds=4.0)
+
+        started = time.time()
+        result = self.run_hook(folder, part="context", runner=slow)
+        took = time.time() - started
+
+        self.assertLess(took, constants.SESSION_START_TIMEOUT_SECONDS)
+        self.assertLessEqual(max(slow.timeouts), session_start.GIT_BUDGET_SECONDS)
+        self.assertTrue(result is None or isinstance(result, str))
+
+    def test_the_hook_still_exits_cleanly_when_the_budget_runs_out(self):
+        root, base_id, folder = self.linked_base()
+        spent = gitcmd.DeadlineRunner(gitcmd.GitRunner(), time.monotonic() - 1)
+
+        answer = session_start.run(
+            {"session_id": "s-1", "source": "startup", "cwd": folder},
+            client="claude",
+            now=NOW,
+            plugin_root=PLUGIN_DIR,
+            part="visible",
+            runner=spent,
+        )
+
+        self.assertTrue(answer is None or isinstance(answer, dict))
 
 
 if __name__ == "__main__":

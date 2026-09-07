@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import os
 import subprocess
+import time
 from typing import Optional, Sequence
 
 from .errors import GitError
@@ -109,6 +110,51 @@ class GitRunner(object):
         if result.code == MISSING_CODE:
             raise GitError("git-missing", code="git-missing", result=result)
         raise GitError("git-failed", code="git-failed", result=result)
+
+
+class DeadlineRunner(object):
+    """Another runner with a moment past which no git call may still be running.
+
+    The session start hook has fifteen seconds for everything it does, and git
+    calls are the only part of it that can wait on a network or a lock. Each
+    call is given whatever is left of the budget rather than its own full time
+    limit, so a run that is already late cannot spend twenty more seconds
+    finding that out. A call made after the moment has passed is not made at
+    all and comes back as a call that timed out, which every caller already
+    knows how to handle.
+    """
+
+    def __init__(self, inner: "GitRunner", deadline: float):
+        self.inner = inner
+        self.deadline = deadline
+
+    def remaining(self) -> float:
+        return self.deadline - time.monotonic()
+
+    def _budget(self, timeout: int) -> Optional[float]:
+        left = self.remaining()
+        if left <= 0:
+            return None
+        return min(float(timeout), left)
+
+    def run(self, args, cwd=None, timeout=DEFAULT_TIMEOUT_SECONDS, input=None):
+        budget = self._budget(timeout)
+        if budget is None:
+            return GitResult(TIMEOUT_CODE, "", "deadline")
+        return self.inner.run(args, cwd=cwd, timeout=budget, input=input)
+
+    def check(self, args, cwd=None, timeout=DEFAULT_TIMEOUT_SECONDS, input=None):
+        budget = self._budget(timeout)
+        if budget is None:
+            raise GitError(
+                "git-timeout", code="git-timeout", result=GitResult(TIMEOUT_CODE, "", "deadline")
+            )
+        return self.inner.check(args, cwd=cwd, timeout=budget, input=input)
+
+
+def with_deadline(runner: Optional["GitRunner"], seconds: float) -> "DeadlineRunner":
+    """Bound a runner to a stretch of time starting now."""
+    return DeadlineRunner(runner_or_default(runner), time.monotonic() + float(seconds))
 
 
 _DEFAULT_RUNNER = None

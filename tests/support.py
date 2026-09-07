@@ -50,6 +50,56 @@ class FakeGitRunner(object):
         return result
 
 
+class CountingRunner(object):
+    """The real runner, with every call and the folder it ran in written down."""
+
+    def __init__(self):
+        from gtmbase.gitcmd import GitRunner
+
+        self.inner = GitRunner()
+        self.calls = []
+
+    def run(self, args, cwd=None, timeout=20, input=None):
+        self.calls.append({"args": list(args), "cwd": cwd})
+        return self.inner.run(args, cwd=cwd, timeout=timeout, input=input)
+
+    def check(self, args, cwd=None, timeout=20, input=None):
+        self.calls.append({"args": list(args), "cwd": cwd})
+        return self.inner.check(args, cwd=cwd, timeout=timeout, input=input)
+
+
+class SlowRunner(object):
+    """A runner that waits before answering, for the checks about the budget."""
+
+    def __init__(self, seconds=4.0):
+        from gtmbase.gitcmd import GitResult, GitRunner
+
+        self.inner = GitRunner()
+        self.seconds = seconds
+        self.calls = []
+        self.timeouts = []
+        self._result = GitResult
+
+    def run(self, args, cwd=None, timeout=20, input=None):
+        import time
+
+        self.calls.append(list(args))
+        self.timeouts.append(timeout)
+        waited = min(float(timeout), self.seconds)
+        time.sleep(waited)
+        if waited < self.seconds:
+            return self._result(124, "", "timeout")
+        return self.inner.run(args, cwd=cwd, timeout=timeout, input=input)
+
+    def check(self, args, cwd=None, timeout=20, input=None):
+        from gtmbase.errors import GitError
+
+        result = self.run(args, cwd=cwd, timeout=timeout, input=input)
+        if not result.ok:
+            raise GitError("git-failed", code="git-failed", result=result)
+        return result
+
+
 def git(args, cwd, check=True, author=None):
     """Run the real git binary in a test folder, with a fixed identity.
 
