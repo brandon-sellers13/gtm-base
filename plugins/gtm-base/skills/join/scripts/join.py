@@ -110,6 +110,15 @@ NO_LISTING_YET = (
     "No list has been shown for this run yet, so there is no yes to take. Run "
     "list-sources first."
 )
+NARROW_FIRST = (
+    "That folder is large enough that nobody could read the list through, so "
+    "the yes was not taken. Ask which of its folders hold the marketing "
+    "material, then show the list for those folders and ask again."
+)
+NO_SUCH_FOLDER = (
+    "That is not one of the folders in the list, so nothing was shown. Name "
+    "one of the folders the counts above name instead."
+)
 NOT_ON_THE_LIST = (
     "That is not on the list you agreed to, so nothing was read. Name one of "
     "the files or folders from that list instead."
@@ -274,7 +283,10 @@ def build_parser():
         "--only", help="only these files from the list, separated by commas"
     )
     parser.add_argument(
-        "--only-folder", help="only the files in this folder of the list"
+        "--only-folder",
+        action="append",
+        default=[],
+        help="only the files in this folder of the list, once per folder",
     )
     parser.add_argument("--answer", help="what the person said, in their own words")
     parser.add_argument("--base", help="the base folder to write into")
@@ -362,7 +374,30 @@ def run_list_sources(options, out):
     run_id = need(options, "run", out)
     if not folder or not run_id:
         return EXIT_ERROR
-    listing = join_flow.list_sources(folder, run_id)
+    try:
+        listing = join_flow.list_sources(
+            folder, run_id, only_folders=options.only_folder
+        )
+    except ConsentError as refusal:
+        if refusal.code != join_flow.CODE_NO_SUCH_FOLDER:
+            raise
+        line(out, "codes", refusal.code)
+        out.write(NO_SUCH_FOLDER + "\n")
+        return EXIT_REFUSED
+    if sources.CODE_NARROW_FIRST in listing.codes:
+        out.write(
+            constants.CONSENT_NARROW_SENTENCE
+            % {
+                "files": len(listing.readable),
+                "folders": len(listing.by_folder),
+            }
+            + "\n"
+        )
+        for name in sorted(listing.by_folder):
+            out.write(
+                "folder=%s count=%d\n"
+                % (safe_value(name), listing.by_folder[name])
+            )
     out.write("These are the files GTM Base would read.\n")
     for entry in listing.readable:
         out.write(
@@ -406,6 +441,10 @@ def run_freeze_sources(options, out):
         if refusal.code == join_flow.CODE_NO_LISTING:
             line(out, "codes", refusal.code)
             out.write(NO_LISTING_YET + "\n")
+            return EXIT_REFUSED
+        if refusal.code == join_flow.CODE_NARROW_FIRST:
+            line(out, "codes", refusal.code)
+            out.write(NARROW_FIRST + "\n")
             return EXIT_REFUSED
         raise
     out.write(
@@ -471,7 +510,7 @@ def narrowing(options):
     only = None
     if options.only:
         only = [piece.strip() for piece in options.only.split(",") if piece.strip()]
-    return only, options.only_folder
+    return only, list(options.only_folder or []) or None
 
 
 def run_preview(options, out):

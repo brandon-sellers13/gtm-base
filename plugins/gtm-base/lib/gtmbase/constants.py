@@ -320,6 +320,30 @@ SOURCE_EXCLUDED_PREFIXES = (".env", "id_rsa", "id_ed25519", "id_ecdsa", "id_dsa"
 # ends in `.key` as well, and it loses: a folder of a person's own documents
 # is also where a private key lives, so the safer reading of the ending wins.
 SOURCE_EXCLUDED_SUFFIXES = (".pem", ".p12", ".pfx", ".key")
+# Column names that say a row of values is a list of people to contact rather
+# than a document about the business. A file whose heading row holds one of
+# these is never offered for reading, because a prospect list is the one thing
+# in a marketing folder that is other people's personal information.
+CONTACT_LIST_COLUMNS = ("email", "e-mail", "phone", "mobile", "linkedin")
+# How much of a file is read to work out whether it is a list of contacts.
+CONTACT_SNIFF_BYTES = 16384
+# How many rows after the heading are looked at for addresses.
+CONTACT_SNIFF_ROWS = 50
+# How many readable files a folder may hold before the person is asked to
+# narrow it down before they say yes to anything.
+CONSENT_NARROW_THRESHOLD = 40
+# How many top level folders those files may be spread across before the same
+# question is asked. Both this and the count above have to be passed, because a
+# big folder of one kind of thing is not the problem; a whole working
+# repository spread across ten folders is.
+CONSENT_NARROW_FOLDERS = 3
+# What a person is told when the folder they named is large and spread out. It
+# says the two numbers and then asks the one question whose answer narrows it.
+CONSENT_NARROW_SENTENCE = (
+    "That folder holds %(files)d files across %(folders)d folders, most of "
+    "which are probably not marketing material. Which of these folders hold "
+    "your customer profiles, positioning, messaging, or plans?"
+)
 # Folders that hold somebody else's code rather than the person's own writing.
 SOURCE_DEPENDENCY_FOLDERS = (
     "node_modules",

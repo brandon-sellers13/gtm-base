@@ -75,7 +75,7 @@ approve a document already knows who may end up reading it.
 
 Ask exactly one question, and ask it in these words:
 
-Where does your marketing context live today? It could be a folder on this computer, something you would rather paste in, or a tool you already have connected.
+Where does your marketing material live today? Name the narrowest folder you can, the one that holds your customer profiles, positioning, messaging, or plans, rather than a whole company or project folder. It can also be something you would rather paste in, or a tool you already have connected.
 
 Wait for the answer. Do not offer a list of examples beyond those three, and do
 not ask a second question before they have answered the first one.
@@ -140,6 +140,37 @@ come, and the date shown for it is today rather than the day the file claims.
 Say so. If the command says a second yes is needed, or that the folder looks
 like it holds work for more than one company, follow
 `references/reading-rules.md` before going any further.
+
+If the command prints `note=narrow-first`, the folder they named is large and
+its files are spread across several folders, which is what a whole working
+repository looks like rather than a folder of marketing material. Do not ask
+for a yes over that list. The command has already printed the sentence that
+names the two numbers and the `folder=<name> count=<number>` lines that go with
+it. Say that sentence and read the folders and their counts out. It is this
+sentence:
+
+That folder holds <number> files across <number> folders, most of which are probably not marketing material. Which of these folders hold your customer profiles, positioning, messaging, or plans?
+
+When they name the folders, run the same command again with one
+`--only-folder <name>` for each folder they named:
+
+```
+python3 scripts/join.py list-sources --folder <path> --run <run identifier> --only-folder <name> --only-folder <name>
+```
+
+Show them that shorter list, and only then ask for the yes. A name that is not
+one of the folders the counts named comes back as `codes=no-such-folder` and
+nothing is shown, so ask them for one of the names from the counts. Asking for
+the yes over the long list is refused anyway: `freeze-sources` prints
+`codes=narrow-first` and takes nothing, because a list nobody could read
+through is not a list anybody can agree to.
+
+Contact lists are left out of every list on purpose. A file of rows whose
+heading names an email address, a phone number, or a social profile, or whose
+rows are mostly email addresses, is counted under `left-out=contact-list` and
+is never offered for reading, whatever else it looks like. Say so if they ask
+where their prospect list went, and say that naming it by hand will not bring
+it back either.
 
 Before asking for their yes, say what the yes is for, in these words, because
 the list can read as a list of files about to be copied somewhere, and it is

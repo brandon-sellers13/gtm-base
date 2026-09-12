@@ -1,6 +1,6 @@
 # Joining GTM Base
 
-Status: as of version 0.2.4 the offer, setting a base up, and linking a base to
+Status: as of version 0.2.5 the offer, setting a base up, and linking a base to
 the folder your material lives in are all live.
 Backing a base up somewhere off your computer, inviting a teammate, and joining
 a base from a link arrive with the next release, so those sections below
@@ -41,6 +41,15 @@ linked to it afterwards, so opening it later brings the base with it. Any other
 folder works too, and you can name your material folder in the conversation
 instead.
 
+Name the narrowest folder you can. The folder you want is the one holding your
+customer profiles, your positioning, your messaging, and your plans, rather than
+a whole company folder or a whole project folder that happens to have some
+marketing material somewhere inside it. If you do name a large folder, you are
+not asked to say yes to all of it. GTM Base tells you how many files it found
+and which folders they sit in, asks you which of those folders hold the
+marketing material, and then shows you the list for just those folders before
+anything is read.
+
 Answer in plain words in your next message. Say yes to set a base up, say that
 you have an invitation link if a teammate already made a base and sent you a
 link to it, or say not now if this is a bad moment.
@@ -76,7 +85,16 @@ your home folder. You are asked whether there is a folder of existing material
 worth reading, and the folder you name there becomes the folder your base is
 linked to, so you open your own folder from then on and the base comes with it.
 When you name a folder of material, the assistant
-reads only the documents you approve and only from the folder you named. Before
+reads only the documents you approve and only from the folder you named. Name
+the narrowest folder you can, the one that holds your customer profiles,
+positioning, messaging, and plans. If the folder you name turns out to be large
+and spread across several folders, you are asked which of those folders hold the
+marketing material before you are asked to say yes to anything, because a list
+of a hundred and fifty files offered for one yes is a list nobody can really
+read. Lists of people are left out on purpose. A file of rows holding email
+addresses or phone numbers, which is what a prospect list looks like, is never
+offered for reading and cannot be named back in, because that is other people's
+personal information rather than a document about your business. Before
 each of the three drafts you are shown what that draft will read and what it
 will leave out, and you can narrow it to the files or the folder that matter for
 that one document, which is worth doing when the folder you named is large. It

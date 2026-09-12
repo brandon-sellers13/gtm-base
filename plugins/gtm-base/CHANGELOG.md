@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.2.5 (2026-09-12)
+
+- Lists of people are now left out of everything GTM Base offers to read. A file of rows is treated as a contact list, and never offered, when its heading row names a column only a list of people has, such as an email address, a phone number, a mobile number, or a social profile, or when most of its rows hold something shaped like an email address. Only the start of the file is looked at. Naming one of those files by hand afterwards does not bring it back either. The second real setup run named a working repository and the list that came back held twenty three files of prospect names, companies, and email addresses, all offered for a single yes. A prospect list is other people's personal information, not a document about your business, so it is left out on purpose and counted with its own reason.
+
+- A folder that turns out to be large and spread out is now narrowed before you are asked to say yes to anything. When the list holds more than forty files across more than three folders, you are told how many files there are and how many folders they sit in, each folder is named with its count, and you are asked which of those folders hold your customer profiles, your positioning, your messaging, or your plans. The list for just those folders is then shown to you, and the yes is taken over that. Saying yes to the long list is refused rather than allowed, because a list of a hundred and fifty files offered for one yes is a list nobody reads, and a yes nobody read is not really a yes. The folders you picked are written down with the list you agreed to.
+
+- The one opening question now asks for the narrowest folder rather than for wherever your context lives. It asks for the folder holding your customer profiles, positioning, messaging, or plans, rather than a whole company or project folder, and it still offers pasting the material in or reading it through a tool you already have connected.
+
 ## 0.2.4 (2026-09-07)
 
 - Every new base now goes in one place, a folder called GTM Bases inside your home folder with one folder per company. It used to go inside the folder you named, which meant it landed wherever your material happens to live, and that is often a folder some other tool already looks after or some other program already copies to the internet on its own. A base holds raw notes and approved company context, so it is put somewhere GTM Base can make a promise about instead. You can still ask for it beside your material, and the same checks then run on the folder you named.

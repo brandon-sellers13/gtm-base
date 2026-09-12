@@ -22,6 +22,7 @@ import plain_language
 import support
 
 from gtmbase import constants, join_flow, machine, marker, stale
+from gtmbase import sources as sources_module
 from gtmbase.errors import ConsentError
 
 DRAFTS = os.path.join(support.FIXTURES_DIR, "drafts")
@@ -963,6 +964,220 @@ class TestNarrowingOneDraftToWhatMatters(unittest.TestCase):
             self.assertNotIn("acme-icp.md", printed)
 
 
+class TestALargeFolderIsNarrowedBeforeTheYes(unittest.TestCase):
+    """A whole working repository is not something anybody can agree to whole."""
+
+    def sprawl(self, sandbox, folders=5, each=9):
+        content = os.path.join(os.environ["HOME"], "everything")
+        for number in range(folders):
+            for index in range(each):
+                support.write(
+                    os.path.join(content, "part-%d" % number, "note-%d.md" % index),
+                    "# Note\n\nSomething written down.\n",
+                )
+        return content
+
+    def test_the_list_counts_the_folders_and_asks_which_ones_matter(self):
+        with support.Sandbox() as sandbox:
+            content = self.sprawl(sandbox)
+            run = join_flow.new_run(TODAY)
+
+            listing = join_flow.list_sources(content, run, today=TODAY)
+
+            self.assertEqual(45, len(listing.readable))
+            self.assertEqual(5, len(listing.by_folder))
+            self.assertIn("narrow-first", listing.codes)
+
+    def test_the_yes_is_refused_until_the_folders_are_named(self):
+        with support.Sandbox() as sandbox:
+            content = self.sprawl(sandbox)
+            run = join_flow.new_run(TODAY)
+            join_flow.list_sources(content, run, today=TODAY)
+
+            with self.assertRaises(ConsentError) as caught:
+                join_flow.freeze_sources(content, SESSION, run, today=TODAY)
+
+            self.assertEqual(
+                join_flow.CODE_NARROW_FIRST, caught.exception.code
+            )
+
+    def test_two_folders_chosen_freeze_only_those_and_are_written_down(self):
+        with support.Sandbox() as sandbox:
+            content = self.sprawl(sandbox)
+            run = join_flow.new_run(TODAY)
+
+            join_flow.list_sources(
+                content, run, today=TODAY, only_folders=["part-1", "part-3"]
+            )
+            consent = join_flow.freeze_sources(content, SESSION, run, today=TODAY)
+
+            self.assertEqual(18, len(consent.paths))
+            folders = set(
+                os.path.basename(os.path.dirname(path)) for path in consent.paths
+            )
+            self.assertEqual({"part-1", "part-3"}, folders)
+            self.assertEqual(
+                ["part-1", "part-3"], join_flow.load_listing(run)["folders"]
+            )
+
+    def test_a_folder_that_is_not_in_the_list_is_refused(self):
+        with support.Sandbox() as sandbox:
+            content = self.sprawl(sandbox)
+            run = join_flow.new_run(TODAY)
+
+            with self.assertRaises(ConsentError) as caught:
+                join_flow.list_sources(
+                    content, run, today=TODAY, only_folders=["part-9"]
+                )
+
+            self.assertEqual(
+                join_flow.CODE_NO_SUCH_FOLDER, caught.exception.code
+            )
+
+    def test_a_folder_of_ordinary_size_is_agreed_to_in_one_step(self):
+        with support.Sandbox() as sandbox:
+            setup = SetupRun(sandbox)
+
+            listing = join_flow.list_sources(setup.content, setup.run, today=TODAY)
+            consent = join_flow.freeze_sources(
+                setup.content, SESSION, setup.run, today=TODAY
+            )
+
+            self.assertNotIn("narrow-first", listing.codes)
+            self.assertEqual(2, len(consent.paths))
+
+    def test_the_script_prints_the_counts_and_the_question(self):
+        with support.Sandbox() as sandbox:
+            import sys
+
+            content = self.sprawl(sandbox)
+            run = join_flow.new_run(TODAY)
+
+            finished = subprocess.run(
+                [sys.executable, SHIM, "list-sources", "--folder", content,
+                 "--run", run],
+                env=dict(os.environ),
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+            )
+            printed = finished.stdout.decode("utf-8")
+
+            self.assertEqual(0, finished.returncode, finished.stderr)
+            self.assertIn(
+                constants.CONSENT_NARROW_SENTENCE % {"files": 45, "folders": 5},
+                printed,
+            )
+            self.assertIn("folder=part-0 count=9", printed)
+            self.assertIn("note=narrow-first", printed)
+
+    def test_the_script_refuses_a_yes_over_a_list_nobody_could_read(self):
+        with support.Sandbox() as sandbox:
+            import sys
+
+            content = self.sprawl(sandbox)
+            run = join_flow.new_run(TODAY)
+            join_flow.list_sources(content, run, today=TODAY)
+
+            finished = subprocess.run(
+                [sys.executable, SHIM, "freeze-sources", "--folder", content,
+                 "--session", SESSION, "--run", run],
+                env=dict(os.environ),
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+            )
+            printed = finished.stdout.decode("utf-8")
+
+            self.assertEqual(1, finished.returncode)
+            self.assertIn("codes=narrow-first", printed)
+            self.assertIn("Ask which of its folders", printed)
+
+    def test_the_script_takes_the_yes_once_the_folders_are_named(self):
+        with support.Sandbox() as sandbox:
+            import sys
+
+            content = self.sprawl(sandbox)
+            run = join_flow.new_run(TODAY)
+
+            listed = subprocess.run(
+                [sys.executable, SHIM, "list-sources", "--folder", content,
+                 "--run", run, "--only-folder", "part-1",
+                 "--only-folder", "part-3"],
+                env=dict(os.environ),
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+            )
+            frozen = subprocess.run(
+                [sys.executable, SHIM, "freeze-sources", "--folder", content,
+                 "--session", SESSION, "--run", run],
+                env=dict(os.environ),
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+            )
+
+            self.assertEqual(0, listed.returncode, listed.stderr)
+            self.assertNotIn("note=narrow-first", listed.stdout.decode("utf-8"))
+            self.assertEqual(0, frozen.returncode, frozen.stderr)
+            self.assertIn("frozen=18", frozen.stdout.decode("utf-8"))
+
+
+class TestAContactListIsNeverPartOfTheYes(unittest.TestCase):
+    """A folder of prospects sitting in a marketing folder is left out."""
+
+    def with_a_prospect_list(self, setup):
+        support.write(
+            os.path.join(setup.content, "outreach", "prospects.csv"),
+            "first name,company,email\n"
+            "Ada,Northwind,ada@example.com\n"
+            "Tomas,Harbour Analytics,tomas@example.com\n",
+        )
+        return setup
+
+    def test_the_list_leaves_it_out_with_its_own_reason(self):
+        with support.Sandbox() as sandbox:
+            setup = self.with_a_prospect_list(SetupRun(sandbox))
+
+            listing = join_flow.list_sources(setup.content, setup.run, today=TODAY)
+
+            self.assertEqual(
+                1, listing.excluded_counts[sources_module.CODE_CONTACT_LIST]
+            )
+            self.assertNotIn(
+                "prospects.csv",
+                [os.path.basename(entry.path) for entry in listing.readable],
+            )
+
+    def test_naming_it_for_one_draft_is_refused(self):
+        with support.Sandbox() as sandbox:
+            setup = self.with_a_prospect_list(SetupRun(sandbox))
+            setup.agree_to_the_list()
+
+            with self.assertRaises(ConsentError) as caught:
+                join_flow.preview_step(
+                    setup.run, "icp", today=TODAY, only=["prospects.csv"]
+                )
+
+            self.assertEqual(join_flow.CODE_NOT_CONSENTED, caught.exception.code)
+
+    def test_the_script_refuses_the_prospect_list_by_name(self):
+        with support.Sandbox() as sandbox:
+            import sys
+
+            setup = self.with_a_prospect_list(SetupRun(sandbox))
+            setup.agree_to_the_list()
+
+            finished = subprocess.run(
+                [sys.executable, SHIM, "preview", "--step", "icp", "--run",
+                 setup.run, "--only", "prospects.csv"],
+                env=dict(os.environ),
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+            )
+            printed = finished.stdout.decode("utf-8")
+
+            self.assertEqual(1, finished.returncode)
+            self.assertIn("codes=not-consented", printed)
+
+
 # --- The run's own folder ----------------------------------------------------
 
 
@@ -1114,6 +1329,73 @@ class TestTheSkillIsPlainAndSaysWhatWillHappen(unittest.TestCase):
 
         self.assertIn("shown what that draft will read", setting_up)
         self.assertIn("narrow it", setting_up)
+
+    def test_the_opening_question_asks_for_the_narrowest_folder(self):
+        text = support.read(os.path.join(SKILL_DIR, "SKILL.md"))
+        step_three = text.split("### Step 3.")[1].split("### Step 4.")[0]
+        question = (
+            "Where does your marketing material live today? Name the narrowest "
+            "folder you can, the one that holds your customer profiles, "
+            "positioning, messaging, or plans, rather than a whole company or "
+            "project folder. It can also be something you would rather paste "
+            "in, or a tool you already have connected."
+        )
+
+        self.assertIn(question, step_three)
+        self.assertEqual([], plain_language.find_banned(question))
+        self.assertEqual([], plain_language.find_dashes(question))
+
+    def test_the_folder_counts_sentence_is_plain_and_in_the_skill(self):
+        text = support.read(os.path.join(SKILL_DIR, "SKILL.md"))
+        step_five = text.split("### Step 5.")[1].split("### Step 6.")[0]
+        sentence = constants.CONSENT_NARROW_SENTENCE
+
+        self.assertEqual([], plain_language.find_banned(sentence))
+        self.assertEqual([], plain_language.find_dashes(sentence))
+        for part in sentence.replace("%(files)d", "\n").replace(
+            "%(folders)d", "\n"
+        ).split("\n"):
+            self.assertIn(part, step_five)
+        self.assertIn("note=narrow-first", step_five)
+        self.assertIn("--only-folder", step_five)
+        self.assertIn("left-out=contact-list", step_five)
+
+    def test_the_reading_rules_carry_the_two_new_rules(self):
+        rules = support.read(
+            os.path.join(SKILL_DIR, "references", "reading-rules.md")
+        )
+
+        self.assertIn("contact-list", rules)
+        self.assertIn("narrow-first", rules)
+        plain_language.assert_plain(
+            self, os.path.join(SKILL_DIR, "references", "reading-rules.md")
+        )
+
+    def test_the_guide_says_to_name_the_narrowest_folder(self):
+        guide = support.read(
+            os.path.join(support.REPO_ROOT, "docs", "join-guide.md")
+        )
+        setting_up = guide.split("## What setting up does")[1].split("\n## ")[0]
+        offer = guide.split("## Open Claude Code and answer the offer")[1].split(
+            "\n## "
+        )[0]
+
+        self.assertIn("narrowest folder", setting_up)
+        self.assertIn("narrowest folder", offer)
+        self.assertIn("left out on purpose", setting_up)
+        for text in (setting_up, offer):
+            self.assertIn("before", text)
+
+    def test_the_atlas_says_what_the_list_now_leaves_out(self):
+        atlas = support.read(
+            os.path.join(
+                support.REPO_ROOT, "docs", "diagrams", "logic-atlas.html"
+            )
+        )
+
+        self.assertIn("contact lists left out;", atlas)
+        self.assertIn("a sprawling folder is narrowed first", atlas)
+        self.assertIn("plugin 0.2.5", atlas)
 
     def test_the_skill_never_says_how_long_any_of_it_takes(self):
         text = support.read(os.path.join(SKILL_DIR, "SKILL.md")).lower()

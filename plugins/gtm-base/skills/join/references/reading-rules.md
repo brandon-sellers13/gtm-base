@@ -37,6 +37,34 @@ like it holds work for more than one company. Stop and ask which company this
 base is for, and offer the narrower folder if there is an obvious one. Do not
 guess.
 
+## A list of people is never offered
+
+A file of rows is left out, with the reason `contact-list`, when its heading row
+names a column only a list of people has, which is an email address, a phone
+number, a mobile number, or a social profile, or when most of its rows hold
+something shaped like an email address. Only the start of the file is looked at,
+and only whole lines of it.
+
+That file is never listed as readable and it cannot be named back in later. A
+prospect list is other people's personal information, and somebody saying yes to
+their marketing folder is not saying yes to that. A file about the email channel
+is a document, not a list of people, so a document that merely talks about email
+is unaffected.
+
+## A large folder is narrowed before anything is read
+
+A list of more than forty files spread across more than three folders comes back
+carrying `narrow-first`, and the yes may not be taken over it. Show the person
+how many files there are and how many folders they sit in, name each folder with
+its count, and ask which of those folders hold their customer profiles, their
+positioning, their messaging, or their plans. Then list those folders on their
+own and ask for the yes over that shorter list.
+
+The reason is the one the second yes exists for. A list of a hundred and fifty
+files offered for a single yes is a list nobody reads, and a yes nobody read is
+not consent. The folders the person chose are written down alongside the list
+they agreed to.
+
 ## One bounded read per source
 
 Read each source once, and read a defined slice of it rather than everything

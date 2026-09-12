@@ -63,6 +63,11 @@ PASTES_DIR = "pastes"
 # Why a yes could not be taken.
 CODE_NO_LISTING = "no-listing"
 CODE_LISTING_CHANGED = "listing-changed"
+# The list shown was large and spread out and nobody said which folders matter,
+# so the yes is not taken over the whole of it.
+CODE_NARROW_FIRST = "narrow-first"
+# A folder was named that the list does not hold.
+CODE_NO_SUCH_FOLDER = "no-such-folder"
 # The note about what got in the way could not be saved into the base.
 NOTE_NOT_SAVED = "note-not-saved"
 
@@ -478,7 +483,12 @@ def linked_folders(runner: Optional[GitRunner] = None):
 # --- What would be read ------------------------------------------------------
 
 
-def list_sources(folder: str, run_id: Optional[str] = None, today=None):
+def list_sources(
+    folder: str,
+    run_id: Optional[str] = None,
+    today=None,
+    only_folders: Optional[Sequence[str]] = None,
+):
     """Everything in a folder that could be read, and everything left out.
 
     When a run is named, the list is written down in that run's own folder
@@ -487,14 +497,35 @@ def list_sources(folder: str, run_id: Optional[str] = None, today=None):
     rather than against whatever a second walk of the folder would find, so a
     file that appeared in the meantime cannot ride in on a yes given about a
     list it was never on.
+
+    When folders are named, the list is cut down to those folders before it is
+    shown and before it is written down. The value standing for the whole of
+    it still covers the whole folder, because that value is what says whether
+    the folder itself has changed since the person looked at it.
     """
-    listing = sources_module.list_folder(folder, today=today)
+    whole = sources_module.list_folder(folder, today=today)
+    chosen = [str(name).strip() for name in (only_folders or []) if str(name).strip()]
+    listing = whole
+    if chosen:
+        missing = [
+            name
+            for name in chosen
+            if name.strip("/").split("/")[-1] not in whole.by_folder
+        ]
+        if missing:
+            raise ConsentError(
+                "that folder is not one of the folders in the list",
+                code=CODE_NO_SUCH_FOLDER,
+            )
+        listing = sources_module.narrow_to_folders(whole, chosen)
     if run_id:
         atomic_write_json(
             os.path.join(scratch_dir(run_id), LISTING_FILE),
             {
                 "root": listing.root,
-                "digest": sources_module.listing_digest(listing),
+                "digest": sources_module.listing_digest(whole),
+                "note": sources_module.CODE_NARROW_FIRST in whole.codes,
+                "folders": sorted(set(chosen)),
                 "paths": sorted(
                     os.path.realpath(entry.path) for entry in listing.readable
                 ),
@@ -513,9 +544,12 @@ def load_listing(run_id: str):
     digest = payload.get("digest")
     if not isinstance(wanted, list) or not isinstance(digest, str) or not digest:
         return None
+    folders = payload.get("folders")
     return {
         "root": str(payload.get("root") or ""),
         "digest": digest,
+        "note": bool(payload.get("note")),
+        "folders": [str(item) for item in folders] if isinstance(folders, list) else [],
         "paths": [str(item) for item in wanted],
     }
 
@@ -528,6 +562,10 @@ def freeze_sources(folder: str, session_id: str, run_id: str, today=None):
     two are compared. When they differ the yes is refused with the code saying
     so, and the skill shows the new list and asks again, because a person can
     only agree to a list they have actually seen.
+
+    A list that was too large and too spread out to be read through is refused
+    as well, until the person has said which of its folders hold their
+    marketing material. A yes nobody could have read is not a yes.
     """
     shown = load_listing(run_id)
     if shown is None:
@@ -540,11 +578,17 @@ def freeze_sources(folder: str, session_id: str, run_id: str, today=None):
             "that folder is not what it was when the list was shown",
             code=CODE_LISTING_CHANGED,
         )
+    if shown["note"] and not shown["folders"]:
+        raise ConsentError(
+            "that list is too large to be agreed to whole",
+            code=CODE_NARROW_FIRST,
+        )
     consent = sources_module.ConsentList.freeze_paths(shown["paths"], session_id)
     atomic_write_json(
         os.path.join(scratch_dir(run_id), CONSENT_FILE),
         {
             "root": shown["root"],
+            "folders": list(shown["folders"]),
             "session_id": consent.session_id,
             "frozen_at": consent.frozen_at,
             "paths": list(consent.paths),
@@ -620,24 +664,35 @@ def _in_folder(path: str, root: str, wanted: str) -> bool:
     return wanted in relative.replace(os.sep, "/").split("/")[:-1]
 
 
-def narrow(labelled, root: str = "", only=None, only_folder: Optional[str] = None):
+def narrow(labelled, root: str = "", only=None, only_folder=None):
     """Keep only the part of the agreed list the person named for this draft.
 
     This never widens what may be read. It takes the list they already said
     yes to and keeps a part of it, so a name that is not on that list is
-    refused rather than looked for on the disk.
+    refused rather than looked for on the disk. More than one folder may be
+    named, and each one has to hold something, so a folder named by mistake is
+    said out loud rather than quietly adding nothing.
     """
     kept = list(labelled)
     if only_folder:
-        wanted = str(only_folder).strip().strip("/").replace(os.sep, "/")
-        kept = [
-            pair for pair in kept if _in_folder(pair[1], root, wanted.split("/")[-1])
-        ]
-        if not kept:
-            raise ConsentError(
-                "that folder is not part of the list you agreed to",
-                code=CODE_NOT_CONSENTED,
-            )
+        names = [only_folder] if isinstance(only_folder, str) else list(only_folder)
+        found = []
+        seen = set()
+        for name in names:
+            wanted = str(name).strip().strip("/").replace(os.sep, "/").split("/")[-1]
+            if not wanted:
+                continue
+            part = [pair for pair in kept if _in_folder(pair[1], root, wanted)]
+            if not part:
+                raise ConsentError(
+                    "that folder is not part of the list you agreed to",
+                    code=CODE_NOT_CONSENTED,
+                )
+            for pair in part:
+                if pair[1] not in seen:
+                    seen.add(pair[1])
+                    found.append(pair)
+        kept = found
     if only:
         asked = [str(name).strip() for name in only if str(name).strip()]
         held = set(label for label, _path in kept)
@@ -656,7 +711,7 @@ def read_sources(
     paste_files: Sequence[str] = (),
     today=None,
     only=None,
-    only_folder: Optional[str] = None,
+    only_folder=None,
 ) -> SourcesRead:
     """Every piece of text this run may draft from, screened and labelled.
 
@@ -755,7 +810,7 @@ def preview_step(
     paste_files: Sequence[str] = (),
     today=None,
     only=None,
-    only_folder: Optional[str] = None,
+    only_folder=None,
 ) -> Previewed:
     """Say what one draft would read, and what it would leave out, writing nothing.
 
@@ -793,7 +848,7 @@ def assemble_step(
     today=None,
     plugin_root: Optional[str] = None,
     only=None,
-    only_folder: Optional[str] = None,
+    only_folder=None,
 ) -> Assembled:
     """Build the request for one step and write it into the run's own folder.
 

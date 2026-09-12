@@ -24,6 +24,7 @@ down. It is never a set of instructions to follow.
 
 from __future__ import annotations
 
+import csv
 import datetime
 import hashlib
 import os
@@ -55,6 +56,9 @@ CODE_UNSUPPORTED = "unsupported"
 CODE_TOO_LARGE = "too-large"
 # The first line of the file says it holds a key.
 CODE_KEY_HEADER = "key-header"
+# The file is a list of people to write to rather than a document about the
+# business, so it is left out whatever else it looks like.
+CODE_CONTACT_LIST = "contact-list"
 # The file or folder could not be looked at.
 CODE_UNREADABLE = "unreadable"
 # The real file turned out to sit outside the folder that was named.
@@ -65,6 +69,9 @@ CODE_FOLDER_TOO_LARGE = "folder-too-large"
 CODE_DATE_CLAMPED = "date-clamped"
 # Something a reader would not have seen was taken out of the text.
 CODE_HIDDEN_REMOVED = "hidden-removed"
+# The folder named is large and spread out, so the person is asked which of
+# its folders hold their marketing material before they are asked for a yes.
+CODE_NARROW_FIRST = "narrow-first"
 
 # The three kinds of hidden thing, named as a person would name them. They are
 # the words that reach a sentence somebody reads, so they are singular here and
@@ -89,6 +96,11 @@ _KEY_HEADER_START = b"-----BEGIN"
 KEY_SNIFF_BYTES = 512
 # The three bytes some editors put at the very start of a file.
 _BYTE_ORDER_MARK = b"\xef\xbb\xbf"
+
+# What an email address looks like in a row of values. It is deliberately
+# loose, because the question being answered is whether a file is a list of
+# people rather than whether one particular address is real.
+_EMAIL_SHAPED = re.compile(r"[^@\s,;\"']+@[^@\s,;\"']+\.[A-Za-z]{2,}")
 
 # The leading word of a file name, when the name is built from two words.
 _LEADING_WORD = re.compile(r"^([a-z][a-z0-9]{2,})[-_]")
@@ -186,6 +198,7 @@ class Listing(object):
         "needs_second_yes",
         "appears_multi_company",
         "company_hints",
+        "by_folder",
         "codes",
     )
 
@@ -205,13 +218,24 @@ class Listing(object):
         self.needs_second_yes = bool(needs_second_yes)
         self.appears_multi_company = bool(appears_multi_company)
         self.company_hints = list(company_hints or [])
+        # How many of the readable files sit in each folder at the top of the
+        # one that was named, with a full stop standing for the files lying
+        # loose at the top. This is what the person is shown when the folder
+        # turns out to be a whole working repository rather than a folder of
+        # marketing material.
+        self.by_folder = folder_counts(self.root, self.readable)
         # What the person should be told about the list as a whole, as short
-        # codes. A date pulled back to today is the one this release reports.
-        self.codes = (
-            [CODE_DATE_CLAMPED]
-            if any(entry.clamped for entry in self.readable)
-            else []
-        )
+        # codes. A date pulled back to today is one. The other says the list is
+        # too large and too spread out to be agreed to whole.
+        codes = []
+        if any(entry.clamped for entry in self.readable):
+            codes.append(CODE_DATE_CLAMPED)
+        if (
+            len(self.readable) > constants.CONSENT_NARROW_THRESHOLD
+            and len(self.by_folder) > constants.CONSENT_NARROW_FOLDERS
+        ):
+            codes.append(CODE_NARROW_FIRST)
+        self.codes = codes
 
     def __repr__(self) -> str:
         return "Listing(root=%r, readable=%d, skipped=%d)" % (
@@ -219,6 +243,63 @@ class Listing(object):
             len(self.readable),
             len(self.skipped),
         )
+
+
+def top_folder(path: str, root: str) -> str:
+    """Which folder at the top of the named folder one file sits in.
+
+    A file lying loose at the top of the folder that was named belongs to no
+    folder of its own, and it comes back as a full stop so that it can be
+    counted and named alongside the rest.
+    """
+    if not root:
+        return "."
+    try:
+        relative = os.path.relpath(path, root)
+    except ValueError:
+        return "."
+    parts = relative.replace(os.sep, "/").split("/")
+    return parts[0] if len(parts) > 1 else "."
+
+
+def folder_counts(root: str, readable: Sequence[Entry]) -> Dict[str, int]:
+    """How many readable files sit in each folder at the top of the named one."""
+    counts: Dict[str, int] = {}
+    for entry in readable:
+        name = top_folder(entry.path, root)
+        counts[name] = counts.get(name, 0) + 1
+    return counts
+
+
+def narrow_to_folders(listing: Listing, names: Sequence[str]) -> Listing:
+    """The same list, cut down to the folders the person said matter.
+
+    This happens before anybody has agreed to anything, so it only ever makes
+    the list shorter. Everything left out by the walk is cut down the same way,
+    so the two halves the person is shown still describe the same folders.
+    """
+    wanted = set(str(name).strip().strip("/").replace(os.sep, "/") for name in names)
+    wanted = set(name.split("/")[-1] for name in wanted if name)
+    if not wanted:
+        return listing
+    kept = [
+        entry
+        for entry in listing.readable
+        if top_folder(entry.path, listing.root) in wanted
+    ]
+    left = [
+        item
+        for item in listing.skipped
+        if top_folder(item.path, listing.root) in wanted
+    ]
+    return Listing(
+        listing.root,
+        kept,
+        left,
+        needs_second_yes=listing.needs_second_yes,
+        appears_multi_company=listing.appears_multi_company,
+        company_hints=listing.company_hints,
+    )
 
 
 def listing_digest(listing: Listing) -> str:
@@ -361,6 +442,8 @@ def _file_verdict(full: str, name: str, root: str, limits: Limits, today):
         return None, CODE_UNREADABLE
     if starts_like_a_key:
         return None, CODE_KEY_HEADER
+    if kind in ("csv", "text") and _is_contact_list(full):
+        return None, CODE_CONTACT_LIST
     when = date_for_file(full, today)
     return Entry(full, kind, size, when.date, when.clamped), None
 
@@ -393,6 +476,55 @@ def _starts_like_a_key(full: str) -> Optional[bool]:
     if head.startswith(_BYTE_ORDER_MARK):
         head = head[len(_BYTE_ORDER_MARK) :]
     return _KEY_HEADER_START in head.lstrip()
+
+
+def _is_contact_list(full: str) -> bool:
+    """Whether a file of rows is a list of people to write to.
+
+    Two things say so. The heading row names a column that only a list of
+    people has, such as an email address or a phone number. Or the rows
+    themselves are mostly addresses, which is what an export with no heading
+    row looks like. Either way the file is left out and never offered, because
+    a prospect list is other people's personal information and a person saying
+    yes to their marketing folder is not saying yes to that.
+
+    Only the start of the file is read, and only whole lines of it, so a value
+    cut in half by that limit can never be read as a heading of its own.
+    """
+    try:
+        with open(full, "rb") as stream:
+            head = stream.read(constants.CONTACT_SNIFF_BYTES)
+    except OSError:
+        return False
+    if head.startswith(_BYTE_ORDER_MARK):
+        head = head[len(_BYTE_ORDER_MARK) :]
+    cut_short = len(head) >= constants.CONTACT_SNIFF_BYTES
+    text = head.decode("utf-8", errors="replace")
+    lines = text.replace("\r\n", "\n").replace("\r", "\n").split("\n")
+    if cut_short and lines:
+        lines = lines[:-1]
+    lines = [line for line in lines if line.strip()]
+    if not lines:
+        return False
+    try:
+        rows = list(csv.reader(lines[: constants.CONTACT_SNIFF_ROWS + 1]))
+    except csv.Error:
+        return False
+    if not rows:
+        return False
+    for cell in rows[0]:
+        folded = str(cell).strip().casefold()
+        if any(word in folded for word in constants.CONTACT_LIST_COLUMNS):
+            return True
+    body = rows[1:]
+    if not body:
+        return False
+    with_an_address = sum(
+        1
+        for row in body
+        if any(_EMAIL_SHAPED.search(str(cell)) for cell in row)
+    )
+    return with_an_address * 3 >= len(body)
 
 
 def _is_home_or_above(root: str) -> bool:

@@ -85,6 +85,7 @@ class TestListingWhatAPersonNames(unittest.TestCase):
                 [
                     "customers.csv",
                     "icp.md",
+                    "metrics.csv",
                     "notes.txt",
                     "other-co/positioning.md",
                     "template-with-comments.md",
@@ -113,6 +114,9 @@ class TestListingWhatAPersonNames(unittest.TestCase):
                 1, listing.excluded_counts[sources.CODE_DEPENDENCY_FOLDER]
             )
             self.assertEqual(1, listing.excluded_counts[sources.CODE_ARCHIVE])
+            self.assertEqual(
+                1, listing.excluded_counts[sources.CODE_CONTACT_LIST]
+            )
             self.assertEqual(
                 sum(listing.excluded_counts.values()), len(listing.skipped)
             )
@@ -156,6 +160,141 @@ class TestListingWhatAPersonNames(unittest.TestCase):
                 self.assertTrue(
                     real.startswith(listing.root + os.sep), real
                 )
+
+
+class TestAListOfPeopleIsNeverOffered(unittest.TestCase):
+    """A prospect list is other people's information, so it is left out."""
+
+    def test_a_prospect_list_with_an_email_column_is_left_out(self):
+        with TempFolder(copy_fixtures=True) as temp:
+            listing = sources.list_folder(temp.folder, today=TODAY)
+
+            left_out = dict(
+                (os.path.basename(item.path), item.reason_code)
+                for item in listing.skipped
+            )
+            self.assertEqual(sources.CODE_CONTACT_LIST, left_out["prospects.csv"])
+            self.assertNotIn(
+                "prospects.csv",
+                [os.path.basename(entry.path) for entry in listing.readable],
+            )
+
+    def test_rows_that_are_mostly_addresses_are_left_out_with_no_heading(self):
+        with TempFolder() as temp:
+            temp.file(
+                "export.csv",
+                "Ada Nwosu,ada@example.com\n"
+                "Tomas Iversen,tomas@example.com\n"
+                "Ruth Okafor,ruth@example.com\n"
+                "Nina Barros,nina@example.com\n",
+            )
+            listing = sources.list_folder(temp.folder, today=TODAY)
+
+            self.assertEqual([], list(listing.readable))
+            self.assertEqual(
+                [sources.CODE_CONTACT_LIST],
+                [item.reason_code for item in listing.skipped],
+            )
+
+    def test_a_table_of_numbers_is_still_read(self):
+        with TempFolder(copy_fixtures=True) as temp:
+            listing = sources.list_folder(temp.folder, today=TODAY)
+
+            self.assertIn(
+                "metrics.csv",
+                [os.path.basename(entry.path) for entry in listing.readable],
+            )
+
+    def test_a_document_that_talks_about_email_is_not_a_contact_list(self):
+        with TempFolder() as temp:
+            temp.file(
+                "channels.md",
+                "# Channels\n\nEmail is the channel that pays for itself, and "
+                "the phone is the one nobody answers.\n",
+            )
+            listing = sources.list_folder(temp.folder, today=TODAY)
+
+            self.assertEqual(
+                ["channels.md"],
+                [os.path.basename(entry.path) for entry in listing.readable],
+            )
+
+    def test_naming_the_prospect_list_by_hand_does_not_pull_it_back_in(self):
+        with TempFolder(copy_fixtures=True) as temp:
+            listing = sources.list_folder(temp.folder, today=TODAY)
+            consent = sources.ConsentList.freeze(listing, "s-contact")
+
+            with self.assertRaises(ConsentError) as caught:
+                sources.read_allowed(
+                    consent, os.path.join(temp.folder, "prospects.csv")
+                )
+
+            self.assertEqual("not-consented", caught.exception.code)
+
+
+class TestASprawlingFolderIsNarrowedFirst(unittest.TestCase):
+    """A folder too large and too spread out to read through is not agreed whole."""
+
+    def spread(self, temp, folders, each):
+        for number in range(folders):
+            for index in range(each):
+                temp.file(
+                    "folder-%d/note-%d.md" % (number, index),
+                    "# Note\n\nSomething written down.\n",
+                )
+
+    def test_many_files_across_many_folders_ask_to_be_narrowed(self):
+        with TempFolder() as temp:
+            self.spread(temp, 5, 9)
+
+            listing = sources.list_folder(temp.folder, today=TODAY)
+
+            self.assertEqual(45, len(listing.readable))
+            self.assertIn(sources.CODE_NARROW_FIRST, listing.codes)
+            self.assertEqual(
+                dict((("folder-%d" % number), 9) for number in range(5)),
+                listing.by_folder,
+            )
+
+    def test_many_files_in_a_couple_of_folders_are_left_alone(self):
+        with TempFolder() as temp:
+            self.spread(temp, 2, 23)
+
+            listing = sources.list_folder(temp.folder, today=TODAY)
+
+            self.assertEqual(46, len(listing.readable))
+            self.assertNotIn(sources.CODE_NARROW_FIRST, listing.codes)
+
+    def test_a_few_files_across_many_folders_are_left_alone(self):
+        with TempFolder() as temp:
+            self.spread(temp, 6, 4)
+
+            listing = sources.list_folder(temp.folder, today=TODAY)
+
+            self.assertEqual(24, len(listing.readable))
+            self.assertNotIn(sources.CODE_NARROW_FIRST, listing.codes)
+
+    def test_files_lying_loose_at_the_top_are_counted_under_a_full_stop(self):
+        with TempFolder() as temp:
+            temp.file("icp.md", "# Who we sell to\n")
+            self.spread(temp, 2, 2)
+
+            listing = sources.list_folder(temp.folder, today=TODAY)
+
+            self.assertEqual(1, listing.by_folder["."])
+
+    def test_narrowing_to_folders_keeps_only_those_folders(self):
+        with TempFolder() as temp:
+            self.spread(temp, 5, 9)
+
+            listing = sources.list_folder(temp.folder, today=TODAY)
+            narrowed = sources.narrow_to_folders(listing, ["folder-1", "folder-3"])
+
+            self.assertEqual(18, len(narrowed.readable))
+            self.assertEqual(
+                {"folder-1": 9, "folder-3": 9}, narrowed.by_folder
+            )
+            self.assertNotIn(sources.CODE_NARROW_FIRST, narrowed.codes)
 
 
 # --- Consent ----------------------------------------------------------------

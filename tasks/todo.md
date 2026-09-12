@@ -286,3 +286,48 @@ One thing that was left as it is. The closing message lives in
 base without one, rather than once with a line swapped into it. That file exists
 so a person can read the message as a message and edit it, and a template with a
 hole in the middle of it stops being readable as one.
+
+## 0.2.5 (2026-09-12): contact lists left out, and a sprawling folder narrowed first
+
+- [x] A file of rows is classified `contact-list` and never offered for reading,
+      when its heading row names an email, phone, mobile, or social column, or
+      when at least a third of the first fifty rows hold something shaped like
+      an email address. Only the first sixteen kilobytes are looked at, and only
+      whole lines of it.
+- [x] A listing now counts its readable files per folder at the top of the one
+      that was named, and carries `narrow-first` when there are more than forty
+      files across more than three of those folders.
+- [x] `list-sources` prints the counts and the question, takes one
+      `--only-folder` per folder, and writes the chosen folders down with the
+      list. `freeze-sources` refuses `narrow-first` until folders were chosen.
+- [x] The one opening question asks for the narrowest folder.
+- [x] The join guide, the reading rules, and figure 7 of the atlas say all three.
+
+### Review
+
+The guard against a whole working repository is two guards, and they sit at
+different points on purpose. The contact-list rule runs during the walk, so a
+prospect list never reaches the list a person is shown and cannot be named back
+in later, because a file that was never readable is not on the frozen list and
+every read goes through that list. The narrowing rule runs between the list and
+the yes, and it is enforced where the yes is taken rather than only in the
+skill's wording, so a large sprawling list cannot be frozen whole even if the
+conversation skips a step.
+
+Two decisions beyond the brief.
+
+The value standing for the whole listing still covers the whole folder even when
+the shown list was narrowed to two of its folders. That value is what says
+whether the folder changed while the person was reading, and narrowing it to the
+chosen folders would have made a file appearing elsewhere in the named folder
+invisible to that check.
+
+Naming a folder that is not one of the folders in the list is refused, with the
+code `no-such-folder`, rather than quietly producing an empty list. An empty
+list silently taken as a yes would have frozen nothing and left the run with no
+material and no explanation.
+
+One thing left as it is. Narrowing for a single draft (`--only-folder` on
+preview and assemble) now accepts several folders as well, which fell out of the
+same change, but the skill still describes one folder there, because a draft
+narrowed to several folders is not a thing anybody has asked for yet.

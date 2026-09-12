@@ -7,7 +7,7 @@ it is still right.
 
 ## Status
 
-Version 0.2.4 holds the ledger path (propose-change, stale-check, confirm),
+Version 0.2.5 holds the ledger path (propose-change, stale-check, confirm),
 the join skill that sets up a base, the link between a base and the folder a
 person keeps their material in, the check that runs before anything leaves
 the computer, and the work done at the start of a session. `hooks/hooks.json`
