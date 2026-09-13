@@ -84,7 +84,16 @@ class TestListingWhatAPersonNames(unittest.TestCase):
             self.assertEqual(
                 [
                     "customers.csv",
+                    "engineering/deploy-plan.md",
+                    "engineering/queue-notes.md",
+                    "engineering/retry-rules.md",
+                    "engineering/runbook.md",
+                    "engineering/schema.md",
                     "icp.md",
+                    "marketing/_spine.md",
+                    "marketing/icp-fintech.md",
+                    "marketing/persona-ops-lead.md",
+                    "marketing/positioning.md",
                     "metrics.csv",
                     "notes.txt",
                     "other-co/positioning.md",
@@ -295,6 +304,143 @@ class TestASprawlingFolderIsNarrowedFirst(unittest.TestCase):
                 {"folder-1": 9, "folder-3": 9}, narrowed.by_folder
             )
             self.assertNotIn(sources.CODE_NARROW_FIRST, narrowed.codes)
+
+
+class TestFindingTheLikelyMarketingMaterial(unittest.TestCase):
+    """The person names a broad folder and is proposed the places inside it."""
+
+    def test_the_marketing_folder_is_the_first_place_with_its_counts(self):
+        with TempFolder(copy_fixtures=True) as temp:
+            found = sources.survey(temp.folder, today=TODAY)
+
+            first = found.places[0]
+            self.assertEqual("marketing", first.relative_folder)
+            self.assertEqual(
+                {"customer-profile": 1, "persona": 1, "positioning": 2},
+                first.counts_by_kind,
+            )
+            self.assertEqual(12, first.score)
+            self.assertEqual(
+                [
+                    "_spine.md",
+                    "icp-fintech.md",
+                    "persona-ops-lead.md",
+                    "positioning.md",
+                ],
+                first.sample_labels,
+            )
+
+    def test_a_folder_of_code_with_one_plan_in_it_is_dropped_as_thin(self):
+        """One plan-shaped name among five files is not a marketing folder."""
+        with TempFolder(copy_fixtures=True) as temp:
+            found = sources.survey(temp.folder, today=TODAY)
+
+            self.assertNotIn(
+                "engineering", [place.relative_folder for place in found.places]
+            )
+            self.assertIn("thin:engineering", found.notes)
+
+    def test_the_places_are_ordered_by_what_they_hold(self):
+        with TempFolder(copy_fixtures=True) as temp:
+            found = sources.survey(temp.folder, today=TODAY)
+
+            self.assertEqual(
+                ["marketing", ".", "other-co"],
+                [place.relative_folder for place in found.places],
+            )
+
+    def test_the_list_of_people_is_never_counted_towards_a_place(self):
+        with TempFolder(copy_fixtures=True) as temp:
+            found = sources.survey(temp.folder, today=TODAY)
+
+            loose = [
+                place for place in found.places if place.relative_folder == "."
+            ][0]
+            self.assertNotIn("prospects.csv", loose.sample_labels)
+            self.assertEqual(
+                {"customer-profile": 1, "strategy": 1, "metrics": 1},
+                loose.counts_by_kind,
+            )
+            self.assertEqual(
+                1, found.skipped_counts[sources.CODE_CONTACT_LIST]
+            )
+
+    def test_the_sentence_names_the_places_and_asks_whether_that_is_it(self):
+        with TempFolder(copy_fixtures=True) as temp:
+            found = sources.survey(temp.folder, today=TODAY)
+
+            self.assertEqual(
+                "It looks like your marketing material sits in these places: "
+                "marketing (1 customer profile, 1 persona file, 2 positioning "
+                "files), the files loose at the top (1 customer profile, 1 "
+                "strategy file, 1 metrics file), other-co (1 positioning "
+                "file). Is this it? Say yes, name a folder to add, or name "
+                "one to drop.",
+                found.sentence(),
+            )
+
+    def test_a_folder_with_nothing_marketing_shaped_says_so(self):
+        with TempFolder() as temp:
+            temp.file("runbook.md", "# What to do when the job stops\n")
+            temp.file("schema.md", "# Tables the worker writes to\n")
+
+            found = sources.survey(temp.folder, today=TODAY)
+
+            self.assertEqual([], found.places)
+            self.assertEqual(
+                "I could not find anything that looks like marketing material "
+                "in %s by its file names and headings. You can name a folder "
+                "inside it, or paste the material in." % found.root,
+                found.sentence(),
+            )
+
+    def test_a_flat_folder_comes_back_as_the_one_place_it_is(self):
+        with TempFolder() as temp:
+            temp.file("icp.md", "# Ideal customer profile\n")
+            temp.file("positioning.md", "# How we describe what we sell\n")
+
+            found = sources.survey(temp.folder, today=TODAY)
+
+            self.assertEqual(["."], [place.relative_folder for place in found.places])
+            self.assertEqual(
+                "It looks like your marketing material sits in %s (1 customer "
+                "profile, 1 positioning file). Is this it? Say yes, name a "
+                "folder to add, or name one to drop." % found.root,
+                found.sentence(),
+            )
+
+    def test_only_the_first_heading_of_a_document_is_read(self):
+        with TempFolder() as temp:
+            temp.file(
+                "tuesday.md",
+                "# Notes from Tuesday\n\nOur positioning is the spine of it.\n",
+            )
+
+            found = sources.survey(temp.folder, today=TODAY)
+
+            self.assertEqual("# Notes from Tuesday", sources.first_heading(
+                os.path.join(temp.folder, "tuesday.md")
+            ))
+            self.assertEqual([], found.places)
+
+    def test_nothing_past_the_first_lines_of_a_file_is_ever_looked_at(self):
+        with TempFolder() as temp:
+            buried = "\n".join(
+                ["plain line"] * 60
+                + ["# Positioning", constants.SOURCE_FENCE_FOOTER]
+            )
+            temp.file("long.md", buried + "\n")
+            temp.file("icp.md", "# Ideal customer profile\n")
+
+            found = sources.survey(temp.folder, today=TODAY)
+
+            self.assertEqual("", sources.first_heading(
+                os.path.join(temp.folder, "long.md")
+            ))
+            self.assertEqual(
+                {"customer-profile": 1}, found.places[0].counts_by_kind
+            )
+            self.assertNotIn(constants.SOURCE_FENCE_FOOTER, found.sentence())
 
 
 # --- Consent ----------------------------------------------------------------

@@ -569,6 +569,168 @@ def _company_reading(readable: Sequence[Entry], root: str):
     return bool(hints), sorted(hints)
 
 
+# --- Finding the likely marketing material ----------------------------------
+
+
+class Place(object):
+    """One folder that looks like it holds marketing material, and why."""
+
+    __slots__ = ("relative_folder", "counts_by_kind", "sample_labels", "score")
+
+    def __init__(self, relative_folder, counts_by_kind, sample_labels, score):
+        self.relative_folder = relative_folder
+        self.counts_by_kind = dict(counts_by_kind)
+        self.sample_labels = list(sample_labels)
+        self.score = int(score)
+
+    def __repr__(self) -> str:
+        return "Place(folder=%r, score=%d)" % (self.relative_folder, self.score)
+
+
+class Survey(object):
+    """What the finding step proposes, before any list is shown at all.
+
+    The person names a folder as broad as they like. This walks it the way the
+    listing walks it, looks at nothing but file names and first headings, and
+    comes back with the folders inside it that look like marketing material.
+    The person confirms, adds, or drops, and only then is a list shown.
+    """
+
+    __slots__ = ("root", "places", "skipped_counts", "notes")
+
+    def __init__(self, root, places, skipped_counts=None, notes=None):
+        self.root = root
+        self.places = list(places)
+        self.skipped_counts = dict(skipped_counts or {})
+        self.notes = list(notes or [])
+
+    def __repr__(self) -> str:
+        return "Survey(root=%r, places=%d)" % (self.root, len(self.places))
+
+    def sentence(self) -> str:
+        """The one sentence the person hears about what was found."""
+        if not self.places:
+            return constants.SURVEY_NOTHING_SENTENCE % {"folder": self.root}
+        if len(self.places) == 1 and self.places[0].relative_folder == ".":
+            return constants.SURVEY_ONE_PLACE_SENTENCE % {
+                "place": "%s (%s)" % (self.root, counted_kinds(self.places[0]))
+            }
+        named = [
+            "%s (%s)" % (place_label(place.relative_folder), counted_kinds(place))
+            for place in self.places
+        ]
+        return constants.SURVEY_SENTENCE % {"places": ", ".join(named)}
+
+
+def place_label(relative_folder: str) -> str:
+    """What one place is called in the sentence a person reads."""
+    if relative_folder == ".":
+        return constants.SURVEY_LOOSE_LABEL
+    return relative_folder
+
+
+def counted_kinds(place: Place) -> str:
+    """How many of each kind one place holds, in the words a person uses."""
+    parts = []
+    for kind, _words in constants.MARKETING_KINDS:
+        count = int(place.counts_by_kind.get(kind, 0))
+        if not count:
+            continue
+        singular, plural = constants.MARKETING_KIND_LABELS[kind]
+        parts.append("%d %s" % (count, singular if count == 1 else plural))
+    return ", ".join(parts)
+
+
+def kind_of(name: str, heading: str) -> str:
+    """Which kind of marketing document a file name and a heading say this is.
+
+    Only the name and the heading are looked at, in that order of writing and
+    with no order of preference between them, and the kinds are tried in the
+    order they are written down, so the first kind whose word appears wins.
+    """
+    haystack = "%s %s" % (str(name or "").casefold(), str(heading or "").casefold())
+    for kind, words in constants.MARKETING_KINDS:
+        for word in words:
+            if word in haystack:
+                return kind
+    return constants.MARKETING_KIND_OTHER
+
+
+def first_heading(path: str) -> str:
+    """The first heading line of a file, from no further in than the cap.
+
+    Nothing else in the file is read. The line is cut to the cap as well, so a
+    file whose first line is a whole paragraph starting with a hash mark
+    cannot carry a paragraph of its own words into the words being matched.
+    """
+    try:
+        with open(path, encoding="utf-8", errors="replace") as stream:
+            for number, line in enumerate(stream):
+                if number >= constants.SURVEY_HEADING_LINES:
+                    return ""
+                stripped = line.lstrip("\ufeff").strip()
+                if stripped.startswith("#"):
+                    return stripped[: constants.SURVEY_HEADING_CHARS]
+    except OSError:
+        return ""
+    return ""
+
+
+def survey(folder: str, limits: Optional[Limits] = None, today=None) -> Survey:
+    """The folders inside the one that was named that look like marketing.
+
+    The walk is the listing's own walk, so everything the listing refuses is
+    refused here too: links, hidden names, names that say a file holds a key,
+    folders of somebody else's code, files holding other files, other bases,
+    and lists of people. Of what is left, a file of rows says nothing but its
+    own name, and a document says its name and its first heading. Nothing else
+    is opened, and nothing is read past the first few lines of any file.
+    """
+    listing = list_folder(folder, limits=limits, today=today)
+    if CODE_FOLDER_TOO_LARGE in listing.excluded_counts:
+        return Survey(
+            listing.root, [], listing.excluded_counts, [CODE_FOLDER_TOO_LARGE]
+        )
+
+    readable_counts: Dict[str, int] = {}
+    kinds: Dict[str, Dict[str, int]] = {}
+    samples: Dict[str, List[str]] = {}
+    for entry in listing.readable:
+        where = top_folder(entry.path, listing.root)
+        readable_counts[where] = readable_counts.get(where, 0) + 1
+        name = os.path.basename(entry.path)
+        heading = "" if entry.kind == "csv" else first_heading(entry.path)
+        kind = kind_of(name, heading)
+        if kind == constants.MARKETING_KIND_OTHER:
+            continue
+        counted = kinds.setdefault(where, {})
+        counted[kind] = counted.get(kind, 0) + 1
+        found = samples.setdefault(where, [])
+        if len(found) < constants.SURVEY_SAMPLE_LABELS:
+            found.append(name)
+
+    places: List[Place] = []
+    notes: List[str] = []
+    for where in sorted(kinds):
+        counted = kinds[where]
+        classified = sum(counted.values())
+        readable = readable_counts.get(where, 0)
+        thin = (
+            classified * constants.SURVEY_THIN_SHARE < readable
+            and classified < constants.SURVEY_THIN_COUNT
+        )
+        if thin:
+            notes.append(constants.SURVEY_THIN_NOTE % where)
+            continue
+        score = sum(
+            count * constants.MARKETING_KIND_WEIGHTS[kind]
+            for kind, count in counted.items()
+        )
+        places.append(Place(where, counted, sorted(samples.get(where, [])), score))
+    places.sort(key=lambda place: (-place.score, place.relative_folder))
+    return Survey(listing.root, places, listing.excluded_counts, notes)
+
+
 # --- Dates ------------------------------------------------------------------
 
 

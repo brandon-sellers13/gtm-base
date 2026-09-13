@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.2.6 (2026-09-12)
+
+- You are no longer asked to work out which of your folders holds your marketing material. The one opening question now asks where your company's material is roughly, a whole company folder is a fine answer, and GTM Base looks through the folder you named and proposes the places inside it that look like marketing material, naming each one with a count of what it found there and asking whether that is it. You say yes, name a folder to add, or name one to drop, and only then are you shown the list of files and asked whether they may be read. The old rule asked for the narrowest folder you could name, which put the finding on the person least likely to know where their own material sits.
+
+- To find those places GTM Base reads the name of every file and the first heading line of every document, and nothing else. The heading is looked for no further than forty lines into a file and kept no longer than two hundred characters, a file of rows says nothing but its own name, and everything the list already refuses is refused here too, including lists of people. You are told this in the same sentence that asks whether the files may be read, so what has already been looked at is said before the yes rather than after it.
+
+- A folder is proposed when the files inside it look like customer profiles, personas, positioning, brand voice, plans, strategy, campaigns, or metrics, by the words in their names and headings. A folder whose marketing-shaped files are both fewer than a quarter of what it holds and fewer than three is left out as thin, which is what keeps a folder of somebody's code out of the proposal when one file in it happens to be called a plan. A folder left out that way can still be added by name.
+
+- The rule that a large spread out folder is narrowed before the yes is still there, as the backstop behind the new step rather than as the thing you meet first.
+
 ## 0.2.5 (2026-09-12)
 
 - Lists of people are now left out of everything GTM Base offers to read. A file of rows is treated as a contact list, and never offered, when its heading row names a column only a list of people has, such as an email address, a phone number, a mobile number, or a social profile, or when most of its rows hold something shaped like an email address. Only the start of the file is looked at. Naming one of those files by hand afterwards does not bring it back either. The second real setup run named a working repository and the list that came back held twenty three files of prospect names, companies, and email addresses, all offered for a single yes. A prospect list is other people's personal information, not a document about your business, so it is left out on purpose and counted with its own reason.

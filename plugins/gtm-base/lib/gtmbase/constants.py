@@ -344,6 +344,134 @@ CONSENT_NARROW_SENTENCE = (
     "which are probably not marketing material. Which of these folders hold "
     "your customer profiles, positioning, messaging, or plans?"
 )
+# --- Finding the likely marketing material (0.2.6) --------------------------
+
+# The kinds of marketing document GTM Base knows the look of, in the order
+# they are tried, each with the words that say a file is one of them. A file is
+# put in the first kind one of whose words appears in its file name or in its
+# first heading. The words are deliberately ordinary, because the thing being
+# guessed at is what somebody called their own file, not what is inside it.
+MARKETING_KINDS = (
+    (
+        "customer-profile",
+        (
+            "icp",
+            "ideal customer",
+            "customer profile",
+            "ibp",
+            "buyer profile",
+            "segment",
+        ),
+    ),
+    ("persona", ("persona", "buyer", "champion")),
+    (
+        "positioning",
+        (
+            "positioning",
+            "value prop",
+            "messaging",
+            "spine",
+            "narrative",
+            "pitch",
+            "one-liner",
+            "tagline",
+        ),
+    ),
+    ("brand-voice", ("voice", "tone", "brand", "style guide")),
+    ("plan", ("plan", "okr", "goal", "roadmap", "quarter", "campaign calendar")),
+    (
+        "strategy",
+        (
+            "strategy",
+            "gtm",
+            "go-to-market",
+            "launch",
+            "playbook",
+            "competitor",
+            "competitive",
+        ),
+    ),
+    (
+        "campaign",
+        (
+            "campaign",
+            "email sequence",
+            "sequence",
+            "outbound",
+            "ad copy",
+            "landing page",
+            "newsletter",
+        ),
+    ),
+    ("metrics", ("definition", "metric", "kpi", "funnel", "attribution")),
+)
+# What a file of each kind counts for when a place is scored. The three
+# documents that say who a company sells to and how it talks about itself carry
+# the most, because a folder holding those is the folder somebody means when
+# they say marketing material.
+MARKETING_KIND_WEIGHTS = {
+    "customer-profile": 3,
+    "persona": 3,
+    "positioning": 3,
+    "brand-voice": 2,
+    "strategy": 2,
+    "plan": 2,
+    "campaign": 1,
+    "metrics": 1,
+}
+# What each kind is called in the sentence a person reads, in the singular and
+# in the plural, because the sentence names counts and a count of one reads
+# wrong with a plural on it.
+MARKETING_KIND_LABELS = {
+    "customer-profile": ("customer profile", "customer profiles"),
+    "persona": ("persona file", "persona files"),
+    "positioning": ("positioning file", "positioning files"),
+    "brand-voice": ("brand voice file", "brand voice files"),
+    "plan": ("plan", "plans"),
+    "strategy": ("strategy file", "strategy files"),
+    "campaign": ("campaign file", "campaign files"),
+    "metrics": ("metrics file", "metrics files"),
+}
+# The name for a file none of those kinds claims. It counts for nothing.
+MARKETING_KIND_OTHER = "other"
+# How far into a file the finding step looks for the first heading. Nothing
+# past this is read, so a document that says something about itself on line
+# fifty says it to nobody.
+SURVEY_HEADING_LINES = 40
+# How much of that heading line is kept.
+SURVEY_HEADING_CHARS = 200
+# How many file names are kept as examples of what a place holds.
+SURVEY_SAMPLE_LABELS = 5
+# A place is dropped as thin when its marketing-shaped files are fewer than one
+# in this many of the files it holds and fewer than the count below. Both have
+# to be true, so a small folder of three profiles is kept and a folder of a
+# hundred files with two plan-shaped names in it is not.
+SURVEY_THIN_SHARE = 4
+SURVEY_THIN_COUNT = 3
+# The note a dropped place leaves behind, with the folder's name after it.
+SURVEY_THIN_NOTE = "thin:%s"
+# What the files lying loose at the top of the named folder are called in that
+# sentence. They are a place like any other, and a full stop is not a name
+# anybody would read out.
+SURVEY_LOOSE_LABEL = "the files loose at the top"
+# What a person is told when the finding step has places to propose.
+SURVEY_SENTENCE = (
+    "It looks like your marketing material sits in these places: %(places)s. "
+    "Is this it? Say yes, name a folder to add, or name one to drop."
+)
+# The same, when everything found sits in the one folder that was named.
+SURVEY_ONE_PLACE_SENTENCE = (
+    "It looks like your marketing material sits in %(place)s. Is this it? Say "
+    "yes, name a folder to add, or name one to drop."
+)
+# What a person is told when nothing in the folder looks like marketing
+# material. It says what was looked at, so the answer is theirs to give.
+SURVEY_NOTHING_SENTENCE = (
+    "I could not find anything that looks like marketing material in "
+    "%(folder)s by its file names and headings. You can name a folder inside "
+    "it, or paste the material in."
+)
+
 # Folders that hold somebody else's code rather than the person's own writing.
 SOURCE_DEPENDENCY_FOLDERS = (
     "node_modules",

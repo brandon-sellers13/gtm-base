@@ -5,6 +5,31 @@ marketing context lives, you show them a list of what you would read, they say
 yes, and only then does anything get opened. Nothing here is optional, and
 nothing here is written to disk.
 
+## Find the places first, and propose them
+
+The person names a folder as broad as they like, because the person least able
+to say which folder holds their marketing material is the person who has never
+had to think about it. `survey` walks that folder with the listing's own walk
+and proposes the places inside it that look like marketing material, and the
+person says yes, adds a folder, or drops one.
+
+What the finding step reads is every file's name and the first heading line of
+every document, and nothing else. The first heading line is the first line
+starting with a hash mark, looked for no further than forty lines in and kept
+no longer than two hundred characters. A file of rows says nothing but its own
+name, because a heading row is a row of data. No file is opened past that, so a
+document that says something about itself halfway down says it to nobody. Tell
+the person that before the yes, in the sentence the skill gives you, because it
+is the honest answer to what has already been looked at.
+
+A place is a folder at the top of the one they named, or the files lying loose
+at the top, holding at least one file whose name or heading says what kind of
+marketing document it is. A place is left out as thin, with a note, when those
+files are both fewer than a quarter of what it holds and fewer than three,
+which is what keeps a folder of somebody's code out of the proposal when one
+file in it happens to be called a plan. A folder left out that way can still be
+added by name.
+
 ## Show the list first, and freeze it on the yes
 
 Run `list_folder` on the folder the person named and show them what came back.

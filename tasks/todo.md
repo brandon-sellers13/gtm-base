@@ -331,3 +331,46 @@ One thing left as it is. Narrowing for a single draft (`--only-folder` on
 preview and assemble) now accepts several folders as well, which fell out of the
 same change, but the skill still describes one folder there, because a draft
 narrowed to several folders is not a thing anybody has asked for yet.
+
+## 0.2.6 (2026-09-12): the places found and proposed, instead of asked for
+
+- [x] `sources.survey` finds the places inside a folder that look like marketing
+      material, from file names and first headings only, and says one sentence
+      about them.
+- [x] `constants.MARKETING_KINDS`, the weights, the plural names, and the three
+      sentences a person hears.
+- [x] `join_flow.survey_sources` writes the proposal down in the run's folder,
+      and `list-sources --from-survey` lists the places with the person's adds
+      and drops applied.
+- [x] The frozen yes records the proposal and the adjustments alongside the
+      list.
+- [x] The shim gains `survey`, `--from-survey`, `--add`, and `--drop`.
+- [x] Step 3 asks where the material is roughly. Step 5 runs the finding step
+      first and the consent sentence says what was looked at.
+- [x] The reading rules, the join guide, and figure 7 of the atlas say the same.
+
+### Review
+
+The finding step sits in front of the list rather than inside it. It runs the
+listing's own walk and then looks at nothing but names and first headings, so
+everything the list refuses is refused here too and a document that says
+something about itself on line fifty says it to nobody. The narrowing rule from
+0.2.5 is still enforced where the yes is taken, as the backstop it now is.
+
+Three decisions beyond the brief.
+
+The files lying loose at the top of the named folder are a place like any other,
+and the sentence calls them "the files loose at the top" rather than reading a
+full stop out loud. The `place=` line still names that place with a full stop,
+which is what `--drop` takes.
+
+A folder named to drop that nobody proposed is refused with `no-such-folder`,
+the same as a folder added that is not there, because both are somebody naming a
+folder that is not the one they think it is. Dropping every place comes back as
+`no-folders-chosen` rather than quietly listing the whole folder again.
+
+The engineering folder in the fixtures is kept out by the thin rule rather than
+by the weighting: one plan-shaped name among five files is fewer than a quarter
+of what the folder holds and fewer than three, so the folder is dropped with the
+note `thin:engineering`. The weighting alone would have ranked it last and still
+proposed it.

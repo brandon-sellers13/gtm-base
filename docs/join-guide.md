@@ -1,6 +1,6 @@
 # Joining GTM Base
 
-Status: as of version 0.2.5 the offer, setting a base up, and linking a base to
+Status: as of version 0.2.6 the offer, setting a base up, and linking a base to
 the folder your material lives in are all live.
 Backing a base up somewhere off your computer, inviting a teammate, and joining
 a base from a link arrive with the next release, so those sections below
@@ -41,14 +41,15 @@ linked to it afterwards, so opening it later brings the base with it. Any other
 folder works too, and you can name your material folder in the conversation
 instead.
 
-Name the narrowest folder you can. The folder you want is the one holding your
-customer profiles, your positioning, your messaging, and your plans, rather than
-a whole company folder or a whole project folder that happens to have some
-marketing material somewhere inside it. If you do name a large folder, you are
-not asked to say yes to all of it. GTM Base tells you how many files it found
-and which folders they sit in, asks you which of those folders hold the
-marketing material, and then shows you the list for just those folders before
-anything is read.
+Name the folder your material is in, roughly. A whole company folder is fine,
+and so is a folder you keep for marketing, because you are not the one who has
+to work out which folder holds what. GTM Base looks through the folder you named
+and comes back with the places inside it that look like your marketing material,
+naming each one with a count of what it found there, and asks you whether that
+is it. You say yes, or you name a folder to add, or you name one to drop. Only
+then are you shown the list of files and asked whether they may be read. Before
+any of that, to find those places, GTM Base looks at the name of each file and
+the first heading inside each document, and at nothing else.
 
 Answer in plain words in your next message. Say yes to set a base up, say that
 you have an invitation link if a teammate already made a base and sent you a
@@ -86,12 +87,16 @@ worth reading, and the folder you name there becomes the folder your base is
 linked to, so you open your own folder from then on and the base comes with it.
 When you name a folder of material, the assistant
 reads only the documents you approve and only from the folder you named. Name
-the narrowest folder you can, the one that holds your customer profiles,
-positioning, messaging, and plans. If the folder you name turns out to be large
-and spread across several folders, you are asked which of those folders hold the
-marketing material before you are asked to say yes to anything, because a list
-of a hundred and fifty files offered for one yes is a list nobody can really
-read. Lists of people are left out on purpose. A file of rows holding email
+that folder roughly, because a whole company folder is fine. GTM Base looks
+through the folder you named before you are shown any list of files, and
+proposes the places inside it that look like your marketing material, with a
+count of what it found in each one, and asks you whether that is it. You say
+yes, add a folder, or drop one, and the list you are then asked about covers
+only those places. That finding step looks at the name of each file and the
+first heading inside each document, and at nothing else. It works this way
+because a list of a hundred and fifty files offered for one yes is a list
+nobody can really read, and working out which folder holds what is not a job to
+hand back to you. Lists of people are left out on purpose. A file of rows holding email
 addresses or phone numbers, which is what a prospect list looks like, is never
 offered for reading and cannot be named back in, because that is other people's
 personal information rather than a document about your business. Before

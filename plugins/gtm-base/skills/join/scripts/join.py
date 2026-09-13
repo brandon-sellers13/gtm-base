@@ -119,6 +119,14 @@ NO_SUCH_FOLDER = (
     "That is not one of the folders in the list, so nothing was shown. Name "
     "one of the folders the counts above name instead."
 )
+NO_SURVEY_YET = (
+    "Nothing has been proposed for this run yet, so there is nothing to list. "
+    "Run survey first, say what it found, and ask whether that is it."
+)
+NO_FOLDERS_CHOSEN = (
+    "Every place was dropped and none was added, so there is nothing left to "
+    "show. Ask which folder holds the marketing material and name that one."
+)
 NOT_ON_THE_LIST = (
     "That is not on the list you agreed to, so nothing was read. Name one of "
     "the files or folders from that list instead."
@@ -283,6 +291,25 @@ def build_parser():
         "--only", help="only these files from the list, separated by commas"
     )
     parser.add_argument(
+        "--from-survey",
+        action="store_true",
+        help="list the places the finding step proposed, with their changes",
+    )
+    parser.add_argument(
+        "--add",
+        action="append",
+        default=[],
+        dest="added",
+        help="one more folder to list alongside the places proposed",
+    )
+    parser.add_argument(
+        "--drop",
+        action="append",
+        default=[],
+        dest="dropped",
+        help="one of the places proposed to leave out, once per folder",
+    )
+    parser.add_argument(
         "--only-folder",
         action="append",
         default=[],
@@ -369,6 +396,35 @@ def run_propose_location(options, out):
     return EXIT_DONE
 
 
+def run_survey(options, out):
+    folder = need(options, "folder", out)
+    run_id = need(options, "run", out)
+    if not folder or not run_id:
+        return EXIT_ERROR
+    found = join_flow.survey_sources(run_id, folder)
+    out.write(found.sentence() + "\n")
+    for place in found.places:
+        counts = " ".join(
+            "%s=%d" % (safe_value(kind), place.counts_by_kind[kind])
+            for kind, _words in constants.MARKETING_KINDS
+            if place.counts_by_kind.get(kind)
+        )
+        out.write(
+            "place=%s score=%d%s\n"
+            % (safe_value(place.relative_folder), place.score, " " + counts if counts else "")
+        )
+    for note in found.notes:
+        line(out, "note", note)
+    return EXIT_DONE
+
+
+LIST_REFUSALS = {
+    join_flow.CODE_NO_SUCH_FOLDER: NO_SUCH_FOLDER,
+    join_flow.CODE_NO_SURVEY: NO_SURVEY_YET,
+    join_flow.CODE_NO_FOLDERS_CHOSEN: NO_FOLDERS_CHOSEN,
+}
+
+
 def run_list_sources(options, out):
     folder = need(options, "folder", out)
     run_id = need(options, "run", out)
@@ -376,13 +432,19 @@ def run_list_sources(options, out):
         return EXIT_ERROR
     try:
         listing = join_flow.list_sources(
-            folder, run_id, only_folders=options.only_folder
+            folder,
+            run_id,
+            only_folders=options.only_folder,
+            from_survey=options.from_survey,
+            added=options.added,
+            dropped=options.dropped,
         )
     except ConsentError as refusal:
-        if refusal.code != join_flow.CODE_NO_SUCH_FOLDER:
+        sentence = LIST_REFUSALS.get(refusal.code)
+        if sentence is None:
             raise
         line(out, "codes", refusal.code)
-        out.write(NO_SUCH_FOLDER + "\n")
+        out.write(sentence + "\n")
         return EXIT_REFUSED
     if sources.CODE_NARROW_FIRST in listing.codes:
         out.write(
@@ -816,6 +878,7 @@ def run_refusal(name):
 MODES = {
     "new-run": run_new_run,
     "propose-location": run_propose_location,
+    "survey": run_survey,
     "list-sources": run_list_sources,
     "freeze-sources": run_freeze_sources,
     "add-paste": run_add_paste,

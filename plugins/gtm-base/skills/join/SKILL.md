@@ -75,7 +75,7 @@ approve a document already knows who may end up reading it.
 
 Ask exactly one question, and ask it in these words:
 
-Where does your marketing material live today? Name the narrowest folder you can, the one that holds your customer profiles, positioning, messaging, or plans, rather than a whole company or project folder. It can also be something you would rather paste in, or a tool you already have connected.
+Where is your company's material, roughly? A company folder is fine, and so is a folder you keep for marketing. It can also be something you would rather paste in, or a tool you already have connected.
 
 Wait for the answer. Do not offer a list of examples beyond those three, and do
 not ask a second question before they have answered the first one.
@@ -124,12 +124,42 @@ linked at the moment it comes into being.
 
 ### Step 5. What will be read, and the yes that fixes the list
 
-Say that GTM Base will show them everything it would read before it opens
-anything, and run:
+Start by finding the likely material rather than asking them to find it. Say
+that GTM Base will look through the folder they named for the places their
+marketing material sits in, and that it will look at nothing but file names and
+first headings while it does. Then run:
 
 ```
-python3 scripts/join.py list-sources --folder <path> --run <run identifier>
+python3 scripts/join.py survey --folder <path> --run <run identifier>
 ```
+
+It prints one sentence and then one `place=<folder> score=<number>` line for
+each place it found, with a count of each kind of document after it, and a
+`note=` line for anything it left out. Say that sentence word for word and say
+nothing else about the places. It is one of these three:
+
+It looks like your marketing material sits in these places: <folder> (<number> customer profiles, <number> persona files), <folder> (...). Is this it? Say yes, name a folder to add, or name one to drop.
+
+It looks like your marketing material sits in <folder> (<number> customer profiles, <number> persona files). Is this it? Say yes, name a folder to add, or name one to drop.
+
+I could not find anything that looks like marketing material in <folder> by its file names and headings. You can name a folder inside it, or paste the material in.
+
+Wait for their answer. On a plain yes, and on any answer that adds or drops
+folders, run the list for the places they settled on:
+
+```
+python3 scripts/join.py list-sources --folder <path> --run <run identifier> --from-survey
+```
+
+Add one `--add <folder>` for each folder they named to add and one
+`--drop <folder>` for each one they named to drop. The files lying loose at the
+top of the folder they named are a place of their own, and its name on the
+`place=` line is a single full stop, so that is what to pass to `--drop` when
+they say those files do not belong. A name that is not a folder of the one they
+named comes back as `codes=no-such-folder` and nothing is shown, so ask them
+for a folder that is there. Dropping every place comes back as
+`codes=no-folders-chosen`, and the answer to that is to ask which folder holds
+the material and list that one.
 
 It prints the files that would be read, with a date on each one that has a date,
 and then what was left out, counted by the reason it was left out. Show them
@@ -141,10 +171,11 @@ Say so. If the command says a second yes is needed, or that the folder looks
 like it holds work for more than one company, follow
 `references/reading-rules.md` before going any further.
 
-If the command prints `note=narrow-first`, the folder they named is large and
-its files are spread across several folders, which is what a whole working
-repository looks like rather than a folder of marketing material. Do not ask
-for a yes over that list. The command has already printed the sentence that
+If the command prints `note=narrow-first`, the places they settled on still hold
+a large number of files spread across several folders, which is what a whole
+working repository looks like rather than a folder of marketing material. This
+is the backstop behind the step above and it rarely happens once the places
+have been settled. Do not ask for a yes over that list. The command has already printed the sentence that
 names the two numbers and the `folder=<name> count=<number>` lines that go with
 it. Say that sentence and read the folders and their counts out. It is this
 sentence:
@@ -176,7 +207,7 @@ Before asking for their yes, say what the yes is for, in these words, because
 the list can read as a list of files about to be copied somewhere, and it is
 not:
 
-These are the documents I would read to draft your ideal customer profile, one decision, and your positioning. None of them is copied into the base or changed in any way. The base only ever gets the three drafts you approve, one at a time. Once you say yes, this list is fixed, and from that point nothing leaves this computer for the rest of this session. A file added to the folder afterwards will not be read until you are shown a new list. May I read these?
+To find these places I looked only at file names and the first heading of each document, and nothing else has been opened. These are the documents I would read to draft your ideal customer profile, one decision, and your positioning. None of them is copied into the base or changed in any way. The base only ever gets the three drafts you approve, one at a time. Once you say yes, this list is fixed, and from that point nothing leaves this computer for the rest of this session. A file added to the folder afterwards will not be read until you are shown a new list. May I read these?
 
 Ask it that way, as a question about reading, and never as a question about
 taking or importing the files.

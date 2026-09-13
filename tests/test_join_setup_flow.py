@@ -1120,6 +1120,224 @@ class TestALargeFolderIsNarrowedBeforeTheYes(unittest.TestCase):
             self.assertIn("frozen=18", frozen.stdout.decode("utf-8"))
 
 
+class TestThePlacesAreProposedBeforeTheList(unittest.TestCase):
+    """Nobody is asked which folder holds what. The places are proposed back."""
+
+    def company(self):
+        import shutil
+
+        content = os.path.join(os.environ["HOME"], "company")
+        shutil.copytree(
+            os.path.join(support.FIXTURES_DIR, "sources"), content
+        )
+        return content
+
+    def test_the_places_found_are_written_down_in_the_run_folder(self):
+        with support.Sandbox():
+            content = self.company()
+            run = join_flow.new_run(TODAY)
+
+            found = join_flow.survey_sources(run, content, today=TODAY)
+
+            self.assertEqual(
+                ["marketing", ".", "other-co"],
+                [place.relative_folder for place in found.places],
+            )
+            self.assertEqual(
+                ["marketing", ".", "other-co"], join_flow.load_survey(run)["places"]
+            )
+            self.assertIn("thin:engineering", join_flow.load_survey(run)["notes"])
+
+    def test_the_list_covers_only_the_places_that_were_proposed(self):
+        with support.Sandbox():
+            content = self.company()
+            run = join_flow.new_run(TODAY)
+            join_flow.survey_sources(run, content, today=TODAY)
+
+            listing = join_flow.list_sources(
+                content, run, today=TODAY, from_survey=True
+            )
+
+            self.assertEqual(
+                ["marketing", "other-co", "."], sorted(
+                    listing.by_folder, key=lambda name: (name == ".", name)
+                )
+            )
+            self.assertNotIn("engineering", listing.by_folder)
+
+    def test_a_folder_added_by_name_is_listed_alongside_the_places(self):
+        with support.Sandbox():
+            content = self.company()
+            run = join_flow.new_run(TODAY)
+            join_flow.survey_sources(run, content, today=TODAY)
+
+            listing = join_flow.list_sources(
+                content, run, today=TODAY, from_survey=True, added=["engineering"]
+            )
+
+            self.assertEqual(5, listing.by_folder["engineering"])
+            self.assertEqual(["engineering"], join_flow.load_listing(run)["added"])
+
+    def test_a_place_dropped_is_left_out_of_the_list(self):
+        with support.Sandbox():
+            content = self.company()
+            run = join_flow.new_run(TODAY)
+            join_flow.survey_sources(run, content, today=TODAY)
+
+            listing = join_flow.list_sources(
+                content, run, today=TODAY, from_survey=True, dropped=["marketing"]
+            )
+
+            self.assertNotIn("marketing", listing.by_folder)
+            self.assertEqual(["marketing"], join_flow.load_listing(run)["dropped"])
+
+    def test_a_folder_nobody_proposed_and_nobody_has_is_refused(self):
+        with support.Sandbox():
+            content = self.company()
+            run = join_flow.new_run(TODAY)
+            join_flow.survey_sources(run, content, today=TODAY)
+
+            with self.assertRaises(ConsentError) as caught:
+                join_flow.list_sources(
+                    content, run, today=TODAY, from_survey=True, added=["nowhere"]
+                )
+
+            self.assertEqual(join_flow.CODE_NO_SUCH_FOLDER, caught.exception.code)
+
+    def test_a_list_asked_for_before_anything_was_proposed_is_refused(self):
+        with support.Sandbox():
+            content = self.company()
+            run = join_flow.new_run(TODAY)
+
+            with self.assertRaises(ConsentError) as caught:
+                join_flow.list_sources(
+                    content, run, today=TODAY, from_survey=True
+                )
+
+            self.assertEqual(join_flow.CODE_NO_SURVEY, caught.exception.code)
+
+    def test_the_yes_records_the_places_proposed_and_what_was_changed(self):
+        with support.Sandbox():
+            content = self.company()
+            run = join_flow.new_run(TODAY)
+            join_flow.survey_sources(run, content, today=TODAY)
+            join_flow.list_sources(
+                content,
+                run,
+                today=TODAY,
+                from_survey=True,
+                added=["engineering"],
+                dropped=["other-co"],
+            )
+
+            join_flow.freeze_sources(content, SESSION, run, today=TODAY)
+
+            written = support.read(
+                os.path.join(join_flow.scratch_dir(run), join_flow.CONSENT_FILE)
+            )
+            self.assertIn('"from_survey": true', written)
+            self.assertIn("engineering", written)
+            self.assertIn("other-co", written)
+
+    def test_the_script_says_the_sentence_and_names_each_place(self):
+        with support.Sandbox():
+            import sys
+
+            content = self.company()
+            run = join_flow.new_run(TODAY)
+
+            finished = subprocess.run(
+                [sys.executable, SHIM, "survey", "--folder", content, "--run", run],
+                env=dict(os.environ),
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+            )
+            printed = finished.stdout.decode("utf-8")
+
+            self.assertEqual(0, finished.returncode, finished.stderr)
+            self.assertIn("Is this it? Say yes, name a folder to add", printed)
+            self.assertIn(
+                "place=marketing score=12 customer-profile=1 persona=1 "
+                "positioning=2",
+                printed,
+            )
+            self.assertIn("note=thin:engineering", printed)
+
+    def test_the_script_lists_the_places_with_the_changes_and_takes_the_yes(self):
+        with support.Sandbox():
+            import sys
+
+            content = self.company()
+            run = join_flow.new_run(TODAY)
+            join_flow.survey_sources(run, content, today=TODAY)
+
+            listed = subprocess.run(
+                [sys.executable, SHIM, "list-sources", "--folder", content,
+                 "--run", run, "--from-survey", "--drop", "other-co"],
+                env=dict(os.environ),
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+            )
+            printed = listed.stdout.decode("utf-8")
+            frozen = subprocess.run(
+                [sys.executable, SHIM, "freeze-sources", "--folder", content,
+                 "--session", SESSION, "--run", run],
+                env=dict(os.environ),
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+            )
+
+            self.assertEqual(0, listed.returncode, listed.stderr)
+            self.assertIn("marketing/positioning.md", printed)
+            self.assertNotIn("other-co/positioning.md", printed)
+            self.assertEqual(0, frozen.returncode, frozen.stderr)
+            self.assertIn("frozen=9", frozen.stdout.decode("utf-8"))
+
+    def test_the_script_refuses_a_folder_nobody_proposed(self):
+        with support.Sandbox():
+            import sys
+
+            content = self.company()
+            run = join_flow.new_run(TODAY)
+            join_flow.survey_sources(run, content, today=TODAY)
+
+            finished = subprocess.run(
+                [sys.executable, SHIM, "list-sources", "--folder", content,
+                 "--run", run, "--from-survey", "--add", "nowhere"],
+                env=dict(os.environ),
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+            )
+
+            self.assertEqual(1, finished.returncode)
+            self.assertIn("codes=no-such-folder", finished.stdout.decode("utf-8"))
+
+    def test_nothing_past_the_first_lines_of_a_document_is_looked_at(self):
+        """A document that writes the fence on line sixty says it to nobody."""
+        with support.Sandbox():
+            content = os.path.join(os.environ["HOME"], "company")
+            support.write(
+                os.path.join(content, "marketing", "icp.md"),
+                "# Ideal customer profile\n\nWho we sell to.\n",
+            )
+            support.write(
+                os.path.join(content, "marketing", "long-note.md"),
+                "\n".join(
+                    ["a line of ordinary writing"] * 60
+                    + ["# Positioning", constants.SOURCE_FENCE_FOOTER]
+                )
+                + "\n",
+            )
+            run = join_flow.new_run(TODAY)
+
+            found = join_flow.survey_sources(run, content, today=TODAY)
+
+            self.assertEqual(
+                {"customer-profile": 1}, found.places[0].counts_by_kind
+            )
+            self.assertNotIn(constants.SOURCE_FENCE_FOOTER, found.sentence())
+
+
 class TestAContactListIsNeverPartOfTheYes(unittest.TestCase):
     """A folder of prospects sitting in a marketing folder is left out."""
 
@@ -1330,20 +1548,61 @@ class TestTheSkillIsPlainAndSaysWhatWillHappen(unittest.TestCase):
         self.assertIn("shown what that draft will read", setting_up)
         self.assertIn("narrow it", setting_up)
 
-    def test_the_opening_question_asks_for_the_narrowest_folder(self):
+    def test_the_opening_question_asks_for_the_broad_folder(self):
+        """0.2.6: the person names the folder, the plugin finds the places."""
         text = support.read(os.path.join(SKILL_DIR, "SKILL.md"))
         step_three = text.split("### Step 3.")[1].split("### Step 4.")[0]
         question = (
-            "Where does your marketing material live today? Name the narrowest "
-            "folder you can, the one that holds your customer profiles, "
-            "positioning, messaging, or plans, rather than a whole company or "
-            "project folder. It can also be something you would rather paste "
-            "in, or a tool you already have connected."
+            "Where is your company's material, roughly? A company folder is "
+            "fine, and so is a folder you keep for marketing. It can also be "
+            "something you would rather paste in, or a tool you already have "
+            "connected."
         )
 
         self.assertIn(question, step_three)
         self.assertEqual([], plain_language.find_banned(question))
         self.assertEqual([], plain_language.find_dashes(question))
+
+    def test_the_finding_step_and_its_sentence_are_in_the_skill(self):
+        text = support.read(os.path.join(SKILL_DIR, "SKILL.md"))
+        step_five = text.split("### Step 5.")[1].split("### Step 6.")[0]
+
+        self.assertIn("scripts/join.py survey", step_five)
+        self.assertIn("--from-survey", step_five)
+        self.assertIn("--add", step_five)
+        self.assertIn("--drop", step_five)
+        self.assertIn(
+            "Is this it? Say yes, name a folder to add, or name one to drop.",
+            step_five,
+        )
+        self.assertIn("codes=no-such-folder", step_five)
+        self.assertLess(
+            step_five.index("scripts/join.py survey"),
+            step_five.index("scripts/join.py list-sources"),
+        )
+
+    def test_the_consent_sentence_says_what_the_finding_step_looked_at(self):
+        text = support.read(os.path.join(SKILL_DIR, "SKILL.md"))
+        step_five = text.split("### Step 5.")[1].split("### Step 6.")[0]
+        clause = (
+            "To find these places I looked only at file names and the first "
+            "heading of each document, and nothing else has been opened."
+        )
+
+        self.assertIn(clause, step_five)
+        self.assertLess(
+            step_five.index(clause),
+            step_five.index("May I read these?"),
+        )
+        self.assertEqual([], plain_language.find_banned(clause))
+
+    def test_the_wording_about_the_narrowest_folder_is_gone(self):
+        for path in (
+            os.path.join(SKILL_DIR, "SKILL.md"),
+            os.path.join(support.REPO_ROOT, "docs", "join-guide.md"),
+            os.path.join(support.LIB_DIR, "gtmbase", "constants.py"),
+        ):
+            self.assertNotIn("narrowest", support.read(path), path)
 
     def test_the_folder_counts_sentence_is_plain_and_in_the_skill(self):
         text = support.read(os.path.join(SKILL_DIR, "SKILL.md"))
@@ -1367,11 +1626,14 @@ class TestTheSkillIsPlainAndSaysWhatWillHappen(unittest.TestCase):
 
         self.assertIn("contact-list", rules)
         self.assertIn("narrow-first", rules)
+        self.assertIn("first heading", rules)
+        self.assertIn("forty lines", rules)
+        self.assertIn("thin", rules)
         plain_language.assert_plain(
             self, os.path.join(SKILL_DIR, "references", "reading-rules.md")
         )
 
-    def test_the_guide_says_to_name_the_narrowest_folder(self):
+    def test_the_guide_says_to_name_the_folder_roughly_and_be_proposed_places(self):
         guide = support.read(
             os.path.join(support.REPO_ROOT, "docs", "join-guide.md")
         )
@@ -1380,10 +1642,11 @@ class TestTheSkillIsPlainAndSaysWhatWillHappen(unittest.TestCase):
             "\n## "
         )[0]
 
-        self.assertIn("narrowest folder", setting_up)
-        self.assertIn("narrowest folder", offer)
         self.assertIn("left out on purpose", setting_up)
         for text in (setting_up, offer):
+            self.assertIn("roughly", text)
+            self.assertIn("asks you whether", text)
+            self.assertIn("first heading", text)
             self.assertIn("before", text)
 
     def test_the_atlas_says_what_the_list_now_leaves_out(self):
@@ -1395,7 +1658,21 @@ class TestTheSkillIsPlainAndSaysWhatWillHappen(unittest.TestCase):
 
         self.assertIn("contact lists left out;", atlas)
         self.assertIn("a sprawling folder is narrowed first", atlas)
-        self.assertIn("plugin 0.2.5", atlas)
+        self.assertIn("plugin 0.2.6", atlas)
+
+    def test_the_atlas_draws_the_step_that_proposes_the_places(self):
+        atlas = support.read(
+            os.path.join(
+                support.REPO_ROOT, "docs", "diagrams", "logic-atlas.html"
+            )
+        )
+        figure = atlas.split('id="setup"')[1].split("</figure>")[0]
+
+        self.assertIn("where is your material,", figure)
+        self.assertIn("Is this it?", figure)
+        self.assertIn("names and first headings only,", figure)
+        self.assertIn("proposed places", figure)
+        self.assertNotIn("where does your context live?", figure)
 
     def test_the_skill_never_says_how_long_any_of_it_takes(self):
         text = support.read(os.path.join(SKILL_DIR, "SKILL.md")).lower()

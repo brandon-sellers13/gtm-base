@@ -58,6 +58,7 @@ from .gitcmd import GitRunner, runner_or_default
 # What the run folder holds.
 CONSENT_FILE = "consent.json"
 LISTING_FILE = "listing.json"
+SURVEY_FILE = "survey.json"
 PASTES_DIR = "pastes"
 
 # Why a yes could not be taken.
@@ -68,6 +69,11 @@ CODE_LISTING_CHANGED = "listing-changed"
 CODE_NARROW_FIRST = "narrow-first"
 # A folder was named that the list does not hold.
 CODE_NO_SUCH_FOLDER = "no-such-folder"
+# A list was asked for from a finding step that has not been run for this run.
+CODE_NO_SURVEY = "no-survey"
+# Every place the finding step proposed was dropped and none was added, so
+# there is nothing left to show.
+CODE_NO_FOLDERS_CHOSEN = "no-folders-chosen"
 # The note about what got in the way could not be saved into the base.
 NOTE_NOT_SAVED = "note-not-saved"
 
@@ -483,11 +489,96 @@ def linked_folders(runner: Optional[GitRunner] = None):
 # --- What would be read ------------------------------------------------------
 
 
+def survey_sources(run_id: str, folder: str, today=None):
+    """Find the places inside a folder that look like marketing material.
+
+    This runs before any list is shown. It looks at nothing but file names and
+    first headings, and what it finds is written down in the run's own folder,
+    so the places the person agrees to are the places they were proposed rather
+    than whatever a second walk would find a minute later.
+    """
+    found = sources_module.survey(folder, today=today)
+    if run_id:
+        atomic_write_json(
+            os.path.join(scratch_dir(run_id), SURVEY_FILE),
+            {
+                "root": found.root,
+                "places": [
+                    {
+                        "folder": place.relative_folder,
+                        "counts": dict(place.counts_by_kind),
+                        "samples": list(place.sample_labels),
+                        "score": place.score,
+                    }
+                    for place in found.places
+                ],
+                "notes": list(found.notes),
+                "skipped": dict(found.skipped_counts),
+            },
+            inside=paths.seat_home(),
+        )
+    return found
+
+
+def load_survey(run_id: str):
+    """The places this run proposed, exactly as they were proposed."""
+    payload = read_json(os.path.join(scratch_dir(run_id), SURVEY_FILE))
+    if not isinstance(payload, dict):
+        return None
+    places = payload.get("places")
+    if not isinstance(places, list):
+        return None
+    return {
+        "root": str(payload.get("root") or ""),
+        "places": [
+            str(item.get("folder") or "")
+            for item in places
+            if isinstance(item, dict) and item.get("folder")
+        ],
+        "notes": [str(item) for item in payload.get("notes") or []],
+    }
+
+
+def chosen_places(run_id: str, added=None, dropped=None):
+    """The places to list: what was proposed, plus adds, less drops.
+
+    A name nobody proposed and nobody added is refused rather than quietly
+    listed, and so is a name dropped that was never on offer, because both of
+    those are somebody naming a folder that is not the one they think it is.
+    """
+    found = load_survey(run_id)
+    if found is None:
+        raise ConsentError(
+            "no places have been proposed for this run yet", code=CODE_NO_SURVEY
+        )
+    chosen = list(found["places"])
+    for name in [str(item).strip() for item in (dropped or []) if str(item).strip()]:
+        wanted = name.strip("/").replace(os.sep, "/").split("/")[-1] or name
+        if wanted not in chosen:
+            raise ConsentError(
+                "that folder is not one of the places that were proposed",
+                code=CODE_NO_SUCH_FOLDER,
+            )
+        chosen.remove(wanted)
+    for name in [str(item).strip() for item in (added or []) if str(item).strip()]:
+        wanted = name.strip("/").replace(os.sep, "/").split("/")[-1] or name
+        if wanted not in chosen:
+            chosen.append(wanted)
+    if not chosen:
+        raise ConsentError(
+            "no places are left to show", code=CODE_NO_FOLDERS_CHOSEN
+        )
+    return chosen
+
+
 def list_sources(
     folder: str,
     run_id: Optional[str] = None,
     today=None,
     only_folders: Optional[Sequence[str]] = None,
+    from_survey: bool = False,
+    added: Optional[Sequence[str]] = None,
+    dropped: Optional[Sequence[str]] = None,
 ):
     """Everything in a folder that could be read, and everything left out.
 
@@ -498,6 +589,10 @@ def list_sources(
     file that appeared in the meantime cannot ride in on a yes given about a
     list it was never on.
 
+    When the places come from the finding step, the folders it proposed, with
+    the person's own adds and drops applied, are the folders listed, and both
+    the proposal and the adjustments are written down with the list.
+
     When folders are named, the list is cut down to those folders before it is
     shown and before it is written down. The value standing for the whole of
     it still covers the whole folder, because that value is what says whether
@@ -505,6 +600,17 @@ def list_sources(
     """
     whole = sources_module.list_folder(folder, today=today)
     chosen = [str(name).strip() for name in (only_folders or []) if str(name).strip()]
+    adjustments = {"added": [], "dropped": []}
+    if from_survey:
+        adjustments = {
+            "added": sorted(
+                set(str(name).strip() for name in (added or []) if str(name).strip())
+            ),
+            "dropped": sorted(
+                set(str(name).strip() for name in (dropped or []) if str(name).strip())
+            ),
+        }
+        chosen = chosen_places(run_id, added=added, dropped=dropped)
     listing = whole
     if chosen:
         missing = [
@@ -526,6 +632,9 @@ def list_sources(
                 "digest": sources_module.listing_digest(whole),
                 "note": sources_module.CODE_NARROW_FIRST in whole.codes,
                 "folders": sorted(set(chosen)),
+                "from_survey": bool(from_survey),
+                "added": list(adjustments["added"]),
+                "dropped": list(adjustments["dropped"]),
                 "paths": sorted(
                     os.path.realpath(entry.path) for entry in listing.readable
                 ),
@@ -545,11 +654,19 @@ def load_listing(run_id: str):
     if not isinstance(wanted, list) or not isinstance(digest, str) or not digest:
         return None
     folders = payload.get("folders")
+
+    def names(key):
+        found = payload.get(key)
+        return [str(item) for item in found] if isinstance(found, list) else []
+
     return {
         "root": str(payload.get("root") or ""),
         "digest": digest,
         "note": bool(payload.get("note")),
         "folders": [str(item) for item in folders] if isinstance(folders, list) else [],
+        "from_survey": bool(payload.get("from_survey")),
+        "added": names("added"),
+        "dropped": names("dropped"),
         "paths": [str(item) for item in wanted],
     }
 
@@ -589,6 +706,9 @@ def freeze_sources(folder: str, session_id: str, run_id: str, today=None):
         {
             "root": shown["root"],
             "folders": list(shown["folders"]),
+            "from_survey": bool(shown["from_survey"]),
+            "added": list(shown["added"]),
+            "dropped": list(shown["dropped"]),
             "session_id": consent.session_id,
             "frozen_at": consent.frozen_at,
             "paths": list(consent.paths),
