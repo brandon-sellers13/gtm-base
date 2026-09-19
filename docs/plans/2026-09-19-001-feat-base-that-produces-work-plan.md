@@ -7,7 +7,10 @@ origin:
   - docs/plans/2026-09-05-001-feat-join-and-onboarding-plan.md (Amendment r2.4, sections A to I)
   - docs/plans/2026-09-04-001-feat-current-without-integrations-plan.md (Amendment r2.5)
   - docs/reviews/2026-09-19-codex-setup-shape-verdict.md
-revision: 1
+reviews:
+  - docs/reviews/2026-09-19-plan-review-astra.md (Astra through Codex; verdict on revision 1: not ready)
+  - docs/reviews/2026-09-19-plan-review-fable.md (Fable 5.1; verdict on revision 1: ready only with changes)
+revision: 2
 ---
 
 # feat: A base that produces work
@@ -16,15 +19,42 @@ revision: 1
 
 ## Overview
 
-GTM Base today can be set up and can notice that a document is out of date. What it cannot do is produce marketing work, and after three real setup runs it also interrupts the person, uses a word for its own central idea that needed three explanations, and holds two files and no skills when setup ends. This plan closes that gap in four phases.
+GTM Base today can be set up and can notice that a document is out of date. What it cannot do is produce marketing work, and after three real setup runs it also interrupts the person, uses a word for its own central idea that needed three explanations, and holds two files and no skills when setup ends.
 
-Phase 1 is the correction, in the order `docs/reviews/2026-09-19-codex-setup-shape-verdict.md` sets under "Smallest ordered change set and proving tests": amend the written contract first, then completion and closing, then quiet by default, then the rename to "context change", then the habit hooks, then selection, then the umbrella profile with segments and guarded adoption, then the plain-language standard, and finally the fidelity replay that gates the deferred summarize-first step.
+As of revision 2 this plan covers Phase 1 only, plus the runner and the first skill that uses the base. Revision 1 held twenty units in four phases. Both reviews of it said that was the wrong shape for one plan, so Phases 2 to 4 moved, word for word, to `docs/plans/2026-09-19-002-roadmap-after-phase-1.md`, and each becomes its own plan after the first skill has been used on real work.
 
-Phase 2 grows what a base holds. A base inventory answers "what is my base missing?" and, on request, adopts or drafts each missing kind, in Brandon's order: messaging, voice, design, then competitors, personas, metric definitions, goals. Setup itself stays at two documents. The map grows into a sources-of-truth file, and a plain "update GTM Base" step exists because plugins do not refresh on their own.
+Phase 1 is the correction. It follows the six steps `docs/reviews/2026-09-19-codex-setup-shape-verdict.md` sets under "Smallest ordered change set and proving tests", and it adds units that verdict never covered, each named as an addition: the UX standard lands second so every later unit writes to it, approving a proposed change locally lands before anything depends on a proposal, quiet by default and the rename come from Amendment r2.5, and the runner with the outbound sequence runs as a side track so the base produces one piece of usable marketing work as early as it safely can. The fidelity replay still gates the release that changes how setup drafts.
 
-Phase 3 is the point of all of it: three skills that read the base and produce work, each a thin runner over context files with owner-approved examples as its tests. Drift grade, content brief, outbound sequence. They ship in the core plugin ahead of backup and invite, because a base that produces nothing is not worth backing up.
+"Revision 2: what the two reviews changed" below is the map from each review finding to the unit that answers it. An agent briefed on a unit reads that unit and its rows in that table.
 
-Phase 4 schedules the brainstorm for company skills shared across seats, which needs a trust model before it needs a design.
+## Revision 2: what the two reviews changed
+
+Astra (through Codex) and Fable 5.1 reviewed revision 1 on 2026-09-19 without reading each other. Astra's verdict was not ready; Fable's was ready only with changes. They agree on the three things that matter most: no proposal can complete on a base that has no shared copy, the fidelity gate could pass without proving anything, and twenty units is too many for one plan. Findings are named A1 to A12 for Astra and B1, H1 to H8, M1 to M9 for Fable. Everything in this table is decided and recorded. The calls that are Brandon's are listed under "For Brandon", each with the default this revision is written to.
+
+| Finding | What was wrong | What revision 2 does | Where |
+|---|---|---|---|
+| B1, A2 (both blockers) | `compose_proposal` refuses a base with no shared copy, the Gridwise base has none, and no shipped code ever marks the first backup as reviewed. Every "no becomes a proposed change" ended at a refusal | New Unit 1.2b: the owner approves a staged change inside Claude and it is applied to the local base, with the same screens, evidence, confirmation, and corrections record. The outgoing-data gate is not weakened | 1.2b, P36 |
+| A1 (blocker), H8 | The migration could hide entries (a refusal, then a writer creating the new folder, then the reader ignoring the old one), could block its own retry by dirtying the tree, cited a `migrate.py` that does not exist, missed consumers, and broke the "catches" number | The reader reads both folders and joins by entry id. The migration is a recorded transaction with a commit point and a recovery step, and the folder move and the field rewrite are two separate changes. Consumer list completed. `report.py` looks under both paths | 1.4 |
+| A3 (blocker), M3 | The fidelity gate could pass on one case, scored by nobody named, or by merely building the fallback | Scorer named and the builder barred from scoring. Each corpus and its answer key frozen before any behavior unit is built. A missing case means incomplete, never pass. Any fix must pass the same three replays afterward. Case one is run against 0.2.6 now | 1.9, 1.1 |
+| A4, H5 | The moment-of-use flag had no action contract, offered a fix nobody had written, treated "use it as is" as a confirmation, and had no real caller in Phase 1 | The sequence is defined: detect, prepare a real candidate, pause, get the choice, resume. "Use as is" leaves the flag standing. "Fix first" waits for an approved application through 1.2b. "It already reflects this" is a separate confirmation. The marker-only interruption is removed. A measured live trial and a read-hook evaluation are added. The runner (1.4b) is the deterministic caller | 1.3, 1.4b |
+| H1 | Sixteen units shipped before one piece of usable work, and the dependency forcing that order was soft | The runner and the outbound sequence run as a side track after 1.4, owning only new files. New success criterion SC-C: one skill output used in real work at Gridwise, with what happened recorded | 1.4b, 1.4c, SC-C |
+| H2, H3, A10 | The UX standard landed last and rewrote wording already checked live. Its lint read the instructions to the assistant, not the sentences people read, which live in Python. The one-question check rejected P4's own required wording, which has no question mark | New Unit 1.1b lands the standard, the four-line format, and the lint second. The lint covers a registry of the Python sentences, asserted complete by a test. The ask check counts one delimited request block and accepts an imperative. The owner's read-aloud check is the acceptance test and the lint is described as a floor. 1.8 shrinks to a sweep of text no unit touched | 1.1b, 1.8 |
+| H4, A contradiction 5 | Six current steps break the standard and no unit fixed them; "show each cleaned body whole" contradicted "never paragraphs" | One ruling per step is recorded in 1.1. The interaction is a short wrapper (what was removed, the opening lines, where the whole cleaned file is) and the complete artifact is separately readable, with the yes bound to its hash | 1.1, 1.7c, P21, P28 |
+| H6 | `_review_items` keys on a run id that closing entries will no longer carry, so the finding 1.2 corrects was dead by 1.5 | 1.2 rekeys the finding: a drafted line on the file, an open entry that affects it, and source material dated before the change happened | 1.2, P22 |
+| H7, A5, A6, A7 | Unit 1.7's write order contradicted itself; duplicate-heading rejection did not establish that a document can be edited later; resumption covered finished files and not interrupted writes; "adopted text stays data on every later read" was promised and assigned to no Phase 1 unit | 1.7 splits into four units. Order is written as numbered steps and the profile still creates the base. Adoption accepts only the heading grammar the editor supports. Recovery is per file, bound to the approved bytes, with a failure injected after each step. Every Phase 1 path that hands a context file to the model is named and fenced | 1.7a to 1.7d, 1.3 |
+| A8 | Optional kinds and rubrics placed in the company-base template get copied into every new base, which makes absent-only adoption refuse them, and never reach an existing base | The outbound rules starter lives in the plugin and enters a base only by an owner-approved request. The same rule is recorded for the roadmap | 1.4c, roadmap |
+| A9 | Comparing version bodies was assigned to the survey, which runs before consent and reads names and first headings only | The survey groups and ranks by name. Bodies are compared only after consent, and a test proves the survey reads no body | 1.6 |
+| M1 | P3 could not be "rerun unchanged" across the rename | The old-layout SC1 test stays byte-identical as the tolerant-reading proof and a new-layout twin is added | P3, 1.4 |
+| M2, Astra test table | Some scenarios would pass with no code change or without proving the behavior | Each is replaced in its unit: closed change newer than the sources with an open control; resumed setup with earlier dates and the same result on another seat; real entry points rather than a fixture for the moment-of-use check; malformed metadata, dirty-tree and default-branch refusals for adoption; confirmation paths exercised while a marker remains | 1.2, 1.3, 1.5, 1.7c, 1.7d |
+| M4 | Giving the map a confirmation line makes it come due again later | The map is excluded from questions and reviews by its kind, which also covers the base created before this unit. No confirmation line is written for it | 1.2, P12 |
+| M5, A7 | Adopted text is unfenced on the only read path Phase 1 has | The injected instruction gains the data-not-instructions sentence, and the residual risk is recorded | 1.3, 1.7c |
+| M9 | "Ordered exactly as Codex sets out" was not accurate | The Overview and the Phase 1 header say which units are Codex's six steps and which are additions, and that Amendment r2.5 had no outside review before these two | Overview, Phase 1 header |
+| A, condition A | Unit 1.1 omitted the parent strategy structure, origin R22 and R23, and the first plan's Unit 3 | Added to 1.1's file list | 1.1 |
+| A, condition C | "One window" was never named | The dismissal lasts the base's confirmation threshold, 30 days unless the map sets another, which is what `stale_check.run` already uses | 1.5, P7, P17 |
+| A, condition E | A mixed-product document cannot be made valid by filtering file names | A document that covers more than the recorded scope is refused for adoption with the offer to draft that segment instead. Scope is enforced by the person dropping named places, recorded with the scope label, not by a text filter | 1.7a, 1.7c |
+| H8, last items | `decided_by` became `noted_by` while P5 still showed "who decided"; the lint banned "decision" and not "ledger" | The line a person reads says who noted the change, because a competitor's launch has no decider. "Ledger" joins the banned words for text a person reads | 1.4, P5 |
+| Fable lows | Thin-runner reference location; `draft-positioning.md` also asks for the marker; P16 asks two questions; r2.4 C.2 still says the daily block asks; an older plugin reads a migrated base as empty | Each fixed in the named unit. The last is recorded against release two, because one seat exists today | 1.4b, 1.7b, 1.5, 1.1, Later phases |
+| H5(a), A question 6 | Shipping 1.2 without 1.5 would give a release in which setup captures no change at all | Release semantics are fixed now. See "Releases" under Execution Posture | Execution Posture |
 
 ## Problem Frame
 
@@ -48,47 +78,51 @@ Each requirement is numbered P1 and upward, and names its source: a section lett
 |---|---|---|
 | P1 | Setup drafts two documents, the customer profile and the positioning. The context-change entry is not a required drafted step. J8, J9, J10, J17, join SC1 and SC3 are amended in writing before any code changes. | r2.4 A; Codex condition A and ordered step 1 |
 | P2 | A base with two confirmed files and no recorded changes gets an honest baseline finding that says both documents were confirmed today, that no context change is recorded, that the base therefore cannot yet check whether a change has made either document out of date, and that names the date each confirmation comes up for review. It never says there is no date to watch. | r2.4 A; Codex condition A |
-| P3 | The first feature's own SC1 (a hand-entered change yields a correct flag and a drafted proposal) keeps its independent test and is rerun unchanged after every Phase 1 unit. | Codex condition A and ordered step 6 |
+| P3 | The first feature's own SC1 (a hand-entered change yields a correct flag and a drafted proposal) keeps its independent test and is rerun after every Phase 1 unit. Across the rename, the old-layout test stays byte-identical as the proof of tolerant reading, and a new-layout twin is added beside it (r2, Fable M1). | Codex condition A and ordered step 6 |
 | P4 | The optional closing question is asked once, after three plain sentences explaining what a context change is, why the base wants it, and how it is used, with one concrete example. Its words are "Tell me if anything about the context of the business changed that we should account for. One sentence is enough, or say skip." | r2.4 B and I; r2.5 "Context change, not decision" |
-| P5 | A sentence given at the closing becomes a proposed entry shown whole before it is written: the date it happened, who decided, which documents it affects, and the review date are each the person's to correct. The entry does not carry the setup run's id, so the same-run exemption never applies to it. | r2.4 B; Codex condition B |
-| P6 | For each affected document the person is asked separately whether that document already reflects the change. A yes writes a confirmation naming the change. A no leaves the document flagged and the fix goes through the proposal path, because setup never edits a file it has already written. | r2.4 B; Codex condition B |
-| P7 | Skip is a complete answer. It dismisses the quiet-record reminder for one window and is counted apart from the file-confirmation yes rate. | r2.4 B; Codex condition C |
+| P5 | A sentence given at the closing becomes a proposed entry shown whole before it is written: the date it happened, who noted it, which documents it affects, and the review date are each the person's to correct (r2: "who noted it", because a competitor's launch has no decider and the field is `noted_by`). The entry does not carry the setup run's id, so the same-run exemption never applies to it. | r2.4 B; Codex condition B |
+| P6 | For each affected document the person is asked separately whether that document already reflects the change. A yes writes a confirmation naming the change. A no leaves the document flagged and the fix goes through the proposal path, because setup never edits a file it has already written. At the closing this is asked only for the two required documents; any other affected document is left flagged for the review (r2, Fable H4). | r2.4 B; Codex condition B |
+| P7 | Skip is a complete answer. It dismisses the quiet-record reminder for the base's confirmation threshold (30 days unless the map sets another) and is counted apart from the file-confirmation yes rate. | r2.4 B; Codex condition C |
 | P8 | At the start of a session the base loads its context and says nothing. No question leads the first reply and no question id is issued. | r2.5 item 1 |
-| P9 | The base speaks up on its own in exactly one case: a document about to be used has been overtaken by a recorded context change. It names the document, the change, and the date, offers the fix it has already written, and asks whether to use the document as it is or fix it first. The check is a local lookup and makes no network call. | r2.5 item 2 |
+| P9 | The base speaks up on its own in exactly one case: a document about to be used has been overtaken by a recorded context change. It names the document, the change, and the date, and asks whether to use the document as it is or fix it first. It says a fix is ready only when a prepared one exists, and otherwise offers to prepare one. "Use it as is" leaves the flag standing and confirms nothing. "Fix it first" waits until the owner has approved the change (P36). "It already reflects this" is a separate answer that writes a confirmation. No work product is produced before the choice. An unanswered marker alone never interrupts. The check is a local lookup and makes no network call (r2, Astra 4, Fable H5). | r2.5 item 2 |
 | P10 | "Review my base" walks what is due and what has been proposed as one short list in one sitting. Question ids, the asked log, not now, and a no that becomes a prepared change all work as before, inside the review. | r2.5 item 3 |
 | P11 | A weekly one-line nudge exists and is off by default. A person can turn it on, and can silence the base for a month or until they ask. | r2.5 item 4 |
-| P12 | The map is never asked about. It is confirmed when the base is created, and the template's placeholder date is removed. | r2.5 item 5 |
+| P12 | The map is never asked about. It is left out of questions and reviews by its kind, which also covers a base created earlier, and the template's placeholder date is removed (r2, Fable M4: a confirmation line would only make it come due again). | r2.5 item 5 |
 | P13 | The AI always proposes and never applies without the owner's yes. Auto-apply is a later rung earned from a base's own record of approvals and corrections, and is out of scope here. | r2.5 item 6; Brandon 2026-09-19 |
 | P14 | Everywhere a person reads it the word is "context change". Internally `work/decisions/` becomes `work/changes/`, the entry gains `kind: change`, and its fields keep their meaning with plainer names (`happened_on`, `written_on`, `noted_by`, `source`, `affects`, `review_by`). | r2.5 "Context change, not decision" |
 | P15 | The one existing base is migrated by the plugin, and a base that still holds `work/decisions/` is read correctly. | r2.5; Brandon 2026-09-19 |
 | P16 | A local hand edit to a context file asks what changed and why. A strategic answer travels with the proposal as its change entry. A typo fix records no change and is not blocked. | r2.4 C; Codex condition C |
-| P17 | A quiet record is asked about inside the review, not at session start, at most once a session, with a dismissal that expires, outside the yes-rate accounting. An empty record is behind immediately rather than after the window, and the reminder's dismissal window is stated. | r2.4 C; Codex condition C |
+| P17 | A quiet record is asked about inside the review, not at session start, at most once a session, with a dismissal that expires, outside the yes-rate accounting. An empty record is behind immediately rather than after the window, which the shipped code already does, so the new behavior to prove is the dismissal and its return. The dismissal lasts the confirmation threshold. | r2.4 C; Codex condition C |
 | P18 | `context/strategy/icp.md` is the umbrella profile: who the company sells to overall, each segment in one short paragraph, and what they share. `context/strategy/segments/<slug>.md` holds one segment at full depth with `kind: segment`. A company with one segment has only the umbrella, at full depth. Segments are distinct from buyer personas, which keep their own folder. | r2.4 D |
-| P19 | The segment inventory is settled before the umbrella is approved. A segment whose file is not yet in the base is listed in the umbrella as pending, in words, never as a link. An interrupted import resumes. | r2.4 D; Codex condition D and the umbrella write-order finding |
-| P20 | A finished document may be adopted instead of redrafted only when it passes a per-file contract: named by the person as the authoritative version for one segment; original settings block discarded and a library-written one put in its place; hidden content removed and counted, then fence-marker, contact and key screens run on what is left; headings unambiguous for later editing; destination a safe slug that collides with nothing, under a folder that is not a link. | r2.4 D; Codex condition D |
-| P21 | The person sees each cleaned body whole, with what was removed, and approval is bound to those exact bytes. A yes to many at once is allowed only after each has been shown, and individual exclusions are kept. Adoption never edits or moves the original. An adopted file is confirmed by the owner's own yes and by nothing else. | r2.4 D; Codex condition D, the batch-yes finding |
-| P22 | The source-age finding looks only at files the change affects and only at open changes, so twelve segment files do not multiply unrelated findings. The first-backup review is rewritten for a base that can hold many files. | r2.4 D; Codex condition D, currency row |
+| P19 | The segment inventory is settled before the umbrella is approved. A segment the person left out is named in the umbrella as pending, in words, never as a link; a segment chosen for adoption is named plainly, and whether its file exists yet is computed, never written into the umbrella. An interrupted import resumes, including a write interrupted partway through one file (r2, Fable H7, Astra 6). | r2.4 D; Codex condition D and the umbrella write-order finding |
+| P20 | A finished document may be adopted instead of redrafted only when it passes a per-file contract: named by the person as the authoritative version for one segment; original settings block discarded and a library-written one put in its place; hidden content removed and counted, then fence-marker, contact and key screens run on what is left; headings limited to the grammar the proposal editor supports, so a later edit lands in the right section (no duplicate headings at one level, no heading-shaped line inside a code fence, no underlined headings); the document covers no more than the recorded scope; destination a safe slug that collides with nothing, under a folder that is not a link. | r2.4 D; Codex condition D |
+| P21 | The person is shown, for each document, what was removed, its opening lines, and where the whole cleaned file is, and can read it whole before answering; approval is bound to those exact bytes (r2, pending Brandon's yes to call 5; revision 1 required every body shown whole in the conversation, which contradicts P28). A yes to many at once is allowed only after each has been shown, and individual exclusions are kept. Adoption never edits or moves the original. An adopted file is confirmed by the owner's own yes and by nothing else. | r2.4 D; Codex condition D, the batch-yes finding |
+| P22 | The source-age finding keys on a drafted line on the file, an open change that affects it, and source material dated before the change happened, never on a run id, because closing entries carry none (r2, Fable H6). It looks only at files the change affects and only at open changes, so twelve segment files do not multiply unrelated findings. The first-backup review is rewritten for a base that can hold many files. | r2.4 D; Codex condition D, currency row |
 | P23 | Setup asks once whether the base is for the whole company or for one part of it, when the person says so or the material plainly splits. The answer is recorded in the umbrella profile, not in the map, and is applied to selection and adoption as well as to the drafting prompts. | r2.4 E; Codex condition E |
 | P24 | Plans and metrics count as marketing signals by default only in a place that also holds a profile, persona, or positioning file. A person can still add a standalone plans folder by name. | r2.4 F; Codex condition F |
 | P25 | The consent record distinguishes a plain yes to the survey from an explicit choice of folders. An explicit choice is honored without a second narrowing question and gets a plain count to confirm. A changed list asks again. | r2.4 F; Codex condition F |
 | P26 | The folder table says what each folder mostly holds, from paths only. Same-stem files are grouped as versions, a name carrying "final" outranks a newer date, a conflict between versions is said out loud, and templates and READMEs rank last. The preview says why a draft reads a limited amount. | r2.4 F; Codex condition F |
 | P27 | An unanswered `[your call: ...]` marker is a state of its own, defined independently of `status`. A file carrying one is not confirmed and does not count as complete, the review step lists each marker and asks, and a later session can settle them without setup overwriting a file. The rule is enforced for adoption too. | r2.4 F; Codex condition F |
 | P28 | Every step of every skill says what it is for in one sentence, shows output readable in seconds (a short list or a small table, never paragraphs), ties it back, then asks one thing. A context change is shown as four short lines: what changed, why, what it affects, when to look again. The plain-language lint grows to check this. | r2.4 H; Brandon 2026-09-19 |
-| P29 | Before Phase 1 ships, three cases are replayed and read: the twelve finished pages, a company with several segments and no finished pages, and positioning inputs larger than one request. The check is whether segments, named deals, figures, and source versions survive. A fail builds the summarize-first step in this release. | r2.4 G; Codex condition G and ordered step 6 |
-| P30 | A base inventory answers "what is my base missing?" against a named list of kinds, and adopts or drafts each on request. Setup stays at two documents. | Brandon 2026-09-19 |
-| P31 | The map grows into a sources-of-truth file: for each kind of data, where it lives outside the base, which connected tool reads it, and the fallback. Context reads stay local. Source reads may be network calls and are never made at context-loading time. | MKT1 comparison item 3; Brandon 2026-09-19 |
-| P32 | A plain "update GTM Base" step exists, because plugins do not refresh on their own. | MKT1 comparison item 5; Brandon 2026-09-19 |
-| P33 | Three skills that use the base ship in the core plugin ahead of backup and invite: drift grade, content brief, outbound sequence. Each is a thin runner over context files, states which context files it reads, triggers the moment-of-use flag, keeps its rubric in a context file, and has owner-approved examples as its tests. | Brandon 2026-09-19; parent scope "rubrics live in context files and skills are thin runners", "an examples folder per skill" |
-| P34 | Company skills shared across seats get a brainstorm whose deliverable is a requirements document. No code is written for them in this plan. | Brandon 2026-09-19; MKT1 comparison item 1 |
+| P29 | Before Phase 1 ships, three cases are replayed and read: the twelve finished pages, a company with several segments and no finished pages, and positioning inputs larger than one request. The check is whether segments, named deals, figures, and source versions survive. A fail builds the summarize-first step in this release, and the same three replays must then pass. The scorer is named and the builder does not score. Each corpus and its answer key are frozen before any behavior unit is built. A case that was not run means the gate is incomplete, never passed (r2, Astra 3, Fable M3). | r2.4 G; Codex condition G and ordered step 6 |
+| P30 (moved to the roadmap) | A base inventory answers "what is my base missing?" against a named list of kinds, and adopts or drafts each on request. Setup stays at two documents. | Brandon 2026-09-19 |
+| P31 (moved to the roadmap) | The map grows into a sources-of-truth file: for each kind of data, where it lives outside the base, which connected tool reads it, and the fallback. Context reads stay local. Source reads may be network calls and are never made at context-loading time. | MKT1 comparison item 3; Brandon 2026-09-19 |
+| P32 (moved to the roadmap) | A plain "update GTM Base" step exists, because plugins do not refresh on their own. | MKT1 comparison item 5; Brandon 2026-09-19 |
+| P33 | Skills that use the base ship in the core plugin ahead of backup and invite. This plan builds the runner and the outbound sequence; drift grade and the content brief moved to the roadmap. Each is a thin runner over context files, states which context files it reads, triggers the moment-of-use flag, keeps its rubric in a context file, and has owner-approved examples as its tests. | Brandon 2026-09-19; parent scope "rubrics live in context files and skills are thin runners", "an examples folder per skill" |
+| P34 (moved to the roadmap) | Company skills shared across seats get a brainstorm whose deliverable is a requirements document. No code is written for them in this plan. | Brandon 2026-09-19; MKT1 comparison item 1 |
 | P35 | Nothing is written outside the base, the plugin's own records folder, and a configured hooks directory. No MCP servers are declared. The logic atlas is updated in the same change as the code and republished. No invented number or timing appears anywhere, in the product or in the records. | Standing rules, Brandon 2026-09-19 |
+| P36 | When a base has no shared copy, the owner can approve a proposed change inside Claude. The staged change is shown in the four-line form with the before and after, and on the owner's yes it is applied to the local base with the same screens, the same evidence, the same confirmation, and the same corrections record a merged proposal gets. A no discards or keeps the staged change. Nothing about what may leave the computer changes. | r2; Astra 2 and Fable B1, both blockers; the local half of the first plan's Unit 8 |
+| P37 | One output of a skill that uses the base is used in real work at Gridwise, and what happened is recorded from the real run. | r2; Fable H1 |
 
 ### Success criteria
 
 Adopted from `docs/ideation/2026-09-19-mkt1-multiplayer-ai-comparison.md`, stated honestly about what is in and out of scope.
 
-**SC-A, the new computer test.** A person is fully productive on a new machine quickly. **In scope:** install the plugin, join a base from an invite link, and reach a rendered daily block and a working skill run without re-entering any context, which is the second-seat join plus a backup. **Out of scope in this plan:** the second seat and backup themselves are release two of the join plan and a later phase here; what this plan owes SC-A is that everything Phases 1 to 3 add travels in the base rather than on a laptop, so nothing new has to be re-entered. Measured by: every context file, rubric, and example added by Phases 2 and 3 is a tracked file in the base or in the core plugin, and no Phase 2 or Phase 3 behavior reads seat-local state for meaning.
+**SC-A, the new computer test.** A person is fully productive on a new machine quickly. **In scope:** install the plugin, join a base from an invite link, and reach a rendered daily block and a working skill run without re-entering any context, which is the second-seat join plus a backup. **Out of scope in this plan:** the second seat and backup themselves are release two of the join plan and a later phase here; what this plan owes SC-A is that everything Phases 1 to 3 add travels in the base rather than on a laptop, so nothing new has to be re-entered. Measured by: every context file, rubric, and example this plan adds is a tracked file in the base or in the core plugin, and neither the runner nor the outbound sequence reads seat-local state for meaning.
 
-**SC-B, the vacation test.** The work runs when the person is offline. **In scope:** every skill in Phase 3 runs from context alone with no person carrying context in, which is the doctrine's own test, and a run's output is a proposal a second person can approve. **Out of scope, stated plainly:** no scheduling exists in GTM Base and none is built here. Nothing in this plan makes a run happen without a person starting it, so the vacation test cannot pass in full, and this plan does not claim it does. What it can pass is the half that is a context problem rather than a scheduling problem.
+**SC-C, the base produced work (added in r2).** SC-A and SC-B both come from a source the ideation file itself labels an unchecked summary, and neither tests whether the base produced anything. **In scope:** one outbound sequence written by Unit 1.4c from the Gridwise base is used in real outreach, and the record says what was sent, what Brandon changed before sending, and what came back. The line from this to pipeline is the shortest one the product has: sequence, sends, replies, meetings. **Measured by:** a walkthrough record written from the real run, with no estimate in it.
+
+**SC-B, the vacation test.** The work runs when the person is offline. **In scope:** the outbound sequence runs from context alone with no person carrying context in, which is the doctrine's own test, and a run's output is a proposal a second person can approve. **Out of scope, stated plainly:** no scheduling exists in GTM Base and none is built here. Nothing in this plan makes a run happen without a person starting it, so the vacation test cannot pass in full, and this plan does not claim it does. What it can pass is the half that is a context problem rather than a scheduling problem.
 
 ## Scope Boundaries
 
@@ -97,9 +131,11 @@ Carried from both earlier plans, and added to here.
 - **No scheduling.** Nothing runs on its own. The vacation test is partially out of reach and the plan says so rather than implying otherwise.
 - **No hosted component.** The web app remains its own brainstorm. The review queue moving there is a later phase, one paragraph only.
 - **No auto-apply.** The AI proposes; the owner approves. Auto-apply is a later rung earned from a base's record.
-- **No company-skills build.** Phase 4 produces a requirements document and nothing else. The trust-surface refusal of `CLAUDE.md`, `AGENTS.md`, and `plugins/` in a base stands unchanged until that brainstorm says otherwise.
+- **No company-skills build.** The roadmap's brainstorm produces a requirements document and nothing else. The trust-surface refusal of `CLAUDE.md`, `AGENTS.md`, and `plugins/` in a base stands unchanged until that brainstorm says otherwise.
 - **No MCP servers declared** in the plugin manifest, unchanged.
-- **Setup stays at two documents.** Everything else a base holds arrives through the inventory, after setup, on request.
+- **Setup stays at two documents.** Everything else a base holds arrives later, on request. The inventory that offers it is in the roadmap, not in this plan.
+- **No second or third skill, no inventory, no new kinds, no update step, no company-skills brainstorm.** All moved to `docs/plans/2026-09-19-002-roadmap-after-phase-1.md` by revision 2.
+- **Local approval is not the review queue.** Unit 1.2b approves one staged change on a base with no shared copy. Listing open proposals from a shared copy, reject-but-keep, and the branch hash check stay with the first plan's Unit 8.
 - **No redesign of the pre-push gate or the folder link.** Both shipped, both have real-run evidence behind them, and neither is in the path of anything here. Units that touch them touch them only as this plan names.
 - **No re-running setup to refresh a complete base**, unchanged from the join plan.
 - **No new document parsing.** Markdown, text, and CSV, as today.
@@ -126,7 +162,7 @@ Every path below is real and was read for this plan.
 - **The templates**: `plugins/gtm-base/templates/` (`injection.md`, `offer.md`, `base-shaped-question.md`, `continue-setup.md`, `ledger-entry.md`, `confirmation-line.md`, `corrections-file.md`, `proposal-staging.md`, `pending-item.json`, `pr-body.md`), plus the company-base template at `templates/company-base/` and its plugin-side copy at `plugins/gtm-base/templates/company-base/`, which a test holds identical file for file. `context/map.md` in both copies carries `last_confirmed: 2026-01-01`, the placeholder date P12 removes.
 - **The tests**: `tests/run.sh` runs `python3 -m unittest discover` with the fakes ahead of the real tools on `PATH`. `tests/support.py` provides `FakeGitRunner`, `Sandbox`, `TempHome`, `make_base`, `commit`, `trust_checkout`, `RecordingGh`, `IndexingGh`, `base_with_a_shared_copy`. `tests/plain_language.py` provides `find_banned`, `find_dashes`, `assert_plain`, today checking only the banned git words from `constants.BANNED_GIT_WORDS` and the two dash characters. There is no `tests/test_plain_language.py`; the lint is asserted from the tests that own each text. Unit 1.8 changes that.
 - **`docs/join-guide.md`** is the only user-facing document besides the offer, the closing message, and the invite. **`plugins/gtm-base/CHANGELOG.md`** records each unit as it lands, in plain language, with the real-run evidence that caused it.
-- **`brandkit/brand-lock.json`** is the model for the design context file in Unit 2.3. Its top-level keys are `version`, `brand_context` (name, offering, industry, positioning, audience, tone), `concept` (visual premise, research principles, reference preferences, avoid), `visual_axes`, `authoritative_assets` (logo with construction and colour rules, fonts, references), `palette` (primary, accent, neutral, semantic roles, forbidden), and `typography` (display, body, metadata). It is a decided record with a forbidden list, which is the shape a context file wants, and it is not a stylesheet.
+- **`brandkit/brand-lock.json`** is the model for the design context file in the roadmap's Unit 2.3. Its top-level keys are `version`, `brand_context` (name, offering, industry, positioning, audience, tone), `concept` (visual premise, research principles, reference preferences, avoid), `visual_axes`, `authoritative_assets` (logo with construction and colour rules, fonts, references), `palette` (primary, accent, neutral, semantic roles, forbidden), and `typography` (display, body, metadata). It is a decided record with a forbidden list, which is the shape a context file wants, and it is not a stylesheet.
 
 ### Institutional Learnings
 
@@ -156,16 +192,17 @@ Limited to what this repository already cites, and not re-verified here.
 | Decision | Rationale | Rejected alternative |
 |---|---|---|
 | **The rename is a vocabulary change plus a folder move plus a field rename, done in one unit while one base exists.** `constants.DECISIONS_DIR` becomes `work/changes`, `formats` gains the change entry with `kind: change` and the fields `happened_on`, `written_on`, `noted_by`, `source`, `affects`, `review_by`, and every sentence a person reads says "context change". | Doing it later means migrating many bases instead of one, and the word is the thing that confused the designer, so it cannot wait behind nine other units. Doing the folder, the fields, and the words separately would leave three half-renamed states in the tree at once. | A user-facing alias over the old internals (leaves `decisions` in every file name a person can see); deferring the rename until after the second seat. |
-| **Migration is performed by the plugin, once, on the base it finds, and is idempotent.** A dedicated `changes.py` moves `work/decisions/` to `work/changes/`, rewrites entry field names, leaves the entry ids untouched, and records what it did in `corrections/`. It refuses on a dirty tree and reports rather than raising. | Entry ids are the join key for confirmations, corrections, proposals, and the index; changing them would orphan every one of them. Recording the migration in `corrections/` is the product's own mechanism for "what a run changed", so the migration is visible to the person the same way any other change is. | A script the person runs by hand; renaming ids to match the new vocabulary. |
-| **Old layout is read, never written.** `base_reader.ledger` reads `work/changes/` first and falls back to `work/decisions/`, and accepts both the old and new field names on an entry. Every writer writes the new layout only. | A second seat, a stale clone, or a base restored from a backup can present the old layout at any time, and a reader that refuses it turns a rename into data loss. Writing both would create two sources of truth for one entry. | Refusing the old layout with a message; writing both layouts during a transition window. |
+| **Migration is performed by the plugin, once, on the base it finds, as a recorded transaction that can always be finished or undone (r2).** A dedicated `changes.py` first checks every entry parses and that no entry id appears in both folders with different content, then writes a transaction record under the plugin's own records folder naming each step, then makes two separate changes: the folder move with no content change, so history follows, and then the field rewrite. The commit point is the second change. A run that finds an unfinished transaction finishes it or puts it back, and it tells its own unfinished work apart from the person's edits by that record, so a half-done migration never blocks its own retry. It records what it did in `corrections/` in a shape `report.py` parses. It refuses on a tree the person has dirtied and reports rather than raising. | Entry ids are the join key for confirmations, corrections, proposals, and the index; changing them would orphan every one of them. Astra's blocker: revision 1 could refuse, let a writer create the new folder, and leave the reader ignoring every old entry; and a failure partway dirtied the tree and blocked the retry. `report.py` finds the change that first added an entry with a log query that does not follow a rename when content changes in the same change, which is why the move and the rewrite are separate. | A script the person runs by hand; renaming ids to match the new vocabulary; one change for move and rewrite; the "migration ordering pattern from `migrate.py`" revision 1 cited, which does not exist (the only `migrate` is a stub in `paths.py`). |
+| **Both layouts are read and joined by entry id; only the new one is written (r2).** `base_reader.ledger` reads `work/changes/` and `work/decisions/` together, accepts old and new field names, returns one entry per id, and reports an id that appears twice with different content as a conflict instead of choosing. Every writer writes the new layout only. `report.py` looks under both paths. | A second seat, a stale clone, or a restored backup can present the old layout at any time. Revision 1's "new first, then fall back" reader hid the old entries the moment anything created the new folder. Tolerant reading protects new code reading old data and nothing else: a seat on an older plugin reads a migrated base as empty, which is recorded against release two because one seat exists today. | Refusing the old layout; writing both layouts; reading the new folder first and falling back. |
 | **Scope is stored in the umbrella profile's frontmatter as a `covers:` field, validated like any other field, and passed to selection, adoption, and drafting.** | Codex condition E: the map is settings only and its parser ignores free text, so a descriptive scope line there is both a contract break and inert. The profile is the document scope is about, it is owned, and it is confirmed, so scope inherits an owner and a review date for free. Wording alone cannot keep another product line's material out of an adopted file, so the value has to reach selection, not just the prompt. | A line in `context/map.md`; a prompt-only instruction; a separate `context/strategy/scope.md`. |
 | **The adoption contract is a per-file manifest, checked in `adopt.py`, and approval is bound to the exact saved bytes.** The manifest names the segment, the authoritative version, and the destination. The checks run in this order: canonicalize the destination and reject unsafe slugs, normalized collisions, symlink parents and trust names; discard the original metadata; run `make_source` so hidden content is removed and counted; then run fence-marker, contact and key screens on what is left; then reject duplicate headings at one level; then write the library-generated frontmatter; then show the cleaned body whole with the removals; then bind the yes to a hash of those bytes. | Every clause answers a verified finding in the Codex verdict's compatibility table: classification by filename establishes neither "finished" nor "one file equals one segment"; fence-marker rejection must run after hidden-content removal; the trust-surface check examines paths, not instructions inside markdown, so adopted content must stay data on later reads; variable destinations need the checks that fixed destinations get from `lexists`; and first-matching-heading addressing makes duplicate headings a correctness problem, not a style problem. | A batch yes over titles and sizes; `listing_digest` as the approval binding; weakening `drafting.parse` to accept anything. |
-| **"About to use a document" is detected at skill time, not by watching the filesystem.** Two mechanisms, and no third: every core skill that opens a context file calls `moment.check(path)` before it reads, which is a local lookup against the recorded changes and the confirmations; and the session context carries an instruction telling the assistant to run the same check before it uses a context file outside a skill. | This is the honest limit. There is no filesystem watcher, no editor integration, and no way to know what the person is about to type. Inside a skill the check is deterministic and testable. Outside a skill it depends on the assistant following an instruction, which is a real mechanism with a real failure rate, and the plan records it as such rather than claiming coverage it does not have. | A file watcher (nothing to hang it on, and it would fire on reads the person never made); a hook on the Read tool (would fire on every file in every repository, which 0.1.4 already retreated from for the gate); claiming the coverage is complete. |
+| **"About to use a document" is detected at skill time, not by watching the filesystem (r2: with an action contract, a measured trial, and a read-hook evaluation).** The flow is detect, prepare a real candidate, pause, get the choice, resume, with the three answers P9 defines. Unit 1.3 also evaluates a hook on the file-read tool that exits at once unless the path is under a joined base's `context/` folder, because revision 1 rejected it for a reason the Bash gate already disproves (it reads every command and exits early), and builds it if Claude Code's documented hook behavior allows it to deliver the flag. Two mechanisms are certain: every core skill that opens a context file calls `moment.check(path)` before it reads, which is a local lookup against the recorded changes and the confirmations; and the session context carries an instruction telling the assistant to run the same check before it uses a context file outside a skill. | This is the honest limit. There is no filesystem watcher, no editor integration, and no way to know what the person is about to type. Inside a skill the check is deterministic and testable. Outside a skill it depends on the assistant following an instruction, which is a real mechanism with a real failure rate, and the plan records it as such rather than claiming coverage it does not have. | A file watcher (nothing to hang it on, and it would fire on reads the person never made); a hook on the Read tool (would fire on every file in every repository, which 0.1.4 already retreated from for the gate); claiming the coverage is complete. |
+| **Approving a proposed change locally reuses the proposal's own parts (r2).** Unit 1.2b adds `approve_local.py`. It loads the staged change with `compose_proposal.load_staging`, checks it with `check_edits`, screens it with `scan_everything`, shows it in the four-line form, and on the owner's yes applies it with `apply_edit` to the local base in one commit together with the confirmation and a corrections file built by `corrections_for`. It runs only when the base has no shared copy. | Both reviewers' blocker. It keeps "the AI proposes, a person approves", it does not reorder backup ahead of skills, and it touches neither `push_conditions.py` nor the gate, so nothing new can leave the computer. It is the local half of the first plan's Unit 8 and that unit later adds the shared-copy half beside it. | Giving the Gridwise base a shared copy by hand (every future base is still broken, and the first-backup flag still has no setter); setting `first_push_reviewed` from code (weakens the outgoing-data gate). |
 | **The review is a new entry point on the existing stale-check skill, not a new skill.** "Review my base" runs `stale_check.run` in a review mode that walks what is due and what has been proposed as one short list, issues the question ids the hook used to issue, and hosts the quiet-record ask. | The computation, the idempotency rules, the question-id lifecycle, and the proposal path already live there, and the review is the same walk with a different trigger and a different first sentence. A second skill would duplicate all of it and then drift from it. The confirm skill's entry point moves from the injected question to this review and to the moment-of-use flag, and `confirm.pending_questions` already exists for the case where a question is answered outside the turn that issued it. | A new `review-base` skill; leaving the question at session start behind a setting. |
-| **The inventory's list of kinds is a constant plus a documented reference.** `constants.BASE_KINDS` holds the ordered list with, for each kind, its destination path, whether it may be adopted, and whether it may be drafted. `plugins/gtm-base/skills/stale-check/references/base-kinds.md` says in plain words what each kind is for and what a good one contains. | A list that lives only in prose cannot be enumerated by the inventory, and a list that lives only in code cannot be read by the person deciding whether they want one. The two are kept in step by a test that asserts every constant has a section and every section a constant, which is the pattern already used for the map settings and the rules reference. | Hard-coding the list in the skill body; deriving it from the template tree (which holds empty folders, not kinds). |
-| **The sources-of-truth file is `context/sources-of-truth.md`, one row per kind of data, with where it lives, which connected tool reads it, and the fallback. Nothing reads it over the network at context time.** It is an ordinary context file with an owner, a confirmation, and a review date. | This is the "mapped" property, and the doctrine is explicit that context reads stay local while sources are read through APIs. Making it a context file rather than a skill means it goes stale like everything else and gets caught by the same machinery, which is the whole product. Keeping the network out of context loading keeps session start quiet, offline-safe, and cheap. | A skill that queries each tool for freshness; folding it into `context/map.md` (settings only); a JSON file no person reads. |
-| **Phase 3 skills are thin runners; the judgment lives in context files; examples are the tests.** Each skill reads a named set of context files, applies a rubric that lives in a context file, produces a work product, calls the moment-of-use check first, and ships an `examples/` folder whose owner-approved input and output pairs are executed by a test harness. | Parent scope, verbatim: rubrics live in context files and skills are thin runners, with an examples folder per skill. It is also the only way a company can change the judgment without changing code, which is what "the context improves and the model is swapped" means in the definition. Examples as tests is the MKT1 lifecycle step that applies without a trust model. | Rubrics inside SKILL.md (uneditable by the company, unconfirmable, invisible to staleness); snapshot tests over model output (non-deterministic). |
-| **The update step checks the installed version against the marketplace pin and tells the person the one thing to do; it never updates anything itself.** `update_check.py` compares `plugins/gtm-base/.claude-plugin/plugin.json` with what the seat has recorded and prints one sentence. | Plugins do not refresh on their own, which both MKT1 and this repository hit. But the plugin cannot reinstall itself, and a step that silently changed what code runs on a seat would be exactly the thing the trust model exists to prevent. Telling the person the single step is honest and sufficient. | Running the install command on the person's behalf; a background check at session start (breaks quiet by default and needs the network). |
+| *(Moved to the roadmap with its unit.)* **The inventory's list of kinds is a constant plus a documented reference.** `constants.BASE_KINDS` holds the ordered list with, for each kind, its destination path, whether it may be adopted, and whether it may be drafted. `plugins/gtm-base/skills/stale-check/references/base-kinds.md` says in plain words what each kind is for and what a good one contains. | A list that lives only in prose cannot be enumerated by the inventory, and a list that lives only in code cannot be read by the person deciding whether they want one. The two are kept in step by a test that asserts every constant has a section and every section a constant, which is the pattern already used for the map settings and the rules reference. | Hard-coding the list in the skill body; deriving it from the template tree (which holds empty folders, not kinds). |
+| *(Moved to the roadmap with its unit.)* **The sources-of-truth file is `context/sources-of-truth.md`, one row per kind of data, with where it lives, which connected tool reads it, and the fallback. Nothing reads it over the network at context time.** It is an ordinary context file with an owner, a confirmation, and a review date. | This is the "mapped" property, and the doctrine is explicit that context reads stay local while sources are read through APIs. Making it a context file rather than a skill means it goes stale like everything else and gets caught by the same machinery, which is the whole product. Keeping the network out of context loading keeps session start quiet, offline-safe, and cheap. | A skill that queries each tool for freshness; folding it into `context/map.md` (settings only); a JSON file no person reads. |
+| **Skills that use the base are thin runners; the judgment lives in context files; approved examples are a replay the owner reads, and the automated test is a runner contract test (r2).** Revision 1 called the harness "examples as tests", but it asserted which files were read, which is the same for every example, and never looked at the approved output. Each example now carries its own expectations (required claims, segment identity, outcome) and at least one deliberately wrong output that must fail. Rubric starters live in the plugin and enter a base only by an owner-approved request, never through the copied template. What follows is revision 1's row. Each skill reads a named set of context files, applies a rubric that lives in a context file, produces a work product, calls the moment-of-use check first, and ships an `examples/` folder whose owner-approved input and output pairs are executed by a test harness. | Parent scope, verbatim: rubrics live in context files and skills are thin runners, with an examples folder per skill. It is also the only way a company can change the judgment without changing code, which is what "the context improves and the model is swapped" means in the definition. Examples as tests is the MKT1 lifecycle step that applies without a trust model. | Rubrics inside SKILL.md (uneditable by the company, unconfirmable, invisible to staleness); snapshot tests over model output (non-deterministic). |
+| *(Moved to the roadmap with its unit.)* **The update step checks the installed version against the marketplace pin and tells the person the one thing to do; it never updates anything itself.** `update_check.py` compares `plugins/gtm-base/.claude-plugin/plugin.json` with what the seat has recorded and prints one sentence. | Plugins do not refresh on their own, which both MKT1 and this repository hit. But the plugin cannot reinstall itself, and a step that silently changed what code runs on a seat would be exactly the thing the trust model exists to prevent. Telling the person the single step is honest and sufficient. | Running the install command on the person's behalf; a background check at session start (breaks quiet by default and needs the network). |
 | **Every unit that changes a sentence a person reads gets a live check by Brandon before release.** | Three real runs found nine defects that 1127 tests did not. The tests assert the sentence that was written; only a person discovers that the sentence was the wrong one. | Relying on the plain-language lint alone. |
 
 ## Execution Posture
@@ -176,7 +213,11 @@ Implementation units are built by Opus 5 agents at high reasoning effort, one un
 
 Reviews are done by Astra, through the Codex CLI, run from a script file, and by Fable 5.1. Three review points: the plan before any build; a security pass and a correctness pass before each release; and design questions during the build, taken to whichever reviewer fits the question.
 
-The orchestrating session holds this plan and the test suite. It runs `sh tests/run.sh` and the plain-language lint after every unit, and never merges a unit whose test scenarios are not all covered. Units that touch setup wording (1.1, 1.2, 1.3, 1.5, 1.6, 1.7, 1.8, and every Phase 2 unit that asks a question) get a live check by Brandon before release, because three real runs found defects no test caught.
+The orchestrating session holds this plan and the test suite. It runs `sh tests/run.sh` and the plain-language lint after every unit, and never merges a unit whose test scenarios are not all covered. Units that touch wording a person reads (1.1, 1.1b, 1.2, 1.2b, 1.3, 1.4c, 1.5, 1.6, 1.7a to 1.7d, 1.8) get a live check by Brandon before release, because three real runs found defects no test caught.
+
+**Releases (r2).** Units merge to main as they pass, and nothing reaches an installed seat until the version is bumped, so a merged unit is not a shipped unit. Units 1.1 to 1.5, with 1.4b and 1.4c, ship together as release A: a release holding 1.2 without 1.5 would be one in which setup captures no context change at all. Units 1.6 to 1.8 ship as release B, gated by the fidelity replay in 1.9, because that gate is about how setup drafts and nothing in release A makes drafting worse than 0.2.6. Release A is what puts a usable outbound sequence in Brandon's hands. This is the default the plan is written to; the alternative, one gated release, is call 4 under "For Brandon". Live checks batch once per release.
+
+**Until the Astra and Fable passes are done on the built code,** the units both reviewers marked riskiest (1.2b, 1.3, 1.4, 1.7c, 1.7d) each get a security pass and a correctness pass before their release, not only the release as a whole.
 
 While the GTM Base plugin is live in a build session, its gate reads every Bash command. Keep git on its own command line, commit with a message file, never name the plugin's records folder or its environment variable on a command line, and run Codex from a script file.
 
@@ -191,27 +232,34 @@ While the GTM Base plugin is live in a build session, its gate reads every Bash 
 - **What the moment-of-use check is:** a skill-time local lookup plus an instruction in the session context, with the instruction's reliability named as a risk rather than assumed away.
 - **Whether adoption may take a document with duplicate headings:** no. It is refused with the reason and the offer to draft that segment instead, per Codex's "restrict incompatible heading structures initially".
 - **Whether the closing question can confirm its own entry:** no. The entry carries no run id, and each affected document is reconciled separately.
-- **Where the inventory's kinds list lives:** `constants.BASE_KINDS` plus a plain-language reference file, held in step by a test.
-- **Whether Phase 3 skills may read a source tool:** no. They read context files only. Source reads belong to the sources-of-truth file's own later phase.
+- **How a no gets approved on a base with no shared copy (r2):** locally, inside Claude, by the owner, through Unit 1.2b.
+- **What creates the base when segments are adopted (r2):** the umbrella, as the profile does today. Adoption runs after both required files exist.
+- **How the map stays unasked (r2):** by its kind, not by a confirmation line.
+- **Whether a skill that uses the base may read a source tool:** no. They read context files only. Source reads belong to the sources-of-truth file's own later phase.
 
 ### Deferred to Implementation
 
 - The exact wording of the honest baseline finding, which is written in Unit 1.2 and then read aloud by Brandon in the live check before release.
 - Whether `_review_items` can be corrected to affected-and-open without changing any currently passing scenario in `tests/test_stale.py`, or whether one existing scenario is genuinely wrong and must be rewritten. Decided by reading the test, not by assumption.
-- The exact command Claude Code exposes for refreshing an installed plugin, verified against the docs at the time Unit 2.6 is built, because the sentence the update step prints has to be the real one.
+- What a hook on the file-read tool may deliver to the assistant, verified against Claude Code's hook documentation when Unit 1.3 is built, because that decides whether the read hook exists.
 - Whether the migration can run inside the session-start hook's budget or must be offered as a step the person accepts. Measured on the one real base before it is wired.
 - The slug rules for `context/strategy/segments/<slug>.md` beyond the safety checks: how a segment named in prose becomes a file name that a person recognizes a year later.
 - How many examples per skill the harness needs before an example set is meaningful, decided when the first set exists rather than picked now.
 
 ### For Brandon
 
-1. **What "Sol" refers to.** The execution posture says implementation units are built by Opus 5 agents together with "Sol" agents. This is recorded exactly as given and not guessed at. Needed before the first unit is briefed, because it changes what each unit's brief contains.
-2. **The design file's contents.** Unit 2.3 proposes `context/strategy/design.md` with sections modeled on `brandkit/brand-lock.json`: palette, type, logo rules, forbidden devices, tone. Confirm the section list, and confirm that design belongs under `context/strategy/` rather than a folder of its own. It stays a context file, not a stylesheet.
-3. **The canonical list of kinds for the inventory.** Brandon's order is messaging, voice, design, competitors, personas, metric definitions, goals. Confirm that list is complete and closed for now, and confirm whether `context/notes/` and `context/plan/` beyond goals belong in it. The constant and the reference file are written from the answer.
-4. **Who scores the fidelity replay, and on what material.** Only one real base exists. The three cases in P29 need real material, and case two (several segments, no finished pages) does not exist in the Gridwise material. Confirm whether Brandon supplies it, whether a fixture stands in and the result is labeled as a fixture result, or whether case two is dropped and the gate is two cases.
-5. **Whether the logic atlas gains new figures.** The atlas has figures 1 to 8 and none of them is a skill run or an update step. Phase 2 and Phase 3 have nowhere to land. Confirm either that new figures are added (a skills figure and an update figure) or that skills stay out of the atlas and the plan says so.
-6. **Scheduling of the live checks.** Eight Phase 1 units and several Phase 2 units need a live check before release. Confirm whether they batch into one check per release or one per unit, because that decides whether Phase 1 ships as one release or several.
-7. **Whether the company-skills brainstorm may reopen the trust-surface refusal set.** Today a base may not hold `CLAUDE.md`, `AGENTS.md`, `plugins/`, or any `.sh`, `.py`, or `.js` file, and that refusal is what makes a cloned base safe. Company skills are, by definition, code on every seat. Confirm the brainstorm is allowed to propose changing that, since the answer shapes its whole question set.
+Revision 2 is written to the recommended answer on each call, so the build can start. A different answer changes the named unit and nothing before it. Calls 2, 3, 5 and 7 of revision 1 (design file contents, the list of kinds, atlas figures for skills, the trust-surface question) moved to the roadmap, because both reviewers said they wait for those plans.
+
+| # | The call | Recommended (what r2 assumes) | Runner-up | Needed before |
+|---|---|---|---|---|
+| 1 | Approving a proposed change inside Claude moves into Phase 1 | Yes, as Unit 1.2b, for a base with no shared copy. Both reviewers call its absence a blocker | Give the Gridwise base a shared copy by hand. Faster, but every base setup creates afterward is still broken | 1.2b is briefed |
+| 2 | One skill is pulled forward so the base produces usable work early, and which one | The outbound sequence, right after the rename, because its line to pipeline is the shortest: sequence, sends, replies, meetings | The content brief | 1.4c is briefed |
+| 3 | Who scores the fidelity replay, and on what material | Brandon scores and the builder never does. Case two is built from the real Gridwise material by holding the twelve finished pages out of consent and scoring the drafted segments against those pages as the answer key. Case three lowers the input cap for the replay and says so in the record. A case not run means incomplete | Brandon supplies a second real company with several segments and no finished pages | 1.1 freezes the corpora |
+| 4 | One release or two | Two. Release A is 1.1 to 1.5 with the runner and the sequence. Release B is selection, segments, and adoption, behind the fidelity gate. One live check per release | One gated release, as Astra recommends. Simpler to reason about, but the first usable skill waits behind adoption and the replay | The first version bump |
+| 5 | The six UX rulings from Fable H4, recorded in 1.1 | Accept all six: the consent paragraph becomes three short lines plus the question; the per-draft narrowing ask is dropped when the folder choice was explicit; the review shows one line per item with the document on request; the closing reconciles only the two required documents; adoption shows what was removed, the opening lines, and where the whole cleaned file is, with the yes bound to that file's hash; documents and changes get human names instead of paths and ids | Accept five and keep every adopted body shown whole in the conversation, as revision 1 and Amendment r2.4 D say | 1.1 is merged |
+| 6 | The bar for the moment-of-use trial, set before it runs | Ten real prompts that each use a flagged document, outside any skill. The flag must fire on at least nine. Below that, the read hook is built if Claude Code allows it, and if it does not, the CHANGELOG and the join guide say plainly that outside a skill the flag is best effort | Record the count and set no bar | 1.3's live check |
+| 7 | What "Sol" refers to in "Opus 5 high agents along with Sol agents" | Not guessed at. Units are built by Opus 5 agents at high effort until this is answered | None | Whenever it is answered |
+| 8 | Add `~/GTM Bases/` to the home-folder rule in the global CLAUDE.md | Add one line: "`~/GTM Bases/` (one folder per company base created by the GTM Base plugin; product data, not client work)" | Leave the rule alone and treat the folder as plugin-managed | Any time |
 
 ## High-Level Technical Design
 
@@ -219,49 +267,33 @@ While the GTM Base plugin is live in a build session, its gate reads every Bash 
 
 ```mermaid
 flowchart TB
-    subgraph P1[Phase 1: correction, in Codex's order]
-        A11[1.1 contract amendments in the documents]
+    subgraph RA[Release A]
+        A11[1.1 contract amendments, UX rulings, frozen replay corpora]
+        A11b[1.1b UX standard and the lint, added by r2]
         A12[1.2 completion and closing]
-        A13[1.3 quiet by default]
-        A14[1.4 rename to context change, with migration]
+        A12b[1.2b approve a proposed change locally, added by r2]
+        A13[1.3 quiet by default, r2.5]
+        A14[1.4 rename to context change, with migration, r2.5]
         A15[1.5 habit hooks]
+        A14b[1.4b thin runner, pulled forward by r2]
+        A14c[1.4c outbound sequence, pulled forward by r2]
+    end
+    subgraph RB[Release B, behind the fidelity gate]
         A16[1.6 selection fixes]
-        A17[1.7 umbrella, segments, guarded adoption, scope]
-        A18[1.8 plain-language standard and the lint]
-        A19[1.9 fidelity replay: the release gate]
+        A17a[1.7a scope and the segment inventory]
+        A17b[1.7b umbrella and segment drafts, the marker state]
+        A17c[1.7c guarded adoption]
+        A17d[1.7d recovery of an interrupted import]
+        A18[1.8 sweep of text no unit touched]
+        A19[1.9 fidelity replay: the gate]
     end
-    subgraph P2[Phase 2: what a base holds]
-        A21[2.1 base inventory]
-        A22[2.2 messaging and voice]
-        A23[2.3 design file]
-        A24[2.4 competitors, personas, metric definitions, goals]
-        A25[2.5 sources-of-truth file]
-        A26[2.6 update GTM Base]
-    end
-    subgraph P3[Phase 3: skills that use the base]
-        A31[3.1 thin-runner pattern and examples-as-tests harness]
-        A32[3.2 drift grade]
-        A33[3.3 content brief]
-        A34[3.4 outbound sequence]
-    end
-    subgraph P4[Phase 4]
-        A41[4.1 company-skills brainstorm: a requirements document]
-    end
-    A11 --> A12 --> A13 --> A14 --> A15 --> A16 --> A17 --> A18 --> A19
-    A19 --> A21
-    A14 --> A21
-    A21 --> A22 --> A23
-    A21 --> A24
-    A21 --> A25
-    A13 --> A26
-    A17 --> A31
-    A22 --> A31
-    A31 --> A32
-    A31 --> A33
-    A31 --> A34
-    A31 --> A41
-    A25 --> A41
+    A11 --> A11b --> A12 --> A12b --> A13 --> A14 --> A15
+    A14 --> A14b --> A14c
+    A15 --> A16 --> A17a --> A17b --> A17c --> A17d --> A18 --> A19
+    A11 -. case one replayed against 0.2.6 now .-> A19
 ```
+
+Codex's six ordered steps are 1.1, 1.2, 1.5, 1.6, 1.7a to 1.7d, and 1.9. Units 1.1b, 1.2b, 1.3, 1.4, 1.4b, 1.4c, and 1.8 are additions Codex's verdict never covered. The side track (1.4b, 1.4c) creates new files only and touches no file the main line owns, which is what lets it run beside 1.5.
 
 ### The lifecycle of one context file
 
@@ -278,23 +310,25 @@ Directional guidance. Every state is observable from the file plus the base's ow
 
 ## Implementation Units
 
-### Phase 1: the correction, in the Codex order
+### Phase 1: the correction
 
-Ordered exactly as `docs/reviews/2026-09-19-codex-setup-shape-verdict.md` sets out under "Smallest ordered change set and proving tests". No unit in this phase starts before the one above it has merged with its scenarios covered.
+Codex's six ordered steps from `docs/reviews/2026-09-19-codex-setup-shape-verdict.md` are Units 1.1, 1.2, 1.5, 1.6, 1.7a to 1.7d, and 1.9, in that order. Units 1.1b, 1.2b, 1.3, 1.4, 1.4b, 1.4c, and 1.8 are additions that verdict never covered, and Amendment r2.5 (quiet by default, the rename) had no outside review before the two plan reviews of 2026-09-19. On the main line no unit starts before the one above it has merged with its scenarios covered. The side track (1.4b, then 1.4c) starts when 1.4 has merged and owns only new files.
 
 - [ ] **Unit 1.1: Contract amendments to the documents**
 
 **Goal:** Every written promise matches what is about to be built, before a line of code moves. Nothing in the repository still says setup drafts three documents, or that a base with no recorded change is up to date.
 
-**Requirements:** P1, P2, P4, P5, P6, P7, P18, P19, P23, P27, P29.
+**Requirements:** P1, P2, P4, P5, P6, P7, P12, P17, P18, P19, P21, P23, P27, P28, P29.
 
 **Dependencies:** None. This is the first unit in the phase.
 
 **Files:**
-- Modify: `docs/brainstorms/2026-09-05-join-and-onboarding-requirements.md` (J8, J9, J10, J17, SC1, SC3 recorded as amended, each with a one-line pointer to Amendment r2.4), `docs/plans/2026-09-05-001-feat-join-and-onboarding-plan.md` (the Overview's three-draft wording, the Key Technical Decisions rows "A base is joined at the first approved file", "Drafting is direct", "The closing finding is computed by", Units 4 and 5), `docs/plans/2026-09-04-001-feat-current-without-integrations-plan.md` (a pointer from Units 9a, 9b and 10 to Amendment r2.5), `plugins/gtm-base/skills/join/SKILL.md` (the description, step 1, step 6's fixed order, step 7), `plugins/gtm-base/skills/join/references/closing-rules.md` (the finding order and both closing messages), `docs/join-guide.md` ("What setting up does")
-- Create: `docs/plans/2026-09-19-001-acceptance-matrix.md` (one row per state in the file-lifecycle table above, with what setup, the review, the moment-of-use check, and the stale computation each do in that state)
+- Modify: `docs/brainstorms/2026-09-05-join-and-onboarding-requirements.md` (J8, J9, J10, J17, SC1, SC3 recorded as amended, each with a one-line pointer to Amendment r2.4), `docs/plans/2026-09-05-001-feat-join-and-onboarding-plan.md` (the Overview's three-draft wording, the Key Technical Decisions rows "A base is joined at the first approved file", "Drafting is direct", "The closing finding is computed by", Units 4 and 5), `docs/plans/2026-09-04-001-feat-current-without-integrations-plan.md` (a pointer from Units 3, 9a, 9b and 10 to Amendment r2.5, and a note on r2.5 item 5 that the map is left out by its kind rather than confirmed at creation, per P12), `docs/brainstorms/2026-09-04-current-without-integrations-requirements.md` (origin R22 and R23 recorded as amended by r2.5), the join plan's Amendment r2.4 section C.2 (the quiet-record ask lives inside the review, not the daily block, per P17) and sections D and H (the conflict between "shown whole" and "never paragraphs" resolved by the ruling below), the parent scope's strategy structure at `~/Obsidian/Vault/Work/GTM-Base/2026-09-04-gtm-base-scope-v1.md` (one dated note appended saying the umbrella and `segments/` replace the single profile; it sits outside this repository, so it is appended to and never rewritten), `plugins/gtm-base/skills/join/SKILL.md` (the description, step 1, step 6's fixed order, step 7), `plugins/gtm-base/skills/join/references/closing-rules.md` (the finding order and both closing messages), `docs/join-guide.md` ("What setting up does")
+- Create: `docs/plans/2026-09-19-001-acceptance-matrix.md` (one row per state in the file-lifecycle table above, with what setup, the review, the moment-of-use check, and the stale computation each do in that state, followed by a "UX rulings" table with one ruling for each of the six steps Fable H4 lists), `docs/walkthroughs/2026-09-fidelity-replay.md` (created here holding only the frozen bar: the named scorer, the three corpora listed by path and content hash, and the answer key for each: the segments, named deals, figures with units, source versions, and unresolved choices a correct output must keep. Results are added by Unit 1.9 and by nobody else)
 
 **Approach:** Amend in place and record the amendment, never silently rewrite, because both plans are the record of why things are the way they are. Each amended requirement keeps its id and gains an "(amended 2026-09-19, r2.4 section A)" marker. The acceptance matrix is the consistency proof Codex asked for in ordered step 1: it is a table, not prose, and every later Phase 1 unit adds its own row rather than inventing a state.
+
+**Execution note (r2):** The six UX rulings are written to the recommended answers in call 5 under "For Brandon" and marked as awaiting his yes; a different answer is a one-row edit. The corpora are frozen before any behavior unit is built so the build cannot set its own evidence standard (Astra 3). Freezing lists paths and hashes and copies no source text into this repository. Case one is replayed against 0.2.6 as soon as it is frozen, in a session Brandon starts, so a fail is known before 1.7b is built.
 
 **Execution note:** Documents only. This unit writes no code and no test beyond the lint. It is the unit most likely to be rushed and the one whose omissions cause the rest of the phase to contradict itself, so its brief carries the whole Codex verdict, not a summary.
 
@@ -304,11 +338,46 @@ Ordered exactly as `docs/reviews/2026-09-19-codex-setup-shape-verdict.md` sets o
 - Lint: no amended text contains a banned git word or a long dash, asserted by `tests/plain_language.py` over each modified user-facing file.
 - Happy path: a search of the repository for the phrase "three documents" and for "one decision" in user-facing text returns nothing outside the historical amendment sections.
 - Edge case: the acceptance matrix has a row for every state in the lifecycle table and a column for each of setup, review, moment of use, and stale computation, with no cell left empty.
+- Edge case (r2): the rulings table has one row for each of the six steps, each naming the unit that carries the ruling out.
+- Edge case (r2): the replay record names the scorer, lists three corpora with a hash per file, and states the pass bar, and holds no result.
 - Integration: `sh tests/run.sh` still passes unchanged, since no behavior moved.
 
 **Verification:** A reader who has never seen the code can read `plugins/gtm-base/skills/join/SKILL.md` and `references/closing-rules.md` end to end and describe exactly what setup writes and what the closing says, with no contradiction against either plan.
 
 **Atlas: figures 7 and 8.** Figure 7 ("Setting up a base, step by step") loses the third draft; figure 8 ("Confirmations and the stale rules") gains the honest baseline state.
+
+- [ ] **Unit 1.1b: The UX standard and the lint that holds it (added by r2)**
+
+**Goal:** The standard is written down once, the four-line change format exists, documents and changes have human names, and the lint reads the sentences a person actually reads, before any behavior unit writes a sentence.
+
+**Requirements:** P28.
+
+**Dependencies:** 1.1. Moved here from Unit 1.8 by r2 (Fable H2, H3; Astra 10), because revision 1 landed the standard last and rewrote wording Brandon would already have checked live.
+
+**Files:**
+- Create: `docs/ux-standard.md` (one page: each step says what it is for in one sentence, shows output readable in seconds, ties it back, asks one thing; the four-line change format; the short interaction wrapper versus the complete artifact a person approves; human names), `plugins/gtm-base/templates/change-four-lines.md` (what changed, why, what it affects, when to look again), `plugins/gtm-base/lib/gtmbase/names.py` (the name a person reads for a context file, "your customer profile" and never `context/strategy/icp.md`, and for a change, its first line and its date and never its id), `tests/test_plain_language.py` (the lint's own tests, which do not exist today), `tests/test_names.py`
+- Modify: `tests/plain_language.py` (four new checks beside `find_banned` and `find_dashes`; `PYTHON_SENTENCES`, a registry of every sentence a person reads that is held as a Python string, which today means `stale_check.py` lines 86 to 152, `constants.py` lines 342 to 346, `confirm.py` lines 151 to 159, `join_flow.py` lines 94 to 104, and whatever else the completeness test finds; `EXEMPTIONS`, each entry carrying its reason and the unit that removes it)
+
+**Approach:** Four mechanical checks, because a lint that tries to judge prose fails. One: a step section opens with a sentence saying what the step is for, before any imperative. Two: a step makes exactly one request, counted as one delimited request block that may be a question or an imperative, because P4's required closing wording ("One sentence is enough, or say skip.") has no question mark and revision 1's question-mark count would have rejected it. Three: an interaction block is a short list or a small table, measured by consecutive prose lines over a stated cap, and the complete artifact a person approves (a whole document, a cleaned file) is a separately marked block the cap does not apply to, which is how "shown whole" and "never paragraphs" both hold. Four: a change shown to a person is the four labeled lines. The registry is asserted complete by a test that walks the library's module-level string constants and fails on any sentence-shaped constant that is neither registered nor exempted with a reason. Texts that fail today are not rewritten here: each goes on the exemption list naming the later unit that owns it, each later unit removes its own entries, and Unit 1.8 empties the list. The lint is a floor. The acceptance test for the standard is Brandon reading steps aloud.
+
+**Execution note:** Agents building to a green lint will satisfy "opens with a purpose sentence" with boilerplate. The brief says so, and says the read-aloud check is what the unit is judged by.
+
+**Patterns to follow:** `assert_plain` and how each test file asserts the texts it owns; the test that holds the map settings and their reference in step, as the model for the registry completeness test.
+
+**Test scenarios:**
+- Happy path: a fixture step that makes two requests fails; one that makes one passes; P4's exact closing wording passes.
+- Happy path: a fixture step that opens with an imperative fails; one that opens with a purpose sentence passes.
+- Happy path: a fixture interaction block of six prose lines fails; the same content as a five-row table passes; a whole document inside a marked artifact block passes.
+- Happy path: a change shown as a paragraph fails; the same change as four labeled lines passes.
+- Edge case: a sentence-shaped constant added to a fixture module and left out of the registry fails the completeness test.
+- Edge case: every exemption carries a reason and the unit that removes it; an entry with neither fails.
+- Edge case: `names.py` gives a readable name for each of the two required files, for a segment file, and for a change, and never returns a path or an id.
+- Edge case: the existing banned-word and dash checks still catch what they caught.
+- Integration: `sh tests/run.sh` passes with the lint asserted over every user-facing file in the plugin and over the registry.
+
+**Verification:** Brandon reads `docs/ux-standard.md` and says it is the standard he meant.
+
+**Atlas: none.** No behavior changes.
 
 - [ ] **Unit 1.2: Completion and closing**
 
@@ -319,10 +388,10 @@ Ordered exactly as `docs/reviews/2026-09-19-codex-setup-shape-verdict.md` sets o
 **Dependencies:** 1.1.
 
 **Files:**
-- Modify: `plugins/gtm-base/lib/gtmbase/constants.py` (`REQUIRED_CONTEXT_FILES` confirmed at two and documented as the completion contract; a new finding code for the honest baseline), `plugins/gtm-base/lib/gtmbase/stale.py` (`first_run_finding` gains the baseline state and loses the "no date to watch" claim; `_review_items` restricted to files the entry affects and to open entries), `plugins/gtm-base/lib/gtmbase/stale_check.py` (`first_run_text`, `finding_sentence`), `plugins/gtm-base/lib/gtmbase/session_start.py` (`_missing_required` and the continue-setup branch stop expecting an entry), `plugins/gtm-base/lib/gtmbase/join_flow.py` (`close_run`, `closing_message`), `plugins/gtm-base/skills/join/references/closing-rules.md`, `templates/company-base/context/map.md` and `plugins/gtm-base/templates/company-base/context/map.md` (placeholder date removed), `plugins/gtm-base/lib/gtmbase/create_base.py` (the map is confirmed at creation)
-- Test: `tests/test_stale.py`, `tests/test_stale_check.py`, `tests/test_session_start.py`, `tests/test_join_setup_flow.py`, `tests/test_create_base.py`, `tests/test_scaffold.py` (the two template copies stay identical)
+- Modify: `plugins/gtm-base/lib/gtmbase/constants.py` (`REQUIRED_CONTEXT_FILES` confirmed at two and documented as the completion contract; a new finding code for the honest baseline), `plugins/gtm-base/lib/gtmbase/stale.py` (`first_run_finding` gains the baseline state and loses the "no date to watch" claim; `_review_items` restricted to files the entry affects and to open entries), `plugins/gtm-base/lib/gtmbase/stale_check.py` (`first_run_text`, `finding_sentence`), `plugins/gtm-base/lib/gtmbase/session_start.py` (`_missing_required` and the continue-setup branch stop expecting an entry), `plugins/gtm-base/lib/gtmbase/join_flow.py` (`close_run`, `closing_message`), `plugins/gtm-base/skills/join/references/closing-rules.md`, `templates/company-base/context/map.md` and `plugins/gtm-base/templates/company-base/context/map.md` (placeholder date removed), `plugins/gtm-base/lib/gtmbase/stale.py` and `stale_check.py` again (a file whose kind is the map is left out of flags, questions, and the review)
+- Test: `tests/test_stale.py`, `tests/test_stale_check.py`, `tests/test_session_start.py`, `tests/test_join_setup_flow.py`, `tests/test_scaffold.py` (the two template copies stay identical)
 
-**Approach:** The baseline finding is a new state in the existing fixed order, not a new code path: skipped file first, then an unanswered marker, then a source older than an affecting change, then the baseline, then nothing-out-of-date. The map is confirmed by `create_base` at the moment the base exists, with a confirmation line like any other file, which is what lets the placeholder date go without leaving the map unconfirmable. `_review_items` is corrected to compare only against entries that both affect the file and are open; the currently passing scenarios are read first and any scenario that only passed because of the wider comparison is rewritten with its reason recorded in the test.
+**Approach:** The baseline finding is a new state in the existing fixed order, not a new code path: skipped file first, then an unanswered marker, then a source older than an affecting change, then the baseline, then nothing-out-of-date. The map is left out of questions and reviews by its kind (r2, Fable M4): a confirmation line would make it come due again after the threshold, and leaving it out also covers the base that was created before this unit. `_review_items` today only considers entries whose run id matches the run on a drafted line (`stale.py`, around line 869), and Unit 1.5 writes closing entries with no run id, so the finding is rekeyed here (r2, Fable H6): a drafted line on the file, an open entry that affects the file, and source material dated before the change happened. It compares only against entries that both affect the file and are open; the currently passing scenarios are read first and any scenario that only passed because of the wider comparison is rewritten with its reason recorded in the test.
 
 **Patterns to follow:** The deterministic finding order already in `closing-rules.md`; the rule that the finding is recomputed and never cached.
 
@@ -332,13 +401,51 @@ Ordered exactly as `docs/reviews/2026-09-19-codex-setup-shape-verdict.md` sets o
 - Edge case: positioning skipped: the finding names the skipped file and nothing else changes.
 - Edge case: a file carrying an unanswered `[your call: ...]` marker outranks the baseline in the finding order. (The marker detection itself lands in 1.7; this unit asserts the ordering slot exists and is empty until then.)
 - Edge case: twelve context files and one open change affecting two of them: `_review_items` returns items for those two only; the other ten produce nothing.
-- Edge case: a closed change older than a file: no review item.
-- Error path: a base whose map has no confirmation line (a base created before this unit): the map is not asked about and the absence is reported as a code, not as a question.
-- Integration: a full setup run through `tests/test_join_setup_flow.py` ends with two files, two drafted confirmation lines, a confirmed map, and the baseline finding.
+- Edge case (r2, replaces a scenario the date comparison already passed): a closed change newer than the file's sources produces no review item, and the same change left open produces one.
+- Edge case (r2): an entry with no run id that affects a file with a drafted line and older sources still produces the review item.
+- Edge case (r2): setup resumed on a later day, so the two confirmations carry different dates: the baseline finding names each date correctly, and a second seat reading the same base computes the same finding.
+- Error path: the map has no confirmation line, in a new base and in one created before this unit: it is never asked about, never listed in the review, and never flagged.
+- Integration: a full setup run through `tests/test_join_setup_flow.py` ends with two files, two drafted confirmation lines, no line for the map, and the baseline finding.
 
 **Verification:** A real setup run that approves both documents and records nothing else ends with a sentence Brandon reads aloud and agrees is true of that base.
 
 **Atlas: figures 5, 7, 8.**
+
+- [ ] **Unit 1.2b: Approve a proposed change locally (added by r2)**
+
+**Goal:** On a base with no shared copy, a prepared change can be read, approved by its owner inside Claude, and applied, so every "no becomes a proposed change" has somewhere to end.
+
+**Requirements:** P36, P13, P28.
+
+**Dependencies:** 1.2, 1.1b. Both reviewers' blocker (Astra 2, Fable B1). Verified on 2026-09-19: `compose_proposal.py` around line 660 refuses a base with no shared copy; the Gridwise base has none; `push_conditions.py` refuses while `first_push_reviewed` is false, `create_base.py` sets it false, and only tests ever set it true.
+
+**Files:**
+- Create: `plugins/gtm-base/lib/gtmbase/approve_local.py`, `plugins/gtm-base/skills/propose-change/scripts/approve_local.py` (a shim), `plugins/gtm-base/skills/propose-change/references/local-approval-rules.md`, `tests/test_approve_local.py`
+- Modify: `plugins/gtm-base/lib/gtmbase/compose_proposal.py` (on a base with no shared copy the refusal becomes a handoff: the staged change is kept and the result says it can be approved here), `plugins/gtm-base/skills/propose-change/SKILL.md`, `plugins/gtm-base/lib/gtmbase/stale_check.py` and `plugins/gtm-base/skills/stale-check/SKILL.md` (prepared changes awaiting approval are listed), `plugins/gtm-base/lib/gtmbase/report.py` (a locally approved change counts exactly as a merged one)
+- Test: `tests/test_compose_proposal.py`, `tests/test_stale_check.py`, `tests/test_report.py`
+- Not touched, and a test says so: `push_conditions.py`, `gate.py`, and the seat's `first_push_reviewed` value.
+
+**Approach:** It runs only when the base has no shared copy; with one, the shipped path is unchanged and this unit refuses and points at it. The steps, in order: load the staged change with `load_staging`; check it still fits the files with `check_edits`, and on a conflict say so and offer to prepare it again; run `scan_everything`, the same screens an outgoing proposal gets, because a local base becomes the shared copy at the first backup; show the change in the four-line form with the before and after of each edited section as the complete artifact; ask one thing (approve, not yet, or drop it). The yes is bound to `content_hash_for` the staged content, so a staged change that moved between the showing and the yes is asked about again. Only an owner of each edited file may approve, by the same author-email rule confirmations use, and anyone else is told who owns it. On a yes, one commit on the base holds the edited files through `apply_edit`, the change entry when the staging carries one, the confirmation line (an owner accepting a proposal is the owner's confirmation, decided 2026-09-06), and a corrections file built by `corrections_for` that `report.py` parses. The tree must be clean first. The staging copy is retired last. Listing open proposals from a shared copy, reject-but-keep, and the branch hash check stay with the first plan's Unit 8, which later adds that half beside this one.
+
+**Execution note:** Do not make this work by loosening anything about what may leave the computer. If a step seems to need `first_push_reviewed` set, the design is wrong.
+
+**Patterns to follow:** "Approve exactly what the reviewer saw" from the first plan's Unit 8; the absent-only, clean-tree write in `review.approve`; the partial-then-commit point from `create_base.py`.
+
+**Test scenarios:**
+- Happy path: on a base built by `create_base` with no shared copy and no fake standing in for one, a no inside the review produces a staged change; it is shown in four lines, approved, and applied; the file changed, one confirmation line names the change, one corrections file parses and is counted by `report.py`, there is one commit, and the staging copy is gone.
+- Happy path: "not yet" leaves the staged change and the flag as they were; "drop it" retires the staged change and leaves the file flagged.
+- Edge case: the staged content changes between the showing and the yes: nothing is applied and the person is asked again.
+- Edge case: the file changed on disk since the change was prepared: reported, with the offer to prepare it again, and nothing applied.
+- Error path: a tree the person has dirtied: one sentence, nothing written.
+- Error path: a failure injected after the file write, after staging, after the confirmation line, and after the commit: every retry ends in the same final state and no run leaves a half-applied change.
+- Security: a staged change naming a path outside `paths.PROPOSAL_PATH_PREFIXES` or under `.claude/` is refused; one carrying a contact detail or a key is refused by the same screens with the class named and never the value; an approver who is not an owner is refused and told who is.
+- Security: no git call reaches a remote, `first_push_reviewed` is still false afterward, and the gate's own tests pass unchanged.
+- Edge case: a base with a shared copy: this path refuses and points at the shipped one.
+- Integration (P3 on a real-shaped base): a hand-entered change, the flag, the staged proposal, local approval, and the file ends confirmed with the flag cleared.
+
+**Verification:** On the Gridwise base Brandon answers no in a review, reads the prepared change in four lines, says yes, and the document is changed and confirmed without GitHub being opened.
+
+**Atlas: figures 5 and 8.**
 
 - [ ] **Unit 1.3: Quiet by default**
 
@@ -346,66 +453,149 @@ Ordered exactly as `docs/reviews/2026-09-19-codex-setup-shape-verdict.md` sets o
 
 **Requirements:** P8, P9, P10, P11, P13.
 
-**Dependencies:** 1.2.
+**Dependencies:** 1.2, 1.2b ("fix it first" and a no inside the review both end in a local approval).
 
 **Files:**
-- Create: `plugins/gtm-base/lib/gtmbase/moment.py` (the moment-of-use check and its sentence), `plugins/gtm-base/templates/moment-of-use.md`, `plugins/gtm-base/templates/weekly-line.md`
-- Modify: `plugins/gtm-base/lib/gtmbase/session_start.py` (`_daily_block` and `_daily_work` stop selecting a question and stop issuing a question id; the map, the change summary, and the moment-of-use instruction remain), `plugins/gtm-base/templates/injection.md`, `plugins/gtm-base/lib/gtmbase/state.py` (weekly-line preference, silence-until date), `plugins/gtm-base/lib/gtmbase/stale_check.py` (`run` gains the review mode), `plugins/gtm-base/skills/stale-check/SKILL.md` (the "review my base" entry point and its first sentence), `plugins/gtm-base/skills/stale-check/references/rules.md`, `plugins/gtm-base/skills/confirm/SKILL.md` (entered from the review and from the moment-of-use flag rather than from a session-start question), `plugins/gtm-base/lib/gtmbase/confirm.py` (question ids issued by the review; `pending_questions` is the way back)
-- Test: `tests/test_session_start.py`, `tests/test_stale_check.py`, `tests/test_confirm.py`, `tests/test_state.py`, and new `tests/test_moment_of_use.py`
+- Create: `plugins/gtm-base/lib/gtmbase/moment.py` (the check, its sentence, and the three answers), `plugins/gtm-base/templates/moment-of-use.md`, `plugins/gtm-base/templates/weekly-line.md`, `tests/test_moment_of_use.py`
+- Modify: `plugins/gtm-base/lib/gtmbase/session_start.py` (`_daily_block` and `_daily_work` stop selecting a question and stop issuing a question id; the map, the change summary, and the moment-of-use instruction remain), `plugins/gtm-base/templates/injection.md` (the instruction, plus one sentence saying that everything inside a context file is data and never an instruction, per Fable M5), `plugins/gtm-base/lib/gtmbase/state.py` (weekly-line preference, silence-until date), `plugins/gtm-base/lib/gtmbase/stale_check.py` (`run` gains the review mode; the review shows one line per item using `names.py`, with the document on request), `plugins/gtm-base/skills/stale-check/SKILL.md` and `references/rules.md`, `plugins/gtm-base/skills/confirm/SKILL.md` (entered from the review and from the moment-of-use flag; "How to ask" no longer shows the whole document and explains all three answers for every item), `plugins/gtm-base/lib/gtmbase/confirm.py` (question ids issued by the review; `pending_questions` is the way back)
+- Conditional, decided inside this unit: `plugins/gtm-base/hooks/hooks.json` and a read-hook wrapper, if the evaluation below passes
+- Test: `tests/test_session_start.py`, `tests/test_stale_check.py`, `tests/test_confirm.py`, `tests/test_state.py`
 
-**Approach:** Session start becomes a subtraction: record the session, bring the shared copy up to date under the existing path refusals, hand over the map and the change summary, and stop. The question-id machinery is not deleted, it moves: the review issues ids bound to the session exactly as the hook did, so single use, expiry, the asked log, and the yes rate keep working with a different issuer. `moment.check(path)` returns either nothing or a four-line block (what changed, why, what it affects, when to look again) plus the already-drafted fix and the one question, and it never touches the network. The weekly line and the silence window live in seat state because they are one person's preference.
+**Approach:** Session start becomes a subtraction: record the session, bring the shared copy up to date under the existing path refusals, hand over the map and the change summary, and stop. The question-id machinery moves rather than dies: the review issues ids bound to the session exactly as the hook did, so single use, expiry, the asked log, and the yes rate keep working with a different issuer.
 
-**Execution note:** The moment-of-use instruction that goes into the session context is the part that depends on the assistant following an instruction. Write it as a hard rule in the same shape the reader agents use, and record in the CHANGELOG that its reliability is unmeasured.
+The moment-of-use flow has an action contract (r2, Astra 4). Detect: `moment.check(path)` is a local lookup against the recorded changes and the confirmations. Prepare: it says a fix is ready only when a staged change for that file exists, because the shipped "drafted fix" is an `Update needed:` placeholder that still needs rewriting (`stale_check.py` around line 327) and `session_start.py` stages nothing; otherwise it offers to prepare one. Pause: the caller produces no work product before the choice. Choose, one of three: "use it as is" leaves the flag standing and writes nothing, because permission to use a stale document is not a statement that it is right; "fix it first" prepares the change and waits for the owner's approval through Unit 1.2b, then resumes; "it already reflects this" is the existing confirmation. Resume: the work continues with whichever document state resulted. An unanswered marker alone never interrupts, because the settled rule is that only an overtaking recorded change does; markers are listed in the review.
 
-**Patterns to follow:** The hook posture (always exit 0, fixed sentences, never a stack trace); the existing question-id lifecycle in `confirm.py`.
+Coverage, stated honestly. Inside a skill, the runner (Unit 1.4b) is the deterministic caller. The Phase 1 skills that hand a context file to the model (stale-check while improving a prepared change, propose-change, confirm) call `moment.check` before they do, and each is tested at its real entry point. Outside a skill the flag rests on the injected instruction, so this unit also does two things revision 1 did not. It evaluates a hook on the file-read tool that exits at once unless the path is under a joined base's `context/` folder; revision 1 rejected this because it "would fire on every file in every repository", but the Bash gate already reads every command and exits early, so the rejection needs a measurement, not an assumption. What such a hook may deliver to the assistant is verified against Claude Code's hook documentation at build time, and it is built only if it can deliver the flag. And the live check is a measured trial with the bar set beforehand (call 6 under "For Brandon"), with the count recorded in the CHANGELOG.
+
+**Execution note:** Write the injected instruction as a hard rule in the same shape the reader agents use. Record in the CHANGELOG exactly what was measured, and nothing that was not.
+
+**Patterns to follow:** The hook posture (always exit 0, fixed sentences, never a stack trace); the existing question-id lifecycle in `confirm.py`; the gate's early exit as the model for a cheap hook.
 
 **Test scenarios:**
 - Happy path: session start on a joined base with two overdue files: the map and the change summary are injected, no question text appears, no question id is issued, and the asked log is unchanged.
-- Happy path: `moment.check` on a file affected by an open change returns the four lines, the change's date, and the drafted fix; on an unaffected file it returns nothing.
-- Edge case: `moment.check` on a file with an unanswered marker returns the marker prompt rather than a change block.
-- Happy path: "review my base" lists what is due and what has been proposed as one list, issues one question id per item asked, and records outcomes in the asked log exactly as the hook did.
-- Edge case: a no inside the review becomes a prepared change, and a not now writes a suppression, both unchanged from the shipped behavior.
-- Edge case: the weekly line is off by default; after it is turned on it appears once in a week and not twice; after a silence of a month is set, nothing appears until the date passes or the person asks.
-- Security: `moment.check` makes no git call that reaches a remote and no network call of any kind, asserted with a runner that fails on any fetch.
+- Happy path: `moment.check` on a file affected by an open change returns the four lines and the change's date; with a staged change present it says a fix is ready; with none it offers to prepare one and never claims one exists.
+- Happy path: "use it as is" writes no confirmation line and the file is still flagged on the next check.
+- Happy path: "it already reflects this" writes one confirmation line naming the change.
+- Happy path: "fix it first" prepares a change, and the work does not resume until Unit 1.2b has applied it or the person chose otherwise.
+- Edge case: a file with an unanswered marker and no overtaking change: `moment.check` returns nothing; the review lists the marker.
+- Edge case (r2): at each real entry point (the stale-check improvement step, propose-change, confirm), no context file is handed to the model before `moment.check` ran for it, asserted on the rendered input and not on a fixture that calls the check voluntarily.
+- Happy path: "review my base" lists what is due and what has been proposed as one line per item with readable names, issues one question id per item asked, and records outcomes in the asked log exactly as the hook did.
+- Edge case: a no inside the review becomes a prepared change that Unit 1.2b can apply, and a not now writes a suppression.
+- Edge case: the weekly line is off by default; once on it appears once in a week and not twice; after a month's silence is set nothing appears until the date passes or the person asks.
+- Security: `moment.check` imports and calls nothing that can reach a network, asserted by failing on any use of the git runner's remote-capable commands and of the network modules, not only on a fetch.
+- Security: a context file holding an instruction sentence reaches the model inside the data fence on every path this unit touches.
 - Error path: a base whose records cannot be read: the check returns nothing and records a code; it never guesses.
-- Integration: a session that opens silently, runs a skill that calls `moment.check`, is flagged, answers yes, and leaves one confirmation line in the right file.
+- Conditional: if the read hook is built, it exits at once for a path outside a joined base's `context/` folder, delivers the flag for a flagged file inside one, and always exits 0.
 
-**Verification:** Brandon opens `~/Gridwise` and gets a working session with no question in it, then asks "review my base" and walks the list in one sitting.
+**Verification:** Brandon opens `~/Gridwise` and gets a working session with no question in it, asks "review my base" and walks the list in one sitting, and then runs the measured trial: the agreed number of real prompts that each use a flagged document, with the count of times the flag fired written down.
 
 **Atlas: figures 2 and 5.**
 
-- [ ] **Unit 1.4: The rename to context change, with migration and tolerant reading**
+- [ ] **Unit 1.4: The rename to context change, with a recoverable migration and both layouts read**
 
-**Goal:** One word everywhere a person reads, one folder name and one set of field names inside, the existing base migrated, and the old layout still read.
+**Goal:** One word everywhere a person reads, one folder name and one set of field names inside, the existing base migrated without any moment at which an entry is hidden or a retry is blocked, and the old layout still read.
 
-**Requirements:** P14, P15.
+**Requirements:** P14, P15, P3.
 
 **Dependencies:** 1.3.
 
 **Files:**
-- Create: `plugins/gtm-base/lib/gtmbase/changes.py` (migration and the old-layout reader), `tests/test_changes_migration.py`
-- Modify: `plugins/gtm-base/lib/gtmbase/constants.py` (`DECISIONS_DIR` becomes `work/changes`; the old value kept as a read-only fallback constant; `LEDGER_ORIGINS` and `LEDGER_STATUSES` keep their values and gain the `change` kind), `plugins/gtm-base/lib/gtmbase/formats.py` (the change entry and its field names, reading both spellings, writing one), `plugins/gtm-base/lib/gtmbase/base_reader.py` (`ledger` reads the new folder first and falls back), `plugins/gtm-base/lib/gtmbase/stale.py` and `stale_check.py` (vocabulary in every sentence), `plugins/gtm-base/lib/gtmbase/session_start.py`, `join_flow.py`, `compose_proposal.py`, `confirm.py`, `review.py`, `plugins/gtm-base/templates/ledger-entry.md` (renamed `change-entry.md`), `injection.md`, `proposal-staging.md`, `pr-body.md`, `plugins/gtm-base/skills/*/SKILL.md` and every `references/*.md`, `plugins/gtm-base/skills/join/references/prompts/draft-ledger-entry.md` (renamed `draft-change-entry.md`), `templates/company-base/` and `plugins/gtm-base/templates/company-base/` (`work/decisions/` becomes `work/changes/`, and `context/map.md`'s "where things live" paragraph), `docs/join-guide.md`
-- Test: `tests/test_formats.py`, `tests/test_base_reader.py`, `tests/test_stale.py`, `tests/test_stale_check.py`, `tests/test_compose_proposal.py`, `tests/test_confirm.py`, `tests/test_join_setup_flow.py`, `tests/test_scaffold.py`, `tests/fixtures/ledger-entry.md` and `tests/fixtures/drafts/ledger-entry.md` (kept as old-layout fixtures and joined by new-layout ones)
+- Create: `plugins/gtm-base/lib/gtmbase/changes.py` (the migration transaction and its recovery), `tests/test_changes_migration.py`
+- Modify: `plugins/gtm-base/lib/gtmbase/constants.py` (`DECISIONS_DIR` becomes `work/changes`; the old value kept as a read-only constant; `LEDGER_ORIGINS` and `LEDGER_STATUSES` keep their values and gain the `change` kind; "decision" as the name of what the base tracks, and "ledger", join the words banned from text a person reads), `plugins/gtm-base/lib/gtmbase/formats.py` (the change entry, reading both spellings of every field, writing one; today's parser around line 415 requires the old fields and kind), `plugins/gtm-base/lib/gtmbase/base_reader.py` (`ledger` today enumerates one directory, around line 195; it reads both folders, joins by entry id, and reports an id that appears twice with different content as a conflict), `plugins/gtm-base/lib/gtmbase/paths.py` (`PROPOSAL_PATH_PREFIXES`, lines 27 to 31, accepts both folders, or a staged or kept proposal naming the old path is refused after the rename), `plugins/gtm-base/lib/gtmbase/report.py` (line 113 and the first-added query at lines 72 to 80 look under both paths), `plugins/gtm-base/lib/gtmbase/stale.py` and `stale_check.py` (vocabulary in every sentence, including the "ledger" sentences at `stale_check.py` lines 110 to 121 and the person-facing name of `--dismiss-ledger-behind`), `session_start.py`, `join_flow.py`, `compose_proposal.py`, `confirm.py`, `review.py`, `approve_local.py`, `plugins/gtm-base/templates/ledger-entry.md` (renamed `change-entry.md`), `injection.md`, `proposal-staging.md`, `pr-body.md`, `templates/corrections-file.md` (line 11), both `CODEOWNERS` templates, `plugins/gtm-base/skills/*/SKILL.md` and every `references/*.md`, `plugins/gtm-base/skills/join/references/prompts/draft-ledger-entry.md` (renamed `draft-change-entry.md`), `templates/company-base/` and `plugins/gtm-base/templates/company-base/` (`work/decisions/` becomes `work/changes/`, and the map's "where things live" paragraph), `docs/join-guide.md`
+- Test: `tests/test_formats.py`, `tests/test_base_reader.py`, `tests/test_stale.py`, `tests/test_stale_check.py`, `tests/test_compose_proposal.py`, `tests/test_confirm.py`, `tests/test_join_setup_flow.py`, `tests/test_scaffold.py`, `tests/test_create_base.py`, `tests/test_paths.py`, `tests/test_report.py`, `tests/test_review.py`, `tests/test_trust_surface.py`, `tests/test_plain_language.py`, `tests/fixtures/ledger-entry.md` and `tests/fixtures/drafts/ledger-entry.md` (kept as old-layout fixtures and joined by new-layout ones)
 
-**Approach:** Three changes in one unit because splitting them leaves the tree half-renamed: the folder, the fields, and the words. Entry ids are untouched, which keeps confirmations, corrections, proposals, and the index joined. `changes.migrate` moves the folder with git so history follows, rewrites field names in place, refuses on a dirty tree, is safe to run twice, and writes a dated file in `corrections/` saying what it did. The old fixtures stay in the suite as the tolerant-reading evidence.
+**Approach:** Three renames land in one unit, because splitting them leaves the tree half-renamed: the folder, the fields, and the words. Entry ids are untouched. What r2 changes is how the base gets from one layout to the other (Astra 1, Fable H8).
 
-**Execution note:** This unit touches more files than any other in the plan and owns all of them for its duration. No other unit runs concurrently with it.
+The reader comes first. `base_reader.ledger` reads both folders and joins by id, so there is no state in which an old entry is hidden, whatever the migration did or did not do. Then `changes.migrate`, in this order: check that every entry parses and that no id exists in both folders with different content, and refuse with a report if not; refuse on a tree the person has dirtied; write a transaction record under the plugin's own records folder naming each step; make change one, the folder move with no content change, so git follows the history; make change two, the field rewrite, which is the commit point; write the dated corrections file in a shape `CorrectionsFile` parses (entry id, staging id, content hash, correction class), or `report.py` skips or miscounts it; close the transaction record. A later run that finds an open transaction finishes it or puts it back, and it knows its own unfinished work from the person's edits by that record, so a half-done migration never blocks its own retry. A base holding both folders with no conflicting ids is migrated by moving what is still in the old one, not refused. `decided_by` becomes `noted_by` as Amendment r2.5 says, and every line a person reads says who noted the change. The user-facing wording is written to `docs/ux-standard.md` and this unit removes its own entries from the lint's exemption list.
 
-**Patterns to follow:** The append-only rule for `constants.py`; the migration ordering pattern from `migrate.py` (record before you rename).
+**Execution note:** This unit touches more files than any other and owns all of them for its duration; nothing on the main line runs beside it. Whether the migration runs inside the session-start budget or is offered as a step the person accepts is measured on the real base before it is wired. One seat exists today. An older plugin reading a migrated base sees it as empty, which is recorded against release two as a condition of inviting a second seat: every seat updates before a base migrates.
+
+**Patterns to follow:** The append-only rule for `constants.py`; the partial-folder-then-rename commit point in `create_base.py` and the transactional registry in `machine.py`, which are the real patterns (revision 1 cited a `migrate.py` that does not exist; the only `migrate` is a stub in `paths.py` lines 510 to 519 that raises).
 
 **Test scenarios:**
-- Happy path: a base holding `work/decisions/` with three entries migrates to `work/changes/`, keeps all three entry ids, rewrites the field names, and records one correction file. Running the migration again changes nothing.
-- Happy path: a base already holding `work/changes/` is read normally and the migration is a no-op.
-- Edge case: a base holding both folders: the migration refuses and reports, rather than merging.
-- Edge case: an entry written with the old field names inside the new folder is read correctly and the values land in the right places.
-- Error path: a dirty tree: the migration refuses with one sentence and writes nothing.
+- Happy path: a base holding `work/decisions/` with three entries migrates to `work/changes/` in two changes, keeps all three ids, rewrites the field names, records one corrections file that `report.py` parses, and closes its transaction. Running it again changes nothing.
+- Happy path: a base already holding `work/changes/` is read normally and the migration does nothing.
+- Error path (r2): a failure injected after each mutation in turn (the transaction record, the move, the rewrite, the corrections file): every retry finishes or puts back, and bodies, ids, confirmations, and computed flags are identical to an uninterrupted run.
+- Edge case (r2): both folders hold different entries: the reader returns all of them, and the migration moves the old ones.
+- Edge case (r2): both folders hold the same id with different content: the reader reports the conflict and chooses neither; the migration refuses and names the id.
+- Edge case (r2): the migration refuses on an old-layout base, a writer then creates `work/changes/` with a new entry, and the reader still returns the old entries beside it.
+- Edge case: an entry written with old field names inside the new folder is read correctly.
+- Error path: a tree the person dirtied: one sentence, nothing written; a tree dirtied only by this migration's own open transaction: recovery runs.
 - Edge case: a confirmation line naming an entry id survives the migration and still settles that entry for its file.
-- Lint: no user-facing text contains the word "decision" as the name of what the base tracks; the words "context change" and "change" appear instead, and the full term appears before the short one in every text.
-- Integration: a full setup run, a local edit proposal, and a review all work end to end on a migrated base, with `tests/test_stale.py` scenarios passing against both layouts.
+- Edge case (r2): the "catches" number from `report.py` is the same before and after the migration on a base with recorded catches.
+- Edge case (r2): a staged proposal that names `work/decisions/` is still accepted after the rename.
+- Edge case (r2, recorded and not fixed): the 0.2.6 parser reading a migrated base is asserted to see no entries, so the known limit is a test and not a surprise.
+- P3 (r2): the old-layout SC1 test stays byte-identical and passes; a new-layout twin is added beside it.
+- Lint: no text a person reads contains "decision" as the name of what the base tracks, or "ledger"; "context change" appears before the short form "change" in every text.
+- Integration: a full setup run, a local edit, a review, and a local approval all work end to end on a migrated base.
 
-**Verification:** The one real base at `~/GTM Bases/Gridwise/gtm-base` migrates in a live run, keeps every entry id, and its next review reads identically to the one before.
+**Verification:** The one real base at `~/GTM Bases/Gridwise/gtm-base` migrates in a live run, keeps its entry id, and its next review reads identically to the one before. Scale, for honesty: that base holds one entry, no corrections, and no proposals.
 
 **Atlas: figures 1 and 8.**
+
+- [ ] **Unit 1.4b: The thin runner and its contract test (pulled forward by r2 from Unit 3.1)**
+
+**Goal:** One shape for every skill that uses the base, which is also the deterministic caller of the moment-of-use check.
+
+**Requirements:** P33, P28, P9.
+
+**Dependencies:** 1.3 (`moment.check`), 1.4 (so no skill is ever written in the old vocabulary). r2, Fable H1: revision 1 also listed 1.7, 2.1, and 2.2, but its own scenarios say a missing file produces a named gap, so those were soft. This unit creates new files only, apart from the two appends named below, and runs beside Unit 1.5.
+
+**Files:**
+- Create: `plugins/gtm-base/lib/gtmbase/runner.py` (read the declared context files, call `moment.check` on each, stop for the choice when one is flagged, fence every file as data, assemble the request with the rubric, screen the output, hand back the work product), `docs/thin-runner.md` (the pattern, written once for people who write skills; r2 moved it out of `plugins/gtm-base/skills/references/`, which would have put a folder with no `SKILL.md` beside the skills), `tests/test_runner_contract.py`
+- Modify, append only: `plugins/gtm-base/lib/gtmbase/constants.py`, `tests/support.py` (a helper that builds a base holding a named set of context files)
+
+**Approach:** The runner is the only place a skill touches the base, which keeps each skill thin and keeps the moment-of-use check from being something a skill has to remember. When a declared file is flagged the runner returns the moment-of-use block and produces nothing until the choice is recorded. An example is a folder holding an input, the list of context files it ran against, an owner-approved output, an expectations file, and at least one deliberately wrong output. r2 (Astra 12, Fable M7): revision 1 called its harness "examples as tests", but it asserted which files were read, which is identical for every example, and never looked at the approved output, so an irrelevant paragraph with no contact detail in it would have passed. The expectations file states what this example must contain: required claims, the segment it is about, and the outcome (for a sequence, the number of steps and that every claim names its context file). The contract test checks the approved output against its expectations and checks that each wrong output fails. It never calls a model and asserts no prose. Separately, before any release that touches a skill or a rubric, the approved examples are run again for real and Brandon reads them; that replay is where judgment is tested, and the plan calls it a replay and not a test.
+
+**Execution note:** Fix what the contract test asserts before Unit 1.4c is written, so the skill is built against a fixed contract.
+
+**Patterns to follow:** `drafting.assemble` and `review.screen` as the two ends of an existing pipeline; the fenced data-not-instructions rule on every source.
+
+**Test scenarios:**
+- Happy path: a fixture skill declaring three context files reads exactly those three and calls `moment.check` on each.
+- Edge case: a declared file missing from the base produces a named gap and does not stop the run.
+- Edge case: a declared file that is flagged returns the moment-of-use block, and no request is assembled until a choice is recorded.
+- Security: a context file holding an instruction sentence reaches the request inside the data fence; the output is screened for contact details and keys before it is handed back. The test claims the fence is present, and does not claim a model would not follow the sentence.
+- Happy path: an example whose approved output meets its expectations passes; its deliberately wrong output fails; an example with no wrong output is rejected as incomplete.
+- Error path: a rubric named by a skill but absent from the base: the run reports it and substitutes nothing.
+
+**Verification:** A fixture skill written against the pattern needs no code of its own beyond its declarations and its prompt.
+
+**Atlas: figure 1** gains the runner as the way a skill reads the base.
+
+- [ ] **Unit 1.4c: Outbound sequence (pulled forward by r2 from Unit 3.4)**
+
+**Goal:** The base produces one piece of marketing work a marketer would send: a sequence grounded in one segment's own language, with every claim attributable to the base.
+
+**Requirements:** P33, P37, P28, P13.
+
+**Dependencies:** 1.4b, and 1.2b for adding the rules file to a base.
+
+**Files:**
+- Create: `plugins/gtm-base/skills/outbound-sequence/SKILL.md`, `scripts/outbound_sequence.py` (a shim), `references/sequence-shape.md`, `examples/`, `starter/outbound-rules.md` (the starter rules, kept in the plugin), `tests/test_outbound_sequence.py`
+- Modify, append only: `plugins/gtm-base/lib/gtmbase/constants.py`
+- Not created, by r2 (Astra 8): nothing under `templates/company-base/`. Base creation copies that whole tree, so a rules file placed there would already exist in every new base, absent-only writing would then refuse it, and the one existing base would never receive it.
+
+**Approach:** Reads the named segment's file when the base has one and otherwise the customer profile, saying which it used; reads the positioning; reads messaging, voice, and competitors where present and names each one that is missing as a gap, never filling it. The Gridwise base holds a profile and a positioning today, so the first real run is against those two with the gaps named. The rules live in `context/strategy/outbound-rules.md`. When the base has no rules file the skill says so and offers the starter as a proposed change, which the owner approves through Unit 1.2b (or through the shipped path once a shared copy exists); nothing is written before that yes, and a customized rules file is never overwritten. Every claim in the sequence names the context file behind it in a short table under the sequence, and a claim with no grounding is dropped and the drop reported, not softened. It reads `context/work/` nowhere, because that folder exists in neither the template nor the real base (Fable M8).
+
+**Execution note:** The deterministic tests cover what code can prove: which files were read, the fence, the contact and key screens, the claims table naming only files that were read. They do not prove the sequence is good or that no prospect's name slipped in, because the screens do not detect arbitrary names (`redaction_patterns.py` around line 124). That is what the owner replay and SC-C are for, and the two are kept apart in the test file and in the CHANGELOG.
+
+**Patterns to follow:** The verbatim-first extraction and banned-word rules from `draft-positioning.md`; the step shape in `docs/ux-standard.md`.
+
+**Test scenarios:**
+- Happy path: a sequence for a named segment reads that segment's file and says so; on a base with no segment files it reads the profile and says so.
+- Edge case: a claim with no grounding in any file that was read is dropped and the drop is reported.
+- Edge case: every row of the claims table names a file that was in the read set; a row naming any other file fails.
+- Edge case: messaging, voice, or competitors missing: each is a named gap.
+- Edge case: the segment named does not exist: the skill lists the ones that do and stops.
+- Edge case: no rules file: the skill offers the starter as a proposed change and produces no sequence until it is approved; a base that already has a rules file is never offered the starter over it.
+- Security: no email address, phone number, or key appears in the output, asserted by the screens.
+- Edge case: a flagged profile pauses the run at the moment-of-use block before any sequence is written.
+- Integration: the approved examples pass the contract test, and each wrong output fails it.
+
+**Verification (SC-C):** Brandon runs it on the Gridwise base, can point at the context file behind every claim, uses the sequence in real outreach, and the walkthrough record says what was sent, what he changed first, and what came back.
+
+**Atlas: figure 1.**
 
 - [ ] **Unit 1.5: Habit hooks**
 
@@ -413,13 +603,13 @@ Ordered exactly as `docs/reviews/2026-09-19-codex-setup-shape-verdict.md` sets o
 
 **Requirements:** P4, P5, P6, P7, P16, P17.
 
-**Dependencies:** 1.4.
+**Dependencies:** 1.4, and 1.2b for every path that ends in an approved change.
 
 **Files:**
-- Modify: `plugins/gtm-base/lib/gtmbase/compose_proposal.py` (the local-edit path asks what changed and why; a strategic answer becomes the proposal's change entry, and `decision_block=None` stops being unconditional), `plugins/gtm-base/skills/propose-change/SKILL.md` (the two questions and the four-line display), `plugins/gtm-base/lib/gtmbase/join_flow.py` (`close_run` asks the optional closing question and runs per-document reconciliation), `plugins/gtm-base/skills/join/SKILL.md` (step 7), `plugins/gtm-base/skills/join/references/closing-rules.md` (the three explaining sentences, the example, the exact question), `plugins/gtm-base/lib/gtmbase/review.py` (`stamp_entry` writes a closing entry with no run id), `plugins/gtm-base/lib/gtmbase/stale.py` (`_ledger_behind`: an empty record is behind immediately; the dismissal window and its expiry), `plugins/gtm-base/lib/gtmbase/stale_check.py` (the quiet-record ask lives in the review), `plugins/gtm-base/lib/gtmbase/confirm.py` (a confirmation that names a closing change), `plugins/gtm-base/templates/change-entry.md`
+- Modify: `plugins/gtm-base/lib/gtmbase/compose_proposal.py` (the local-edit path asks one thing, "What changed, and why?", in one request block; a strategic answer becomes the proposal's change entry, and `decision_block=None` stops being unconditional), `plugins/gtm-base/skills/propose-change/SKILL.md` (the two questions and the four-line display), `plugins/gtm-base/lib/gtmbase/join_flow.py` (`close_run` asks the optional closing question and runs per-document reconciliation), `plugins/gtm-base/skills/join/SKILL.md` (step 7), `plugins/gtm-base/skills/join/references/closing-rules.md` (the three explaining sentences, the example, the exact question), `plugins/gtm-base/lib/gtmbase/review.py` (`stamp_entry` writes a closing entry with no run id), `plugins/gtm-base/lib/gtmbase/stale.py` (`_ledger_behind`: an empty record is behind immediately; the dismissal window and its expiry), `plugins/gtm-base/lib/gtmbase/stale_check.py` (the quiet-record ask lives in the review), `plugins/gtm-base/lib/gtmbase/confirm.py` (a confirmation that names a closing change), `plugins/gtm-base/templates/change-entry.md`
 - Test: `tests/test_compose_proposal.py`, `tests/test_join_setup_flow.py`, `tests/test_stale.py`, `tests/test_stale_check.py`, `tests/test_confirm.py`, `tests/test_review.py`
 
-**Approach:** The closing question is asked once, after the three plain sentences and the example. A sentence becomes a proposed entry shown whole, as four short lines plus the date, the person who decided, the affected documents, and the review date, each correctable. It carries no run id. Then, for each affected document separately, the person is asked whether that document already reflects the change: a yes writes a confirmation naming the change, a no leaves the document flagged and hands the fix to the proposal path. Skip writes nothing, dismisses the quiet-record reminder for one window, and is recorded outside the yes-rate denominator. On the local-edit path the two questions are asked once; a typo answer records no change and the proposal proceeds unchanged, which is the case that must keep working.
+**Approach:** The closing question is asked once, after the three plain sentences and the example. A sentence becomes a proposed entry shown whole, as four short lines plus the date, the person who decided, the affected documents, and the review date, each correctable. It carries no run id. Then, for each of the two required documents the change affects, separately, the person is asked whether that document already reflects the change (r2, Fable H4: with segments "affects" can name twelve files, so any other affected document is left flagged for the review and the closing says how many): a yes writes a confirmation naming the change, a no leaves the document flagged and hands the fix to the proposal path. Skip writes nothing, dismisses the quiet-record reminder for the confirmation threshold (30 days unless the map sets another, the window `stale_check.run` already uses), and is recorded outside the yes-rate denominator. On the local-edit path the one request, what changed and why, is made once, on top of the existing "where did this come from"; a typo answer records no change and the proposal proceeds unchanged, which is the case that must keep working.
 
 **Execution note:** Codex's condition C is that these hooks are built before they are presented as the replacement habit. The unit is not done when the code exists; it is done when the closing and the local-edit path have both been run live.
 
@@ -430,11 +620,12 @@ Ordered exactly as `docs/reviews/2026-09-19-codex-setup-shape-verdict.md` sets o
 - Happy path: an entry affecting both documents asks twice, once per document; a yes on the profile writes a confirmation naming the change, a no on the positioning leaves it flagged and produces one staged proposal.
 - Edge case (the case Codex named): the approved profile targets small fleets and the closing sentence says the company stopped selling to small fleets. The earlier same-run confirmation does not settle it, the reconciliation question is asked, and a no flags the file.
 - Edge case: skip writes nothing, dismisses the quiet-record reminder for the stated window, and does not appear in the yes-rate denominator; `tests/test_report.py` confirms the denominator is unchanged.
-- Edge case: an empty record is behind immediately rather than after the window; after a dismissal it is silent until the window expires, then returns once.
+- Edge case (r2, replaces a scenario `stale.py` already passed): after a dismissal the quiet-record ask is silent until the threshold passes, then returns once, inside the review only.
+- Edge case (r2): an entry affecting the two required documents and ten segment files asks twice at the closing, leaves the ten flagged, and says so in one line.
 - Happy path: a local edit with a strategic answer produces a proposal carrying a change entry with the stated source; the same edit with a typo answer produces a proposal with no entry and the edit intact.
 - Error path: a refused proposal leaves the person's own edit and the stated source in place, unchanged.
 - Edge case: the quiet-record ask happens at most once a session and only inside the review, never at session start.
-- Integration: setup, closing sentence, reconciliation no, proposal, review, approve, and the affected file ends confirmed against that change.
+- Integration (r2): on a base with no shared copy, built the way `create_base` really builds one and with no fake standing in for a remote: setup, closing sentence, reconciliation no, staged change, local approval through Unit 1.2b, and the affected file ends changed and confirmed against that change.
 
 **Verification:** Brandon runs a setup closing live and, separately, hand-edits a context file and raises it, and in both cases the base ends holding a change entry he recognizes as his own sentence.
 
@@ -449,7 +640,7 @@ Ordered exactly as `docs/reviews/2026-09-19-codex-setup-shape-verdict.md` sets o
 **Dependencies:** 1.5.
 
 **Files:**
-- Modify: `plugins/gtm-base/lib/gtmbase/sources.py` (`survey` and `kind_of`: plans and metrics count only beside a profile, persona, or positioning file; `Place` gains what the folder mostly holds, from paths only; per-file candidates in the survey output; same-stem version grouping with "final" outranking a newer date and a conflict reported), `plugins/gtm-base/lib/gtmbase/constants.py` (`MARKETING_KIND_WEIGHTS` and the version and template ranking vocabulary), `plugins/gtm-base/lib/gtmbase/join_flow.py` (`chosen_places` and `freeze_sources` record explicit selection distinctly from a plain yes; a changed manifest asks again; `preview_step` says why a draft reads a limited amount), `plugins/gtm-base/lib/gtmbase/drafting.py` (`order_sources` ranks templates and READMEs last), `plugins/gtm-base/skills/join/SKILL.md` (step 5: the count confirmation for an explicit choice, and the narrowing question asked at most once)
+- Modify: `plugins/gtm-base/lib/gtmbase/sources.py` (`survey` and `kind_of`: plans and metrics count only beside a profile, persona, or positioning file; `Place` gains what the folder mostly holds, from paths only; per-file candidates in the survey output; same-stem version grouping by name, with "final" outranking a newer date. r2, Astra 9: the survey runs before consent and reads names and capped first headings only, so it groups and ranks and never compares bodies), `plugins/gtm-base/lib/gtmbase/constants.py` (`MARKETING_KIND_WEIGHTS` and the version and template ranking vocabulary), `plugins/gtm-base/lib/gtmbase/join_flow.py` (`chosen_places` and `freeze_sources` record explicit selection distinctly from a plain yes; a changed manifest asks again; `preview_step` says why a draft reads a limited amount, compares the bodies of grouped versions now that consent exists and says a conflict out loud, and no longer asks before every draft whether to narrow when the folder choice was explicit), `plugins/gtm-base/lib/gtmbase/drafting.py` (`order_sources` ranks templates and READMEs last), `plugins/gtm-base/skills/join/SKILL.md` (step 5: the count confirmation for an explicit choice, the narrowing question asked at most once, and the consent paragraph cut from seven sentences to three short lines plus the question, keeping the 0.2.2 lesson that the sentence must say the files are read and not copied anywhere; step 6: the per-draft narrowing ask dropped for an explicit choice; `tests/test_join_setup_flow.py` around line 1595 pins the old paragraph and is rewritten with it)
 - Test: `tests/test_sources.py`, `tests/test_join_setup_flow.py`, `tests/test_drafting.py`, and the fixture tree under `tests/fixtures/sources/`, which already holds an `engineering/` folder with `deploy-plan.md`, `queue-notes.md`, `retry-rules.md`, `runbook.md`, `schema.md` and a `marketing/` folder with `_spine.md`, `icp-fintech.md`, `persona-ops-lead.md`, `positioning.md`, plus a top-level `metrics.csv`
 
 **Approach:** Provenance is the heart of it. The consent record gains a field distinguishing a plain yes to the survey from an explicit list the person named, because Codex established that a plain yes also populates selected folders, so checking whether folders exist preserves the broad-list problem. An explicit choice is honored without a second narrowing question and gets a plain count to confirm; a changed manifest re-consents. The plans-and-metrics rule keeps manual inclusion by name, because Codex's trade-off is that requiring a profile nearby also hides a legitimate standalone `Plans/` folder. Version grouping is deterministic: same stem groups together, a name carrying "final" outranks a newer modification time, and when two versions disagree the conflict is stated rather than silently ordered away, because modification time is not review authority.
@@ -463,7 +654,9 @@ Ordered exactly as `docs/reviews/2026-09-19-codex-setup-shape-verdict.md` sets o
 - Edge case: a plain yes to a survey of the same four folders is recorded as a plain yes, and the narrowing backstop still applies to it.
 - Edge case: the chosen list changes between the survey and the freeze: consent is asked again and the old manifest is not reused.
 - Happy path: `positioning.md` and `positioning.final.md` group as one version set, the final wins, and the fact that a newer sibling was not used is stated.
-- Edge case: two versions whose bodies disagree: the conflict is reported in words, not resolved silently.
+- Edge case: two versions whose bodies disagree: after consent, the preview reports the conflict in words rather than resolving it silently.
+- Security (r2): the survey opens no file body. Asserted with a reader that fails on any read past the capped first heading.
+- Edge case (r2): with an explicit folder choice, no draft is preceded by a narrowing ask; with a plain yes, the backstop still asks.
 - Edge case: a template and a README rank last in `order_sources` and are the first things the cap drops.
 - Happy path: the preview says how many files this draft reads, how many it leaves out, which ones, and why a draft reads a limited amount at all.
 - Integration: preview and assemble include exactly the same files for the same narrowing, asserted by comparing their label lists.
@@ -472,73 +665,151 @@ Ordered exactly as `docs/reviews/2026-09-19-codex-setup-shape-verdict.md` sets o
 
 **Atlas: figure 7.**
 
-- [ ] **Unit 1.7: Umbrella profile, segments, guarded adoption, scope, and the unanswered-marker state**
+- [ ] **Unit 1.7a: Scope and the segment inventory (split from Unit 1.7 by r2)**
 
-**Goal:** A company that sells to eleven segments gets an umbrella plus a file per segment, finished documents are adopted under a contract rather than rewritten, scope is recorded and enforced, and an unanswered marker is a real state.
+**Goal:** Setup knows what part of the company the base is for and which segments it will hold, before anything is drafted or adopted.
 
-**Requirements:** P18, P19, P20, P21, P22, P23, P27.
+**Requirements:** P18, P19, P23.
 
-**Dependencies:** 1.6. This is the largest unit in the plan and the one Codex conditioned most heavily.
+**Dependencies:** 1.6. r2 split revision 1's Unit 1.7 into four, because Astra asked for separately testable pieces and Fable H7 found its write order contradicted itself. The order below is the design for all four.
+
+**The order, as numbered steps (r2):**
+1. The scope question is asked once, when the person says the base is for one part of the company or the material plainly splits. The answer is held in the run folder, because the umbrella that will carry it does not exist yet.
+2. Scope is applied to selection by the person dropping named places that fall outside it, and the consent record keeps the scope label beside what was dropped. There is no text filter: nothing in revision 1 said how free text would filter files, and Codex itself called folder names a heuristic.
+3. The segment inventory is settled. For each candidate the person says one of three things: adopt this finished document as the authoritative version for one segment, draft this segment, or leave it out. The inventory is saved in the run folder.
+4. The umbrella is drafted from the settled inventory and approved. It creates the base, exactly as the profile does today (`SKILL.md` lines 341 to 345 and `approve --parent` assume the first document is the profile, and that stays true). `covers:` is written into its frontmatter from the held scope. A segment left out is named as pending, in words. A segment chosen for adoption or drafting is named plainly, and whether its file exists yet is computed and never written into the umbrella, so the umbrella does not become wrong when the import finishes.
+5. The positioning is drafted and approved. The base is complete.
+6. Adoption runs per file through the contract (1.7c), and segments with no finished page are drafted (1.7b).
+7. An interrupted import resumes from the saved inventory (1.7d).
 
 **Files:**
-- Create: `plugins/gtm-base/lib/gtmbase/adopt.py` (the per-file contract, in the order in the decisions table), `plugins/gtm-base/lib/gtmbase/segments.py` (the inventory, slugs, the umbrella's pending references, resumption), `plugins/gtm-base/skills/join/references/prompts/draft-umbrella.md`, `plugins/gtm-base/skills/join/references/prompts/draft-segment.md`, `plugins/gtm-base/skills/join/references/adoption-rules.md`, `tests/test_adoption.py`, `tests/test_segments.py`, `tests/fixtures/adoption/` (a clean finished profile; one with embedded frontmatter; one with a fence marker hidden inside a comment; one with `owner:` and a phone number in the body; one with a private key block; one with two `## Overview` headings; one whose name slugs into a collision with another; one under a symlinked folder)
-- Modify: `plugins/gtm-base/lib/gtmbase/drafting.py` (explicit document variants for `umbrella` and `segment`, added rather than validation weakened), `plugins/gtm-base/lib/gtmbase/review.py` (`approve` accepts an adopted file bound to a byte hash; the screens run in the contract's order; destination checks for variable paths: canonicalization, safe slug, normalized-collision check, symlink-parent rejection, trust-name rejection, before any write), `plugins/gtm-base/lib/gtmbase/validate.py` (the `covers:` scope field), `plugins/gtm-base/lib/gtmbase/join_flow.py` (the scope question asked once; the segment inventory settled before the umbrella is approved; adoption offered per file; resumption of an interrupted import), `plugins/gtm-base/lib/gtmbase/stale.py` (an unanswered marker is a state independent of `status`; a file carrying one is not complete and not confirmed), `plugins/gtm-base/lib/gtmbase/base_reader.py` (marker detection), `plugins/gtm-base/lib/gtmbase/constants.py` (the segment kind, the marker pattern, the slug rules), `plugins/gtm-base/lib/gtmbase/push_review.py` is not yet built, so instead `plugins/gtm-base/skills/join/references/closing-rules.md` and `docs/join-guide.md` record that the first-backup review must be rewritten for many files before release two starts, `plugins/gtm-base/skills/join/references/prompts/draft-icp.md` (the umbrella shape, and the `[your call: ...]` instruction reconciled with the marker rule), `templates/company-base/` and `plugins/gtm-base/templates/company-base/` (a `context/strategy/segments/` folder)
-- Test: `tests/test_review.py`, `tests/test_drafting.py`, `tests/test_stale.py`, `tests/test_base_reader.py`, `tests/test_join_setup_flow.py`, `tests/test_prompt_guards_join.py`, `tests/test_scaffold.py`
-
-**Approach:** Order is the whole design. The scope question is asked once, early, and its answer reaches selection and adoption, not only the prompt. The segment inventory is settled next, before the umbrella is drafted, so the umbrella never points at a file that was later skipped; a segment not yet in the base is named in the umbrella in words, as pending, never as a link. Adoption then runs per file through the contract, in the exact order the decisions table gives, and the yes is bound to a hash of the cleaned bytes that were shown. A yes covering several files is accepted only after each body has been shown whole, and excluding one does not disturb the others. An interrupted import resumes from what is already written, because the two required files have already made the base complete and a half-finished import must not make it incomplete again. Where no finished page exists, a segment draft is written with a prompt that asks for depth and forbids compression.
-
-**Execution note:** Build the contract test-first against the hostile fixtures before any adoption code writes a file. Every fixture in `tests/fixtures/adoption/` exists to fail a specific clause, and a clause with no failing fixture is not built.
-
-**Patterns to follow:** `trust_checkout` in `tests/support.py` as the model for hostile fixtures; the absent-only write with `lexists` in `drafting.py` and `review.py`; the partial-folder-then-rename commit point from `create_base.py` for resumable imports.
+- Create: `plugins/gtm-base/lib/gtmbase/segments.py` (the inventory, slugs, the three answers, the saved state), `tests/test_segments.py`
+- Modify: `plugins/gtm-base/lib/gtmbase/validate.py` (the `covers:` field), `plugins/gtm-base/lib/gtmbase/join_flow.py` (steps 1 to 3 and the held scope), `plugins/gtm-base/lib/gtmbase/sources.py` (the scope label on the consent record), `plugins/gtm-base/lib/gtmbase/constants.py` (the segment kind and the slug rules, append only), `plugins/gtm-base/skills/join/SKILL.md`, `templates/company-base/` and the plugin-side copy (an empty `context/strategy/segments/` folder only)
+- Test: `tests/test_join_setup_flow.py`, `tests/test_sources.py`, `tests/test_scaffold.py`
 
 **Test scenarios:**
-- Happy path: twelve finished segment pages, all adopted after each is shown: twelve files under `context/strategy/segments/`, each with library-written frontmatter, `sources` naming the original path and its date, and one drafted confirmation line; the umbrella names all twelve; every original file is byte-identical afterwards.
-- Happy path: a company with one segment gets only the umbrella, written at full depth.
-- Edge case: the person excludes two of the twelve: the other ten are adopted, the umbrella names the two as pending in words, and no link points at a missing file.
-- Error path: the import is interrupted after six: the next run resumes, adopts the remaining six, and writes no duplicates.
-- Security: the embedded-frontmatter fixture has its original metadata discarded and the library's applied; the hidden fence marker is caught after hidden-content removal, not before; the body `owner:` and phone number are refused with the class named and never the value; the private key block is refused; the two `## Overview` headings are refused with the reason and the offer to draft that segment instead.
-- Security: a destination that slugs into a collision with an existing file is refused; a destination under a symlinked folder is refused; a slug matching a trust-refused name is refused; all refusals happen before any write.
-- Security: the approval hash is taken over the exact cleaned bytes; changing the source file between the showing and the yes invalidates the approval and the person is asked again.
-- Edge case: an adopted file is confirmed only by the owner's own yes; copying the consent from the batch does not produce a confirmation, and `status: adopted` gives the file no freshness of its own.
-- Edge case: twelve adopted segments and one open change affecting one of them produce one review item, not twelve.
-- Happy path: the scope answer is written to the umbrella's `covers:` field, is validated, and narrows both the selection list and the adoption offer, not only the prompt text.
-- Edge case: a file carrying `[your call: ...]` is not complete and not confirmed whatever its `status`; the review lists each marker and asks; settling one later goes through the proposal path and no setup step overwrites the file.
-- Integration: a second seat reading the same base computes the same flags for the adopted files, with no seat-local state involved.
+- Happy path: the scope answer is held, then written to the umbrella's `covers:` field and validated; the places the person dropped are recorded with the scope label.
+- Edge case: no scope question is asked when the person did not raise it and the material does not split.
+- Happy path: an inventory of twelve with two left out is saved and read back identically after the session ends.
+- Edge case: a company with one segment has an inventory of one and gets only the profile, at full depth.
+- Edge case: two candidates that slug to the same name are caught at the inventory, before anything is written.
 
-**Verification:** A live replay of the Gridwise material produces an umbrella Brandon recognizes, twelve segment files whose bodies are the ones he already reviewed, and no file he did not see whole before it was written.
+**Verification:** On the Gridwise material Brandon settles scope and the inventory in one short exchange and the saved inventory matches what he said.
+
+**Atlas: figure 7.**
+
+- [ ] **Unit 1.7b: Umbrella and segment drafts, and the unanswered-marker state (split from Unit 1.7 by r2)**
+
+**Goal:** A company with several segments gets an umbrella plus a drafted file for each segment that has no finished page, and an unanswered `[your call: ...]` marker is a real state.
+
+**Requirements:** P18, P19, P27.
+
+**Dependencies:** 1.7a.
+
+**Files:**
+- Create: `plugins/gtm-base/skills/join/references/prompts/draft-umbrella.md`, `draft-segment.md` (asks for depth and forbids compression), `tests/fixtures/drafts/umbrella.md`, `segment.md`
+- Modify: `plugins/gtm-base/lib/gtmbase/drafting.py` (explicit `umbrella` and `segment` variants, added rather than validation weakened), `plugins/gtm-base/lib/gtmbase/stale.py` and `base_reader.py` (the marker is detected from the body and is a state independent of `status`; a file carrying one is not complete and not confirmed), `plugins/gtm-base/lib/gtmbase/constants.py` (the marker pattern), `plugins/gtm-base/lib/gtmbase/stale_check.py` (the review lists each marker and asks; the ordering slot Unit 1.2 left empty is filled), `plugins/gtm-base/lib/gtmbase/confirm.py` (no confirmation path settles a file while a marker remains), `plugins/gtm-base/skills/join/references/prompts/draft-icp.md` and `draft-positioning.md` (both ask for the marker today, the second at line 83; both are reconciled with the rule)
+- Test: `tests/test_drafting.py`, `tests/test_stale.py`, `tests/test_base_reader.py`, `tests/test_confirm.py`, `tests/test_prompt_guards_join.py`
+
+**Approach:** The umbrella says who the company sells to overall, gives each segment one short paragraph, and says what they share. `draft-icp.md` stays the prompt for a company with one segment. Settling a marker later is a prepared change approved through Unit 1.2b, never a setup step overwriting a file. A marker alone never triggers the moment-of-use flag.
+
+**Test scenarios:**
+- Happy path: fixture sources for three segments produce an umbrella with three short paragraphs and three segment drafts at depth.
+- Edge case: a segment left out in the inventory appears in the umbrella as pending in words, and nothing in the umbrella is a link.
+- Edge case: a file carrying a marker is not complete and not confirmed whatever its `status`.
+- Edge case (r2, Astra test table): with a marker still in the file, a drafted confirmation, an ordinary yes, and a confirmation after an approved change each leave the file not confirmed.
+- Happy path: the review lists each marker and asks; answering one produces a prepared change, and after local approval the marker is gone and the file can be confirmed.
+
+**Verification:** Brandon reads an umbrella drafted from the Gridwise material and recognizes every segment in it.
+
+**Atlas: figures 7 and 8.**
+
+- [ ] **Unit 1.7c: Guarded adoption (split from Unit 1.7 by r2)**
+
+**Goal:** A finished document is adopted under a per-file contract instead of being rewritten, the person approves exactly the bytes that are saved, and adopted text stays data every time it is read afterward.
+
+**Requirements:** P20, P21, P22, P23.
+
+**Dependencies:** 1.7b, 1.2b.
+
+**Files:**
+- Create: `plugins/gtm-base/lib/gtmbase/adopt.py` (the contract, in the order in the decisions table), `plugins/gtm-base/skills/join/references/adoption-rules.md`, `tests/test_adoption.py`, `tests/fixtures/adoption/` (a clean finished profile; one with embedded frontmatter; one with malformed frontmatter; one with a fence marker hidden inside a comment; one with `owner:` and a phone number in the body; one with a private key block; one with two `## Overview` headings; one with a heading-shaped line inside a code fence; one with underlined headings; one that covers two product lines; one whose name slugs into a collision; one under a symlinked folder)
+- Modify: `plugins/gtm-base/lib/gtmbase/review.py` (`approve` accepts an adopted file bound to a byte hash; destination checks for variable paths before any write: canonical form, safe slug, normalized collision, symlink parent, trust names), `plugins/gtm-base/lib/gtmbase/join_flow.py` (adoption offered per file from the saved inventory), `plugins/gtm-base/skills/stale-check/SKILL.md` (around line 62 the assistant reads the document while improving a prepared change), `plugins/gtm-base/skills/propose-change/SKILL.md`, `plugins/gtm-base/skills/confirm/SKILL.md` (every Phase 1 path that hands a context file to the model puts it inside the data fence; with `injection.md` from Unit 1.3 and `runner.py` from Unit 1.4b, that is all of them)
+- Test: `tests/test_review.py`, `tests/test_join_setup_flow.py`, `tests/test_stale.py`
+
+**Approach:** The checks run in the decisions table's order, and r2 adds three. Heading grammar (Astra 5): the proposal editor treats a heading-shaped line inside a code fence as a heading (`compose_proposal.py` around lines 213 and 969) and cannot address every valid Markdown structure, so adoption accepts only the grammar the editor supports, and the proof is a round trip: adopt, prepare an edit to one section, apply it, and the right section changed. Scope (Astra, condition E): a document that covers more than the recorded scope is refused with the reason and the offer to draft that segment instead, because dropping file names cannot make a mixed body valid. Display (Fable H4, Astra's fifth contradiction, call 5): the person is shown what was removed and counted, the document's opening lines, and where the whole cleaned file sits in the run folder, and can read it whole before answering; the yes is bound to a hash of that file, and changing the source or the cleaned file between the showing and the yes asks again. A yes covering several is accepted only after each has been shown this way, and leaving one out disturbs no other. Adoption never edits or moves the original.
+
+Later reads (Astra 7, Fable M5). Approval establishes which document was adopted. It does not make an instruction inside it authoritative. Ordinary-language instructions pass every screen, so the fence is the whole defense, and this unit puts it on every Phase 1 path named above and records the residual risk in the CHANGELOG in those words.
+
+**Execution note:** Build the contract test-first against the hostile fixtures before any adoption code writes a file. Every fixture exists to fail one clause, and a clause with no failing fixture is not built.
+
+**Patterns to follow:** `trust_checkout` in `tests/support.py` as the model for hostile fixtures; the absent-only write with `lexists` in `drafting.py` and `review.py`.
+
+**Test scenarios:**
+- Happy path: twelve finished pages, each shown and then adopted: twelve files under `context/strategy/segments/`, each with library-written frontmatter, `sources` naming the original path and its date, and one drafted confirmation line; every original is byte-identical afterward.
+- Edge case: the person leaves out two of the twelve: ten are adopted and nothing else changes.
+- Security: embedded frontmatter is discarded and the library's applied; malformed frontmatter is refused; the hidden fence marker is caught after hidden-content removal, not before; the body `owner:` and phone number are refused with the class named and never the value; the key block is refused.
+- Security (r2): two `## Overview` headings, a heading-shaped line inside a code fence, and underlined headings are each refused with the reason and the offer to draft instead.
+- Integration (r2): the round trip. An adopted document takes a prepared edit to one named section and the right section changes.
+- Security (r2): the document covering two product lines is refused under a one-line scope.
+- Security: a colliding slug, a destination under a symlinked folder, and a slug matching a trust-refused name are each refused before any write.
+- Security (r2): a tree the person dirtied, and a base not on its default branch: refused, and the test asserts no destination file, no confirmation line, and no other tracked write.
+- Security: the approval hash covers the exact cleaned bytes; changing the source between the showing and the yes invalidates it.
+- Security (r2): with a hostile adopted document in the base, the rendered input of the stale-check improvement step, propose-change, confirm, the injected context, and the runner each carry it inside the fence. The test claims the fence, not the model's behavior.
+- Edge case: an adopted file is confirmed only by the owner's own yes, and `status: adopted` gives it no freshness of its own.
+- Edge case: twelve adopted segments and one open change affecting one of them produce one review item.
+
+**Verification:** A live replay of the Gridwise material leaves twelve segment files whose bodies are the ones Brandon already reviewed, and no file he had no chance to read whole before it was written.
 
 **Atlas: figures 1 and 7.**
 
-- [ ] **Unit 1.8: The plain-language standard, applied everywhere, with the lint extended**
+- [ ] **Unit 1.7d: Recovery of an interrupted import (split from Unit 1.7 by r2)**
 
-**Goal:** Every step of every skill says what it is for, shows something readable in seconds, ties it back, and asks one thing. The lint checks it rather than trusting it.
+**Goal:** An import that stops anywhere, including partway through one file, finishes on the next run with no duplicate, no overwrite, and no file that looks adopted without being confirmed.
+
+**Requirements:** P19, P22.
+
+**Dependencies:** 1.7c.
+
+**Files:**
+- Modify: `plugins/gtm-base/lib/gtmbase/adopt.py`, `plugins/gtm-base/lib/gtmbase/segments.py` (per-file state in the saved inventory: approved hash, written, confirmed, committed), `plugins/gtm-base/lib/gtmbase/review.py`, `plugins/gtm-base/skills/join/references/closing-rules.md` and `docs/join-guide.md` (the first-backup review must be rewritten for a base holding many files, recorded as a condition of release two starting, since `push_review.py` is not built)
+- Test: `tests/test_adoption.py`, `tests/test_segments.py`, `tests/test_join_setup_flow.py`
+
+**Approach:** r2 (Astra 6): the shipped writer writes the document, stages it, appends the confirmation, then commits (`review.py` around line 348). A failure between those steps leaves a destination that exists and perhaps a dirty tree, and a retry then meets the absent-only refusal or the clean-tree refusal. Revision 1's "interrupted after six" could pass by testing six successful commits, and resuming from file presence would mistake a half-written file for an adopted one. Recovery is therefore per file and bound to the approved bytes: a destination whose bytes match the approved hash and that lacks its confirmation or its commit is finished; a destination whose bytes do not match is never overwritten and is reported; a tree dirtied only by this import's own recorded step is recovered, and one the person dirtied is refused. The two required files already made the base complete, so a half-finished import never makes it incomplete again.
+
+**Test scenarios:**
+- Error path: a failure injected after the write, after staging, after the confirmation line, and after the commit, for one file in the middle of twelve: the next run finishes that file and the rest, writes no duplicate, and ends in the same state as an uninterrupted run.
+- Security: a destination that exists with other bytes (an unrelated file at that path) is never overwritten, and is reported.
+- Edge case: the import stops after six complete files: the next run adopts the remaining six and touches none of the first six.
+- Edge case: the approved hash for a file no longer matches its source on the resumed run: that file is asked about again and the others proceed.
+- Integration: a second seat reading the same base computes the same flags for the adopted files, with no seat-local state involved.
+
+**Verification:** Brandon stops an import partway on purpose and the next session finishes it without asking him anything he already answered.
+
+**Atlas: figure 7.**
+
+- [ ] **Unit 1.8: The sweep of text no unit touched**
+
+**Goal:** Every text a person reads meets `docs/ux-standard.md`, and the lint's exemption list is empty or every entry left has a reason that is not "later".
 
 **Requirements:** P28.
 
-**Dependencies:** 1.7. Runs last among the behavior units because it rewrites the sentences the earlier units wrote.
+**Dependencies:** 1.7d. r2 moved the standard and the lint to Unit 1.1b. What is left is the text no unit owned.
 
 **Files:**
-- Modify: `tests/plain_language.py` (new checks beside `find_banned` and `find_dashes`), `plugins/gtm-base/skills/join/SKILL.md`, `plugins/gtm-base/skills/join/references/closing-rules.md`, `reading-rules.md`, `adoption-rules.md`, `plugins/gtm-base/skills/stale-check/SKILL.md` and `references/rules.md`, `plugins/gtm-base/skills/propose-change/SKILL.md` and `references/pr-body-rules.md`, `plugins/gtm-base/skills/confirm/SKILL.md`, every file under `plugins/gtm-base/templates/`, `docs/join-guide.md`
-- Create: `tests/test_plain_language.py` (the lint's own tests, which do not exist today)
+- Modify: whatever the exemption list in `tests/plain_language.py` still names, which by construction is text no earlier unit touched: parts of `plugins/gtm-base/skills/join/references/reading-rules.md`, `plugins/gtm-base/skills/propose-change/references/pr-body-rules.md`, the templates under `plugins/gtm-base/templates/` that no unit changed, the remaining registered Python sentences, and `docs/join-guide.md`
+- Test: `tests/test_plain_language.py` and the tests that pin each rewritten sentence, including the safety sentences `tests/test_prompt_guards_join.py` pins around line 32, which keep their meaning word for word where the meaning is a safety promise
 
-**Approach:** The lint gains four checks, each deliberately mechanical, because a lint that tries to judge prose fails: a step section must open with a sentence stating what the step is for, before any imperative; a step must ask exactly one question, counted by question marks in the asking block; an output block must be a list or a table rather than a paragraph, measured by consecutive prose lines above a stated cap; and a context change shown to a person must be four labeled lines. Every existing text is brought to the standard in the same unit, so the lint never lands red. The closing question about what got in the way gains the three things P28 requires: that it is feedback for the people who make GTM Base, that it is optional, and where it is kept.
-
-**Execution note:** The checks will produce false positives on texts that are correct. Each exemption is written into the test with its reason rather than by loosening the check, so the exemption list is itself reviewable.
-
-**Patterns to follow:** `assert_plain` and how each test file asserts the texts it owns; the four-line change display from 1.5.
+**Approach:** Work the exemption list to empty. The closing question about what got in the way gains the three things P28 requires: that it is feedback for the people who make GTM Base, that it is optional, and where it is kept. A sentence a test pins is changed together with its test and the reason is recorded in the test. Nothing here changes behavior.
 
 **Test scenarios:**
-- Lint: every SKILL.md and every reference file passes all four new checks; the exemption list is empty or every entry carries a reason.
-- Happy path: a fixture step that asks two questions fails; one that asks one passes.
-- Happy path: a fixture step that opens with an imperative fails; one that opens with a purpose sentence passes.
-- Happy path: a fixture output block of six prose lines fails; the same content as a five-row table passes.
-- Happy path: a change shown as a paragraph fails; the same change as four labeled lines passes.
-- Edge case: the existing banned-word and dash checks still catch what they caught, asserted against the fixtures that already exercise them.
-- Integration: `sh tests/run.sh` passes with the lint asserted over every user-facing file in the plugin, not only the ones whose tests happen to call it.
+- Lint: every SKILL.md, every reference file, every template, and every registered Python sentence passes all four checks; the exemption list is empty or every entry carries a lasting reason.
+- Edge case: every safety sentence pinned by `tests/test_prompt_guards_join.py` still says what it said.
+- Integration: `sh tests/run.sh` passes.
 
 **Verification:** Brandon reads three steps he has never seen and can say, in one sentence each, what the step is for and what it is asking him.
 
-**Atlas: figures 5 and 7.**
+**Atlas: figures 5 and 7**, only where a sentence quoted in the atlas changed.
 
 - [ ] **Unit 1.9: The fidelity replay, as the release gate on Phase 1**
 
@@ -546,15 +817,15 @@ Ordered exactly as `docs/reviews/2026-09-19-codex-setup-shape-verdict.md` sets o
 
 **Requirements:** P29, P3.
 
-**Dependencies:** 1.8. Nothing in Phase 1 ships until this passes or the summarize-first step is built.
+**Dependencies:** 1.1 (the frozen bar), 1.8. Release B does not ship until all three cases have been run and pass. If a case fails, the summarize-first step is built and the same three replays must pass afterward; building it is not passing (r2, Astra 3).
 
 **Files:**
-- Create: `docs/walkthroughs/2026-09-fidelity-replay.md` (the record: what was read, what survived, what did not, and the decision)
+- Modify: `docs/walkthroughs/2026-09-fidelity-replay.md` (created by 1.1 with the frozen bar; this unit adds what was read, what survived, what did not, and the decision)
 - Modify: `docs/plans/2026-09-05-001-feat-join-and-onboarding-plan.md` (the deferred brief pipeline's entry records the replay result), `plugins/gtm-base/CHANGELOG.md`
 
-**Approach:** Three cases, replayed through the flow as Phase 1 leaves it. Case one: the twelve finished Gridwise pages, which after 1.7 go through adoption rather than drafting, so what is being tested is the umbrella and the positioning that are still written from them. Case two: a company with several segments and no finished pages, so every segment is drafted. Case three: positioning inputs larger than one request. What is read, in each case: whether every segment the material names appears in the output, whether named deals survive, whether figures survive with their units, whether the source and version each claim came from is attributable, whether unresolved choices are marked rather than invented, and what a reviewer had to correct. The pass bar is stated before the replay is run, not after: every segment present, no figure altered, no named deal dropped, every claim attributable, and no invented content. A fail on any of those builds the summarize-first step in this release, as a stage between reading and drafting, with its own unit written then.
+**Approach:** Three cases, replayed through the flow as Phase 1 leaves it. Case one: the twelve finished Gridwise pages, which after 1.7 go through adoption rather than drafting, so what is being tested is the umbrella and the positioning that are still written from them. Case two: a company with several segments and no finished pages, so every segment is drafted; by default this is the real Gridwise material with the twelve finished pages held out of consent, and the drafted segments are scored against those pages as the answer key. Case three: positioning inputs larger than one request, produced by lowering the input cap for the replay, which the record states. Brandon scores every case and the builder scores none. The uncorrected output is scored against the whole original corpus, including material past the input cutoff, because what the cap dropped is exactly what the gate is looking for. What is read, in each case: whether every segment the material names appears in the output, whether named deals survive, whether figures survive with their units, whether the source and version each claim came from is attributable, whether unresolved choices are marked rather than invented, and what a reviewer had to correct. The pass bar is stated before the replay is run, not after: every segment present, no figure altered, no named deal dropped, every claim attributable, and no invented content. A fail on any of those builds the summarize-first step in this release, as a stage between reading and drafting, with its own unit written then.
 
-**Execution note:** This unit produces a record and a decision, not a feature. The record holds real results only. If a case cannot be run because the material does not exist, the record says so and names which case was not run, and the gate is decided on the cases that were.
+**Execution note:** This unit produces a record and a decision, not a feature. The record holds real results only. If a case cannot be run, the record says so, names it, and the gate is incomplete; it is never decided on the cases that happened to run (r2).
 
 **Patterns to follow:** `docs/walkthroughs/2026-09-05-phase-a1-sc1-sc5-test-base.md` as the shape of a walkthrough record; the standing rule that walkthrough records come from real runs only.
 
@@ -566,343 +837,15 @@ Ordered exactly as `docs/reviews/2026-09-19-codex-setup-shape-verdict.md` sets o
 
 **Atlas: figure 7**, which gains the note about what a draft reads and why.
 
-### Phase 2: what a base holds
-
-Starts after Phase 1 ships. Setup stays at two documents throughout.
-
-- [ ] **Unit 2.1: The base inventory**
-
-**Goal:** A person can ask "what is my base missing?" and get a short answer against a named list, with the offer to adopt or draft each one.
-
-**Requirements:** P30, P28.
-
-**Dependencies:** 1.4 (the vocabulary), 1.7 (adoption).
-
-**Files:**
-- Create: `plugins/gtm-base/lib/gtmbase/inventory.py`, `plugins/gtm-base/skills/stale-check/references/base-kinds.md`, `tests/test_inventory.py`
-- Modify: `plugins/gtm-base/lib/gtmbase/constants.py` (`BASE_KINDS`: ordered, each with destination path, adoptable, draftable), `plugins/gtm-base/lib/gtmbase/stale_check.py` (the inventory is part of the review), `plugins/gtm-base/skills/stale-check/SKILL.md` ("what is my base missing?")
-- Test: `tests/test_stale_check.py`, `tests/test_scaffold.py`
-
-**Approach:** The inventory is a read over `base_reader.context_files` against `BASE_KINDS`, returned as a small table: the kind, whether the base has it, and when it was last confirmed. It offers adopt or draft per kind on request and does nothing on its own. The reference file says in plain words what each kind is for and what a good one contains, and a test holds the constant and the reference in step.
-
-**Patterns to follow:** The review's one-list-in-one-sitting shape; the map-settings-and-reference pattern.
-
-**Test scenarios:**
-- Happy path: a base with the two setup files reports the other kinds as missing, in the stated order, as a table.
-- Happy path: a base holding messaging reports it present with its last confirmation date.
-- Edge case: a kind present but carrying an unanswered marker is reported as present and not confirmed.
-- Edge case: a kind whose file exists with `status: skipped` is reported as skipped, not present.
-- Error path: an unreadable file is reported as unreadable and does not make the kind missing.
-- Integration: every entry in `constants.BASE_KINDS` has a section in `base-kinds.md` and every section has an entry.
-
-**Verification:** Brandon asks the question on the Gridwise base and gets a table he can act on without a follow-up question.
-
-**Atlas: figure 1.**
-
-- [ ] **Unit 2.2: Messaging and voice, adopted or drafted**
-
-**Goal:** The two kinds Brandon wants first in his own base arrive through the same guarded path as segments.
-
-**Requirements:** P30, P20, P21, P28.
-
-**Dependencies:** 2.1.
-
-**Files:**
-- Create: `plugins/gtm-base/skills/join/references/prompts/draft-messaging.md`, `draft-voice.md`, `templates/company-base/context/strategy/messaging.md` and `voice.md` (and the plugin-side copies), `tests/fixtures/drafts/messaging.md`, `voice.md`
-- Modify: `plugins/gtm-base/lib/gtmbase/drafting.py` (two explicit document variants), `plugins/gtm-base/lib/gtmbase/inventory.py`, `plugins/gtm-base/lib/gtmbase/constants.py`
-- Test: `tests/test_drafting.py`, `tests/test_inventory.py`, `tests/test_review.py`, `tests/test_prompt_guards_join.py`
-
-**Approach:** Both kinds go through the adoption contract when a finished document exists and through a drafting prompt when it does not. The voice prompt is the one place where verbatim-first matters most, because a voice document written in the model's voice is worse than none, so it quotes the person's own sentences and marks anything it could not ground. Neither is required, and skipping either leaves the base complete.
-
-**Patterns to follow:** The donor's verbatim-first rules and banned-word list already in `draft-positioning.md`; the always and only-if-signal section rule from `draft-icp.md`.
-
-**Test scenarios:**
-- Happy path: fixture sources produce a messaging document with no invented claim and a voice document quoting the sources' own sentences.
-- Edge case: sources with nothing about voice produce a document that says which sections had no signal rather than filling them.
-- Security: a draft carrying a contact detail is returned to the same step; a draft with a long dash or a banned word is refused.
-- Happy path: a finished messaging document is adopted under the full contract, with its original metadata discarded.
-- Edge case: skipping voice leaves the base complete and the inventory reports it skipped.
-- Integration: both files are read by `base_reader`, owned, confirmed, and flagged by a change that affects them.
-
-**Verification:** Brandon's own base holds a messaging document and a voice document he would send to a writer.
-
-**Atlas: figure 1.**
-
-- [ ] **Unit 2.3: The design file**
-
-**Goal:** A base can hold the visual decisions a piece of work has to respect, as a context file rather than a stylesheet.
-
-**Requirements:** P30, P28. Section list pending Brandon's answer to open question 2.
-
-**Dependencies:** 2.2.
-
-**Files:**
-- Create: `templates/company-base/context/strategy/design.md` and the plugin-side copy, `plugins/gtm-base/skills/join/references/prompts/draft-design.md`, `tests/fixtures/drafts/design.md`
-- Modify: `plugins/gtm-base/lib/gtmbase/drafting.py`, `constants.py`, `inventory.py`, `plugins/gtm-base/skills/stale-check/references/base-kinds.md`
-- Test: `tests/test_drafting.py`, `tests/test_inventory.py`
-
-**Approach:** The proposed sections are modeled on `brandkit/brand-lock.json`, which is a decided record with a forbidden list rather than an asset bundle: palette (named roles, not hex lists for their own sake), type (display, body, metadata families and how each is used), logo rules (construction, colour, the one-ink treatment, what may never be done to it), forbidden devices, and tone. It stays prose a person can confirm, with no code in it, because a stylesheet is an artifact and this is context about artifacts. Assets themselves stay out of the base.
-
-**Patterns to follow:** `brandkit/brand-lock.json`'s own structure, read as a model and not imported.
-
-**Test scenarios:**
-- Happy path: fixture sources produce a design document with the agreed sections and no invented hex value.
-- Edge case: sources with no logo rules produce a document that names the gap instead of inventing a rule.
-- Security: no image, font, or binary is written into the base by this path.
-- Edge case: the forbidden-devices section is present and empty rather than omitted, because an empty forbidden list is a real answer.
-- Integration: the file is read, owned, confirmed, and flagged like any other context file.
-
-**Verification:** A person handed the design file and a draft asset can say whether the asset respects the base.
-
-**Atlas: figure 1.**
-
-- [ ] **Unit 2.4: Competitors, personas, metric definitions, goals**
-
-**Goal:** The remaining kinds arrive through the same path, with the honest limit on the two that depend on numbers.
-
-**Requirements:** P30, P31 (the dependency), P28.
-
-**Dependencies:** 2.1.
-
-**Files:**
-- Create: `templates/company-base/context/strategy/competitors.md`, `context/strategy/personas/.gitkeep`, `context/metrics/definitions.md`, `context/plan/goals.md` and the plugin-side copies, `plugins/gtm-base/skills/join/references/prompts/draft-competitors.md`, `draft-persona.md`, `draft-metric-definitions.md`, `draft-goals.md`
-- Modify: `plugins/gtm-base/lib/gtmbase/drafting.py`, `constants.py`, `inventory.py`, `plugins/gtm-base/skills/stale-check/references/base-kinds.md`
-- Test: `tests/test_drafting.py`, `tests/test_inventory.py`, `tests/test_base_reader.py`
-
-**Approach:** Competitors and personas draft from the person's own material exactly as the other kinds do, with personas kept explicitly distinct from segments. Metric definitions and goals are different and the prompts say so: a definition of a new customer or of the price payback divides by is a decision the person states, and a target is a number that lives in a model outside the base. Both prompts therefore ask rather than infer, and both refuse to write a number the sources did not carry. This is the doctrine's own line: targets stay in the model, the judgment about targets lives in context, and the map points between them, which is what Unit 2.5 builds.
-
-**Patterns to follow:** The never-hallucinate and leave-empty rules from the donor prompts; the standing rule against an invented number.
-
-**Test scenarios:**
-- Happy path: fixture sources produce a competitors document and one persona file, with personas written to `context/strategy/personas/` and never to `segments/`.
-- Edge case: a source naming a competitor with no claim about it produces a named competitor and an empty claim section rather than an invented claim.
-- Security: a metric definitions draft that contains a figure absent from the sources is refused and returned to the same step.
-- Edge case: a goals draft with no target in the sources produces the definition and the question, never a number.
-- Edge case: the inventory distinguishes personas (a folder that may hold many) from the single-file kinds.
-- Integration: all four are read, owned, confirmed, and flagged like any other context file.
-
-**Verification:** The metric definitions file in Brandon's base states the payback price rule he actually uses and cites where the number lives, without restating the number.
-
-**Atlas: figure 1.**
-
-- [ ] **Unit 2.5: The sources-of-truth file**
-
-**Goal:** The map grows up. For each kind of data: where it lives outside the base, which connected tool reads it, and the fallback. Nothing reads it over the network at context time.
-
-**Requirements:** P31, P28, P35.
-
-**Dependencies:** 2.1, 2.4.
-
-**Files:**
-- Create: `templates/company-base/context/sources-of-truth.md` and the plugin-side copy, `plugins/gtm-base/lib/gtmbase/truth_map.py` (parse and validate the rows), `plugins/gtm-base/skills/join/references/prompts/draft-sources-of-truth.md`, `tests/test_sources_of_truth.py`
-- Modify: `plugins/gtm-base/lib/gtmbase/constants.py`, `inventory.py`, `plugins/gtm-base/skills/stale-check/references/base-kinds.md`, `templates/company-base/context/map.md` and the plugin-side copy (the "where things live" paragraph points at the new file and the map stays settings only)
-- Test: `tests/test_inventory.py`, `tests/test_base_reader.py`, `tests/test_session_start.py`
-
-**Approach:** One row per kind of data, with four columns: the kind, where it lives, which connected tool reads it, and the fallback when that tool is not connected. It is an ordinary context file, owned and confirmed, so it goes stale like everything else and the existing machinery catches it, which is the point. `truth_map.py` parses it for the skills that will use it and validates the shape; it never calls anything. The map keeps its two settings and gains a pointer, which preserves the settings-only contract Codex defended in condition E.
-
-**Patterns to follow:** The map's settings parser and its range checks; the rule that context reads stay local.
-
-**Test scenarios:**
-- Happy path: a well-formed file parses into rows with all four columns; a row missing the fallback is reported as incomplete rather than accepted.
-- Security: parsing makes no network call and no git call that reaches a remote, asserted with a runner that fails on any fetch.
-- Edge case: a row naming a tool that is not connected on this seat is still valid, because the file is the team's record and not this seat's inventory.
-- Edge case: session start injects the map and does not inject the sources-of-truth file, keeping the injection cap intact.
-- Integration: the file is flagged by a change that affects it and confirmed like any other context file.
-
-**Verification:** Brandon can answer "where does our spend data actually live and what reads it?" from the file alone.
-
-**Atlas: figures 1 and 2.**
-
-- [ ] **Unit 2.6: Update GTM Base**
-
-**Goal:** A person can say "update GTM Base" and be told, in one sentence, the one thing to do.
-
-**Requirements:** P32, P28.
-
-**Dependencies:** 1.3.
-
-**Files:**
-- Create: `plugins/gtm-base/lib/gtmbase/update_check.py`, `plugins/gtm-base/templates/update-step.md`, `tests/test_update_step.py`
-- Modify: `plugins/gtm-base/skills/stale-check/SKILL.md` (the entry point), `docs/join-guide.md` (a section saying the plugin does not refresh on its own)
-- Test: `tests/test_state.py`
-
-**Approach:** Compare the version in `plugins/gtm-base/.claude-plugin/plugin.json` as the seat has it recorded against what the seat last recorded, print one sentence naming the step, and stop. It changes nothing itself, for the reason in the decisions table. The exact command is verified against the documentation at build time rather than written from memory.
-
-**Patterns to follow:** The install sentence the hook wrapper prints when prerequisites are missing: one sentence, one step, exit cleanly.
-
-**Test scenarios:**
-- Happy path: a seat whose recorded version is behind gets the one sentence naming the step.
-- Happy path: a seat that is current is told so in one sentence and nothing else happens.
-- Security: the step runs no install command and writes nothing outside the seat's own records.
-- Error path: the version cannot be read: one sentence, a recorded code, no guess.
-- Integration: running it twice in a session says the same thing twice and changes nothing.
-
-**Verification:** Brandon updates a seat by following the printed sentence and nothing else.
-
-**Atlas: figure 2**, pending Brandon's answer to open question 5 about whether this earns a figure of its own.
-
-### Phase 3: skills that use the base
-
-Starts after Phase 2's inventory and Unit 2.2 have shipped, because a skill that reads voice and messaging needs them to exist. These ship in the core plugin ahead of backup and invite.
-
-- [ ] **Unit 3.1: The thin-runner pattern and the examples-as-tests harness**
-
-**Goal:** One shape for every skill that uses the base, and a way to execute an owner-approved example as a test.
-
-**Requirements:** P33, P28, P9.
-
-**Dependencies:** 1.3 (the moment-of-use check), 1.7, 2.1, 2.2.
-
-**Files:**
-- Create: `plugins/gtm-base/lib/gtmbase/runner.py` (read the named context files, call `moment.check` on each, assemble the request with the rubric, screen the output, hand back the work product), `plugins/gtm-base/skills/references/thin-runner.md` (the pattern, written once and referenced by each skill), `tests/test_skill_examples.py` (the harness)
-- Modify: `plugins/gtm-base/lib/gtmbase/constants.py`, `tests/support.py` (a helper that builds a base holding a named set of context files)
-- Test: `tests/test_moment_of_use.py`
-
-**Approach:** The runner is the only place a skill touches the base, which keeps every skill thin and keeps the moment-of-use check from being something each skill remembers to do. An example is an input, the context files it was run against, and an owner-approved output. The harness asserts the deterministic parts: which context files were read, that the moment-of-use check ran for each, that the rubric came from a context file and not from the skill body, that the output carries no contact detail and no long dash, and that a missing context file produces the named gap rather than a guess. It does not assert model prose, because that would be a snapshot test over a non-deterministic output.
-
-**Execution note:** Decide what the harness asserts before writing any skill, so the three skills are built against a fixed contract rather than the harness being widened to fit them.
-
-**Patterns to follow:** `drafting.assemble` and `review.screen` as the two ends of an existing pipeline; the fenced data-not-instructions rule on every source.
-
-**Test scenarios:**
-- Happy path: a fixture skill declaring three context files reads exactly those three and calls `moment.check` on each.
-- Edge case: a declared file missing from the base produces a named gap in the output and does not stop the run.
-- Edge case: a declared file that is flagged produces the moment-of-use block before the work product.
-- Security: a context file carrying an instruction sentence is fenced as data and the assertion covers the fence; the output is screened for contact details and keys before it is handed back.
-- Happy path: an example folder with one input and one approved output runs and passes; changing the declared context file list fails it.
-- Error path: a rubric named by a skill but absent from the base: the skill reports it and does not substitute its own judgment.
-
-**Verification:** A fixture skill written against the pattern needs no code of its own beyond its declarations and its prompt.
-
-**Atlas: figure 1**, pending open question 5.
-
-- [ ] **Unit 3.2: Drift grade**
-
-**Goal:** Score an artifact against the base's strategy and end in one of two places: a fix to the artifact, or a proposal to the context when the buyer has moved.
-
-**Requirements:** P33, P28, P13.
-
-**Dependencies:** 3.1.
-
-**Files:**
-- Create: `plugins/gtm-base/skills/drift-grade/SKILL.md`, `scripts/drift_grade.py` (a shim), `references/rubric-source.md`, `examples/`, `templates/company-base/context/strategy/messaging-rubric.md` and the plugin-side copy, `tests/test_drift_grade.py`
-- Modify: `plugins/gtm-base/lib/gtmbase/constants.py`, `inventory.py` (the rubric is a kind), `plugins/gtm-base/skills/stale-check/references/base-kinds.md`
-- Test: `tests/test_skill_examples.py`
-
-**Approach:** Reads `context/strategy/icp.md`, the relevant `segments/`, `positioning.md`, `messaging.md`, `voice.md`, and `context/work/` for what else is in flight, so it can report a contradiction between two pieces rather than only a drift from strategy. The rubric lives in `context/strategy/messaging-rubric.md` and the skill is a runner over it. Its second output is a proposal, never an edit, which is P13.
-
-**Patterns to follow:** The parent scope's drift-grade description, including reading across `context/work/`; the proposal path in `compose_proposal.py`.
-
-**Test scenarios:**
-- Happy path: an artifact matching the base scores clean and produces no proposal.
-- Happy path: an artifact using a value proposition the positioning no longer carries produces a fix to the artifact.
-- Happy path: evidence that the buyer moved produces a proposal to the context, with the evidence quoted, and no edit.
-- Edge case: two pieces in flight that contradict each other are reported as a contradiction naming both.
-- Edge case: the rubric file is missing: the skill says so and grades nothing.
-- Security: the artifact is fenced as data; an instruction inside it is not followed, asserted.
-- Integration: the approved examples pass through the harness.
-
-**Verification:** Brandon runs it on a real piece of his own copy and agrees with both the score and the one thing it asked him to change.
-
-**Atlas: figure 1**, pending open question 5.
-
-- [ ] **Unit 3.3: Content brief**
-
-**Goal:** Produce a brief a writer can work from, grounded in the base, with the gaps named rather than filled.
-
-**Requirements:** P33, P28.
-
-**Dependencies:** 3.1.
-
-**Files:**
-- Create: `plugins/gtm-base/skills/content-brief/SKILL.md`, `scripts/content_brief.py`, `references/brief-shape.md`, `examples/`, `templates/company-base/context/strategy/content-rules.md` and the plugin-side copy, `tests/test_content_brief.py`
-- Modify: `constants.py`, `inventory.py`, `base-kinds.md`
-- Test: `tests/test_skill_examples.py`
-
-**Approach:** Reads the umbrella and the named segment, `positioning.md`, `messaging.md`, `voice.md`, `design.md` where present, and `context/work/` for what else is in flight, and produces the brief. Its rules live in `context/strategy/content-rules.md`. Anything it cannot ground is a named gap, which is the "leave fields empty, never hallucinate" rule the donor prompts already carry.
-
-**Patterns to follow:** The horizontal-coherence argument in the definition: one audience, so each piece must know what the others said.
-
-**Test scenarios:**
-- Happy path: a brief for a named segment carries that segment's language and not the umbrella's generic version.
-- Edge case: a segment with no file produces a brief against the umbrella and says so.
-- Edge case: a piece already in flight on the same topic is named in the brief.
-- Security: no contact detail reaches the output; the screens run before it is handed back.
-- Edge case: `voice.md` missing produces a named gap, not a generic voice.
-- Integration: the approved examples pass through the harness.
-
-**Verification:** A writer handed the brief and nothing else produces a draft Brandon does not have to re-brief.
-
-**Atlas: figure 1**, pending open question 5.
-
-- [ ] **Unit 3.4: Outbound sequence**
-
-**Goal:** Produce a sequence grounded in one segment's own language, with every claim attributable to the base.
-
-**Requirements:** P33, P28.
-
-**Dependencies:** 3.1.
-
-**Files:**
-- Create: `plugins/gtm-base/skills/outbound-sequence/SKILL.md`, `scripts/outbound_sequence.py`, `references/sequence-shape.md`, `examples/`, `templates/company-base/context/strategy/outbound-rules.md` and the plugin-side copy, `tests/test_outbound_sequence.py`
-- Modify: `constants.py`, `inventory.py`, `base-kinds.md`
-- Test: `tests/test_skill_examples.py`
-
-**Approach:** Reads the named segment file, `positioning.md`, `messaging.md`, `voice.md`, and the competitors file where present, and writes the sequence against rules that live in `context/strategy/outbound-rules.md`. Every claim is attributable to a context file, and a claim that is not is dropped rather than softened.
-
-**Patterns to follow:** The verbatim-first extraction and banned-word rules from the donor messaging prompt.
-
-**Test scenarios:**
-- Happy path: a sequence for a named segment uses that segment's felt needs in its own words.
-- Edge case: a claim with no grounding in any context file is dropped and the drop is reported.
-- Edge case: a competitor mentioned with no competitors file produces a named gap.
-- Security: no prospect name, email, or phone number appears in the output, asserted by the screens.
-- Edge case: the segment named does not exist: the skill lists the segments that do and stops.
-- Integration: the approved examples pass through the harness.
-
-**Verification:** Brandon reads a sequence and can point at the context file behind every claim in it.
-
-**Atlas: figure 1**, pending open question 5.
-
-### Phase 4: the brainstorm before the build
-
-- [ ] **Unit 4.1: The company-skills brainstorm**
-
-**Goal:** A requirements document for company skills shared across seats. No code.
-
-**Requirements:** P34.
-
-**Dependencies:** 3.1 (the thin-runner pattern is an input), 2.5 (the sources-of-truth file is an input).
-
-**Files:**
-- Create: `docs/brainstorms/2026-XX-company-skills-requirements.md`
-- Modify: none.
-
-**Approach:** Run the brainstorm with the skill lifecycle from the MKT1 comparison as an input (examples as tests, a propose-an-update step after a session for approval, weekly and monthly audits) and with this repository's trust posture as the constraint. The document answers the questions below or records why each is deferred. It proposes nothing that is not answerable.
-
-**Open questions the brainstorm must answer:**
-1. **The trust model for code on every seat.** A company skill is code that runs on every teammate's machine. Today the trust-surface check refuses `CLAUDE.md`, `AGENTS.md`, `plugins/`, and every `.sh`, `.py`, and `.js` file in a base, and the session-start pull refuses the same paths. What replaces that refusal, and who reviews what.
-2. **How the pull refusal and the trust-surface check change**, path by path, and what a seat does when a pulled skill changes.
-3. **Review and ownership.** Who owns a skill, who approves a change to one, and how that is enforced on a plan with no branch protection.
-4. **Distribution.** Through the base as its own marketplace, or through the core plugin. The parent scope assumed the former; the MKT1 read suggests the latter is simpler for a small team.
-5. **Examples as tests**, carried over from Unit 3.1: whether a company skill must ship examples before it may be distributed.
-6. **Update after a session:** the step where the AI proposes edits to a skill it just used and a person approves, which is propose-a-change applied to skills.
-7. **Audits** for stale and duplicate skills and rules, and where their output goes.
-8. **The vacation test and scheduling.** Scheduled runs are the missing half of the vacation test. Whether they belong to this feature, to the web app, or nowhere yet.
-
-**Test scenarios:** None. The deliverable is a document. Its acceptance is a review by Astra and by Fable 5.1 and Brandon's sign-off.
-
-**Verification:** The document can be handed to a planning session and produce an implementation plan without a second round of questions.
-
-**Atlas: none.** A brainstorm changes no behavior.
-
 ### Later phases, not detailed here
 
-**Reviewing proposals in Claude.** The first plan's Unit 8 (`review-proposals`) is still unbuilt, which means a no at the closing, a no inside the review, and every drift-grade proposal produce something a person can only approve on the GitHub page. That is the gap the parent scope's marketer critique named as the reason the skill exists at all, because the founder approver never opens GitHub. It becomes urgent the moment Phase 3 starts producing proposals at volume, and it is the first unit of the phase after this plan.
+**What a base holds, the other two skills, and company skills.** Revision 1's Phases 2 to 4, moved word for word to `docs/plans/2026-09-19-002-roadmap-after-phase-1.md` with the review findings that apply to them. Each becomes its own plan after the outbound sequence has been used on real work, because that use will change what the inventory and the rubric files need to hold.
+
+**Reviewing proposals from a shared copy in Claude.** Unit 1.2b builds the local half of the first plan's Unit 8 (`review-proposals`): approving one prepared change on a base with no shared copy. The other half is still unbuilt: listing the open proposals on a shared copy, rendering each as before-and-after prose, checking the branch hash against what the reviewer saw, and reject-but-keep. Until it exists, a base that has a shared copy can only approve on the GitHub page, which is the gap the parent scope's marketer critique named, because the founder approver never opens GitHub. It is the first unit of the plan that ships backup, since no base has a shared copy before then.
 
 **Reading calls and threads for context changes.** Phase A2 of the first plan (Units 5 and 6) turns transcripts into proposals. Applied to context changes, its hard part is the relevance bar: an entry is written only from a specific line that is change-shaped, the quote is carried as evidence, the number written per run is capped, and rejections teach the bar rather than being discarded. Its surface is the weekly review, not an interruption, which is what makes it compatible with quiet by default.
 
-**Backup, invite, the second seat, and the pinned plugin id.** Release two of the join plan. Before any of it, the release step has to put a real forty-character identifier in the company template's settings file in place of the row of zeros that ships today, because a base created before that installs nothing for the person who joins it. The first-backup review also has to be rewritten for a base holding many files, since its original rationale was that inspection is cheap when there are at most three drafts.
+**Backup, invite, the second seat, and the pinned plugin id.** Release two of the join plan. Before any of it, the release step has to put a real forty-character identifier in the company template's settings file in place of the row of zeros that ships today, because a base created before that installs nothing for the person who joins it. The first-backup review also has to be rewritten for a base holding many files, since its original rationale was that inspection is cheap when there are at most three drafts, and it now also covers every change that was approved locally before the backup. And every seat updates its plugin before a base is migrated to `work/changes/`, because a seat on an older plugin reads a migrated base as empty and reports nothing out of date (Fable, recorded by Unit 1.4 as a test).
 
 **Codex packaging.** The first plan's Unit 11 and its Tier B verifications, which decide which Bash gate is live on Codex and what that client can and cannot enforce.
 
@@ -910,9 +853,9 @@ Starts after Phase 2's inventory and Unit 2.2 have shipped, because a skill that
 
 ## System-Wide Impact
 
-**Interaction graph.** The session-start hook loses a branch (the question) and keeps the rest: record the session, pull under the existing path refusals, inject the map, the change summary, and the moment-of-use instruction. The stale-check skill gains three entry points (the review, the inventory, the update step) and keeps one computation. The confirm skill's entry point moves from the injected question to the review and to the moment-of-use flag, with `confirm.pending_questions` as the way back. The join skill gains the scope question, the segment inventory, adoption, and the closing question, and loses one drafted document. `propose-change` gains the two local-edit questions. Three new skills enter through `runner.py` and touch the base nowhere else. The plugin's records folder gains the weekly-line preference and the silence date; nothing else new is written there, and nothing at all is written outside the base, that folder, and a configured hooks directory.
+**Interaction graph.** The session-start hook loses a branch (the question) and keeps the rest: record the session, pull under the existing path refusals, inject the map, the change summary, and the moment-of-use instruction. The stale-check skill gains one entry point, the review, which also lists prepared changes awaiting local approval, and keeps one computation. The confirm skill's entry point moves from the injected question to the review and to the moment-of-use flag, with `confirm.pending_questions` as the way back. The join skill gains the scope question, the segment inventory, adoption, and the closing question, and loses one drafted document. `propose-change` gains the one local-edit request and, on a base with no shared copy, the local approval. One new skill, the outbound sequence, enters through `runner.py` and touches the base nowhere else. The plugin's records folder gains the weekly-line preference and the silence date; nothing else new is written there, and nothing at all is written outside the base, that folder, and a configured hooks directory.
 
-**Error propagation.** Unchanged posture: hooks exit 0 with fixed sentences, skills narrate and return to the same step, the gate and the path guard fail closed, everything else fails silent but visible. Two new failure surfaces: a migration that cannot run leaves the old layout in place and is read by the tolerant reader, and an adoption that fails any clause of its contract writes nothing and names the clause without naming the value.
+**Error propagation.** Unchanged posture: hooks exit 0 with fixed sentences, skills narrate and return to the same step, the gate and the path guard fail closed, everything else fails silent but visible. Three new failure surfaces: a migration that cannot run or stops partway leaves a recorded transaction that the next run finishes or puts back, while the reader goes on returning every entry from both folders; an adoption that fails any clause of its contract writes nothing and names the clause without naming the value; and a local approval that fails partway ends, on retry, in the same state as one that did not fail.
 
 **State lifecycle risks.** The migration is the sharpest one: entry ids are the join key for confirmations, corrections, proposals, and the index, so the migration moves the folder and renames fields and touches no id. Partial adoption is the second: an interrupted import must resume rather than restart, and the umbrella must never hold a link to a file that was skipped, which is why the inventory is settled before the umbrella is approved. The unanswered-marker state is the third: it is computed from the body and not stored, so it cannot drift out of step with the file, and it is deliberately independent of `status` so a retained draft cannot count as complete.
 
@@ -922,14 +865,16 @@ Starts after Phase 2's inventory and Unit 2.2 have shipped, because a skill that
 
 | Risk | Mitigation |
 |---|---|
-| The rename breaks the one existing base | Migration is idempotent, moves with git so history follows, touches no entry id, refuses on a dirty tree, and records what it did in `corrections/`. The old layout stays readable forever. The migration is run live on the Gridwise base before the release ships, and its next review is compared with the one before |
+| The rename breaks the one existing base | Both folders are read and joined by entry id, so no state hides an entry. The migration is a recorded transaction with a commit point and a recovery step, makes the move and the field rewrite as two changes so history follows, touches no entry id, refuses on a tree the person dirtied, and records what it did in `corrections/` in a shape the report parses. A failure is injected after every mutation in the tests. The old layout stays readable forever. The migration is run live on the Gridwise base before the release ships, and its next review is compared with the one before |
 | Adoption imports a bad document into cross-seat context | The per-file contract, run in a fixed order, with a hostile fixture per clause; original metadata discarded; fence-marker rejection after hidden-content removal; contact and key screens on the cleaned text; approval bound to the exact bytes shown; adopted content fenced as data on every later read. Residual: ordinary-language instructions inside a document are not detectable by any screen, so the fence is the whole defense and it is stated as such |
-| The moment-of-use flag is unreliable because it depends on the assistant following an instruction | Inside a core skill the check is deterministic and covered by tests. Outside a skill it is an instruction with an unmeasured failure rate, written as a hard rule and recorded in the CHANGELOG as unmeasured. The review is the backstop, and the review is the surface the product tells people to use |
-| Plain-language rewrites drift from tested sentences | Unit 1.8 runs after the behavior units, rewrites and re-asserts in one change, and every exemption to a lint rule is written into the test with its reason. Each unit's own tests assert its texts, so a rewrite that breaks a promise fails a test rather than a review |
-| Scope creep across four phases | The phases are gated: Phase 1 by the fidelity replay, Phase 2 by Phase 1 shipping, Phase 3 by the inventory and messaging existing, Phase 4 by being a document with no code. Setup stays at two documents in every phase. The scope boundaries list what is not built, and Phase 4's deliverable is explicitly a requirements document |
+| The moment-of-use flag is unreliable because it depends on the assistant following an instruction | Inside a core skill the check is deterministic and covered by tests. Outside a skill it is an instruction, so Unit 1.3 measures it in a live trial against a bar set beforehand and evaluates a scoped read hook as the deterministic backstop. Whatever was measured is what the CHANGELOG says. The review remains the surface the product tells people to use |
+| Plain-language rewrites drift from tested sentences | The standard and the lint land second (Unit 1.1b), so each unit writes its sentences once, to the standard, before Brandon checks them live. Every exemption names its reason and the unit that removes it, and Unit 1.8 only sweeps what no unit touched. Each unit's own tests assert its texts, so a rewrite that breaks a promise fails a test rather than a review |
+| Scope creep | Revision 2 cut this plan to Phase 1 plus the runner and one skill, and moved the rest to the roadmap. Release B is gated by the fidelity replay. Setup stays at two documents in every phase. The scope boundaries list what is not built |
 | One real user so far | Every unit that changes a sentence gets a live check. Walkthrough records come from real runs only. The fidelity replay's second case may not exist in real material, which is an open question for Brandon rather than a fixture quietly standing in for evidence |
 | The fidelity replay fails and the summarize-first step must be built | The gate is stated before the replay runs, and a fail adds a unit inside this release rather than deferring a third time. The cost is a slip in Phase 1's release date, which is accepted |
-| `review-proposals` does not exist, so proposals produced by Phase 1 and Phase 3 can only be approved on the GitHub page | Named in Later phases as the first unit of the next plan. Phase 1's volume is low (one proposal per unconfirmed document). If Phase 3 raises the volume before that unit lands, it is pulled forward |
+| No proposal could complete on a base with no shared copy, which is every base that exists | Unit 1.2b, before anything depends on a proposal. It changes nothing about what may leave the computer. The shared-copy half of `review-proposals` ships with backup |
+| The pulled-forward skill ships before the base holds messaging or voice | The sequence names each missing file as a gap and never fills it, and SC-C judges it on real use rather than on a test. If the gaps make the output unusable, that is the finding, and it decides what the roadmap builds first |
+| Two releases let release A ship without adoption or the fidelity gate | Nothing in release A changes how setup drafts, so it cannot make fidelity worse than 0.2.6. Units 1.2 to 1.5 ship together so no release captures no context change. If Brandon chooses one release instead, only the version bump moves |
 | Two template copies drift | `tests/test_scaffold.py` holds them identical file for file, and every unit that touches one touches both |
 | The atlas falls behind the code | Every unit names the figures it updates, the atlas is changed in the same commit as the code, and it is republished on release |
 
@@ -945,6 +890,8 @@ Starts after Phase 2's inventory and Unit 2.2 have shipped, because a skill that
 
 ## Sources & References
 
+- The two reviews of revision 1: [docs/reviews/2026-09-19-plan-review-astra.md](../reviews/2026-09-19-plan-review-astra.md) and [docs/reviews/2026-09-19-plan-review-fable.md](../reviews/2026-09-19-plan-review-fable.md); the brief both answered: [docs/reviews/2026-09-19-plan-review-brief.md](../reviews/2026-09-19-plan-review-brief.md)
+- The roadmap that now holds Phases 2 to 4: [docs/plans/2026-09-19-002-roadmap-after-phase-1.md](2026-09-19-002-roadmap-after-phase-1.md)
 - Amendment r2.4 (sections A to I) and Amendments r2.1 to r2.3: [docs/plans/2026-09-05-001-feat-join-and-onboarding-plan.md](2026-09-05-001-feat-join-and-onboarding-plan.md)
 - Amendment r2.5 and Units 5, 6, 8, 11, 12: [docs/plans/2026-09-04-001-feat-current-without-integrations-plan.md](2026-09-04-001-feat-current-without-integrations-plan.md)
 - Codex verdict and its ordered change set: [docs/reviews/2026-09-19-codex-setup-shape-verdict.md](../reviews/2026-09-19-codex-setup-shape-verdict.md); the brief it answered: [docs/reviews/2026-09-19-codex-setup-shape-brief.md](../reviews/2026-09-19-codex-setup-shape-brief.md)
@@ -958,3 +905,4 @@ Starts after Phase 2's inventory and Unit 2.2 have shipped, because a skill that
 ## Revision Log
 
 - 2026-09-19 r1: written from Amendment r2.4 of the join plan, Amendment r2.5 of the first plan, the Codex setup-shape verdict, and the MKT1 comparison, grounded in the shipped code at 0.2.6. Four phases, twenty units. Nothing built.
+- 2026-09-19 r2: both plan reviews folded in (Astra through Codex: not ready; Fable 5.1: ready only with changes). Cut to Phase 1 plus the runner and the outbound sequence; Phases 2 to 4 moved unchanged to `2026-09-19-002-roadmap-after-phase-1.md`. Added Units 1.1b (UX standard and lint, second), 1.2b (approve a proposed change locally), 1.4b (runner), 1.4c (outbound sequence). Split 1.7 into 1.7a to 1.7d with the write order as numbered steps. Rewrote 1.3 with an action contract, a measured trial, and a read-hook evaluation, and 1.4 with both folders read and a recoverable migration. Made the fidelity gate unable to pass on missing cases. Added P36, P37, and SC-C. Two releases by default. Eight calls for Brandon, each with the default the plan is written to. Baseline before the build: 1127 tests passing, after `tests/run.sh` was given a fixed time zone (three tests in `tests/test_review.py` assumed a Pacific date and failed on a machine set to Hawaii time). Nothing built.

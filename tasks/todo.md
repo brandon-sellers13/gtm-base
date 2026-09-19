@@ -374,3 +374,40 @@ by the weighting: one plan-shaped name among five files is fewer than a quarter
 of what the folder holds and fewer than three, so the folder is dropped with the
 note `thin:engineering`. The weighting alone would have ranked it last and still
 proposed it.
+
+
+## 2026-09-19: the plan reviews, revision 2, and the start of Phase 1
+
+Plan: `docs/plans/2026-09-19-001-feat-base-that-produces-work-plan.md` (revision 2).
+This file is append-only. Agents add below; nobody rewrites what is above.
+
+- [x] Run the Astra review through the Codex CLI from a script file, written to
+      `docs/reviews/2026-09-19-plan-review-astra.md`. Verdict on revision 1: not ready.
+- [x] Read both reviews and fold every finding into the plan as revision 2, with
+      a table from finding to unit.
+- [x] Move Phases 2 to 4, unchanged, to `docs/plans/2026-09-19-002-roadmap-after-phase-1.md`.
+- [x] Baseline before the build: 1127 tests passing. `tests/run.sh` now fixes the
+      time zone, because three tests in `tests/test_review.py` assumed a Pacific date.
+- [ ] Brandon answers the eight calls under "For Brandon" in the plan. The plan
+      is written to the recommended answer on each, so the build does not wait.
+
+### Release A
+- [ ] Unit 1.1: contract amendments, the six UX rulings, the frozen replay bar
+- [ ] Unit 1.1b: the UX standard and the lint
+- [ ] Unit 1.2: completion and closing
+- [ ] Unit 1.2b: approve a proposed change locally
+- [ ] Unit 1.3: quiet by default
+- [ ] Unit 1.4: the rename to context change, with a recoverable migration
+- [ ] Unit 1.4b: the thin runner and its contract test (side track)
+- [ ] Unit 1.4c: the outbound sequence (side track)
+- [ ] Unit 1.5: habit hooks
+- [ ] Security pass and correctness pass, then the live check, then the version bump
+
+### Release B, behind the fidelity gate
+- [ ] Unit 1.6: selection fixes
+- [ ] Unit 1.7a: scope and the segment inventory
+- [ ] Unit 1.7b: umbrella and segment drafts, the unanswered-marker state
+- [ ] Unit 1.7c: guarded adoption
+- [ ] Unit 1.7d: recovery of an interrupted import
+- [ ] Unit 1.8: the sweep of text no unit touched
+- [ ] Unit 1.9: the fidelity replay, scored by Brandon

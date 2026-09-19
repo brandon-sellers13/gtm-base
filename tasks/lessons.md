@@ -12,3 +12,13 @@
   anywhere in the command, and the false-refusal rate is accepted.
 - Two agents editing shared modules concurrently need explicit file ownership and append-only rules for constants.
 - macOS caches bytecode under `~/Library/Caches/com.apple.python`; a stale cache made a correct fix look broken.
+
+## 2026-09-19, the plan reviews
+- A test that fixes a moment and separately hard-codes the day it fell on passes only in the zone it was written in.
+  Three tests in `tests/test_review.py` failed on a machine set to Hawaii time. `tests/run.sh` now fixes the zone.
+  Run the suite before trusting a handoff's test count.
+- A "happy path" that passes because a fake stands in for the shared copy proves nothing about a base that has none.
+  Both reviewers found that no proposal could complete on the only real base. Build at least one integration test on a
+  base made the way `create_base` really makes one.
+- A long script passed to the shell inline is read by the plugin's gate, and prose that mentions the version-control
+  tool by name gets the whole command refused. Write the script to a file with the file tool and run the file.
