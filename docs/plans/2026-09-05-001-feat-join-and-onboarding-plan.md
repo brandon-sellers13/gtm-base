@@ -797,3 +797,8 @@ Added after Brandon's review of the live run on 2026-09-19. Every step of every 
 4. The one thing the person is being asked.
 
 A decision is shown as four short lines (what was decided, why, what it changes, when to look again). The closing question about what got in the way says that the answer is feedback for the people who make GTM Base, that it is optional, and where it is kept.
+
+### I. Added 2026-09-19: quiet by default, and "context change"
+
+The first plan's Amendment r2.5 applies to setup as well. The optional closing question in B is worded: "Tell me if anything about the context of the business changed that we should account for. One sentence is enough, or say skip." The three sentences before it explain a context change, not a decision. The closing message no longer promises a question at the next session. It says the base will be there when the folder is opened, that it stays quiet unless a document the person is about to use has been overtaken by a change, and that "review my base" is how to go through what is due.
+

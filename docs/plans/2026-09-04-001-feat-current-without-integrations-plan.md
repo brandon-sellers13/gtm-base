@@ -719,3 +719,30 @@ Brandon's decision: the first hosted piece is a web app in the shape of Product 
 ## Amendment r2.4 (2026-09-06): the offer follows the join plan
 
 Unit 3's setup-offer behavior follows Amendment r2.1 of `docs/plans/2026-09-05-001-feat-join-and-onboarding-plan.md`: the offer reaches the person as part of the assistant's first reply, it is made once a session in any folder until they answer in words, and only after an explicit not now does it fall back to empty and base-shaped folders.
+
+## Amendment r2.5 (2026-09-19): quiet by default, and the word for what the base tracks
+
+Decided by Brandon on 2026-09-19 after the first real return session, in which the base opened a working session by asking whether its own map was still right. Not yet built. Built together with the join plan's Amendment r2.4.
+
+### Quiet by default
+
+This amends origin R22 and R23 and this plan's Unit 3 and Unit 10. The base no longer asks a confirmation question at the start of a session.
+
+1. At the start of a session the base loads its context and says nothing. It records the session, brings the shared copy up to date, and gives the assistant the map. No question leads the first reply, and no question is issued.
+2. The base speaks up on its own in one case only: the person is about to use a document that a recorded context change has made wrong. It says which document, which change, and the date, offers the fix it has already written, and asks whether to use the document as it is or fix it first. The check is a lookup in the base's own record and makes no network call.
+3. A review happens when the person asks for one ("review my base"). It walks what is due and what has been proposed as one short list in one sitting. The question ids, the asked log, not now, and a no that becomes a prepared change all work as before, inside the review.
+4. A weekly one-line nudge exists and is off by default. A person can turn it on, and can silence the base for a month or until they ask.
+5. The map is never asked about. It is confirmed when the base is created, and the template's placeholder date is removed.
+6. The proposed change is always written by the AI and never applied without the owner's yes. Applying some kinds of change without a yes is the last rung of the ladder and is earned later from a base's own record of approvals and corrections.
+7. When the web app exists, the review queue lives there, with a way to open a proposed change in Claude to talk it through.
+
+The yes rate in SC7 is now measured over reviews and moment-of-use flags, and will take longer to mean anything. That cost is accepted.
+
+### Context change, not decision
+
+What the base tracks is anything that happened that makes a document no longer true: a team decision, a competitor's launch, a price change, something learned about how customers describe the problem. "Decision" is too narrow and needed three explanations in the live run.
+
+Everywhere a person reads it, the word is **context change**, and the asking sentence is: "Tell me if anything about the context of the business changed that we should account for." In running text it may be shortened to "change" once the full term has been used.
+
+Internally, `work/decisions/` becomes `work/changes/`, the ledger entry becomes a change entry with `kind: change`, and its fields keep their meaning with plainer names (`happened_on` for the date it happened, `written_on`, `noted_by`, `source`, `affects`, `review_by`). The rename is done as part of the r2.4 build, while one base exists. The one existing base is migrated by the plugin, and a base that still holds `work/decisions/` is read correctly.
+
