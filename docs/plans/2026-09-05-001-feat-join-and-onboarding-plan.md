@@ -504,6 +504,7 @@ Starts after one real user-one session has been observed and `docs/walkthroughs/
 - 2026-09-05 r1: written from the origin and research.
 - 2026-09-05 deepened: architecture, security, and data-integrity passes (40 findings).
 - 2026-09-05 r2: plan review by coherence, feasibility, security, and scope-guardian reviewers (33 findings; the adversarial reviewer did not complete). Cuts: the brief pipeline, `.docx` and `.pptx` parsing, the kept-names list, seat-directory merging, re-migration, not-now expiry, the shipped sha allowlist. Fixes: release line after Unit 5; `xcode-select` prerequisite check; two-entry hook fallback; run id carried on committed artifacts for the same-run exemption; drafted mode appends and stages without committing so one commit holds file and line; `git init -b main`; owner stamped with the repo-local email; completeness by `status`; copies not adopted; partial clone beside the destination; user two identity step; source dates only when a source carries one; contact-detail screening of drafts; trust surface widened (case folding, NFC, whole tree, pull refusal set, `plugins/`); `gh` deny list and widened push classification; first-push review as a gate condition on every push path; collaborator write-access disclosure; token lifecycle and sign-out; `/cd` advice without a version gate; account state as the only joined record; SC5 scope clarified; J21 amendment stated in full.
+- 2026-09-19 r2.4: amended after the third real setup run (Gridwise Analytics, 97 consented files) and a Codex review of the proposed changes (docs/reviews/2026-09-19-codex-setup-shape-brief.md and -verdict.md). Two required drafts instead of three, an honest baseline finding, an optional decision question that never confirms itself, the decision habit wired at the moment of use, an umbrella profile with per-segment files and guarded adoption of finished documents, scope recorded in the profile, selection fixes, a fidelity replay as the gate on the deferred brief pipeline, and a plain-language standard for every step. See Amendment r2.4 below. Not yet built.
 - 2026-09-07 r2.3: amended after two reviews of the base location question by Codex. Every new base goes to `~/GTM Bases/<Company>/gtm-base` by default; a destination inside a repository or a known synced location is refused at proposal and again at creation; and the joined entry gains the folder the base belongs with plus enough evidence about that folder to tell a rename from a replacement. J14 and J15 are amended. See Amendment r2.3 below. Shipped in 0.2.4.
 - 2026-09-06 r2.2: amended after the first real setup run on a hundred and four files. Hidden content is removed from a source rather than costing the whole document, each step orders its sources before the cap is applied, the cap is raised, and a preview with a chance to narrow now runs in front of every draft. The deferred brief pipeline's trigger fired and the trigger is recorded as fired; the pipeline itself is still deferred. See Amendment r2.2 below.
 - 2026-09-06 r2.1: amended after the first live sessions on the desktop app. The offer is the assistant's first reply rather than an on-screen notice, and an offer shown and never answered no longer counts as not now. See Amendment r2.1 below.
@@ -721,3 +722,78 @@ extend the frozen list of documents from setup, and activation never reads a
 document. It is not carried by the shared copy, so a second person has no link
 until they name a folder at their own join. It cannot tell two people sharing one
 computer account apart, because nothing in the account file can.
+
+## Amendment r2.4 (2026-09-19): the shape of setup, after the third real run
+
+Status: decided by Brandon on 2026-09-19 and reviewed by Codex the same day. Codex agreed with conditions on A, C, D, E, and F, disagreed with B and G as first written, and both are changed here to meet its objections. Nothing in this amendment is built yet.
+
+### What the run showed
+
+1. The customer profile draft read twelve finished segment pages and came back as a summary. Nothing caps the output. The prompt asks for one document with four fixed sections, which cannot hold the depth of a company that sells to eleven segments, and it rewrote material the person had already finished.
+2. The decision entry step was not understood by the product's own designer after three explanations, and on the day it is written it changes nothing the person can see.
+3. The finding step proposed ten places where two were right, because plan and metrics words matched engineering plans.
+4. After the person chose four folders, the narrowing question was asked a second time.
+5. Draft ordering read an older file and left out its final sibling, and spent room on templates and a README.
+6. The preview said files were left out and did not say why a draft reads a limited amount.
+7. An approved file was saved with an unanswered `[your call: ...]` marker in it.
+8. The company has two product lines and the person wanted the base to cover one. Nothing in setup asks.
+9. Several steps asked for an answer before saying what the step is for. The decision entry was shown as three dense paragraphs, and the closing question about what got in the way did not say who reads the answer or why.
+
+### A. Two required drafts
+
+Setup drafts the customer profile and the positioning. The decision entry is no longer a required, drafted step. This amends J8, J9, J10, J17, and the join plan's SC1 and SC3, the three-draft wording in the Overview and in Units 4 and 5, the join skill, and the closing rules. The first feature's own SC1 (a hand-entered decision yields a flag and a proposal) is untouched and keeps its own test.
+
+A base with two confirmed files and no decisions must not be told that nothing is out of date. The closing finding for that state is a truthful baseline: both documents were confirmed today, no decisions are recorded, so the base cannot yet check whether a decision has made either document out of date, and it names the date each confirmation will come up for review. `first_run_finding` gains this state and loses the claim that there is no date to watch.
+
+### B. One optional decision question, which never confirms itself
+
+At the closing, after three plain sentences that say what a decision note is, why the base wants it, and how it is used, with one concrete example, setup asks once whether the team has decided anything lately that changes who they sell to or how they describe what they sell. One sentence is enough, and skip is a complete answer.
+
+A sentence becomes a proposed entry that is shown whole before it is written: the date, who decided, which of the two documents it affects, and the review date are each the person's to correct. The entry does not carry the setup run's id, so the same-run exemption never applies to it. The person is then asked, for each affected document, whether that document already reflects the decision. A yes writes a confirmation that names the decision. A no leaves the document flagged, and the fix goes through the proposal path, because setup never edits a file it has already written.
+
+Skip dismisses the quiet-ledger reminder for one window and is counted apart from the file-confirmation yes rate.
+
+### C. The decision habit, wired before it is promised
+
+Codex found that two of the three hooks this amendment leans on do not exist yet. They are built as part of this amendment, not assumed.
+
+1. When a person has edited a context file by hand, the local-edit path asks what changed and why. A strategic answer travels with the proposal as its decision entry. A typo fix records no decision.
+2. When the record has gone quiet for the window, the daily block asks once whether anything was decided, with a dismissal that expires, at most once a session, outside the yes-rate accounting.
+3. Reading a call transcript writes entries (Phase A2, unchanged).
+
+### D. An umbrella profile, per-segment files, and guarded adoption
+
+`context/strategy/icp.md` is the umbrella: who the company sells to overall, the segments with one short paragraph each, and what they share. `context/strategy/segments/<slug>.md` holds one segment at full depth with `kind: segment`. A company with one segment has only the umbrella, written at full depth. Segments are distinct from buyer personas, which keep their own folder from the parent scope.
+
+The segment inventory is settled before the umbrella is approved, so the umbrella never points at a file that was later skipped. A segment whose file is not yet in the base is listed in the umbrella as pending, in words, not as a link.
+
+A finished document may be adopted instead of redrafted when it passes a contract, per file: the person names it as the authoritative version for one segment; its original settings block is discarded and a library-written one replaces it; hidden content is removed and counted, then the fence-marker and contact and key screens run on what is left; its headings are unambiguous for later editing (no duplicate headings at one level); its destination is a safe slug that collides with nothing, under a folder that is not a link. The person sees each cleaned body whole, with what was removed, and the approval is bound to those exact bytes. A yes to many at once is allowed only after each has been shown, individual exclusions are kept, and an interrupted import resumes. Adoption never edits or moves the original. An adopted file is confirmed by the owner's own yes and by nothing else.
+
+Where no finished page exists for a segment, a segment draft is written with a prompt that says depth is wanted.
+
+The source-age finding is corrected to look only at files the decision affects and only at open decisions, so twelve segment files do not multiply unrelated findings. The first-backup review is rewritten for a base that can hold many files.
+
+### E. Scope, recorded in the profile
+
+When the person says the base is for one part of the company, or the material plainly splits, setup asks once whether the base is for the whole company or for one part of it. The answer is recorded in the umbrella profile, not in the map, which stays settings only. It is applied to what is selected and adopted as well as to the drafting prompts, because wording alone cannot keep another product line's material out of an adopted file.
+
+### F. Selection and review fixes
+
+Plans and metrics count as marketing signals by default only in a place that also holds a profile, persona, or positioning file, and a person can still add a standalone plans folder by name. The consent record distinguishes a plain yes to the proposal from an explicit choice of folders; an explicit choice is honored without a second narrowing question and gets a plain count to confirm; a changed list asks again. The folder table says what each folder mostly holds, from paths only. Same-stem files are grouped as versions, a name carrying final outranks a newer date, a conflict between versions is said out loud, and templates and READMEs rank last. The preview says why a draft reads a limited amount.
+
+An unanswered `[your call: ...]` marker is a state of its own. A file that carries one is not confirmed and does not count as complete, the review step lists each marker and asks, and a later session can settle them without setup overwriting a file.
+
+### G. The brief pipeline is gated, not deferred
+
+Before this amendment ships, three cases are replayed and read: the twelve finished pages, a company with several segments and no finished pages, and positioning inputs larger than one request. The check is whether segments, named deals, figures, and source versions survive. If they do not, the summarize-first step is built in this release.
+
+### H. A plain-language standard for every step
+
+Added after Brandon's review of the live run on 2026-09-19. Every step of every skill follows one shape, and the plain-language test grows to check it.
+
+1. What this is for, in one sentence, in the person's terms, before anything is asked.
+2. What is being shown, in a form that can be read in a few seconds: a short list or a small table, never paragraphs of evidence. Detail is available on request.
+3. How it ties back to the purpose stated in the first sentence.
+4. The one thing the person is being asked.
+
+A decision is shown as four short lines (what was decided, why, what it changes, when to look again). The closing question about what got in the way says that the answer is feedback for the people who make GTM Base, that it is optional, and where it is kept.
