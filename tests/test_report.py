@@ -228,6 +228,121 @@ class TestTheFourNumbers(unittest.TestCase):
             self.assertEqual([], plain_language.find_dashes(text))
 
 
+
+class TestAChangeApprovedOnABaseWithNoSharedCopy(unittest.TestCase):
+    """Unit 1.2b: approving one in Claude counts exactly as accepting one does.
+
+    There is nowhere for a proposal to go on a base with no shared copy, so the
+    owner approves the prepared change in Claude and the note saved with it says
+    so. The four-week numbers have to count that as something GTM Base caught,
+    because it is the same event with nowhere else to happen.
+    """
+
+    LOCAL_ENTRY = "stg-" + "e" * 16
+    LOCAL_RECORD = "stg-" + "f" * 16
+
+    def build(self, sandbox):
+        root, base_id, _remote = support.base_with_a_shared_copy(sandbox)
+        support.write(
+            os.path.join(root, constants.DECISIONS_DIR, self.LOCAL_ENTRY + ".md"),
+            entry(self.LOCAL_ENTRY),
+        )
+        support.write(
+            os.path.join(
+                root,
+                constants.CORRECTIONS_DIR,
+                "%s-%s.md" % (IN_WINDOW, self.LOCAL_RECORD),
+            ),
+            record(self.LOCAL_RECORD, self.LOCAL_ENTRY),
+        )
+        support.git(["add", "-A"], cwd=root)
+        support.git(
+            [
+                "commit",
+                "-q",
+                "-m",
+                "%s%s: bring the profile in line"
+                % (report.LOCAL_APPROVAL_COMMIT_PREFIX, self.LOCAL_RECORD),
+            ],
+            cwd=root,
+        )
+        return root, base_id
+
+    def test_it_is_counted_as_a_catch(self):
+        with support.Sandbox() as sandbox:
+            root, base_id = self.build(sandbox)
+
+            found = report.four_week_summary(
+                root, base_id, gh=support.RecordingGh(), today=TODAY
+            )["catches"]
+
+            self.assertEqual(1, found["count"])
+            self.assertEqual(1, found["records_in_window"])
+            self.assertEqual(
+                [self.LOCAL_ENTRY], [item["entry_id"] for item in found["entries"]]
+            )
+
+
+    def test_two_records_about_one_change_are_counted_once(self):
+        """C3: a run that was recovered can leave a second record behind."""
+        with support.Sandbox() as sandbox:
+            root, base_id = self.build(sandbox)
+            support.write(
+                os.path.join(
+                    root,
+                    constants.CORRECTIONS_DIR,
+                    "%s-%s.md" % ("2026-05-21", CAUGHT_RECORD),
+                ),
+                record(CAUGHT_RECORD, self.LOCAL_ENTRY, date="2026-05-21"),
+            )
+            support.git(["add", "-A"], cwd=root)
+            support.git(
+                [
+                    "commit",
+                    "-q",
+                    "-m",
+                    "%s%s: the same change again"
+                    % (report.LOCAL_APPROVAL_COMMIT_PREFIX, CAUGHT_RECORD),
+                ],
+                cwd=root,
+            )
+
+            found = report.four_week_summary(
+                root, base_id, gh=support.RecordingGh(), today=TODAY
+            )["catches"]
+
+            self.assertEqual(2, found["records_in_window"])
+            self.assertEqual(1, found["count"])
+            self.assertEqual(
+                [self.LOCAL_ENTRY], [item["entry_id"] for item in found["entries"]]
+            )
+
+    def test_a_record_somebody_typed_out_themselves_is_still_not_counted(self):
+        with support.Sandbox() as sandbox:
+            root, base_id, _remote = support.base_with_a_shared_copy(sandbox)
+            support.write(
+                os.path.join(root, constants.DECISIONS_DIR, TYPED_ENTRY + ".md"),
+                entry(TYPED_ENTRY),
+            )
+            support.write(
+                os.path.join(
+                    root,
+                    constants.CORRECTIONS_DIR,
+                    "%s-%s.md" % (IN_WINDOW, TYPED_RECORD),
+                ),
+                record(TYPED_RECORD, TYPED_ENTRY),
+            )
+            support.git(["add", "-A"], cwd=root)
+            support.git(["commit", "-q", "-m", "wrote down what we decided"], cwd=root)
+
+            found = report.four_week_summary(
+                root, base_id, gh=support.RecordingGh(), today=TODAY
+            )["catches"]
+
+            self.assertEqual(0, found["count"])
+            self.assertEqual(1, found["records_in_window"])
+
+
 class TestTheWindow(unittest.TestCase):
     """The window is the 28 days the summary says it is, and not 29."""
 

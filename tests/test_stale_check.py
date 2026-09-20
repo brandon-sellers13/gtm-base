@@ -22,6 +22,7 @@ from gtmbase import (
     gate,
     ids,
     machine,
+    names,
     push_conditions,
     paths,
     stale,
@@ -1017,6 +1018,60 @@ class TestTheHashRuleIsOneRule(unittest.TestCase):
         )
         self.assertNotIn("content_hash_at_commit.get(", text)
         self.assertNotIn("content_hash_at_commit[", text)
+
+
+
+# --- What is waiting on the owner of a base with no shared copy --------------
+
+
+class TestPreparedChangesWaitingToBeApprovedHere(unittest.TestCase):
+    """Unit 1.2b: a base with nowhere to send one says so in the same run."""
+
+    def stage_one(self, fixture, staging_id=ENTRY):
+        staging = stale_check.build_file_proposal(
+            fixture.root,
+            formats.LedgerEntry.parse(entry_text(entry_id=staging_id)),
+            "%s/%s.md" % (constants.DECISIONS_DIR, staging_id),
+            ICP,
+        )
+        return stale_check.save_staging(fixture.root, staging)
+
+    def test_each_one_is_listed_by_the_name_of_the_document_it_changes(self):
+        with support.Sandbox() as sandbox:
+            base = BaseFixture(sandbox, remote=False)
+            self.stage_one(base)
+
+            result = run_check(base)
+
+            self.assertIn(
+                stale_check.AWAITING_LOCAL_APPROVAL % names.document_name(ICP),
+                result.lines(),
+            )
+
+    def test_a_base_that_has_somewhere_to_send_them_is_told_nothing_of_the_sort(self):
+        with support.Sandbox() as sandbox:
+            base = BaseFixture(sandbox)
+            self.stage_one(base)
+
+            result = run_check(base)
+
+            for line in result.lines():
+                self.assertNotIn("approve it here", line)
+
+    def test_a_prepared_change_that_cannot_be_read_is_left_out_rather_than_guessed(self):
+        with support.Sandbox() as sandbox:
+            base = BaseFixture(sandbox, remote=False)
+            support.write(
+                os.path.join(
+                    base.root, constants.PROPOSALS_PENDING_DIR, "not-a-proposal.md"
+                ),
+                "this is not a prepared change at all\n",
+            )
+
+            self.assertEqual([], stale_check.awaiting_local_approval(base.root))
+            result = run_check(base)
+            for line in result.lines():
+                self.assertNotIn("approve it here", line)
 
 
 # --- The skill a person reads -------------------------------------------------

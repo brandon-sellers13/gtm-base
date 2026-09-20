@@ -446,6 +446,28 @@ def _change_body_findings(start, body):
 # fails on any sentence-shaped constant that is in neither this registry nor
 # NOT_PERSON_FACING, so the registry can never quietly fall behind the code.
 PYTHON_SENTENCES = (
+    ("approve_local", "HAS_SHARED_COPY"),
+    ("approve_local", "NOT_WAITING_HERE"),
+    ("approve_local", "MARKER_DISAGREES"),
+    ("approve_local", "ALREADY_RECORDED"),
+    ("approve_local", "NOTE_UNREADABLE"),
+    ("approve_local", "NOT_AN_OWNER"),
+    ("approve_local", "NO_OWNER_RECORDED"),
+    ("approve_local", "NO_ADDRESS"),
+    ("approve_local", "OUTSIDE_THE_FOLDERS"),
+    ("approve_local", "ASSISTANT_FOLDER"),
+    ("approve_local", "CONFLICT"),
+    ("approve_local", "MOVED"),
+    ("approve_local", "UNSAVED_EDITS"),
+    ("approve_local", "NOT_ON_MAIN"),
+    ("approve_local", "COULD_NOT_SAVE"),
+    ("approve_local", "UNREADABLE"),
+    ("approve_local", "APPLIED"),
+    ("approve_local", "KEPT"),
+    ("approve_local", "DROPPED"),
+    ("approve_local", "ASK"),
+    ("compose_proposal", "APPROVE_HERE"),
+    ("compose_proposal", "CANNOT_TELL"),
     ("confirm", "UNKNOWN_ID"),
     ("confirm", "ALREADY_ANSWERED"),
     ("confirm", "WRONG_SESSION"),
@@ -518,6 +540,7 @@ PYTHON_SENTENCES = (
     ("stale_check", "FINDING_DOCUMENT_OLDER"),
     ("stale_check", "FINDING_NOTHING_YET"),
     ("stale_check", "FINDING_NOTHING_YET_NO_DATE"),
+    ("stale_check", "AWAITING_LOCAL_APPROVAL"),
 )
 
 # Constants that read like a sentence but that no person ever reads. Each one

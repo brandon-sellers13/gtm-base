@@ -628,3 +628,11 @@ BASES_FOLDER_NAME = "GTM Bases"
 # stays at two: anything else a base holds arrives later, on request. No
 # second name for the list is added here, because a second name could drift
 # from the first.
+
+# --- Local approval (added by Unit 1.2b of the 2026-09-19 plan) -------------
+
+# Where a prepared change its owner threw away is kept. It is moved rather
+# than deleted, so nothing here ever deletes a file outright and so the next
+# check can tell that this change was already decided about and never prepare
+# the same one again.
+PROPOSALS_DROPPED_DIR = "work/proposals/dropped"

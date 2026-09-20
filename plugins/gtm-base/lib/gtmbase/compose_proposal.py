@@ -7,6 +7,11 @@ leave, and only then is a working folder made. The edits are applied there, the
 decision and the record of what changed are written beside them, and the whole
 lot is sent as one review.
 
+A base with no shared copy has nowhere to send a proposal, so it never reaches
+any of that. The run stops at the second step, keeps the prepared change
+exactly where it is, and says it can be approved in Claude instead, which is
+what `approve_local.py` does.
+
 Nothing here touches the person's own folder. A run that stops halfway leaves a
 working folder behind, and the next run picks it up where it was.
 """
@@ -46,6 +51,9 @@ STATUS_MERGED_SKIPPED = "merged-skipped"
 STATUS_REFUSED = "refused"
 STATUS_CONFLICT = "conflict"
 STATUS_RESUMED = "resumed"
+# The base has no shared copy, so this is a handoff rather than a refusal: the
+# prepared change is kept exactly where it is and approved in Claude instead.
+STATUS_APPROVE_HERE = "approve-here"
 
 # Codes recorded on the result. They are for the log, not for a person.
 CODE_UNREADABLE = "staging-unreadable"
@@ -68,6 +76,14 @@ CODE_COMMIT_REUSED = "saved-work-reused"
 CODE_REVIEW_REUSED = "review-reused"
 CODE_ROW_MISSING_SOURCE = "no-source-row"
 CODE_GIT_FAILED = "git-failed"
+CODE_CANNOT_TELL = "cannot-tell-about-the-shared-copy"
+
+# What the base's own settings say about a shared copy. Not knowing is its own
+# answer, because a settings file that could not be read for a moment is not a
+# base without a shared copy.
+SHARED_COPY_PRESENT = "present"
+SHARED_COPY_ABSENT = "absent"
+SHARED_COPY_UNKNOWN = "unknown"
 
 # What the saved work in a working folder is called, so a repeat run knows it.
 COMMIT_SUBJECT_PREFIX = "Proposal "
@@ -75,6 +91,17 @@ COMMIT_SUBJECT_PREFIX = "Proposal "
 COMMIT_SUMMARY_CHARS = 60
 # How much of the summary the title of a review carries.
 TITLE_SUMMARY_CHARS = 80
+
+# What a person is told when the base has nowhere to send a proposed change.
+APPROVE_HERE = (
+    "This base has no shared copy yet, so there is nowhere to send this "
+    "prepared change. It is still here, and you can approve it here instead."
+)
+# What a person is told when that question could not be answered at all.
+CANNOT_TELL = (
+    "GTM Base could not tell whether this base has a shared copy, so it did "
+    "nothing at all. Ask again in a moment."
+)
 
 _HEADING_RE = re.compile(r"^(#{1,6})\s+\S")
 _PULL_NUMBER_RE = re.compile(r"/pull/(\d+)")
@@ -142,6 +169,88 @@ def load_staging(path: str) -> "formats.ProposalStaging":
     return formats.ProposalStaging.parse(text).validate()
 
 
+def shared_copy_state(base_root: str, runner: Optional[GitRunner] = None) -> str:
+    """Whether this base has somewhere to send a proposed change, or is unclear.
+
+    Only the base's own settings are read, and nothing leaves the computer to
+    answer it. A failure to read them is its own answer rather than a no,
+    because treating a moment's trouble as "this base has no shared copy"
+    would quietly send a base that does have one down the path meant for a
+    base that does not.
+    """
+    git = runner_or_default(runner)
+    found = git.run(["remote", "get-url", "origin"], cwd=base_root)
+    if found.ok and found.out():
+        return SHARED_COPY_PRESENT
+    listed = git.run(["remote"], cwd=base_root)
+    if listed.ok and not listed.out():
+        return SHARED_COPY_ABSENT
+    return SHARED_COPY_UNKNOWN
+
+
+def marker_of(staging) -> str:
+    """The one line this proposal carries wherever it ends up."""
+    return duplicate_check.marker_for(staging)
+
+
+def marker_problems(staging) -> List[Tuple[str, str]]:
+    """Whether the marker and the change entry this proposal carries agree.
+
+    A marker naming this proposal's own identifier as the change means the
+    proposal creates that change, so it has to carry it. A marker naming any
+    other change means one the base already holds, quoted as evidence, and the
+    proposal must not carry a second copy of it.
+    """
+    parsed = find_marker(marker_of(staging))
+    entry_id = parsed[1] if parsed else None
+    if entry_id == staging.staging_id and not staging.decision_block:
+        return [
+            (
+                CODE_MARKER_ENTRY,
+                "This proposal says it carries a decision, but no decision is "
+                "written in it.",
+            )
+        ]
+    if entry_id and entry_id != staging.staging_id and staging.decision_block:
+        return [
+            (
+                CODE_ENTRY_MISMATCH,
+                "This proposal names a decision the base already holds and "
+                "writes out a second copy of it, which it may not do.",
+            )
+        ]
+    return []
+
+
+def _name_is_the_file(base_root: str, relative: str) -> bool:
+    """Whether the file this path really points at sits at this very name.
+
+    A link in the middle of a path, and a machine that treats two spellings as
+    one file, both make a path mean a file that is filed under another name.
+    Following the path and asking where the answer sits is what tells them
+    apart, and it is asked of every edit rather than only of the map.
+    """
+    real_base = os.path.realpath(base_root)
+    real_target = os.path.realpath(os.path.join(base_root, relative))
+    try:
+        settled = os.path.relpath(real_target, real_base)
+    except ValueError:
+        return False
+    return settled.replace(os.sep, "/") == relative
+
+
+def _is_the_map(base_root: str, relative: str) -> bool:
+    """Whether this path means the map itself, whatever it calls it."""
+    named = os.path.join(base_root, relative.replace("/", os.sep))
+    the_map = os.path.join(base_root, constants.MAP_PATH.replace("/", os.sep))
+    if not os.path.exists(named) or not os.path.exists(the_map):
+        return False
+    try:
+        return os.path.samefile(named, the_map)
+    except OSError:
+        return False
+
+
 def check_edits(base_root: str, staging) -> List[Tuple[str, str]]:
     """Everything about the edits that stops the proposal before it starts.
 
@@ -149,6 +258,13 @@ def check_edits(base_root: str, staging) -> List[Tuple[str, str]]:
     everything lives. The settings block at the top of a file is out of bounds
     because it carries who owns the file and when it was last confirmed, and a
     proposal that could rewrite those could confirm itself.
+
+    The name an edit gives a file also has to be the file it really is. A
+    folder link inside the context folder, and a difference of letter case on a
+    machine that treats two such names as one file, both let an edit read as an
+    ordinary file and land on the map. So the path is followed to the file it
+    really means, that file has to sit at the very name the edit gave, and the
+    map is recognised as the same file rather than as the same spelling.
     """
     reasons: List[Tuple[str, str]] = []
     if not staging.edits:
@@ -167,12 +283,21 @@ def check_edits(base_root: str, staging) -> List[Tuple[str, str]]:
                 )
             )
             continue
-        if relative == constants.MAP_PATH:
+        if relative == constants.MAP_PATH or _is_the_map(base_root, relative):
             reasons.append(
                 (
                     CODE_MAP_TARGET,
                     "A proposal may never change the map, which is the file that "
                     "says where everything lives.",
+                )
+            )
+            continue
+        if not _name_is_the_file(base_root, relative):
+            reasons.append(
+                (
+                    CODE_OUTSIDE_CONTEXT,
+                    "A proposal may only change files in the context folder, and "
+                    "%s is a name for a file somewhere else." % edit.path,
                 )
             )
             continue
@@ -382,6 +507,9 @@ def scan_everything(staging, base_root: str, extra: Optional[List[str]] = None):
         pieces.append(("the decision", staging.decision_block))
     for number, edit in enumerate(staging.edits, start=1):
         pieces.append(("edit %d" % number, edit.text))
+        # The heading is written into the file too, whenever an edit adds a
+        # part that is not there yet, so it is read like any other text.
+        pieces.append(("the heading edit %d names" % number, edit.heading or ""))
     for text in extra or []:
         pieces.append(("the note saved with the change", text))
     for context, text in pieces:
@@ -530,36 +658,40 @@ def propose(
             reasons=[sentence for _, sentence in edit_problems],
         )
 
-    marker = duplicate_check.marker_for(staging)
+    marker = marker_of(staging)
     parsed_marker = find_marker(marker)
     entry_id = parsed_marker[1] if parsed_marker else None
     source_id = parsed_marker[2] if parsed_marker else staging.source_id
-    # A marker naming this proposal's own identifier as the decision means the
-    # proposal creates that decision, so it has to carry it. A marker naming any
-    # other decision means one the base already holds, quoted as evidence, and
-    # the proposal must not carry a second copy of it.
-    if entry_id == staging.staging_id and not staging.decision_block:
+    disagreements = marker_problems(staging)
+    if disagreements:
         return ProposalResult(
             STATUS_REFUSED,
             staging_id=staging.staging_id,
-            codes=[CODE_MARKER_ENTRY],
-            reasons=[
-                "This proposal says it carries a decision, but no decision is "
-                "written in it."
-            ],
-        )
-    if entry_id and entry_id != staging.staging_id and staging.decision_block:
-        return ProposalResult(
-            STATUS_REFUSED,
-            staging_id=staging.staging_id,
-            codes=[CODE_ENTRY_MISMATCH],
-            reasons=[
-                "This proposal names a decision the base already holds and "
-                "writes out a second copy of it, which it may not do."
-            ],
+            codes=[code for code, _ in disagreements],
+            reasons=[sentence for _, sentence in disagreements],
         )
 
-    # 2. The two conditions that stop anything leaving this computer.
+    # 2. A base with no shared copy has nowhere to send anything, so the run
+    # stops here and hands the prepared change to the path that approves it in
+    # Claude. It is asked before the two conditions below because those are
+    # about what may leave this computer, and nothing is going to leave it.
+    state_of_it = shared_copy_state(base_root, runner=git)
+    if state_of_it == SHARED_COPY_ABSENT:
+        return ProposalResult(
+            STATUS_APPROVE_HERE,
+            staging_id=staging.staging_id,
+            codes=[CODE_NO_REMOTE],
+            reasons=[APPROVE_HERE],
+        )
+    if state_of_it != SHARED_COPY_PRESENT:
+        return ProposalResult(
+            STATUS_REFUSED,
+            staging_id=staging.staging_id,
+            codes=[CODE_CANNOT_TELL],
+            reasons=[CANNOT_TELL],
+        )
+
+    # 3. The two conditions that stop anything leaving this computer.
     session = session_id if session_id is not None else _seat_session_id(base_id)
     blocked = push_conditions.check(base_id, session)
     if blocked:
@@ -570,7 +702,7 @@ def propose(
             reasons=[sentence for _, sentence in blocked],
         )
 
-    # 3. Read everything the proposal would carry.
+    # 4. Read everything the proposal would carry.
     subject = commit_subject(staging)
     hits, allowlist_code = scan_everything(staging, base_root, extra=[subject])
     if allowlist_code:
@@ -583,7 +715,7 @@ def propose(
             reasons=[hit.sentence() for hit in hits],
         )
 
-    # 4. Has anybody already proposed this. A review on this proposal's own
+    # 5. Has anybody already proposed this. A review on this proposal's own
     # line of work is this seat's own earlier run, which step 5 finishes.
     branch = constants.PROPOSAL_BRANCH_PREFIX + staging.staging_id
     duplicate = duplicate_check.check(
@@ -628,7 +760,7 @@ def propose(
             ],
         )
 
-    # 5. A review this seat already opened means the run only has to finish.
+    # 6. A review this seat already opened means the run only has to finish.
     recorded = _row_proposal_id(base_id, source_id, staging.staging_id)
     existing = duplicate_check.open_review_for_branch(branch, base_root, gh=gh)
     if recorded or existing:
@@ -657,18 +789,7 @@ def propose(
             codes=["no-default-branch"],
             reasons=["GTM Base could not tell which line of work the team shares."],
         )
-    if not git.run(["remote", "get-url", "origin"], cwd=base_root).ok:
-        return ProposalResult(
-            STATUS_REFUSED,
-            staging_id=staging.staging_id,
-            codes=[CODE_NO_REMOTE],
-            reasons=[
-                "This base has no shared copy yet, so there is nowhere to send a "
-                "proposal. Set one up first."
-            ],
-        )
-
-    # 6. The working folder, made or picked up where it was left.
+    # 7. The working folder, made or picked up where it was left.
     made = None
     written: List[str] = []
 
@@ -726,7 +847,7 @@ def propose(
             branch=branch,
         )
 
-    # 7. Send it, and open the review.
+    # 8. Send it, and open the review.
     sent = git.run(["push", "origin", made.branch], cwd=made.path, timeout=60)
     if not sent.ok:
         codes.append(CODE_PUSH_FAILED)

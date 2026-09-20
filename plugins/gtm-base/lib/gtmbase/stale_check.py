@@ -169,6 +169,11 @@ FINDING_NOTHING_YET_NO_DATE = (
     "Nothing is out of date yet, and no decision has a review date set, so there "
     "is no date to watch."
 )
+# Said once for each prepared change still waiting on a base with no shared
+# copy, which is the one kind of base where the owner approves one in Claude.
+AWAITING_LOCAL_APPROVAL = (
+    "%s has a prepared change waiting for you to approve it here."
+)
 
 
 # --- What comes back ---------------------------------------------------------
@@ -309,6 +314,34 @@ def _staging_exists(base_root: str, staging_id: str) -> bool:
     """Whether a prepared change with this identifier is already waiting."""
     wanted = staging_id + ".md"
     return any(os.path.basename(path) == wanted for path in _proposals_glob(base_root))
+
+
+def awaiting_local_approval(
+    base_root: str, runner: Optional[GitRunner] = None
+) -> List[Tuple[str, List[str]]]:
+    """Every prepared change waiting on a yes that could actually be given.
+
+    The answer comes from the one module that applies them, so this list and
+    that path can never disagree about what is waiting, and a change nobody
+    here could approve is never named as though somebody could. It is imported
+    inside the function because that module reads this one.
+    """
+    from . import approve_local
+
+    return approve_local.waiting(base_root, runner=runner)
+
+
+def _list_awaiting_local_approval(result, base_root: str, git) -> None:
+    """Say, once per document, that a prepared change is waiting on a yes."""
+    said: List[str] = []
+    for _staging_id, targets in awaiting_local_approval(base_root, runner=git):
+        for path in targets:
+            if path in said:
+                continue
+            said.append(path)
+            result.sentences.append(
+                AWAITING_LOCAL_APPROVAL % names.document_name(path)
+            )
 
 
 def _corrections_citing(base_root: str) -> List["formats.CorrectionsFile"]:
@@ -731,6 +764,8 @@ def run(
         result.finding_sentence = finding_sentence(report, finding)
         result.sentences.append(result.finding_sentence)
         _report_the_rest(result, report, base_id, today, dry_run)
+        if not has_remote:
+            _list_awaiting_local_approval(result, base_root, git)
         return result
 
     if not result.drafting_refused:
@@ -741,6 +776,11 @@ def run(
         _list_without_preparing(result, report)
 
     _report_the_rest(result, report, base_id, today, dry_run)
+
+    # A base with no shared copy has nowhere to send a prepared change, so the
+    # ones waiting are waiting on the owner here rather than on a reviewer.
+    if not has_remote:
+        _list_awaiting_local_approval(result, base_root, git)
 
     if dismiss_ledger_behind and not dry_run:
         window = report.settings.confirmation_threshold_days

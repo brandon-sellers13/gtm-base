@@ -420,3 +420,29 @@ Brandon's call: context first, skills after. Units 1.4b and 1.4c above are withd
 - [x] 2026-09-19: Unit 1.1b built, suite at 1193 passing. Eleven exemptions, all in the join skill, cleared by Units 1.5, 1.6, and 1.8. The registry found 71 sentences held as Python strings across eight modules.
 
 - [x] 2026-09-20: Unit 1.2 built, suite at 1217 passing. Carried forward: the older sentence that says there is no date to watch can still be reached when every recorded change is closed; it belongs to the Unit 1.4 wording pass.
+
+- [x] 2026-09-20: Unit 1.2b built, suite at 1264 passing. A prepared change can be
+      approved by its owner in Claude on a base with no shared copy, in two calls
+      bound together by the hash of what was shown. `push_conditions.py` and
+      `gate.py` are byte for byte as they were, and the seat's `first_push_reviewed`
+      is still false after a change is approved. `compose_proposal.propose` now
+      asks about the shared copy before the two conditions, because the one real
+      base fails both and the person was being told about a backup that was never
+      going to happen; no existing test pinned the old refusal sentence. Carried
+      forward: the shared-copy half of reviewing proposals, which is listing open
+      proposals, reject-but-keep, and the branch hash check, still ships with backup.
+
+- [x] 2026-09-20: Unit 1.2b reviewed twice from outside and every FIX folded in,
+      suite at 1310 passing. Three defects were reproduced first and then fixed:
+      the map rule could be reached by letter case or by a folder link, throwing
+      a prepared change away deleted whatever path it was handed, and recovery
+      wrote over the person's own edits on a path its note named. The note now
+      records the content it will write at each path and puts nothing back that
+      does not match it. Also fixed: not knowing whether a base has a shared copy
+      is no longer read as not having one, what is shown is the whole of what
+      gets written, the screens read the headings and the note saved with the
+      work, a change is never recorded twice, and one context change counts once.
+      `push_conditions.py` and `gate.py` are still byte for byte as they were.
+      Recorded as residual in the CHANGELOG: the turned down rate still comes
+      only from a shared copy, and the command check reads commands only, which
+      belongs to the release security pass.

@@ -84,3 +84,60 @@ says to raise a change that was turned down before.
 has to contain and in what order. The text says, in its own words, that an
 assistant drafted it and that no person has reviewed it yet, so nobody reading
 it later mistakes it for a person's own writing.
+
+## Approving a prepared change here, when the base has no shared copy
+<!-- step -->
+
+This step is for the base that has nowhere to send a proposed change, so its
+owner reads the change here and approves it here. It runs only when the base
+has no shared copy. A base that has one keeps the path above, where the change
+is raised and somebody on the team reads it there.
+
+Show the whole change first:
+
+- `python3 scripts/approve_local.py --staging <path to the prepared change> --show`
+
+What comes back is the complete thing the owner is approving, written out so
+that nothing about it is hidden. It opens with the four labeled lines:
+
+<!-- change -->
+What changed: We stopped selling to companies under twenty people.
+Why: The last four of them took the longest to close and left the soonest.
+What it affects: your customer profile, your positioning
+When to look again: 2026-12-19
+<!-- end change -->
+
+After those come the context change it carries and the parts of the files it
+touches, each as it reads now and as the change would leave it. Show all of it
+rather than a summary of it. The shown value printed underneath is what the yes
+is bound to, so keep it.
+
+<!-- ask -->
+Approve this change, leave it for now, or drop it?
+<!-- end ask -->
+
+Then wait for their answer. Three rules hold here and nowhere else:
+
+- The showing and the yes are two separate runs, and they must never happen in
+  the same turn.
+- The permission prompt in front of the second run is the person's own step,
+  and it is the whole point.
+- This script never goes on a list of commands that run without being asked
+  about.
+
+Run the answer they gave, and say back the sentence that comes out of it:
+
+- approve: `python3 scripts/approve_local.py --staging <path> --approve --shown <the shown value>`
+- leave it for now: `python3 scripts/approve_local.py --staging <path> --not-yet`
+- drop it: `python3 scripts/approve_local.py --staging <path> --drop`
+
+Two things worth knowing about the other two answers:
+
+- Dropping one moves it to the folder of changes nobody wanted, so the same one
+  is never prepared again tomorrow. The document stays as it was, and flagged.
+- `python3 scripts/approve_local.py --list` says which prepared changes are
+  waiting for a yes this account could actually give.
+
+`references/local-approval-rules.md` holds the rest of the rules: who may
+approve and what that rule does and does not protect against, what a yes writes
+into the base, and what happens on the next run when one stopped halfway.

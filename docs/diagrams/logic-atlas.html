@@ -403,16 +403,17 @@
       <text x="36" y="224" class="lbl">you have unsaved edits in the base; the base is not on its main line;</text>
       <text x="36" y="242" class="lbl">the shared copy cannot be reached. One fixed sentence each. Nothing else runs.</text>
 
-      <rect x="480" y="160" width="400" height="110" rx="6" class="box"/>
+      <rect x="480" y="160" width="400" height="130" rx="6" class="box"/>
       <text x="496" y="184" class="title">Answering the question</text>
       <text x="496" y="206" class="lbl">yes: one line in the confirmations file, saved and sent, nothing else touched</text>
       <text x="496" y="224" class="lbl">not now: that file is left alone for a set number of days</text>
       <text x="496" y="242" class="lbl">no: becomes a prepared change with your reason as the evidence</text>
-      <text x="496" y="260" class="lbl">the id is spent on first use and expires after an hour</text>
+      <text x="496" y="260" class="lbl">with no shared copy, its owner is shown that change, and answers in a second run</text>
+      <text x="496" y="278" class="lbl">the id is spent on first use and expires after an hour</text>
     </svg>
     </div>
     <figcaption>Slices, never dumps: the map is the one file read every session; everything else is read on demand by path. Anything that could run code on your machine is refused rather than pulled.
-      <span class="meta"><span class="stamp">decided 2026-09-04, amended 2026-09-19</span> first plan Unit 3 and Unit 10, origin R23 to R26 · the map left out of the question by its kind, 2026-09-19 plan Unit 1.2</span></figcaption>
+      <span class="meta"><span class="stamp">decided 2026-09-04, amended 2026-09-19</span> first plan Unit 3 and Unit 10, origin R23 to R26 · the map left out of the question by its kind, 2026-09-19 plan Unit 1.2 · a no ending in a local approval, Unit 1.2b</span></figcaption>
   </figure>
 
   <h2 id="gate">6. What the safety check reads</h2>
@@ -536,7 +537,7 @@
   <div class="text"><p>How the base knows a file is still true, and when it stops believing it. Identity is the address on the saved change, never a name typed into a file.</p></div>
   <figure>
     <div class="frame">
-    <svg viewBox="0 0 900 390" role="img" aria-label="The four ways a file counts as confirmed against a context change, the two ways it is flagged, and the baseline state of a base with nothing recorded against it">
+    <svg viewBox="0 0 900 390" role="img" aria-label="The five ways a file counts as confirmed against a context change, the two ways it is flagged, and the baseline state of a base with nothing recorded against it">
       <defs>
         <marker id="a8" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="currentColor"/></marker>
       </defs>
@@ -549,13 +550,14 @@
       <path d="M140,90 L140,120" class="edge" marker-end="url(#a8)" style="color: var(--ink-mid)"/>
       <text x="150" y="110" class="lbl">affects</text>
 
-      <rect x="300" y="20" width="580" height="160" rx="6" class="box"/>
+      <rect x="300" y="20" width="580" height="180" rx="6" class="box"/>
       <text x="316" y="44" class="title">Counts as confirmed against that decision when any one of these holds</text>
       <text x="316" y="70" class="lbl">1. the owner's line names the decision's id</text>
       <text x="316" y="90" class="lbl">2. the owner's line is dated after both the decision date and the date it was written down</text>
       <text x="316" y="110" class="lbl">3. the owner accepted the prepared change that carried it (same files touched, same content)</text>
       <text x="316" y="130" class="lbl">4. the file was drafted in the same setup run as the decision (same run id, any dates)</text>
-      <text x="316" y="158" class="lbl" style="fill: var(--ink-quiet)">a line by anyone who is not the owner counts for nothing</text>
+      <text x="316" y="150" class="lbl">5. the owner approved that prepared change here, on a base with no shared copy</text>
+      <text x="316" y="178" class="lbl" style="fill: var(--ink-quiet)">a line by anyone who is not the owner counts for nothing; rule 5 is refused unless the file names them as its owner</text>
       <path d="M260,150 L300,150" class="edge" marker-end="url(#a8)" style="color: var(--ink-mid)"/>
 
       <rect x="20" y="210" width="420" height="60" rx="6" class="warnbox"/>
@@ -572,7 +574,7 @@
     </svg>
     </div>
     <figcaption>The example the whole product was built around: a decision recorded Thursday about Tuesday's meeting flags the file the owner confirmed on Wednesday, because Wednesday is before Thursday.
-      <span class="meta"><span class="stamp">decided 2026-09-04, amended 2026-09-19</span> first plan Unit 9a, origin R15 to R25; rule 3 decided 2026-09-06, rule 4 on 2026-09-06 (night) · the baseline state, 2026-09-19 plan Unit 1.2</span></figcaption>
+      <span class="meta"><span class="stamp">decided 2026-09-04, amended 2026-09-19</span> first plan Unit 9a, origin R15 to R25; rule 3 decided 2026-09-06, rule 4 on 2026-09-06 (night) · the baseline state, 2026-09-19 plan Unit 1.2 · rule 5, the owner approving one in Claude, Unit 1.2b</span></figcaption>
   </figure>
 
   <hr class="rule">

@@ -30,6 +30,12 @@ WINDOW_DAYS = 28
 # The note saved with work a proposal prepared, which is how a decision nobody
 # typed by hand is told from one somebody did.
 DRAFTED_COMMIT_PREFIX = "Proposal "
+# The note saved when the owner of a base with no shared copy approves a
+# prepared change in Claude. It is the same event as a proposal accepted on a
+# shared copy, so it is counted the same way and never as something the person
+# typed out themselves.
+LOCAL_APPROVAL_COMMIT_PREFIX = "Approved prepared change "
+DRAFTED_COMMIT_PREFIXES = (DRAFTED_COMMIT_PREFIX, LOCAL_APPROVAL_COMMIT_PREFIX)
 
 # The decisions a catch is counted for: ones that came out of a run rather than
 # out of somebody sitting down and writing them.
@@ -93,6 +99,10 @@ def catches(
     says in its own first word. A decision somebody typed and saved themselves
     carries their own note, so it is not counted, which is the point: a catch is
     something the run found, not something the person already knew.
+
+    A prepared change the owner approved in Claude, on a base with no shared
+    copy, carries its own note and counts exactly as one accepted on a shared
+    copy does, because it is the same event with nowhere else to happen.
     """
     found: List[Dict[str, Any]] = []
     considered = 0
@@ -121,7 +131,12 @@ def catches(
         if entry.origin not in CAUGHT_ORIGINS:
             continue
         subject = _introducing_subject(base_root, entry_relative, git)
-        if not subject.startswith(DRAFTED_COMMIT_PREFIX):
+        if not subject.startswith(DRAFTED_COMMIT_PREFIXES):
+            continue
+        # One context change is one catch, however many records name it. A run
+        # picked up after it stopped, and a change raised a second time, both
+        # leave a second record about the same one thing.
+        if any(item["entry_id"] == entry.id for item in found):
             continue
         found.append({"entry_id": entry.id, "date": correction.date})
     return {

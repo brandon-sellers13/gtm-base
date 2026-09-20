@@ -113,3 +113,24 @@ dismiss option and it stays quiet for that many days.
 including how a decision and a document are compared, what counts as a
 confirmation, and how the same change is recognised so it is never prepared
 twice.
+
+## When the base has no shared copy
+<!-- step -->
+
+A base with no shared copy has nowhere to send a prepared change, so the run
+lists each one still waiting and names the document it would change. Its owner
+approves it in Claude instead.
+
+- Only changes this account could actually approve are listed, so one whose
+  document has gone, and one about a document somebody else owns, are left out.
+- Improve the wording of the prepared change first, the same way as above.
+- Hand it to the local approval step in the `propose-change` skill, which shows
+  the owner the whole change and applies it on their yes:
+  `python3 ../propose-change/scripts/approve_local.py --staging <path> --show`
+- Showing it and approving it are two separate runs, never the same turn,
+  because the person answers in between.
+- Until somebody approves one, the document it is about stays as it was.
+
+<!-- ask -->
+Which of the prepared changes waiting here should be read through first?
+<!-- end ask -->

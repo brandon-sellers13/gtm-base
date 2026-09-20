@@ -606,6 +606,142 @@ class TestTheFileMovedOn(unittest.TestCase):
             self.assertEqual(1, len(gh.created()))
 
 
+
+
+class TestTheMapCannotBeReachedByAnotherName(unittest.TestCase):
+    """S-H1: the name a change gives a file has to be the file it really is.
+
+    Comparing the path a prepared change names against the map's path lets a
+    difference of letter case, or a folder link inside the context folder,
+    point an edit at the map while reading as an ordinary file.
+    """
+
+    def edit_for(self, path):
+        return formats.Edit(path, "## Settings", "replace", "anything\n")
+
+    def staging_for(self, path):
+        text = template_text().replace("context/strategy/icp.md", path)
+        return formats.ProposalStaging.parse(text)
+
+    def test_a_folder_link_inside_the_context_folder_cannot_reach_the_map(self):
+        with support.Sandbox() as sandbox:
+            root, _base_id, _remote = base_with_a_shared_copy(sandbox)
+            os.symlink(".", os.path.join(root, constants.CONTEXT_DIR, "here"))
+
+            found = compose_proposal.check_edits(
+                root, self.staging_for("context/here/map.md")
+            )
+
+            self.assertNotEqual([], found)
+            self.assertIn(
+                compose_proposal.CODE_MAP_TARGET, [code for code, _ in found]
+            )
+
+    def test_a_path_that_resolves_somewhere_else_is_refused_by_that_alone(self):
+        with support.Sandbox() as sandbox:
+            root, _base_id, _remote = base_with_a_shared_copy(sandbox)
+            os.symlink(".", os.path.join(root, constants.CONTEXT_DIR, "here"))
+
+            found = compose_proposal.check_edits(
+                root, self.staging_for("context/here/strategy/icp.md")
+            )
+
+            self.assertNotEqual([], found)
+            self.assertIn(
+                compose_proposal.CODE_OUTSIDE_CONTEXT, [code for code, _ in found]
+            )
+
+    def test_the_map_in_another_letter_case_cannot_be_changed(self):
+        with support.Sandbox() as sandbox:
+            root, _base_id, _remote = base_with_a_shared_copy(sandbox)
+            shouted = os.path.join(root, "context", "MAP.md")
+            if not os.path.exists(shouted):
+                self.skipTest("this file system tells the two names apart")
+
+            found = compose_proposal.check_edits(
+                root, self.staging_for("context/MAP.md")
+            )
+
+            self.assertNotEqual([], found)
+            self.assertIn(
+                compose_proposal.CODE_MAP_TARGET, [code for code, _ in found]
+            )
+
+    def test_an_ordinary_file_is_still_allowed(self):
+        with support.Sandbox() as sandbox:
+            root, _base_id, _remote = base_with_a_shared_copy(sandbox)
+
+            self.assertEqual([], compose_proposal.check_edits(root, self.staging_for(ICP)))
+
+
+
+# --- A base with nowhere to send anything ------------------------------------
+
+
+class TestABaseWithNoSharedCopy(unittest.TestCase):
+    """Unit 1.2b: the refusal became a handoff, and nothing else moved.
+
+    Before this unit the run ended here with "there is nowhere to send a
+    proposal. Set one up first.", which was true and left the person with
+    nothing they could do. The prepared change is now kept and the sentence
+    says it can be approved in Claude instead. The check also moved ahead of
+    the two conditions, because the one real base fails both and the person
+    was being told about a backup that was never going to happen.
+    """
+
+    def local_base(self, sandbox, reviewed=False):
+        from gtmbase import machine
+
+        root = os.path.join(sandbox.path, "local")
+        base_id = ids.base_id_random()
+        support.make_base(root, base_id=base_id)
+        support.write(
+            os.path.join(root, ".gitignore"), "work/inbox/\nwork/proposals/\n"
+        )
+        support.write(
+            os.path.join(root, constants.ALLOWLIST_PATH), "# ours\n%s\n" % OWNER
+        )
+        support.git(["add", "-A"], cwd=root)
+        support.git(["commit", "-q", "-m", "a local base"], cwd=root)
+        machine.append_joined(root=root, base_id=base_id, remote=None)
+        state.update_seat(base_id, first_push_reviewed=reviewed)
+        return root, base_id
+
+    def test_the_prepared_change_is_kept_and_can_be_approved_in_claude(self):
+        with support.Sandbox() as sandbox:
+            root, base_id = self.local_base(sandbox)
+            staged = stage(root)
+            gh = RecordingGh()
+
+            result = compose_proposal.propose(
+                staged, root, base_id, gh=gh, now=TODAY, session_id="sess-1"
+            )
+
+            self.assertEqual(compose_proposal.STATUS_APPROVE_HERE, result.status)
+            self.assertEqual([compose_proposal.CODE_NO_REMOTE], result.codes)
+            self.assertEqual([compose_proposal.APPROVE_HERE], result.reasons)
+            self.assertTrue(os.path.isfile(staged))
+            self.assertEqual([], gh.calls)
+            self.assertEqual("", status_of(root))
+
+    def test_it_is_said_before_the_two_conditions_are_even_asked(self):
+        with support.Sandbox() as sandbox:
+            root, base_id = self.local_base(sandbox, reviewed=False)
+            marker.write_sources_read_marker("sess-1")
+            staged = stage(root)
+
+            result = compose_proposal.propose(
+                staged, root, base_id, gh=RecordingGh(), now=TODAY, session_id="sess-1"
+            )
+
+            self.assertEqual(compose_proposal.STATUS_APPROVE_HERE, result.status)
+            self.assertNotIn(
+                gate.sentence_for(gate.REASON_FIRST_PUSH), result.reasons
+            )
+            seat, _problems = state.load_seat(base_id)
+            self.assertFalse(seat.get("first_push_reviewed"))
+
+
 # --- The two conditions on anything leaving the computer ----------------------
 
 
