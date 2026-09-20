@@ -1,0 +1,148 @@
+---
+title: "The UX standard: how a step reads"
+type: reference
+status: active
+date: 2026-09-19
+plan: docs/plans/2026-09-19-001-feat-base-that-produces-work-plan.md
+unit: "Unit 1.1b: The UX standard and the lint that holds it"
+---
+
+# The UX standard
+
+This is the standard every step of every GTM Base skill is written to. It is
+one page because a standard nobody rereads is not a standard. Requirement P28
+of the plan is the source, and the six rulings in
+`docs/plans/2026-09-19-001-acceptance-matrix.md` are how it applies to the six
+steps that break it worst today.
+
+## The shape of a step
+
+A step does four things, in this order.
+
+1. It says what it is for, in one sentence, before it tells anybody to do
+   anything.
+2. It shows something that can be read in a few seconds. That means a short
+   list or a small table, and it never means paragraphs of evidence.
+3. It ties what it showed back to why the person is here.
+4. It asks for one thing.
+
+A step that asks for nothing is allowed, because some steps exist only to tell
+somebody something before they are asked to approve anything. A step that asks
+for two things is not allowed. Split it.
+
+## The four-line form for a context change
+
+A context change shown to a person is four labeled lines, in this order, and
+nothing else.
+
+<!-- change -->
+What changed: We stopped selling to companies under twenty people.
+Why: The last four of them took the longest to close and left the soonest.
+What it affects: your customer profile, your positioning
+When to look again: 2026-12-19
+<!-- end change -->
+
+`plugins/gtm-base/templates/change-four-lines.md` holds this form as a template
+so no step has to remember it. The word for what the base tracks is "context
+change" everywhere a person reads it.
+
+## The short wrapper and the complete artifact
+
+Two rules that look like they contradict each other both hold, and this is how.
+
+The **wrapper** is what a person is shown in the conversation. It is short,
+readable at a glance, and the readable-in-seconds rule applies to it. For an
+adopted document the wrapper says what was removed, shows the opening lines,
+and says where the whole cleaned file is.
+
+The **artifact** is the complete thing a person approves: a whole cleaned
+document, a whole prepared change. It is written out in full, it can be read in
+full before any answer is given, and the yes is bound to exactly those bytes.
+The readable-in-seconds rule does not apply to it, because the whole point of
+an artifact is that nothing was hidden.
+
+So "shown whole" is true of the artifact and "never paragraphs" is true of the
+wrapper, and there was never a real conflict between them.
+
+## Human names
+
+A document is called what a person calls it, never what the file system calls
+it. "Your customer profile", never `context/strategy/icp.md`. A change is
+called by its first line and the day it happened, never by its identifier.
+`plugins/gtm-base/lib/gtmbase/names.py` is the one place that does this, so a
+name cannot drift between one step and the next. Paths and identifiers stay in
+the machine-readable lines, which nobody reads aloud.
+
+## The four questions a base answers
+
+**DRAFT, awaiting Brandon's wording.** This section is recorded as a draft on
+2026-09-19 and nothing is built on it. No lint check reads it. It is here so
+that the idea is written down in the place the standard lives, and the wording
+is his to set.
+
+Every step should tie back to one of four questions a base answers.
+
+1. **What's true?** The documents the company has decided on.
+2. **Where's the rest?** The file that says where data, work in flight, and
+   notes live, which stay outside the base.
+3. **What changed?** The dated record of context changes, which is the only
+   thing that makes the base speak up.
+4. **Who said yes?** Owners, confirmations, and proposed changes with their
+   answers. The AI proposes and a person approves.
+
+## The lint is a floor
+
+`tests/plain_language.py` holds four mechanical checks on top of the banned
+words and the long dashes. They are a floor and nothing more. They can tell
+that a step opened with an order instead of a purpose; they cannot tell whether
+the purpose sentence means anything. An agent building to a green lint will
+satisfy "opens with a purpose sentence" with boilerplate, and the lint will not
+notice.
+
+**The acceptance test for this standard is Brandon reading the steps aloud.**
+He should be able to read three steps he has never seen and say, in one
+sentence each, what the step is for and what it is asking him. That is the bar.
+A green lint is the price of admission, not the verdict.
+
+## What the four checks actually check
+
+Checks one, two and three read a step section. A step section is a heading
+whose title begins with the word "Step", or any section carrying the marker
+`<!-- step -->` on the line under its heading. A section nobody marked is not
+checked, so a later unit opts its own rewritten step in by marking it. Check
+four reads any change block, wherever it appears.
+
+| Check | What it does | What it cannot do |
+|---|---|---|
+| purpose | Reads the first paragraph under the step's heading and fails when the first sentence is an order rather than a statement. | Tell whether the statement says anything useful. |
+| one-request | Counts the blocks marked `<!-- ask -->` and fails when a step holds more than one. A request may be a question or an imperative, which is why nothing counts question marks. | Notice a second request somebody wrote outside an ask block. |
+| prose | Counts a run of plain prose lines and fails over five. A list, a table, an ask block, and an artifact block are not prose. | Tell a dense five lines from an airy five lines. |
+| four-lines | Reads each block marked `<!-- change -->` and fails unless it is the four labels, in order, one per line. | Tell whether the four values are true. |
+
+The counting rule behind the one-request check is worth stating, because an
+earlier draft of it was wrong. Revision 1 of the plan proposed counting
+question marks. The closing request that requirement P4 fixes word for word,
+"Tell me if anything about the context of the business changed that we should
+account for. One sentence is enough, or say skip.", contains no question mark
+at all, so that check would have rejected the product's own required wording.
+Requests are counted as delimited blocks instead.
+
+## The exemption list
+
+Unit 1.1b changed no sentence anybody reads. Every text that fails one of the
+four checks today is on the exemption list in `tests/plain_language.py`, and
+every entry on it carries two things: the reason it fails, and the unit that
+removes it. A unit rewriting a step clears its own entries as part of that
+rewrite. Unit 1.8 empties whatever is left.
+
+An entry that names no unit is not allowed. "Later" is not a unit.
+
+## The sentences held in Python
+
+Not every sentence a person reads lives in a document. Some of them are Python
+strings, which means they were outside the lint entirely until this unit. The
+registry `PYTHON_SENTENCES` in `tests/plain_language.py` lists every one of
+them by module and constant name, and a test walks the library and fails on any
+sentence-shaped constant that is in neither the registry nor the short list of
+constants no person ever reads. That is how the registry stays honest as the
+code grows.

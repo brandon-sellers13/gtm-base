@@ -414,3 +414,7 @@ This file is append-only. Agents add below; nobody rewrites what is above.
 
 ### 2026-09-19, revision 2.1
 Brandon's call: context first, skills after. Units 1.4b and 1.4c above are withdrawn from release A and live in the roadmap. Release A is Units 1.1 to 1.5.
+
+- [x] 2026-09-19: Unit 1.1 merged and pushed (921a0d7), suite at 1127 passing. The replay corpus lists are kept outside the repository at ~/GTM Bases/Gridwise/fidelity-replay/. Left open: case two corpus, the answer key, the lowered read amount for case three; figure 7 of the atlas still says three drafts and moves with Unit 1.2.
+
+- [x] 2026-09-19: Unit 1.1b built, suite at 1193 passing. Eleven exemptions, all in the join skill, cleared by Units 1.5, 1.6, and 1.8. The registry found 71 sentences held as Python strings across eight modules.
