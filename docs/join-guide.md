@@ -100,18 +100,22 @@ hand back to you. Lists of people are left out on purpose. A file of rows holdin
 addresses or phone numbers, which is what a prospect list looks like, is never
 offered for reading and cannot be named back in, because that is other people's
 personal information rather than a document about your business. Before
-each of the three drafts you are shown what that draft will read and what it
+each of the two drafts you are shown what that draft will read and what it
 will leave out, and you can narrow it to the files or the folder that matter for
 that one document, which is worth doing when the folder you named is large. It
-then drafts three things for you, which are your ideal customer profile, one
-entry recording a real decision your team made, and your positioning. You read each
+then drafts two things for you, which are your ideal customer profile and your
+positioning. You read each
 draft as a whole document and either approve it, edit it, or skip it. Nothing is
 saved until you approve it, and you can stop at any point and pick up where you
 left off.
 
 At the end you get one real finding about your own context rather than a
-congratulations message. If nothing is out of date yet, it says so and tells you
-the date it will start watching.
+congratulations message. When your base is brand new, that finding is an honest
+one: it says both documents were confirmed today, that nothing has been recorded
+yet about what has changed in your business, and that the base therefore cannot
+tell you yet whether either document has gone out of date. It also gives you the
+date each document comes up for review. Once you have recorded something that
+changed, the finding tells you whether a document is now behind it.
 
 ## Where the base lives
 

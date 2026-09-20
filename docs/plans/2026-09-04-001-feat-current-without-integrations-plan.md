@@ -299,6 +299,8 @@ Phase A1 is Units 1, 2, 9a, 4, 3, 7, 9b, 10. SC1 and SC5 must pass end to end on
 
 - [x] **Unit 9a: `stale-check` library (compute only)**
 
+*(Amended 2026-09-19, r2.5. This unit shipped as written. Amendment r2.5 below changes what the computation is asked for and what it is called: a file whose kind is the map is left out of flags, questions, and the review; the folder the entries live in and the names of their fields change; and everywhere a person reads it the word is "context change". The computation itself stays pure and still makes no network call.)*
+
 **Goal:** The pure computation of what is out of date, shared by the session-start hook and the stale-check skill.
 
 **Requirements:** R15, R16, R18, R19.
@@ -364,6 +366,8 @@ Phase A1 is Units 1, 2, 9a, 4, 3, 7, 9b, 10. SC1 and SC5 must pass end to end on
 **Verification:** From inside the client, an attempted push of an inbox file is refused with one plain sentence; from a plain terminal the same push is refused by git.
 
 - [x] **Unit 3: Session-start hook**
+
+*(Amended 2026-09-19, r2.5. This unit shipped as written. Amendment r2.5 below removes the last clause of the goal: the hook no longer injects a confirmation question and issues no question identifier. It records the session, brings the shared copy up to date under the same path refusals, and gives the assistant the map and the summary of what has changed. The question it used to ask now lives inside the review a person asks for, and inside the flag raised when a document a recorded context change has overtaken is about to be used.)*
 
 **Goal:** On every session record the session id; on startup and resume only, fast-forward the working clone safely (refusing code and instruction paths), inject the map and a one-line change summary, and inject at most one confirmation question, with a single-use id, for a file this seat owns.
 
@@ -431,6 +435,8 @@ Phase A1 is Units 1, 2, 9a, 4, 3, 7, 9b, 10. SC1 and SC5 must pass end to end on
 
 - [x] **Unit 9b: `stale-check` skill and report**
 
+*(Amended 2026-09-19, r2.5. This unit shipped as written. Amendment r2.5 below gives this skill a second way in, the review a person asks for by saying "review my base", which walks what is due and what has been prepared as one short list in one sitting and hosts the question identifiers the session-start hook used to issue. It stays one computation and one skill. The quiet-record reminder is asked inside that review rather than at the start of a session, at most once a session, with a dismissal that lasts the base's confirmation threshold and is counted apart from the file-confirmation yes rate.)*
+
 **Goal:** Run the stale library, draft the fix for each flag, propose affected files when missing, flag the ledger on age, stay idempotent, refuse while unprocessed inbox items exist, and report the four-week numbers.
 
 **Requirements:** R15, R16, R18, R19; SC1, SC5, SC7.
@@ -457,6 +463,8 @@ Phase A1 is Units 1, 2, 9a, 4, 3, 7, 9b, 10. SC1 and SC5 must pass end to end on
 **Verification:** SC1 and SC5 pass end to end on a test base with a real remote; running twice produces one proposal.
 
 - [x] **Unit 10: Confirmation flow**
+
+*(Amended 2026-09-19, r2.5. This unit shipped as written and every rule in it holds. What changes is where the question comes from: not the session-start hook, but the review a person asks for and the flag raised when a document a recorded context change has overtaken is about to be used. The existing way of answering a question outside the turn that issued it is what carries a yes across that move. A no still becomes a prepared change, and on a base that has no shared copy the owner approves that change inside Claude, which is built in Unit 1.2b of `docs/plans/2026-09-19-001-feat-base-that-produces-work-plan.md`.)*
 
 **Goal:** Record a yes as a confirmation line in a worktree, honor "not now," turn a no into a proposal, keep the write safe and tied to a single-use question the owner saw this session, and never lose a yes.
 
@@ -733,6 +741,8 @@ This amends origin R22 and R23 and this plan's Unit 3 and Unit 10. The base no l
 3. A review happens when the person asks for one ("review my base"). It walks what is due and what has been proposed as one short list in one sitting. The question ids, the asked log, not now, and a no that becomes a prepared change all work as before, inside the review.
 4. A weekly one-line nudge exists and is off by default. A person can turn it on, and can silence the base for a month or until they ask.
 5. The map is never asked about. It is confirmed when the base is created, and the template's placeholder date is removed.
+
+   *(Amended 2026-09-19, revision 2 of `docs/plans/2026-09-19-001-feat-base-that-produces-work-plan.md`, requirement P12. The map is left out of questions and reviews by its kind, and no confirmation line is written for it. Confirming it at creation would only bring it back once the threshold passed, and it would say nothing when it did, because the map carries settings and no meaning. Leaving it out by its kind also covers the one base that was created before this change. The template's placeholder date is still removed.)*
 6. The proposed change is always written by the AI and never applied without the owner's yes. Applying some kinds of change without a yes is the last rung of the ladder and is earned later from a base's own record of approvals and corrections.
 7. When the web app exists, the review queue lives there, with a way to open a proposed change in Claude to talk it through.
 

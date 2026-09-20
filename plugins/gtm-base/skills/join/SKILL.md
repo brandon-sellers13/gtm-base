@@ -1,6 +1,6 @@
 ---
 name: join
-description: Set up a company base for somebody who does not have one yet, reading the marketing material they name and drafting their ideal customer profile, one decision, and their positioning for approval. Use when the person says "set up my company base", asks to set up a company base, says they want to start a base, or answers yes to the setup offer. Say "set up my company base" whenever you are ready. Also handles "link this folder to my base", "unlink this folder from my base", and "show my linked folders", which connect a base to the folder somebody keeps their marketing material in. Also handles "join a base from a link" and "back this up", both of which arrive with the next release and are refused today with one sentence.
+description: Set up a company base for somebody who does not have one yet, reading the marketing material they name and drafting their ideal customer profile and their positioning for approval. Use when the person says "set up my company base", asks to set up a company base, says they want to start a base, or answers yes to the setup offer. Say "set up my company base" whenever you are ready. Also handles "link this folder to my base", "unlink this folder from my base", and "show my linked folders", which connect a base to the folder somebody keeps their marketing material in. Also handles "join a base from a link" and "back this up", both of which arrive with the next release and are refused today with one sentence.
 ---
 
 # Set up a company base
@@ -28,7 +28,7 @@ Three rules hold for the whole session.
 
 1. Say what is about to happen before it happens. Every step below starts with
    the sentence that belongs to it.
-2. Never ask for one field at a time. Each of the three documents is drafted
+2. Never ask for one field at a time. Each of the two documents is drafted
    whole and shown whole.
 3. Never say how long anything will take, and never reassure them about it.
    Not as a number, not as a promise of speed, not as an aside.
@@ -43,8 +43,8 @@ it.
   numbers, and the decisions behind them, in a form your AI can read at the
   start of every session.
 - Setting it up means reading the marketing material you already have and
-  writing three documents from it: who you sell to, one decision you have
-  already made, and how you describe what you sell.
+  writing two documents from it: who you sell to, and how you describe what
+  you sell.
 - You see every document whole before anything is written down, and nothing is
   written down until you say yes to it.
 
@@ -207,7 +207,7 @@ Before asking for their yes, say what the yes is for, in these words, because
 the list can read as a list of files about to be copied somewhere, and it is
 not:
 
-To find these places I looked only at file names and the first heading of each document, and nothing else has been opened. These are the documents I would read to draft your ideal customer profile, one decision, and your positioning. None of them is copied into the base or changed in any way. The base only ever gets the three drafts you approve, one at a time. Once you say yes, this list is fixed, and from that point nothing leaves this computer for the rest of this session. A file added to the folder afterwards will not be read until you are shown a new list. May I read these?
+To find these places I looked only at file names and the first heading of each document, and nothing else has been opened. These are the documents I would read to draft your ideal customer profile and your positioning. None of them is copied into the base or changed in any way. The base only ever gets the two drafts you approve, one at a time. Once you say yes, this list is fixed, and from that point nothing leaves this computer for the rest of this session. A file added to the folder afterwards will not be read until you are shown a new list. May I read these?
 
 Ask it that way, as a question about reading, and never as a question about
 taking or importing the files.
@@ -253,14 +253,16 @@ the closing. Nothing in it is ever written into the base. A run that stops part
 way is never closed, so the next run started on a later day clears away what it
 was holding.
 
-### Step 6. The three drafts, one at a time
+### Step 6. The two drafts, one at a time
 
 Say that GTM Base will now draft the first document, that they will see it
 whole, and that nothing is written until they say yes. The order is fixed: the
-ideal customer profile, then the decision, then the positioning.
+ideal customer profile, then the positioning. (Amended 2026-09-19, r2.4 section
+A: setup used to draft a third document, an entry recording something the team
+had decided. It is no longer a drafted step here.)
 
-For each step in turn, with `<step>` being `icp`, then `ledger-entry`, then
-`positioning`, start by seeing what this one document would read:
+For each step in turn, with `<step>` being `icp` and then `positioning`, start
+by seeing what this one document would read:
 
 ```
 python3 scripts/join.py preview --step <step> --run <run identifier>
@@ -320,7 +322,6 @@ person is waiting:
 
 - Reading what you named.
 - Drafting your ideal customer profile.
-- Drafting the decision entry.
 - Drafting your positioning.
 - Saving that into the base.
 
