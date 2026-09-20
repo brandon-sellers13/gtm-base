@@ -484,6 +484,40 @@ class SessionStartTest(SessionStartHelpers):
         records, _problems = state.load_question_ids(base_id)
         self.assertEqual([], records)
 
+    def test_a_base_with_both_documents_and_no_change_is_finished(self):
+        """Unit 1.2: a base holding no context change is not a half made base."""
+        root, _base_id = self.joined_base(remote=False)
+        self.add_files(root, decision_affects=None)
+
+        context = self.context_of(self.run_hook(root))
+
+        self.assertNotIn("Setup is not finished", context)
+        self.assertNotIn("a first decision written down", context)
+
+    def test_the_map_is_never_the_file_a_session_asks_about(self):
+        """The first real return session opened by asking about the map.
+
+        This base is shaped like one created before the map was left out by its
+        kind: its map carries a placeholder date and no confirmation line, and
+        it is owned by the same person as the two documents.
+        """
+        root, base_id = self.joined_base(remote=False)
+        self.add_files(root, decision_affects=None)
+
+        context = self.context_of(self.run_hook(root))
+
+        question = context.split("## One question for this session")[1]
+        self.assertIn("The file: context/strategy/icp.md", question)
+        self.assertIn(
+            "Also waiting, and not asked this time: context/strategy/positioning.md",
+            question,
+        )
+        self.assertNotIn(constants.MAP_PATH, question)
+        asked, _problems = state.load_asked(base_id)
+        self.assertEqual(
+            [], [row for row in asked if row.get("path") == constants.MAP_PATH]
+        )
+
     # --- the update that is refused ----------------------------------------
 
     def refused_incoming(self, path, name="base"):

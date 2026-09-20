@@ -35,6 +35,7 @@ from . import (
     duplicate_check,
     formats,
     ids,
+    names,
     paths,
     stale,
     state,
@@ -134,9 +135,26 @@ DROPPED = (
 FINDING_REQUIRED_FILE = (
     "You have not written %s yet, so there is nothing there to keep current."
 )
-FINDING_REQUIRED_ENTRY = (
-    "No decision has been written down yet, so there is nothing for GTM Base to "
-    "check your documents against."
+# The honest baseline, for a base whose two documents are confirmed and whose
+# record of context changes is empty. It says what was confirmed and when, it
+# says plainly what the base cannot do yet, and it names the day each document
+# comes back. It never says that nothing is out of date, because nothing has
+# been checked against anything, and it never says there is no date to watch,
+# because each confirmation has one. It replaces the older sentence that said
+# no decision had been written down yet, which made a missing habit sound like
+# a missing step.
+FINDING_BASELINE = (
+    "You confirmed %s on %s and %s on %s. No context change is recorded yet, so "
+    "GTM Base cannot yet check whether a change has made either document out of "
+    "date. GTM Base will ask about %s again on %s, and about %s on %s."
+)
+# The same baseline for a base where a required document carries no owner
+# confirmation at all, which is the one case where there is no date to name.
+FINDING_BASELINE_UNCONFIRMED = (
+    "No context change is recorded yet, so GTM Base cannot yet check whether a "
+    "change has made either document out of date, and %s carries no "
+    "confirmation from its owner, so GTM Base will ask about it the next time "
+    "you review your base."
 )
 FINDING_DOCUMENT_OLDER = (
     "The material behind %s is dated %s, and decision %s was made on %s, so that "
@@ -563,16 +581,45 @@ def _retry_pending(base_id: str, base_root: str, git: GitRunner) -> None:
 # --- The first run's one finding ---------------------------------------------
 
 
+def _baseline_sentence(report, finding) -> str:
+    """The honest baseline, said about the two documents the base holds.
+
+    Each document is named the way a person names it and carries its own two
+    dates, because setup can be resumed on a later day and then the two
+    confirmations fall on different days. A document nobody has confirmed has
+    no review date to give, so that case is said in its own words rather than
+    with a date invented for it.
+    """
+    items = report.baseline_items()
+    unnamed = [item for item in items if item.confirmed_on is None]
+    if unnamed or len(items) != 2:
+        path = finding.path or (items[0].path if items else constants.REQUIRED_CONTEXT_FILES[0])
+        return FINDING_BASELINE_UNCONFIRMED % names.document_name(path)
+    first, second = items[0], items[1]
+    return FINDING_BASELINE % (
+        names.document_name(first.path),
+        first.confirmed_on,
+        names.document_name(second.path),
+        second.confirmed_on,
+        names.document_name(first.path),
+        first.review_on,
+        names.document_name(second.path),
+        second.review_on,
+    )
+
+
 def finding_sentence(report, finding) -> str:
     """The one honest thing a first run says, in plain words.
 
-    It never claims more than the dates show. When nothing is out of date it
-    says exactly that, and names the first date it will watch.
+    It never claims more than the dates show. A base with nothing recorded
+    against it gets the baseline sentence, which says what it cannot check yet
+    rather than saying that nothing is out of date. Only a base that does hold
+    a context change is ever told that nothing is out of date.
     """
     if finding.code == stale.FINDING_REQUIRED_FILE_MISSING:
         return FINDING_REQUIRED_FILE % finding.path
-    if finding.code == stale.FINDING_REQUIRED_ENTRY_MISSING:
-        return FINDING_REQUIRED_ENTRY
+    if finding.code == stale.FINDING_BASELINE_NO_CHANGES:
+        return _baseline_sentence(report, finding)
     if finding.code == stale.FINDING_DOCUMENT_OLDER:
         decided = None
         for item in report.review_items:
@@ -594,9 +641,10 @@ def first_run_text(result) -> str:
     """The one sentence a first run has to say, ready to be read out loud.
 
     It is the finding the run already worked out, in the fixed order: a file
-    the person did not write, then a document older than the decision it is
-    meant to reflect, then the plain statement that nothing is out of date yet
-    with the first date it will watch. When the run stopped before it could
+    the person did not write, then a document older than the change it is meant
+    to reflect, then the baseline for a base with no context change recorded,
+    then the plain statement that nothing is out of date yet with the first
+    date it will watch. When the run stopped before it could
     look at anything, what comes back is the reason it stopped, because that is
     the only honest thing there is to say.
     """

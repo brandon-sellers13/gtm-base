@@ -617,3 +617,14 @@ SOURCES_READ_REFUSAL = (
 # the company cannot be used (it is a repository already, or the very folder
 # the person named).
 BASES_FOLDER_NAME = "GTM Bases"
+
+# --- The completion contract (added by Unit 1.2 of the 2026-09-19 plan) ------
+
+# Setup is finished when the base holds the two documents in
+# REQUIRED_CONTEXT_FILES above, and on nothing else. A context change is no
+# longer a required drafted step, so a base that holds no change yet is a
+# finished base with nothing recorded against it, and the closing says so in
+# the baseline finding rather than offering to finish setting it up. The list
+# stays at two: anything else a base holds arrives later, on request. No
+# second name for the list is added here, because a second name could drift
+# from the first.

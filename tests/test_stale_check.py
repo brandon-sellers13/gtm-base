@@ -36,6 +36,8 @@ THURSDAY = "2026-06-04"
 FRIDAY = "2026-06-05"
 
 ENTRY = "stg-" + "a" * 16
+RUN = "run-2026-06-01-0000aaaa"
+OTHER_RUN = "run-2026-06-05-0000bbbb"
 ICP = "context/strategy/icp.md"
 POSITIONING = "context/strategy/positioning.md"
 OWNER = "owner@example.com"
@@ -157,6 +159,25 @@ def run_check(fixture, gh=None, **options):
         session_id="sess-1",
         **options
     )
+
+
+class SecondSeat(object):
+    """Another computer's copy of one base, enough of it for a run to read."""
+
+    def __init__(self, root, base_id, remote):
+        self.root = root
+        self.base_id = base_id
+        self.remote = remote
+
+
+def second_seat(sandbox, base, name="second-seat"):
+    """The same base as somebody else would have it, in a folder of its own."""
+    root = os.path.join(sandbox.path, name)
+    support.git(["clone", "-q", base.remote, root], cwd=sandbox.path)
+    support.git(["config", "--local", "user.email", OWNER], cwd=root)
+    support.git(["config", "--local", "user.name", "Test Owner"], cwd=root)
+    support.git(["config", "--local", "gtmbase.id", base.base_id], cwd=root)
+    return SecondSeat(root, base.base_id, base.remote)
 
 
 def staged_for(result, entry_id=ENTRY):
@@ -788,16 +809,102 @@ class TestTheFirstRunFinding(unittest.TestCase):
             self.assertIn(POSITIONING, result.finding_sentence)
             self.assertEqual([], result.staged)
 
-    def test_then_no_decision_written_down_at_all(self):
+    def _confirmed(self, sandbox, icp_date=FRIDAY, positioning_date=FRIDAY):
+        """A base whose two documents were drafted and confirmed by their owner."""
+        base = self._base(sandbox)
+        base.confirm(ICP, icp_date, trigger="drafted", run=RUN)
+        base.confirm(POSITIONING, positioning_date, trigger="drafted", run=RUN)
+        return base
+
+    def test_then_the_honest_baseline_when_nothing_has_been_recorded_yet(self):
+        """Rewritten by Unit 1.2 on 2026-09-19.
+
+        This scenario used to assert the sentence saying that no decision had
+        been written down. Setup no longer requires one (P1), so the closing
+        now says what it holds and what it cannot check yet (P2).
+        """
         with support.Sandbox() as sandbox:
-            base = self._base(sandbox)
+            base = self._confirmed(sandbox)
 
             result = run_check(base, mode="first-run")
 
+            self.assertEqual(stale.FINDING_BASELINE_NO_CHANGES, result.finding.code)
             self.assertEqual(
-                stale.FINDING_REQUIRED_ENTRY_MISSING, result.finding.code
+                "You confirmed your customer profile on 2026-06-05 and your "
+                "positioning on 2026-06-05. No context change is recorded yet, "
+                "so GTM Base cannot yet check whether a change has made either "
+                "document out of date. GTM Base will ask about your customer "
+                "profile again on 2026-07-06, and about your positioning on "
+                "2026-07-06.",
+                result.finding_sentence,
             )
-            self.assertEqual(stale_check.FINDING_REQUIRED_ENTRY, result.finding_sentence)
+            self.assertNotIn("nothing is out of date", result.finding_sentence.lower())
+            self.assertNotIn("no date to watch", result.finding_sentence)
+            self.assertNotIn(".md", result.finding_sentence)
+
+    def test_the_baseline_names_each_date_when_setup_was_resumed_later(self):
+        with support.Sandbox() as sandbox:
+            base = self._confirmed(sandbox, icp_date=WEDNESDAY)
+
+            result = run_check(base, mode="first-run")
+
+            self.assertIn("your customer profile on 2026-06-03", result.finding_sentence)
+            self.assertIn("your positioning on 2026-06-05", result.finding_sentence)
+            self.assertIn(
+                "ask about your customer profile again on 2026-07-04",
+                result.finding_sentence,
+            )
+            self.assertIn(
+                "about your positioning on 2026-07-06", result.finding_sentence
+            )
+
+    def test_a_second_seat_reading_the_same_base_says_the_same_thing(self):
+        """Two computers, one base, one sentence. The rules read dates only."""
+        with support.Sandbox() as sandbox:
+            base = self._confirmed(sandbox, icp_date=WEDNESDAY)
+            here = run_check(base, mode="first-run")
+
+            elsewhere = second_seat(sandbox, base)
+            there = run_check(elsewhere, mode="first-run")
+
+            self.assertEqual(here.finding.code, there.finding.code)
+            self.assertEqual(here.finding_sentence, there.finding_sentence)
+            self.assertNotEqual(base.root, elsewhere.root)
+
+    def test_a_document_nobody_confirmed_is_said_plainly_with_no_date_invented(self):
+        with support.Sandbox() as sandbox:
+            base = self._base(sandbox)
+            base.confirm(ICP, FRIDAY, trigger="drafted", run=RUN)
+
+            result = run_check(base, mode="first-run")
+
+            self.assertEqual(stale.FINDING_BASELINE_NO_CHANGES, result.finding.code)
+            self.assertEqual(
+                stale_check.FINDING_BASELINE_UNCONFIRMED % "your positioning",
+                result.finding_sentence,
+            )
+
+    def test_the_map_is_never_flagged_asked_about_or_named_by_the_closing(self):
+        with support.Sandbox() as sandbox:
+            base = self._confirmed(sandbox)
+
+            result = run_check(base, mode="first-run")
+
+            self.assertEqual([], [flag.path for flag in result.report.file_flags])
+            self.assertEqual(
+                [],
+                [
+                    question.path
+                    for question in result.report.candidate_questions(OWNER)
+                ],
+            )
+            self.assertEqual([], result.report.review_items)
+            self.assertNotIn("map", result.finding_sentence)
+            self.assertFalse(
+                os.path.isfile(
+                    os.path.join(base.root, confirmations_name(constants.MAP_PATH))
+                )
+            )
 
     def test_then_a_document_older_than_the_decision_it_reflects(self):
         with support.Sandbox() as sandbox:

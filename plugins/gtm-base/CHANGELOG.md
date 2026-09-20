@@ -1,5 +1,15 @@
 # Changelog
 
+## Unreleased
+
+- Setting up a base now finishes on two documents, your customer profile and your positioning. Writing down something that changed about your business is no longer a required step of setting up, so a base that has nothing recorded against it yet is a finished base rather than a half made one, and a later session never offers to finish setting it up again.
+
+- The sentence that ends setting up now tells the truth about a base with nothing recorded against it. It names each document and the day you confirmed it, says plainly that no context change is recorded and that GTM Base therefore cannot yet check whether a change has made either document out of date, and names the day each document comes back to you. On the third real setup run that sentence said there was no date to watch, which was wrong twice over: nothing had been checked, and both confirmations already had a date of their own.
+
+- Your base's map is never asked about. It holds the settings and the note of where things live, so nothing you decide about your business can make it wrong, and it is now left out of the flags, the questions, and the review by what it is rather than by a confirmation line, which would only have brought it back a month later. The first real return session opened by asking whether the map was still right, which is the worst possible first sentence for a working session. A base created before this change is covered too, and the placeholder date the map template carried is gone.
+
+- The finding about a document written from material older than the change it should reflect now looks at the documents that change actually names, and only while the change is still open. It used to match on the setup run the document was drafted in, which would have gone quiet as soon as changes recorded outside setup arrived, and which would have raised one finding per document in a base holding many of them instead of one per document the change affects.
+
 ## 0.2.6 (2026-09-12)
 
 - You are no longer asked to work out which of your folders holds your marketing material. The one opening question now asks where your company's material is roughly, a whole company folder is a fine answer, and GTM Base looks through the folder you named and proposes the places inside it that look like marketing material, naming each one with a count of what it found there and asking whether that is it. You say yes, name a folder to add, or name one to drop, and only then are you shown the list of files and asked whether they may be read. The old rule asked for the narrowest folder you could name, which put the finding on the person least likely to know where their own material sits.

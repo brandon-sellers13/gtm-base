@@ -2,6 +2,7 @@
 
 import ast
 import datetime
+import inspect
 import os
 import unittest
 
@@ -762,6 +763,110 @@ class TestReviewItems(unittest.TestCase):
     def test_a_source_newer_than_the_decision_is_not_a_review_item(self):
         self.assertEqual([], self._report("2026-09-03").review_items)
 
+    def _rekeyed(self, files, entries, confirmations):
+        return run(
+            files=files,
+            ledger=[make_input(entry) for entry in entries],
+            confirmations=confirmations,
+            today=self.SEPTEMBER,
+        )
+
+    def test_an_entry_with_no_run_behind_it_still_raises_the_item(self):
+        """The changes a person records at the closing carry no run id at all."""
+        entry = make_entry(
+            decided_on="2026-09-01",
+            written_on="2026-09-01",
+            review_by="2026-12-01",
+            run_id=None,
+            affects=[ICP],
+        )
+        report = self._rekeyed(
+            [make_file(ICP, sources_date="2026-08-10", kind="icp")],
+            [entry],
+            [make_record(ICP, "2026-09-05", trigger="drafted", run=OTHER_RUN)],
+        )
+
+        self.assertEqual([ICP], [item.path for item in report.review_items])
+        self.assertEqual([STG], [item.entry_id for item in report.review_items])
+
+    def test_a_closed_change_raises_nothing_and_the_same_one_open_raises_one(self):
+        """The dates are identical in both halves, so only the status differs."""
+        made = dict(
+            decided_on="2026-09-04",
+            written_on="2026-09-04",
+            review_by="2026-12-01",
+            run_id=None,
+            affects=[ICP],
+        )
+        files = [make_file(ICP, sources_date="2026-09-02", kind="icp")]
+        lines = [make_record(ICP, "2026-09-05", trigger="drafted", run=OTHER_RUN)]
+
+        closed = self._rekeyed(files, [make_entry(status="closed", **made)], lines)
+        opened = self._rekeyed(files, [make_entry(status="open", **made)], lines)
+
+        self.assertEqual([], closed.review_items)
+        self.assertEqual([ICP], [item.path for item in opened.review_items])
+
+    def test_one_change_affecting_two_of_twelve_files_raises_two_items(self):
+        paths = ["context/strategy/segments/s%02d.md" % number for number in range(12)]
+        entry = make_entry(
+            decided_on="2026-09-01",
+            written_on="2026-09-01",
+            review_by="2026-12-01",
+            run_id=None,
+            affects=[paths[3], paths[7]],
+        )
+        report = self._rekeyed(
+            [make_file(path, sources_date="2026-08-10", kind="segment") for path in paths],
+            [entry],
+            [
+                make_record(path, "2026-09-05", trigger="drafted", run=OTHER_RUN)
+                for path in paths
+            ],
+        )
+
+        self.assertEqual(
+            [paths[3], paths[7]], [item.path for item in report.review_items]
+        )
+
+    def test_a_file_with_no_drafted_line_raises_nothing(self):
+        entry = make_entry(
+            decided_on="2026-09-01",
+            written_on="2026-09-01",
+            review_by="2026-12-01",
+            run_id=None,
+            affects=[ICP],
+        )
+        report = self._rekeyed(
+            [make_file(ICP, sources_date="2026-08-10", kind="icp")],
+            [entry],
+            [make_record(ICP, "2026-09-05", trigger="threshold")],
+        )
+
+        self.assertEqual([], report.review_items)
+
+    def test_a_change_that_does_not_affect_the_file_raises_nothing(self):
+        entry = make_entry(
+            decided_on="2026-09-01",
+            written_on="2026-09-01",
+            review_by="2026-12-01",
+            run_id=RUN,
+            affects=[POSITIONING],
+        )
+        report = self._rekeyed(
+            [
+                make_file(ICP, sources_date="2026-08-10", kind="icp"),
+                make_file(POSITIONING, sources_date="2026-09-04", kind="positioning"),
+            ],
+            [entry],
+            [
+                make_record(ICP, "2026-09-05", trigger="drafted", run=RUN),
+                make_record(POSITIONING, "2026-09-05", trigger="drafted", run=RUN),
+            ],
+        )
+
+        self.assertEqual([], report.review_items)
+
 
 class TestFirstRunFinding(unittest.TestCase):
     SEPTEMBER = datetime.date(2026, 9, 5)
@@ -786,6 +891,24 @@ class TestFirstRunFinding(unittest.TestCase):
                 make_record(POSITIONING, "2026-09-05", trigger="drafted", run=RUN),
             ],
             today=self.SEPTEMBER,
+        )
+
+    def test_the_unanswered_marker_slot_is_there_and_is_still_empty(self):
+        """The second place in the order belongs to Unit 1.7 and nothing else.
+
+        The slot is asserted here rather than left to be discovered, because
+        the closing rules promise five findings in one order and this module
+        has to run that order from the day the baseline lands. Empty means the
+        computation cannot reach it: it is handed values and never a file body,
+        so no marker can be seen here yet.
+        """
+        source = inspect.getsource(stale.StaleReport.first_run_finding)
+        slot = source.index("# The unanswered-marker slot.")
+        self.assertLess(source.index("FINDING_REQUIRED_FILE_MISSING"), slot)
+        self.assertLess(slot, source.index("self.review_items"))
+        self.assertEqual(
+            [],
+            [name for name in dir(stale) if name.startswith("FINDING_") and "MARKER" in name],
         )
 
     def test_a_skipped_required_file_wins(self):
@@ -816,21 +939,144 @@ class TestFirstRunFinding(unittest.TestCase):
         self.assertEqual(stale.FINDING_REQUIRED_FILE_MISSING, finding.code)
         self.assertEqual(POSITIONING, finding.path)
 
-    def test_no_entry_at_all_is_reported_when_an_entry_is_required(self):
-        report = run(
+    def baseline_report(self, positioning_date=FRIDAY, confirm_positioning=True):
+        """A base with both documents confirmed and nothing recorded against it."""
+        confirmations = [make_record(ICP, FRIDAY, trigger="drafted", run=RUN)]
+        if confirm_positioning:
+            confirmations.append(
+                make_record(POSITIONING, positioning_date, trigger="drafted", run=RUN)
+            )
+        return run(
             files=[
-                make_file(ICP),
-                make_file(POSITIONING),
+                make_file(ICP, kind="icp"),
+                make_file(POSITIONING, kind="positioning"),
             ],
             ledger=[],
+            confirmations=confirmations,
+        )
+
+    def test_two_confirmed_files_and_no_change_give_the_honest_baseline(self):
+        """Rewritten by Unit 1.2 on 2026-09-19.
+
+        This scenario used to assert that a base holding no entry was reported
+        as missing a required one. Setup no longer requires a context change to
+        be drafted (P1), so that finding was taken out of the order and the
+        honest baseline took its place (P2).
+        """
+        report = self.baseline_report()
+        finding = report.first_run_finding()
+
+        self.assertEqual(stale.FINDING_BASELINE_NO_CHANGES, finding.code)
+        self.assertIsNone(finding.path)
+        self.assertIsNone(finding.entry_id)
+        self.assertEqual(
+            [
+                (ICP, datetime.date(2026, 6, 5), datetime.date(2026, 7, 6)),
+                (POSITIONING, datetime.date(2026, 6, 5), datetime.date(2026, 7, 6)),
+            ],
+            [
+                (item.path, item.confirmed_on, item.review_on)
+                for item in report.baseline_items()
+            ],
+        )
+        self.assertEqual(datetime.date(2026, 7, 6), finding.date)
+
+    def test_a_setup_resumed_on_a_later_day_keeps_each_date_apart(self):
+        report = self.baseline_report(positioning_date=WEDNESDAY)
+        items = report.baseline_items()
+
+        self.assertEqual(
+            [datetime.date(2026, 6, 5), datetime.date(2026, 6, 3)],
+            [item.confirmed_on for item in items],
+        )
+        self.assertEqual(
+            [datetime.date(2026, 7, 6), datetime.date(2026, 7, 4)],
+            [item.review_on for item in items],
+        )
+        # The finding carries the earlier of the two, which is the first day
+        # the base has anything to say at all.
+        self.assertEqual(datetime.date(2026, 7, 4), report.first_run_finding().date)
+
+    def test_the_review_date_is_one_day_past_the_threshold(self):
+        report = self.baseline_report()
+        threshold = report.settings.confirmation_threshold_days
+
+        confirmed = report.baseline_items()[0].confirmed_on
+        self.assertEqual(
+            confirmed + datetime.timedelta(days=threshold + 1),
+            report.review_on(ICP),
+        )
+
+    def test_a_required_file_nobody_confirmed_is_named_by_the_baseline(self):
+        report = self.baseline_report(confirm_positioning=False)
+        finding = report.first_run_finding()
+
+        self.assertEqual(stale.FINDING_BASELINE_NO_CHANGES, finding.code)
+        self.assertEqual(POSITIONING, finding.path)
+        self.assertIsNone(report.review_on(POSITIONING))
+
+    def test_one_recorded_change_takes_the_base_past_the_baseline(self):
+        report = run(
+            files=[make_file(ICP), make_file(POSITIONING)],
+            ledger=[make_input(make_entry(affects=[ICP]))],
             confirmations=[make_record(ICP, FRIDAY), make_record(POSITIONING, FRIDAY)],
         )
         self.assertEqual(
-            stale.FINDING_REQUIRED_ENTRY_MISSING, report.first_run_finding().code
+            stale.FINDING_NOTHING_OUT_OF_DATE, report.first_run_finding().code
         )
+
+
+class TestTheMapIsLeftOutByItsKind(unittest.TestCase):
+    """The map holds settings, so no context change can make it wrong."""
+
+    MAP = "context/map.md"
+
+    def _report(self, kind="map", confirmations=()):
+        return run(
+            files=[
+                make_file(self.MAP, kind=kind),
+                make_file(ICP, kind="icp"),
+            ],
+            ledger=[make_input(make_entry(affects=[self.MAP, ICP]))],
+            confirmations=list(confirmations),
+        )
+
+    def test_it_is_never_flagged_and_never_asked_about(self):
+        report = self._report()
+
+        self.assertEqual([ICP], [flag.path for flag in report.file_flags])
         self.assertEqual(
-            stale.FINDING_NOTHING_OUT_OF_DATE,
-            report.first_run_finding(required_entry=False).code,
+            [ICP], [question.path for question in report.candidate_questions(OWNER)]
+        )
+
+    def test_a_base_made_before_this_rule_is_covered_too(self):
+        """That base's map carries no confirmation line, and never needs one."""
+        report = self._report(confirmations=[make_record(ICP, FRIDAY)])
+
+        self.assertEqual([], [flag.path for flag in report.file_flags if flag.path == self.MAP])
+        self.assertNotIn(self.MAP, report.confirmed_on)
+
+    def test_it_is_never_a_review_item(self):
+        report = run(
+            files=[make_file(self.MAP, kind="map", sources_date="2026-01-01")],
+            ledger=[
+                make_input(
+                    make_entry(
+                        decided_on="2026-06-01",
+                        written_on="2026-06-02",
+                        affects=[self.MAP],
+                    )
+                )
+            ],
+            confirmations=[make_record(self.MAP, FRIDAY, trigger="drafted", run=RUN)],
+        )
+        self.assertEqual([], report.review_items)
+
+    def test_a_file_of_any_other_kind_is_still_flagged(self):
+        report = self._report(kind="notes")
+
+        self.assertEqual(
+            [self.MAP, ICP], sorted(set(flag.path for flag in report.file_flags))
         )
 
 

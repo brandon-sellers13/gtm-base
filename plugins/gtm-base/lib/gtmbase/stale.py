@@ -61,9 +61,20 @@ TRIGGER_ACCEPTED = "accepted"
 
 # The one finding the first run reports, in the order it is looked for.
 FINDING_REQUIRED_FILE_MISSING = "required-file-missing"
-FINDING_REQUIRED_ENTRY_MISSING = "required-entry-missing"
 FINDING_DOCUMENT_OLDER = "document-older-than-decision"
+# Both required documents are confirmed and no context change is recorded, so
+# nothing can be compared yet. Added by Unit 1.2 of the 2026-09-19 plan, in
+# place of the older "no entry was written down" finding, because setup no
+# longer requires a context change to be drafted.
+FINDING_BASELINE_NO_CHANGES = "baseline-no-context-change-recorded"
 FINDING_NOTHING_OUT_OF_DATE = "nothing-out-of-date-yet"
+
+# The kind the base's own map carries. A file of this kind is left out of
+# flags, of questions, and of the review, because the map holds settings and
+# says nothing that a context change could make wrong. Leaving it out by its
+# kind covers a base created before this rule as well as every base created
+# after it, which a confirmation line would not.
+KIND_MAP = "map"
 
 # What a file's status says when the person chose not to write it.
 STATUS_SKIPPED = "skipped"
@@ -311,6 +322,9 @@ Question = namedtuple("Question", "path trigger entry_id reason")
 # nobody has to be asked about because its owner accepted the change itself.
 MergeConfirmation = namedtuple("MergeConfirmation", "path date entry_id merged_by")
 Finding = namedtuple("Finding", "code path date entry_id")
+# One required document at the baseline: the day its owner confirmed it, and
+# the day it comes up for review if nothing else happens first.
+BaselineItem = namedtuple("BaselineItem", "path confirmed_on review_on")
 
 
 class StaleReport(object):
@@ -349,6 +363,10 @@ class StaleReport(object):
         # Keyed by path: the newest acceptance by one of that file's owners,
         # which is why the file may carry a confirmation nobody typed.
         self.merge_confirmations: Dict[str, MergeConfirmation] = {}
+        # Keyed by path: the newest day an owner said this file is still true,
+        # whether they said it in a line or by accepting a prepared change.
+        # A file nobody has confirmed is not in here at all.
+        self.confirmed_on: Dict[str, Any] = {}
 
     # A base with nowhere to send its work cannot be behind anyone.
     @property
@@ -374,10 +392,10 @@ class StaleReport(object):
 
         Ledger questions come before threshold questions, because a decision
         the team already made is a better reason to ask than the calendar. A
-        file this owner does not own, a file that was set aside for now, and a
-        file the person chose not to write are all left out. One decision
-        raises at most one question, so a decision that touches three files
-        does not ask three times.
+        file this owner does not own, a file that was set aside for now, a file
+        the person chose not to write, and the base's own map are all left out.
+        One decision raises at most one question, so a decision that touches
+        three files does not ask three times.
         """
         ledger_questions = []
         threshold_questions = []
@@ -385,6 +403,8 @@ class StaleReport(object):
         for flag in self.file_flags:
             info = self.files.get(flag.path)
             if info is None or not info.present:
+                continue
+            if is_map(info):
                 continue
             if owner_email is not None and owner_email not in info.owners:
                 continue
@@ -411,28 +431,76 @@ class StaleReport(object):
             return False
         return self.today < until
 
+    def review_on(self, path: str):
+        """The day this file comes up for review, or None if nobody confirmed it.
+
+        A file is left alone while the days since its newest owner confirmation
+        are no more than the threshold, so the first day it is treated as out
+        of date is one day past that. This is the one place that date is worked
+        out, so what the closing says and what the check does cannot drift.
+        """
+        confirmed = _as_date(self.confirmed_on.get(path))
+        if confirmed is None:
+            return None
+        return confirmed + datetime.timedelta(
+            days=self.settings.confirmation_threshold_days + 1
+        )
+
+    def baseline_items(
+        self, required_files: Sequence[str] = REQUIRED_FILES
+    ) -> List[BaselineItem]:
+        """Each required document the base holds, with its two dates.
+
+        Setup can be resumed on a later day, so the two documents can carry
+        different confirmation dates and therefore different review dates. Each
+        one is worked out on its own rather than one standing in for both.
+        """
+        items = []
+        for path in required_files:
+            info = self.files.get(path)
+            if info is None or not info.present:
+                continue
+            items.append(
+                BaselineItem(path, _as_date(self.confirmed_on.get(path)), self.review_on(path))
+            )
+        return items
+
     def first_run_finding(
         self,
         required_files: Sequence[str] = REQUIRED_FILES,
-        required_entry: bool = True,
     ) -> Finding:
         """The one honest thing to say at the end of a first run.
 
         The order is fixed so every run of the same base says the same thing: a
-        file the person did not write, then a document older than the decision
-        it is supposed to reflect, then the plain statement that nothing is out
-        of date yet, naming the earliest date it will watch.
+        file the person did not write, then a file carrying a question nobody
+        answered, then a document older than the context change it is supposed
+        to reflect, then the honest baseline for a base with nothing recorded
+        yet, then the plain statement that nothing is out of date.
+
+        The second place in that order is the unanswered marker, which is built
+        in Unit 1.7 of the 2026-09-19 plan. Until then the slot is here and is
+        never reached, so the order the closing rules promise is the order this
+        runs in from the day the baseline lands.
         """
         for path in required_files:
             info = self.files.get(path)
             if info is None or not info.present:
                 return Finding(FINDING_REQUIRED_FILE_MISSING, path, None, None)
-        if required_entry and not self.entries:
-            return Finding(FINDING_REQUIRED_ENTRY_MISSING, None, None, None)
+        # The unanswered-marker slot. Unit 1.7 fills it.
         if self.review_items:
             item = self.review_items[0]
             return Finding(
                 FINDING_DOCUMENT_OLDER, item.path, item.sources_date, item.entry_id
+            )
+        if not self.entries:
+            items = self.baseline_items(required_files)
+            unconfirmed = [item.path for item in items if item.confirmed_on is None]
+            dates = [item.review_on for item in items if item.review_on is not None]
+            return Finding(
+                FINDING_BASELINE_NO_CHANGES,
+                unconfirmed[0] if unconfirmed else None,
+                min(dates) if dates else None,
+                None,
             )
         review_by = None
         entry_id = None
@@ -519,6 +587,7 @@ def compute(
     entries = _usable_entries(ledger, day, malformed)
     owner_lines, non_owner_counts = _index_confirmations(known, confirmations, malformed)
     settled, accepted = _corrections_confirmations(known, corrections, malformed)
+    confirmed_on = _newest_confirmations(known, owner_lines, accepted)
 
     file_flags = _file_flags(
         day,
@@ -530,6 +599,7 @@ def compute(
         settled,
         accepted,
         owner_email,
+        confirmed_on,
     )
     entry_flags = _entry_flags(known, entries)
     proposals = _affected_files_proposals(known, entries, map_hints)
@@ -561,6 +631,7 @@ def compute(
     )
     report.suppressions = dict(seat.suppressions)
     report.merge_confirmations = dict(accepted)
+    report.confirmed_on = dict(confirmed_on)
     return report
 
 
@@ -741,6 +812,37 @@ def _line_confirms(line, entry) -> bool:
     return line_date > later
 
 
+def is_map(info) -> bool:
+    """Whether this file is the base's own map, worked out from its kind.
+
+    Nothing here looks at the path, so a map that has been moved is still a
+    map, and a base created before this rule is covered without being touched.
+    """
+    return str(getattr(info, "kind", "") or "").strip().lower() == KIND_MAP
+
+
+def _lines_for(path, owner_lines, accepted):
+    """Every owner yes standing for one file, typed or given by acceptance."""
+    lines = list(owner_lines.get(path, []))
+    acceptance = accepted.get(path)
+    if acceptance is not None:
+        lines.append(_AcceptedLine(path, acceptance.date))
+    return lines
+
+
+def _newest_confirmations(known, owner_lines, accepted):
+    """The newest day an owner said each file is still true."""
+    newest: Dict[str, Any] = {}
+    for path in known:
+        for line in _lines_for(path, owner_lines, accepted):
+            line_date = _as_date(line.date)
+            if line_date is None:
+                continue
+            if path not in newest or line_date > newest[path]:
+                newest[path] = line_date
+    return newest
+
+
 def _file_flags(
     day,
     options,
@@ -751,23 +853,19 @@ def _file_flags(
     settled,
     accepted,
     owner_email,
+    confirmed_on,
 ):
     flags = []
     for path in sorted(known):
         info = known[path]
         if not info.present:
             continue
+        if is_map(info):
+            continue
         if owner_email is not None and owner_email not in info.owners:
             continue
-        lines = list(owner_lines.get(path, []))
-        acceptance = accepted.get(path)
-        if acceptance is not None:
-            lines.append(_AcceptedLine(path, acceptance.date))
-        newest = None
-        for line in lines:
-            line_date = _as_date(line.date)
-            if newest is None or line_date > newest:
-                newest = line_date
+        lines = _lines_for(path, owner_lines, accepted)
+        newest = confirmed_on.get(path)
         unconfirmed_entries = []
         for entry in entries:
             if entry.status != "open" or path not in entry.affects:
@@ -867,20 +965,32 @@ def _review_by_items(day, entries):
 
 
 def _review_items(known, entries, owner_lines):
-    """Documents setup wrote from material older than the decision itself."""
+    """Documents written from material older than the change they should reflect.
+
+    Three things have to be true, and a run id is not one of them (Unit 1.2 of
+    the 2026-09-19 plan, Fable finding H6): the file carries a line saying
+    setup drafted it, an open change names that file in what it affects, and
+    the material the file was written from is dated before the day that change
+    happened. Keying on a run id used to be the third test, and the changes a
+    person records at the closing carry no run id at all, so the finding would
+    have gone quiet the moment that habit landed. Looking only at the files a
+    change affects is also what keeps twelve documents in a base from raising
+    twelve findings about one change that touches two of them.
+    """
     items = []
     for path in sorted(known):
         info = known[path]
         if not info.present or info.sources_date is None:
             continue
-        runs = set()
-        for line in owner_lines.get(path, []):
-            if line.trigger == TRIGGER_DRAFTED and line.run:
-                runs.add(line.run)
-        if not runs:
+        if is_map(info):
+            continue
+        drafted = any(
+            line.trigger == TRIGGER_DRAFTED for line in owner_lines.get(path, [])
+        )
+        if not drafted:
             continue
         for entry in entries:
-            if not entry.run_id or entry.run_id not in runs:
+            if entry.status != "open" or path not in entry.affects:
                 continue
             decided = _as_date(entry.decided_on)
             if decided is None or info.sources_date >= decided:

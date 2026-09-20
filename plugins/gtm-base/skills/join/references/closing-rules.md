@@ -30,10 +30,12 @@ this repository is ahead of what the base actually says.
    read. It looks only at the files that change affects, and only at changes
    that are still open.
 4. **The honest baseline, when nothing has been recorded yet.** Both documents
-   were confirmed today, and no context change is recorded, so the base cannot
-   yet check whether a change has made either document out of date. The finding
-   says exactly that, and it names the date each confirmation comes up for
-   review. It never says that nothing is out of date, and it never says that
+   are confirmed and no context change is recorded, so the base cannot yet
+   check whether a change has made either document out of date. The finding
+   says exactly that. It names each document and the day its owner confirmed
+   it, which is usually today and is a different day for each document when
+   setting up was resumed on a later day, and it names the day each document
+   comes up for review. It never says that nothing is out of date, and it never says that
    there is no date to watch. (Amended 2026-09-19, r2.4 section A. This
    replaces the older line that said nothing had been written down yet, which
    mistook missing evidence for a base that was known to be current.)

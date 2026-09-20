@@ -17,7 +17,7 @@ for _path in (LIB_DIR, TESTS_DIR):
     if _path not in sys.path:
         sys.path.insert(0, _path)
 
-from gtmbase import constants, session_start  # noqa: E402
+from gtmbase import constants, session_start, stale  # noqa: E402
 import plain_language  # noqa: E402
 
 
@@ -26,6 +26,7 @@ PLUGIN_DIR = os.path.join(REPO_ROOT, "plugins", "gtm-base")
 PLUGIN_MANIFEST_PATH = os.path.join(PLUGIN_DIR, ".claude-plugin", "plugin.json")
 HOOKS_PATH = os.path.join(PLUGIN_DIR, "hooks", "hooks.json")
 TEMPLATE_DIR = os.path.join(REPO_ROOT, "templates", "company-base")
+PLUGIN_TEMPLATE_DIR = os.path.join(PLUGIN_DIR, "templates", "company-base")
 JOIN_GUIDE_PATH = os.path.join(REPO_ROOT, "docs", "join-guide.md")
 
 EMAIL_RE = re.compile(r"^[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)+$")
@@ -260,10 +261,22 @@ class TestTemplateTree(unittest.TestCase):
                 )
                 self.assertEqual(constants.OWNER_PLACEHOLDER_EMAIL, owner)
                 self.assertIn("kind", fields)
-                self.assertIn("last_confirmed", fields)
                 self.assertIn("sources", fields)
                 self.assertIn("status", fields)
+                if fields.get("kind") == stale.KIND_MAP:
+                    # Unit 1.2, 2026-09-19: the map is never asked about, so it
+                    # carries no confirmation date. The placeholder date it used
+                    # to carry was a date nobody had ever confirmed anything on.
+                    self.assertNotIn("last_confirmed", fields)
+                else:
+                    self.assertIn("last_confirmed", fields)
         self.assertTrue(seen, "no template context files were found")
+
+    def test_the_map_in_both_template_copies_carries_no_confirmation_date(self):
+        for folder in (TEMPLATE_DIR, PLUGIN_TEMPLATE_DIR):
+            text = read_text(os.path.join(folder, constants.MAP_PATH))
+            self.assertNotIn("last_confirmed", text, folder)
+            self.assertIn("kind: map", text, folder)
 
     def test_settings_file_has_exactly_two_keys_and_the_pinned_marketplace(self):
         settings = read_json(os.path.join(TEMPLATE_DIR, constants.SETTINGS_PATH))

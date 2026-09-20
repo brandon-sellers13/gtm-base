@@ -1055,11 +1055,14 @@ def _question_text(
     ledger = _ledger(root, base_id, today)
     by_path = {info.path: info for info in files}
 
+    # Setup is finished when both required documents are there. A base that
+    # holds no context change yet is a finished base with nothing recorded
+    # against it, not a half made one, so it is never offered setup again
+    # (Unit 1.2 of the 2026-09-19 plan, requirement P1).
     missing = _missing_required(by_path)
-    usable_entries = [item for item in ledger if item.entry is not None and not item.error]
-    if missing or not usable_entries:
+    if missing:
         setup = load_blocks(root_of_plugin, "continue-setup.md")
-        named = ", ".join(missing) if missing else "a first decision written down"
+        named = ", ".join(missing)
         return _Question(
             fill(setup.get("context", ""), {"missing": named}),
             fill(setup.get("visible", ""), {"missing": named}),

@@ -418,3 +418,5 @@ Brandon's call: context first, skills after. Units 1.4b and 1.4c above are withd
 - [x] 2026-09-19: Unit 1.1 merged and pushed (921a0d7), suite at 1127 passing. The replay corpus lists are kept outside the repository at ~/GTM Bases/Gridwise/fidelity-replay/. Left open: case two corpus, the answer key, the lowered read amount for case three; figure 7 of the atlas still says three drafts and moves with Unit 1.2.
 
 - [x] 2026-09-19: Unit 1.1b built, suite at 1193 passing. Eleven exemptions, all in the join skill, cleared by Units 1.5, 1.6, and 1.8. The registry found 71 sentences held as Python strings across eight modules.
+
+- [x] 2026-09-20: Unit 1.2 built, suite at 1217 passing. Carried forward: the older sentence that says there is no date to watch can still be reached when every recorded change is closed; it belongs to the Unit 1.4 wording pass.

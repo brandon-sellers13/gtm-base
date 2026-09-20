@@ -123,6 +123,17 @@ class SetupRun(object):
         self.positioning()
         return self
 
+    def two_documents(self):
+        """Setup as it completes from Unit 1.2 on: the two required documents.
+
+        A context change is no longer a drafted step, so this is everything a
+        run that records nothing leaves behind.
+        """
+        self.agree_to_the_list()
+        self.profile()
+        self.positioning()
+        return self
+
     def close(self, got_in_the_way=None, now=TODAY):
         return join_flow.close_run(
             self.root, self.run, got_in_the_way=got_in_the_way, now=now
@@ -298,6 +309,75 @@ def _base_id(root):
     from gtmbase import paths
 
     return paths.resolve_base(root, machine.load_machine_state()).base_id
+
+
+class TestASetupThatRecordsNoContextChange(unittest.TestCase):
+    """Unit 1.2, end to end: what a run that records nothing leaves behind.
+
+    Nothing is faked here. The real flow writes the files, the real library
+    reads them back, and the finding is the one a person would be read at the
+    end of that session.
+    """
+
+    def test_it_ends_with_two_documents_two_lines_and_no_line_for_the_map(self):
+        with support.Sandbox() as sandbox:
+            setup = SetupRun(sandbox).two_documents()
+
+            for relative in (ICP, POSITIONING, constants.MAP_PATH):
+                self.assertTrue(
+                    os.path.isfile(os.path.join(setup.root, relative)), relative
+                )
+            self.assertEqual(1, len(confirmation_lines(setup.root, ICP)))
+            self.assertEqual(1, len(confirmation_lines(setup.root, POSITIONING)))
+            self.assertEqual([], confirmation_lines(setup.root, constants.MAP_PATH))
+            folder = os.path.join(setup.root, constants.DECISIONS_DIR)
+            self.assertEqual(
+                [], [name for name in os.listdir(folder) if name.endswith(".md")]
+            )
+            self.assertEqual("", support.status_of(setup.root))
+
+    def test_the_closing_is_the_honest_baseline_and_names_both_review_dates(self):
+        with support.Sandbox() as sandbox:
+            setup = SetupRun(sandbox).two_documents()
+
+            closed = setup.close()
+
+            self.assertEqual(
+                "You confirmed your customer profile on 2026-09-06 and your "
+                "positioning on 2026-09-06. No context change is recorded yet, "
+                "so GTM Base cannot yet check whether a change has made either "
+                "document out of date. GTM Base will ask about your customer "
+                "profile again on 2026-10-07, and about your positioning on "
+                "2026-10-07.",
+                closed.finding,
+            )
+            self.assertNotIn("Nothing is out of date", closed.finding)
+            self.assertNotIn("no date to watch", closed.finding)
+            self.assertEqual([], plain_language.find_banned(closed.finding))
+            self.assertEqual([], plain_language.find_dashes(closed.finding))
+
+    def test_the_map_is_left_out_of_the_flags_the_questions_and_the_review(self):
+        with support.Sandbox() as sandbox:
+            from gtmbase import base_reader
+
+            setup = SetupRun(sandbox).two_documents()
+            inputs = base_reader.read_base(setup.root, _base_id(setup.root), today=TODAY)
+            report = stale.compute(
+                today=TODAY,
+                settings=inputs.settings,
+                files=inputs.files,
+                ledger=inputs.ledger,
+                confirmations=inputs.confirmations,
+                corrections=inputs.corrections,
+                seat=inputs.seat,
+            )
+
+            self.assertIn(constants.MAP_PATH, report.files)
+            self.assertEqual([], [flag.path for flag in report.file_flags])
+            self.assertEqual(
+                [], [question.path for question in report.candidate_questions(EMAIL)]
+            )
+            self.assertEqual([], report.review_items)
 
 
 # --- The finding, in its fixed order ----------------------------------------

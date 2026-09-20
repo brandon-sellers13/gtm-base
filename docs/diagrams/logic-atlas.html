@@ -132,7 +132,7 @@
 
 <div class="page">
   <div class="text">
-    <p class="meta">GTM Base <b>logic atlas</b> · plugin 0.2.6 · updated 2026-09-12</p>
+    <p class="meta">GTM Base <b>logic atlas</b> · plugin 0.2.6 · updated 2026-09-19</p>
     <h1>GTM Base Logic Atlas</h1>
     <p class="lede">Every decision the plugin makes on your behalf, drawn once and kept current with the code. Each figure is one rule. The stamp under it says when the rule was decided and where it is written down.</p>
     <div class="key">
@@ -384,8 +384,8 @@
 
       <rect x="480" y="40" width="190" height="80" rx="6" class="resolved"/>
       <text x="575" y="64" text-anchor="middle" class="title">One question</text>
-      <text x="575" y="84" text-anchor="middle" class="lbl">a file you own, one-time id,</text>
-      <text x="575" y="102" text-anchor="middle" class="lbl">the rest listed as waiting</text>
+      <text x="575" y="84" text-anchor="middle" class="lbl">a file you own, never the map,</text>
+      <text x="575" y="102" text-anchor="middle" class="lbl">one-time id, the rest listed as waiting</text>
 
       <rect x="710" y="40" width="170" height="80" rx="6" class="seat"/>
       <text x="795" y="64" text-anchor="middle" class="title">Or continue setup</text>
@@ -412,7 +412,7 @@
     </svg>
     </div>
     <figcaption>Slices, never dumps: the map is the one file read every session; everything else is read on demand by path. Anything that could run code on your machine is refused rather than pulled.
-      <span class="meta"><span class="stamp">decided 2026-09-04, amended 2026-09-06</span> first plan Unit 3 and Unit 10, origin R23 to R26</span></figcaption>
+      <span class="meta"><span class="stamp">decided 2026-09-04, amended 2026-09-19</span> first plan Unit 3 and Unit 10, origin R23 to R26 · the map left out of the question by its kind, 2026-09-19 plan Unit 1.2</span></figcaption>
   </figure>
 
   <h2 id="gate">6. What the safety check reads</h2>
@@ -495,7 +495,7 @@
       <path d="M784,90 C784,120 100,110 100,150" class="edge" marker-end="url(#a7)" style="color: var(--ink-mid)"/>
 
       <rect x="20" y="150" width="860" height="130" rx="6" class="box"/>
-      <text x="36" y="174" class="title">For each document, in this order: ideal customer profile, one decision, positioning</text>
+      <text x="36" y="174" class="title">For each document, in this order: ideal customer profile, then positioning</text>
       <rect x="36" y="190" width="150" height="70" rx="5" class="source"/>
       <text x="111" y="212" text-anchor="middle" class="title">Preview</text>
       <text x="111" y="230" text-anchor="middle" class="lbl">what goes in, what is left out;</text>
@@ -518,8 +518,8 @@
 
       <rect x="20" y="310" width="420" height="70" rx="6" class="resolved"/>
       <text x="36" y="334" class="title">The first finding</text>
-      <text x="36" y="352" class="lbl">a skipped document; a missing decision; a document older than the decision;</text>
-      <text x="36" y="368" class="lbl">or "nothing out of date yet" naming the date it will watch. Never more than the dates show.</text>
+      <text x="36" y="352" class="lbl">a skipped document; a document older than the context change that affects it;</text>
+      <text x="36" y="368" class="lbl">the honest baseline when nothing is recorded; or "nothing out of date yet" with the date it watches.</text>
       <rect x="480" y="310" width="400" height="70" rx="6" class="box"/>
       <text x="496" y="334" class="title">The closing</text>
       <text x="496" y="352" class="lbl">where the base lives and how to come back; backup and teammates arrive</text>
@@ -529,14 +529,14 @@
     </svg>
     </div>
     <figcaption>The one question asks where the material is roughly, and GTM Base finds the likely places itself and proposes them before any list is shown. The base comes into existence at the first approval, not before. Everything read stays in memory or in a run folder under the plugin's records that the closing deletes.
-      <span class="meta"><span class="stamp">decided 2026-09-05, amended 2026-09-12</span> join plan Units 2 to 5, Amendment r2.2, plugin 0.2.0 to 0.2.3 · contact lists left out of every list, and a large folder narrowed to the folders the person picks before the yes, built in 0.2.5 · the broad folder named and the places proposed back from file names and first headings, built in 0.2.6</span></figcaption>
+      <span class="meta"><span class="stamp">decided 2026-09-05, amended 2026-09-12</span> join plan Units 2 to 5, Amendment r2.2, plugin 0.2.0 to 0.2.3 · contact lists left out of every list, and a large folder narrowed to the folders the person picks before the yes, built in 0.2.5 · the broad folder named and the places proposed back from file names and first headings, built in 0.2.6 · setup completes on two documents, 2026-09-19 plan Unit 1.2</span></figcaption>
   </figure>
 
   <h2 id="confirm">8. Confirmations and the stale rules</h2>
   <div class="text"><p>How the base knows a file is still true, and when it stops believing it. Identity is the address on the saved change, never a name typed into a file.</p></div>
   <figure>
     <div class="frame">
-    <svg viewBox="0 0 900 290" role="img" aria-label="The four ways a file counts as confirmed against a decision, and the two ways it is flagged">
+    <svg viewBox="0 0 900 390" role="img" aria-label="The four ways a file counts as confirmed against a context change, the two ways it is flagged, and the baseline state of a base with nothing recorded against it">
       <defs>
         <marker id="a8" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="currentColor"/></marker>
       </defs>
@@ -564,10 +564,15 @@
       <rect x="480" y="210" width="400" height="60" rx="6" class="warnbox"/>
       <text x="496" y="234" class="title">Asked about on age alone</text>
       <text x="496" y="254" class="lbl">no owner yes within the threshold (30 days by default); not now waits 7</text>
+
+      <rect x="20" y="290" width="860" height="80" rx="6" class="box"/>
+      <text x="36" y="314" class="title">The baseline, when nothing has been recorded against either document</text>
+      <text x="36" y="334" class="lbl">the closing names each document and the day its owner confirmed it, says plainly that no context change is recorded</text>
+      <text x="36" y="354" class="lbl">so neither can be checked against one yet, and names the day each comes back. The map is left out of all of this by its kind.</text>
     </svg>
     </div>
     <figcaption>The example the whole product was built around: a decision recorded Thursday about Tuesday's meeting flags the file the owner confirmed on Wednesday, because Wednesday is before Thursday.
-      <span class="meta"><span class="stamp">decided 2026-09-04, amended 2026-09-06</span> first plan Unit 9a, origin R15 to R25; rule 3 decided 2026-09-06, rule 4 on 2026-09-06 (night)</span></figcaption>
+      <span class="meta"><span class="stamp">decided 2026-09-04, amended 2026-09-19</span> first plan Unit 9a, origin R15 to R25; rule 3 decided 2026-09-06, rule 4 on 2026-09-06 (night) · the baseline state, 2026-09-19 plan Unit 1.2</span></figcaption>
   </figure>
 
   <hr class="rule">
