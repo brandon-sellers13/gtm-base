@@ -411,3 +411,6 @@ This file is append-only. Agents add below; nobody rewrites what is above.
 - [ ] Unit 1.7d: recovery of an interrupted import
 - [ ] Unit 1.8: the sweep of text no unit touched
 - [ ] Unit 1.9: the fidelity replay, scored by Brandon
+
+### 2026-09-19, revision 2.1
+Brandon's call: context first, skills after. Units 1.4b and 1.4c above are withdrawn from release A and live in the roadmap. Release A is Units 1.1 to 1.5.

@@ -13,7 +13,7 @@ origin:
 
 This file is not an implementation plan. Both reviews of the build plan (Astra and Fable 5.1, 2026-09-19) said that twenty units across four phases is the wrong shape for one plan, so revision 2 of the build plan keeps Phase 1 plus the runner and the first skill, and the units below were moved here word for word. Each phase becomes its own plan, written after the first skill has been used on real work at Gridwise, because that use will change what the inventory and the rubric files need to hold.
 
-Two units left this file and went into the build plan: Unit 3.1 (the thin runner) became Unit 1.4b, and Unit 3.4 (the outbound sequence) became Unit 1.4c. Their text stays below only as the record of what revision 1 said.
+**Order, set by Brandon on 2026-09-19: all of the context goes into the base first, and skills that use it come after.** So the next plan after Phase 1 is what a base holds (the inventory, then messaging, voice, design, competitors, personas, metric definitions, goals, and the sources-of-truth file), and the runner and the skills follow it. Revision 2 of the build plan briefly pulled the runner and the outbound sequence forward as Units 1.4b and 1.4c; revision 2.1 moved them back here. Their revision 2 text, which already carries the review fixes, is at the end of this file and replaces Units 3.1 and 3.4 below. The success criterion for the first skill (SC-C in the build plan) is that one output is used in real work and what happened is recorded.
 
 ## Review findings to fold in when each plan is written
 
@@ -360,3 +360,71 @@ Starts after Phase 2's inventory and Unit 2.2 have shipped, because a skill that
 **Verification:** The document can be handed to a planning session and produce an implementation plan without a second round of questions.
 
 **Atlas: none.** A brainstorm changes no behavior.
+
+## The runner and the outbound sequence, as revision 2 wrote them
+
+These replace Units 3.1 and 3.4 above. Their dependencies on Units 1.3, 1.4, and 1.2b of the build plan still hold.
+
+- [ ] **Unit 1.4b: The thin runner and its contract test (pulled forward by r2 from Unit 3.1)**
+
+**Goal:** One shape for every skill that uses the base, which is also the deterministic caller of the moment-of-use check.
+
+**Requirements:** P33, P28, P9.
+
+**Dependencies:** 1.3 (`moment.check`), 1.4 (so no skill is ever written in the old vocabulary). r2, Fable H1: revision 1 also listed 1.7, 2.1, and 2.2, but its own scenarios say a missing file produces a named gap, so those were soft. This unit creates new files only, apart from the two appends named below, and runs beside Unit 1.5.
+
+**Files:**
+- Create: `plugins/gtm-base/lib/gtmbase/runner.py` (read the declared context files, call `moment.check` on each, stop for the choice when one is flagged, fence every file as data, assemble the request with the rubric, screen the output, hand back the work product), `docs/thin-runner.md` (the pattern, written once for people who write skills; r2 moved it out of `plugins/gtm-base/skills/references/`, which would have put a folder with no `SKILL.md` beside the skills), `tests/test_runner_contract.py`
+- Modify, append only: `plugins/gtm-base/lib/gtmbase/constants.py`, `tests/support.py` (a helper that builds a base holding a named set of context files)
+
+**Approach:** The runner is the only place a skill touches the base, which keeps each skill thin and keeps the moment-of-use check from being something a skill has to remember. When a declared file is flagged the runner returns the moment-of-use block and produces nothing until the choice is recorded. An example is a folder holding an input, the list of context files it ran against, an owner-approved output, an expectations file, and at least one deliberately wrong output. r2 (Astra 12, Fable M7): revision 1 called its harness "examples as tests", but it asserted which files were read, which is identical for every example, and never looked at the approved output, so an irrelevant paragraph with no contact detail in it would have passed. The expectations file states what this example must contain: required claims, the segment it is about, and the outcome (for a sequence, the number of steps and that every claim names its context file). The contract test checks the approved output against its expectations and checks that each wrong output fails. It never calls a model and asserts no prose. Separately, before any release that touches a skill or a rubric, the approved examples are run again for real and Brandon reads them; that replay is where judgment is tested, and the plan calls it a replay and not a test.
+
+**Execution note:** Fix what the contract test asserts before Unit 1.4c is written, so the skill is built against a fixed contract.
+
+**Patterns to follow:** `drafting.assemble` and `review.screen` as the two ends of an existing pipeline; the fenced data-not-instructions rule on every source.
+
+**Test scenarios:**
+- Happy path: a fixture skill declaring three context files reads exactly those three and calls `moment.check` on each.
+- Edge case: a declared file missing from the base produces a named gap and does not stop the run.
+- Edge case: a declared file that is flagged returns the moment-of-use block, and no request is assembled until a choice is recorded.
+- Security: a context file holding an instruction sentence reaches the request inside the data fence; the output is screened for contact details and keys before it is handed back. The test claims the fence is present, and does not claim a model would not follow the sentence.
+- Happy path: an example whose approved output meets its expectations passes; its deliberately wrong output fails; an example with no wrong output is rejected as incomplete.
+- Error path: a rubric named by a skill but absent from the base: the run reports it and substitutes nothing.
+
+**Verification:** A fixture skill written against the pattern needs no code of its own beyond its declarations and its prompt.
+
+**Atlas: figure 1** gains the runner as the way a skill reads the base.
+
+- [ ] **Unit 1.4c: Outbound sequence (pulled forward by r2 from Unit 3.4)**
+
+**Goal:** The base produces one piece of marketing work a marketer would send: a sequence grounded in one segment's own language, with every claim attributable to the base.
+
+**Requirements:** P33, P37, P28, P13.
+
+**Dependencies:** 1.4b, and 1.2b for adding the rules file to a base.
+
+**Files:**
+- Create: `plugins/gtm-base/skills/outbound-sequence/SKILL.md`, `scripts/outbound_sequence.py` (a shim), `references/sequence-shape.md`, `examples/`, `starter/outbound-rules.md` (the starter rules, kept in the plugin), `tests/test_outbound_sequence.py`
+- Modify, append only: `plugins/gtm-base/lib/gtmbase/constants.py`
+- Not created, by r2 (Astra 8): nothing under `templates/company-base/`. Base creation copies that whole tree, so a rules file placed there would already exist in every new base, absent-only writing would then refuse it, and the one existing base would never receive it.
+
+**Approach:** Reads the named segment's file when the base has one and otherwise the customer profile, saying which it used; reads the positioning; reads messaging, voice, and competitors where present and names each one that is missing as a gap, never filling it. The Gridwise base holds a profile and a positioning today, so the first real run is against those two with the gaps named. The rules live in `context/strategy/outbound-rules.md`. When the base has no rules file the skill says so and offers the starter as a proposed change, which the owner approves through Unit 1.2b (or through the shipped path once a shared copy exists); nothing is written before that yes, and a customized rules file is never overwritten. Every claim in the sequence names the context file behind it in a short table under the sequence, and a claim with no grounding is dropped and the drop reported, not softened. It reads `context/work/` nowhere, because that folder exists in neither the template nor the real base (Fable M8).
+
+**Execution note:** The deterministic tests cover what code can prove: which files were read, the fence, the contact and key screens, the claims table naming only files that were read. They do not prove the sequence is good or that no prospect's name slipped in, because the screens do not detect arbitrary names (`redaction_patterns.py` around line 124). That is what the owner replay and SC-C are for, and the two are kept apart in the test file and in the CHANGELOG.
+
+**Patterns to follow:** The verbatim-first extraction and banned-word rules from `draft-positioning.md`; the step shape in `docs/ux-standard.md`.
+
+**Test scenarios:**
+- Happy path: a sequence for a named segment reads that segment's file and says so; on a base with no segment files it reads the profile and says so.
+- Edge case: a claim with no grounding in any file that was read is dropped and the drop is reported.
+- Edge case: every row of the claims table names a file that was in the read set; a row naming any other file fails.
+- Edge case: messaging, voice, or competitors missing: each is a named gap.
+- Edge case: the segment named does not exist: the skill lists the ones that do and stops.
+- Edge case: no rules file: the skill offers the starter as a proposed change and produces no sequence until it is approved; a base that already has a rules file is never offered the starter over it.
+- Security: no email address, phone number, or key appears in the output, asserted by the screens.
+- Edge case: a flagged profile pauses the run at the moment-of-use block before any sequence is written.
+- Integration: the approved examples pass the contract test, and each wrong output fails it.
+
+**Verification (SC-C):** Brandon runs it on the Gridwise base, can point at the context file behind every claim, uses the sequence in real outreach, and the walkthrough record says what was sent, what he changed first, and what came back.
+
+**Atlas: figure 1.**
