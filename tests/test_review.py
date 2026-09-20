@@ -114,9 +114,9 @@ class Setup(object):
         self.base_id = result.base_id
         return result
 
-    def decision(self, name="ledger-entry.md"):
+    def decision(self, name="change-entry.md"):
         return review.approve(
-            draft(drafting.STEP_LEDGER, name),
+            draft(drafting.STEP_CHANGE, name),
             self.root,
             self.base_id,
             self.run,
@@ -174,7 +174,7 @@ class TestTheScreenFindsWhatMustNotBeWrittenDown(unittest.TestCase):
         self.assertEqual([], review.screen(clean, "dana@acme.test"))
 
     def test_the_decision_entry_may_name_the_owner_as_the_person_who_decided(self):
-        entry = draft(drafting.STEP_LEDGER, "ledger-entry.md")
+        entry = draft(drafting.STEP_CHANGE, "change-entry.md")
         self.assertEqual([], review.screen(entry, "owner@example.com"))
 
     def test_an_address_in_the_body_is_still_found_when_it_is_the_owners_own(self):
@@ -218,8 +218,8 @@ class TestStampingTheOwnerOnADraft(unittest.TestCase):
         self.assertIn("owner: " + EMAIL, stamped.text)
 
     def test_the_decision_entry_is_stamped_on_who_decided(self):
-        stamped = review.stamp_owner(draft(drafting.STEP_LEDGER, "ledger-entry.md"), EMAIL)
-        self.assertEqual(EMAIL, stamped.fields["decided_by"])
+        stamped = review.stamp_owner(draft(drafting.STEP_CHANGE, "change-entry.md"), EMAIL)
+        self.assertEqual(EMAIL, stamped.fields["noted_by"])
 
     def test_a_handle_line_is_taken_off_rather_than_left_as_it_was(self):
         """join-04: the handle line was exempt from the screen and never written.
@@ -229,8 +229,8 @@ class TestStampingTheOwnerOnADraft(unittest.TestCase):
         unread. It comes off the document instead.
         """
         entry = drafting.parse(
-            drafting.STEP_LEDGER,
-            captured("ledger-entry.md").replace(
+            drafting.STEP_CHANGE,
+            captured("change-entry.md").replace(
                 "origin: join", "origin: join\nowner_handle: @somebody"
             ),
         )
@@ -241,7 +241,7 @@ class TestStampingTheOwnerOnADraft(unittest.TestCase):
         self.assertNotIn("@somebody", stamped.text)
 
     def test_every_settings_line_the_screen_lets_through_is_written_over(self):
-        entry = drafting.parse(drafting.STEP_LEDGER, captured("ledger-entry.md"))
+        entry = drafting.parse(drafting.STEP_CHANGE, captured("change-entry.md"))
 
         stamped = review.stamp_owner(entry, EMAIL)
 
@@ -254,22 +254,22 @@ class TestTheFilesADecisionSaysItAffects(unittest.TestCase):
     """Every affected path is inside the context folder or it is refused."""
 
     def test_a_path_inside_the_context_folder_is_accepted(self):
-        entry = draft(drafting.STEP_LEDGER, "ledger-entry.md")
+        entry = draft(drafting.STEP_CHANGE, "change-entry.md")
         self.assertEqual([ICP], review.canonical_affects(entry))
 
     def test_a_path_climbing_out_of_the_base_is_refused(self):
-        hostile = captured("ledger-entry.md").replace(
+        hostile = captured("change-entry.md").replace(
             "affects: [context/strategy/icp.md]", "affects: [../secrets.md]"
         )
-        entry = drafting.parse(drafting.STEP_LEDGER, hostile)
+        entry = drafting.parse(drafting.STEP_CHANGE, hostile)
         with self.assertRaises(PathError):
             review.canonical_affects(entry)
 
     def test_a_path_from_the_root_of_the_machine_is_refused(self):
-        hostile = captured("ledger-entry.md").replace(
+        hostile = captured("change-entry.md").replace(
             "affects: [context/strategy/icp.md]", "affects: [/etc/passwd]"
         )
-        entry = drafting.parse(drafting.STEP_LEDGER, hostile)
+        entry = drafting.parse(drafting.STEP_CHANGE, hostile)
         with self.assertRaises(PathError):
             review.canonical_affects(entry)
 
@@ -385,7 +385,7 @@ class TestTheDecisionEntryLandsAsOnePieceOfWork(unittest.TestCase):
             result = setup.decision()
 
             self.assertEqual(
-                constants.DECISIONS_DIR + "/" + review.entry_id() + ".md", result.path
+                constants.CHANGES_DIR + "/" + review.entry_id() + ".md", result.path
             )
             entry = formats.LedgerEntry.parse(
                 support.read(os.path.join(setup.root, result.path))
@@ -393,7 +393,7 @@ class TestTheDecisionEntryLandsAsOnePieceOfWork(unittest.TestCase):
             entry.validate(today=TODAY)
             self.assertEqual("join", entry.origin)
             self.assertEqual(setup.run, entry.run_id)
-            self.assertEqual(EMAIL, entry.decided_by)
+            self.assertEqual(EMAIL, entry.noted_by)
             self.assertEqual([ICP], entry.affects)
             self.assertEqual("open", entry.status)
 
@@ -596,7 +596,7 @@ class TestAFolderWithSomethingHalfDoneInItIsLeftAlone(unittest.TestCase):
             self.assertEqual(review.CODE_UNSAVED_EDITS, caught.exception.code)
             self.assertFalse(
                 os.path.isdir(
-                    os.path.join(setup.root, constants.DECISIONS_DIR, "pending.md")
+                    os.path.join(setup.root, constants.CHANGES_DIR, "pending.md")
                 )
             )
 
@@ -700,8 +700,8 @@ class TestNothingScreenedOutIsEverWritten(unittest.TestCase):
             setup.profile()
             before = support.head_of(setup.root)
             hostile = drafting.parse(
-                drafting.STEP_LEDGER,
-                captured("ledger-entry.md").replace(
+                drafting.STEP_CHANGE,
+                captured("change-entry.md").replace(
                     "affects: [context/strategy/icp.md]", "affects: [../secrets.md]"
                 ),
             )
@@ -732,8 +732,8 @@ class TestNothingScreenedOutIsEverWritten(unittest.TestCase):
             setup = Setup(sandbox)
             setup.profile()
             hostile = drafting.parse(
-                drafting.STEP_LEDGER,
-                captured("ledger-entry.md").replace(
+                drafting.STEP_CHANGE,
+                captured("change-entry.md").replace(
                     "affects: [context/strategy/icp.md]", "affects: [../secrets.md]"
                 ),
             )

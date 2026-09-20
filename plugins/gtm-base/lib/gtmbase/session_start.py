@@ -27,7 +27,7 @@ the sentence the person sees, as one object holding that message. It writes
 nothing at all and reaches nothing over the network. The second part prints
 only the text the assistant reads, as plain text, and it is the one that
 records the session, brings the base up to date, says the weekly line when it
-is due, and installs the safeguard. Both parts work the same decision out from the same
+is due, and installs the safeguard. Both parts work the same answer out from the same
 inputs, so what the person is told and what the assistant is primed with always
 agree.
 

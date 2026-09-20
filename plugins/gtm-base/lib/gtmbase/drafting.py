@@ -29,15 +29,28 @@ from .fsutil import read_text
 # --- The three steps ---------------------------------------------------------
 
 STEP_ICP = "icp"
-STEP_LEDGER = "ledger-entry"
+STEP_CHANGE = "change-entry"
 STEP_POSITIONING = "positioning"
 
-STEPS = (STEP_ICP, STEP_LEDGER, STEP_POSITIONING)
+STEPS = (STEP_ICP, STEP_CHANGE, STEP_POSITIONING)
+
+# What this step was called before the rename. A setup run somebody left
+# halfway through may have saved that name, and coming back to it has to work.
+LEGACY_STEP_CHANGE = "ledger-entry"
+
+
+def step_named(name: str):
+    """The step one name means, under either of the names it has had."""
+    if name in STEPS:
+        return name
+    if name == LEGACY_STEP_CHANGE:
+        return STEP_CHANGE
+    return None
 
 # The prompt file each step is built from.
 PROMPT_FILES = {
     STEP_ICP: "draft-icp.md",
-    STEP_LEDGER: "draft-ledger-entry.md",
+    STEP_CHANGE: "draft-change-entry.md",
     STEP_POSITIONING: "draft-positioning.md",
 }
 
@@ -49,7 +62,11 @@ ICP_PATH = constants.CONTEXT_DIR + "/strategy/icp.md"
 POSITIONING_PATH = constants.CONTEXT_DIR + "/strategy/positioning.md"
 
 # What the settings block at the top of each file has to say the file is.
-KINDS = {STEP_ICP: "icp", STEP_LEDGER: "decision", STEP_POSITIONING: "positioning"}
+KINDS = {
+    STEP_ICP: "icp",
+    STEP_CHANGE: constants.ENTRY_KIND,
+    STEP_POSITIONING: "positioning",
+}
 
 # The settings every context file this unit writes has to carry.
 CONTEXT_FIELDS = ("kind", "owner", "last_confirmed", "sources", "status")
@@ -129,7 +146,7 @@ _BANNED = [(word, _banned_pattern(word)) for word in constants.DRAFT_BANNED_WORD
 PROGRESS = {
     "reading": "Reading what you named.",
     STEP_ICP: "Drafting your ideal customer profile.",
-    STEP_LEDGER: "Drafting the decision entry.",
+    STEP_CHANGE: "Drafting the context change.",
     STEP_POSITIONING: "Drafting your positioning.",
     "saving": "Saving that into the base.",
 }
@@ -246,8 +263,8 @@ def order_sources(step: str, sources: Sequence["sources_module.Source"]):
     messaging.
     """
     listed = list(sources)
-    if step == STEP_LEDGER:
-        # What a decision entry wants first is the most recent material, so
+    if step == STEP_CHANGE:
+        # What a context change wants first is the most recent material, so
         # the dated sources lead, newest first, and the undated follow in the
         # order they were listed.
         dated = [source for source in listed if getattr(source, "date", None)]
@@ -511,13 +528,33 @@ def parse(step: str, model_text: str) -> Draft:
     except (ValidationError, PathError):
         raise DraftError(step, CODE_NO_FRONTMATTER)
 
+    if step == STEP_CHANGE:
+        # A model that learned the older names for these two settings is not
+        # wrong about the change, only about what it is called, so the older
+        # spelling is read and the draft is saved under the name in use.
+        # Nothing is written out again when nothing was folded, because
+        # writing a draft out again is a change to it, and a draft that says
+        # the right thing already should come back exactly as it arrived.
+        try:
+            folded = formats._fold_field_names(fields)
+        except (ValidationError, PathError) as failure:
+            raise DraftError(step, failure.code or CODE_MISSING_FIELD % "kind")
+        if folded != fields:
+            fields = folded
+            try:
+                text = formats.render_document(fields, body)
+            except (ValidationError, PathError) as failure:
+                raise DraftError(
+                    step, failure.code or CODE_MISSING_FIELD % "kind"
+                )
+
     required = (
-        formats.LEDGER_REQUIRED if step == STEP_LEDGER else CONTEXT_FIELDS
+        formats.CHANGE_REQUIRED if step == STEP_CHANGE else CONTEXT_FIELDS
     )
     for name in required:
         if name not in fields:
             raise DraftError(step, CODE_MISSING_FIELD % name)
-    if step != STEP_LEDGER:
+    if step != STEP_CHANGE:
         # The two context files carry exactly the five settings this plugin
         # writes and reads. Anything else is refused rather than carried into
         # the base, because a setting nothing here checks would sit in the file
@@ -525,7 +562,21 @@ def parse(step: str, model_text: str) -> Draft:
         for name in sorted(fields):
             if name not in CONTEXT_FIELDS:
                 raise DraftError(step, CODE_UNKNOWN_FIELD % name)
-    if str(fields.get("kind", "")).strip() != KINDS[step]:
+    said_kind = str(fields.get("kind", "")).strip()
+    if step == STEP_CHANGE:
+        # An entry that calls itself by the older name is still an entry, and
+        # it is written back out under the name in use.
+        if said_kind not in constants.ENTRY_KINDS:
+            raise DraftError(step, CODE_WRONG_KIND)
+        if said_kind != KINDS[step]:
+            fields["kind"] = KINDS[step]
+            try:
+                text = formats.render_document(fields, body)
+            except (ValidationError, PathError) as failure:
+                raise DraftError(
+                    step, failure.code or CODE_MISSING_FIELD % "kind"
+                )
+    elif said_kind != KINDS[step]:
         raise DraftError(step, CODE_WRONG_KIND)
 
     present: List[str] = []

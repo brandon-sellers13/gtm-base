@@ -566,3 +566,175 @@ Brandon's call: context first, skills after. Units 1.4b and 1.4c above are withd
       Recorded as open in the CHANGELOG and not fixed: two sessions in one base
       at once, the backstop writing "told" before the client delivers the text,
       and unsalted path hashes.
+
+- [x] 2026-09-20: Unit 1.4 built, the rename to context change, suite at 1446
+      passing. What the base tracks is a context change everywhere a person
+      reads it. `work/decisions` became `work/changes`, entries say
+      `kind: change`, and `decided_on` and `decided_by` became `happened_on`
+      and `noted_by`. Entry identifiers are untouched, which is what keeps
+      every confirmation, correction record, and prepared change pointing at
+      the same thing.
+
+      The reader came first and nothing else could have gone before it.
+      `base_reader.ledger` now reads both folders and joins by identifier, so
+      there was never a moment at which an old entry could be hidden. An
+      identifier in both folders saying two different things comes back as one
+      problem naming it and neither version is used. Two copies that say the
+      same thing under different spellings are one entry, because they are
+      compared on what they say and not on their bytes.
+
+      The migration is in a new `changes.py`, written on the recovery pattern
+      `approve_local.py` already uses: a note in the seat folder before any
+      mutation, the pre-run head, a hash per path of what the run will write,
+      validated on load, undoing only what still matches, and the note kept
+      whenever a path holds the person's own words. It makes two saved changes
+      on purpose, the move with no content change and then the rewrite, because
+      `report.py` works out the "catches" number from which saved change first
+      added each file, and a move saved together with a rewrite reads as a new
+      file. `report.py` now recognises the move's own note and looks again
+      under the older path rather than following renames, which was tried and
+      miscounted a second entry whose content happened to be similar.
+
+      Measured before wiring: twelve runs on a fresh sandbox base shaped like
+      the real one (one entry, no corrections, no proposals) gave a median of
+      0.211 seconds and a slowest run of 0.294, against a session start budget
+      of fifteen seconds, and the question of whether it is needed is one
+      folder listing at 0.09 milliseconds. The cost is not what decided it. It
+      is offered inside "review my base" and carried out only by
+      `--move-changes` after a yes, because nothing is applied to a base
+      without one.
+
+      Existing tests changed and why: every reference to the renamed constant,
+      the renamed drafting step, and the two renamed settings, which is
+      mechanical; five sentences a test pinned by their old words. The
+      old-layout SC1 test in `test_stale_check.py` is byte-identical, proved by
+      comparing it against the version on the previous save; its fixture's
+      `add_entry` gained a `folder` argument defaulting to the older folder, so
+      the class body and `entry_text` are untouched. A new-layout twin sits
+      beside it. `test_stale.py` was not touched at all.
+
+      Carried forward, recorded and not fixed: a seat on 0.2.6 reads a migrated
+      base as empty. There is a test that freezes the 0.2.6 parse rule and
+      asserts it, the CHANGELOG says so, and `docs/join-guide.md` makes every
+      seat updating a condition of inviting a second one.
+
+- [x] 2026-09-20: Unit 1.4 corrected after two outside reviews, suite at 1536
+      passing. Two critical and five high data-safety findings, plus the
+      mediums from the correctness review, every one of them reproduced on a
+      sandbox base before it was touched. Nothing was committed.
+
+      The rule the recovery follows now is one sentence: work out what every
+      file is before touching any of them, and if one holds words the person
+      has not saved, stop there, change nothing, and name that file. The two
+      criticals were both the absence of that rule. One took a context change
+      away and only then noticed the next path was theirs, leaving that change
+      in neither folder with a deletion staged and every retry repeating it.
+      The other put an older path back without looking at it and wrote over an
+      unsaved edit to a change the move had not reached, then reported that
+      everything said what it said before.
+
+      Why the criticals were missed the first time: the failure injection only
+      ever stopped at a commit. It now also stops between two file moves, part
+      way through the rewrite, and between writing the dated record and saving
+      it, and what an interrupted run is compared against is no longer entries
+      and folder listings alone. It is also the confirmations, the flags the
+      stale rules compute, the review dates, what git says is unsaved, and
+      what is staged. Three of those comparisons would have caught a critical
+      on their own.
+
+      The rewrite is now a line-level rename that leaves every other byte
+      alone, proved by a script that migrates a file with carriage returns,
+      trailing spaces, a tab, runs of blank lines and the older setting name
+      written inside the body, and shows exactly three lines changed. Before
+      this it parsed the file and wrote a fresh one in its place, which
+      reformatted the person's own writing underneath them.
+
+      Two findings turned out to be better than the fix asked for. The rule
+      that every file is named after the change inside it makes K9's own case,
+      two files in one folder claiming one identifier, unreachable, so that
+      test asserts the reachable form instead and the code is kept for a disk
+      that cannot tell two names apart. And a value no writer could write out,
+      a comma inside an affected path, now survives the move untouched rather
+      than being a refusal, because the rewrite never writes the whole file.
+
+      One new defect was found by the new tests rather than by the reviewers:
+      git names a whole folder when nothing in it has been saved yet, so the
+      run that had just written the first record read `corrections/` as
+      somebody else's work. And a second by the case test: on a disk that does
+      not tell `work/Decisions` from `work/decisions`, the move handed git a
+      path it did not hold and failed. Both fixed.
+
+      Not fixed, recorded: a seat on 0.2.6 still reads an updated base as
+      empty, which is why the update now refuses on a base other people can
+      reach until the owner says every seat is on this release.
+
+- [x] 2026-09-20: Unit 1.4 corrected again after a second data-safety pass,
+      suite at 1586 passing. The pass reran every first-pass critical and high
+      and confirmed them closed, then found that the line-level rename I added
+      to fix D-M3 had introduced one critical, three highs and four mediums.
+      All reproduced before being touched. Nothing committed.
+
+      The invariant went in first and closed a whole class at once: every
+      renamed entry is read back with the both-spellings reader and refused,
+      by name and before anything is written, unless every field and the body
+      compare equal. A byte-order mark, the oldest kind of line ending, both
+      spellings of one setting on two lines, and a quoted word where a plain
+      one was expected were all files the rename turned into something the
+      base could not read back, and the run reported success on every one.
+
+      The critical was a folder named with a capital letter. Most Macs cannot
+      tell that from the same name in lower case; git can. The note recorded
+      the name git did not hold, so every question about that path came back
+      no, the restore list came back empty, and the undo list deleted the copy
+      anyway. Every change ended in neither folder, on every retry. Fixed by
+      recording the real name and by writing the general rule into the code:
+      no recovery removes a file unless another readable copy of that change
+      is confirmed to be there at that moment. Put-back also restores before
+      it removes now, so there is no instant in which a change is nowhere.
+
+      The lesson I want recorded: my first-pass fix for the whole-file rewrite
+      was right about the problem and created a new class of its own, because
+      a rename that only touches some lines can leave a file whose remaining
+      lines no longer make sense together. Writing a file is not finished
+      until it has been read back. That is now the rule in this module rather
+      than a thing I remembered to check in four places.
+
+      Three findings improved on what was asked. A conflict now blocks the
+      question, the yes, the "it already reflects this", and the local
+      approval, rather than only being said out loud, because saying it while
+      still accepting a yes was how the change got hidden for good. Quiet
+      never hides a conflict. And a base left half updated is recognised as
+      having work still to do, so the second half can be offered and finished
+      rather than falling off the edge.
+
+      Also added because the reviewer asked and it was right: a read-only
+      check of the update the owner can run on a real base before deciding
+      anything, and a way to say not now that is actually recorded.
+
+- [x] 2026-09-20: Unit 1.4, third pass. The reviewer reran N1 to N8 and every
+      low and confirmed them closed, could not fool the read-back check, and
+      called it safe for the real base. Two mediums were left, neither losing
+      data, and both are fixed. Suite at 1592 passing, nothing committed.
+
+      R1: a run killed before its first save, then saved by the person
+      themselves, wedged every retry with a sentence saying the file had never
+      been saved and telling them to save a base with nothing left to save.
+      The note can only record what this run did; it cannot record what
+      somebody else did afterwards. So the question is now asked of the base:
+      every file the run moved gone from what was last saved, every copy it
+      made there instead holding what the run wrote, means the move landed,
+      whoever saved it, and the run finishes.
+
+      R2: giving up left behind the dated record it had written and not saved,
+      because the rule about never deleting the last copy of something applied
+      to it. That rule is about context changes, which are the thing that
+      cannot be got back; the record of a run being undone is not one. Giving
+      up now also keeps its note until nothing of its own is left, which is
+      the rule putting work back already followed.
+
+      One thing the fix exposed that nobody had asked about: the sentence for
+      a half updated base claimed the settings still carried their older
+      names, which is true when the run stopped before the rewrite and false
+      when it stopped after. It now says only what it can know. That is the
+      same mistake as the one I recorded last pass, in a sentence rather than
+      in code: a claim about a state that varies, written as though it did not.

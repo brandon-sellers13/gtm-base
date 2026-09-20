@@ -134,12 +134,12 @@
   <div class="text">
     <p class="meta">GTM Base <b>logic atlas</b> · plugin 0.2.6 · updated 2026-09-19</p>
     <h1>GTM Base Logic Atlas</h1>
-    <p class="lede">Every decision the plugin makes on your behalf, drawn once and kept current with the code. Each figure is one rule. The stamp under it says when the rule was decided and where it is written down.</p>
+    <p class="lede">Every call the plugin makes on your behalf, drawn once and kept current with the code. Each figure is one rule. The stamp under it says when the rule was decided and where it is written down.</p>
     <div class="key">
       <span><i class="sw source"></i> your folders and sources</span>
       <span><i class="sw resolved"></i> the base</span>
       <span><i class="sw seat"></i> the plugin's own records</span>
-      <span><i class="sw ink"></i> where a decision resolves</span>
+      <span><i class="sw ink"></i> where a call resolves</span>
     </div>
     <div class="contents">
       <span class="meta">Contents</span>
@@ -176,7 +176,7 @@
       <text x="346" y="66" class="title">The base</text>
       <text x="346" y="86" class="mono">~/GTM Bases/Gridwise/gtm-base</text>
       <text x="346" y="112" class="lbl">The shared binder: context files,</text>
-      <text x="346" y="128" class="lbl">decisions, confirmations, corrections.</text>
+      <text x="346" y="128" class="lbl">context changes, confirmations, corrections.</text>
       <text x="346" y="156" class="lbl">Its own history. Its inbox and drafts</text>
       <text x="346" y="172" class="lbl">never leave this computer.</text>
 
@@ -197,8 +197,8 @@
       <text x="425" y="286" class="lbl" text-anchor="middle">belongs with: path plus folder identity</text>
     </svg>
     </div>
-    <figcaption>Your folder is read once, at setup, with your permission. The base is written only through setup, a proposal, or a confirmation. The plugin's records point at both and hold nothing a teammate should see.
-      <span class="meta"><span class="stamp">decided 2026-09-07, built in 0.2.4</span> join plan Key Decisions, first plan "three state stores"</span></figcaption>
+    <figcaption>Your folder is read once, at setup, with your permission. The base is written only through setup, a proposal, or a confirmation. The plugin's records point at both and hold nothing a teammate should see. Inside the base the context changes sit in <code>work/changes</code>; a base set up before the rename keeps them in <code>work/decisions</code>, both are read, and the update is offered once, never done without a yes, and never offered at all while anything is unsaved, while one change is written down twice, or on a base other people can reach until every seat is on this release. While it runs, the note that makes it recoverable sits in the plugin's records and never in the base.
+      <span class="meta"><span class="stamp">decided 2026-09-07, built in 0.2.4; the folder renamed 2026-09-19</span> join plan Key Decisions, first plan "three state stores" · the rename, 2026-09-19 plan Unit 1.4</span></figcaption>
   </figure>
 
   <h2 id="start">2. What happens when a session opens</h2>
@@ -544,8 +544,8 @@
         <marker id="a8" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="currentColor"/></marker>
       </defs>
       <rect x="20" y="30" width="240" height="60" rx="6" class="box"/>
-      <text x="140" y="54" text-anchor="middle" class="title">A decision, dated</text>
-      <text x="140" y="74" text-anchor="middle" class="lbl">decided on, written on, review by</text>
+      <text x="140" y="54" text-anchor="middle" class="title">A context change, dated</text>
+      <text x="140" y="74" text-anchor="middle" class="lbl">happened on, written on, review by</text>
       <rect x="20" y="120" width="240" height="60" rx="6" class="resolved"/>
       <text x="140" y="144" text-anchor="middle" class="title">A context file it affects</text>
       <text x="140" y="164" text-anchor="middle" class="lbl">with an owner address in front</text>
@@ -553,18 +553,18 @@
       <text x="150" y="110" class="lbl">affects</text>
 
       <rect x="300" y="20" width="580" height="180" rx="6" class="box"/>
-      <text x="316" y="44" class="title">Counts as confirmed against that decision when any one of these holds</text>
-      <text x="316" y="70" class="lbl">1. the owner's line names the decision's id</text>
-      <text x="316" y="90" class="lbl">2. the owner's line is dated after both the decision date and the date it was written down</text>
+      <text x="316" y="44" class="title">Counts as confirmed against that context change when any one of these holds</text>
+      <text x="316" y="70" class="lbl">1. the owner's line names the change's id</text>
+      <text x="316" y="90" class="lbl">2. the owner's line is dated after both the day it happened and the day it was written down</text>
       <text x="316" y="110" class="lbl">3. the owner accepted the prepared change that carried it (same files touched, same content)</text>
-      <text x="316" y="130" class="lbl">4. the file was drafted in the same setup run as the decision (same run id, any dates)</text>
+      <text x="316" y="130" class="lbl">4. the file was drafted in the same setup run as the change (same run id, any dates)</text>
       <text x="316" y="150" class="lbl">5. the owner approved that prepared change here, on a base with no shared copy</text>
       <text x="316" y="178" class="lbl" style="fill: var(--ink-quiet)">a line by anyone who is not the owner counts for nothing; rule 5 is refused unless the file names them as its owner</text>
       <path d="M260,150 L300,150" class="edge" marker-end="url(#a8)" style="color: var(--ink-mid)"/>
 
       <rect x="20" y="210" width="420" height="60" rx="6" class="warnbox"/>
-      <text x="36" y="234" class="title">Flagged, and a change is prepared with the decision as evidence</text>
-      <text x="36" y="254" class="lbl">the newest owner line is older than the decision, or there is no owner line at all</text>
+      <text x="36" y="234" class="title">Flagged, and an edit is prepared with the context change as evidence</text>
+      <text x="36" y="254" class="lbl">the newest owner line is older than the change, or there is no owner line at all</text>
       <rect x="480" y="210" width="400" height="60" rx="6" class="warnbox"/>
       <text x="496" y="234" class="title">Asked about on age alone</text>
       <text x="496" y="254" class="lbl">no owner yes within the threshold (30 days by default); not now waits 7</text>
@@ -575,8 +575,8 @@
       <text x="36" y="354" class="lbl">so neither can be checked against one yet, and names the day each comes back. The map is left out of all of this by its kind.</text>
     </svg>
     </div>
-    <figcaption>The example the whole product was built around: a decision recorded Thursday about Tuesday's meeting flags the file the owner confirmed on Wednesday, because Wednesday is before Thursday.
-      <span class="meta"><span class="stamp">decided 2026-09-04, amended 2026-09-19</span> first plan Unit 9a, origin R15 to R25; rule 3 decided 2026-09-06, rule 4 on 2026-09-06 (night) · the baseline state, 2026-09-19 plan Unit 1.2 · rule 5, the owner approving one in Claude, Unit 1.2b</span></figcaption>
+    <figcaption>The example the whole product was built around: a context change recorded Thursday about something that happened on Tuesday flags the file the owner confirmed on Wednesday, because Wednesday is before Thursday. Identifiers are untouched by the rename, which is why every line already written still settles what it always settled.
+      <span class="meta"><span class="stamp">decided 2026-09-04, amended 2026-09-19</span> first plan Unit 9a, origin R15 to R25; rule 3 decided 2026-09-06, rule 4 on 2026-09-06 (night) · the baseline state, 2026-09-19 plan Unit 1.2 · rule 5, the owner approving one in Claude, Unit 1.2b · the words and the settings, Unit 1.4</span></figcaption>
   </figure>
 
   <hr class="rule">

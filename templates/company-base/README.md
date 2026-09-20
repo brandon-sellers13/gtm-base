@@ -10,12 +10,13 @@ holds the record of how that context stays current as the business moves.
 `strategy` holds your ideal customer profile, your positioning, and your
 messaging. `metrics` holds your numbers and what each one means. `plan` holds
 your goals and targets. `notes` holds your own working notes and the thinking
-behind decisions that never became a document. `context/map.md` is the map,
+behind choices that never became a document. `context/map.md` is the map,
 which says where everything lives and carries two settings you can change.
 
-**work** holds the record of how the base stays current. `decisions` holds one
-dated entry per decision the team made. `confirmations` holds the record of the
-owner saying that a file is still right. `inbox` is where you drop meeting notes
+**work** holds the record of how the base stays current. `changes` holds one
+dated entry per context change, which is anything that happened that makes a
+document here no longer true. `confirmations` holds the record of the owner
+saying that a file is still right. `inbox` is where you drop meeting notes
 and transcripts for the assistant to read. `proposals` holds suggested changes
 while they are being prepared.
 

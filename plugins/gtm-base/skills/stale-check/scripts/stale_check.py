@@ -45,7 +45,15 @@ if _lib not in sys.path:
 
 import argparse  # noqa: E402
 
-from gtmbase import machine, moment, paths, report, stale_check, state  # noqa: E402
+from gtmbase import (  # noqa: E402
+    changes,
+    machine,
+    moment,
+    paths,
+    report,
+    stale_check,
+    state,
+)
 from gtmbase.errors import GtmBaseError  # noqa: E402
 
 EXIT_DONE = 0
@@ -72,9 +80,39 @@ def build_parser():
         help="say the one honest thing a first run can say",
     )
     parser.add_argument(
+        "--dismiss-quiet-record",
+        # The name this had before the rename is still accepted, because a
+        # session holding the older instructions will ask for it by that name
+        # and being refused would lose the answer the person just gave.
         "--dismiss-ledger-behind",
+        dest="dismiss_quiet_record",
         action="store_true",
-        help="stop mentioning a quiet ledger for a while",
+        help="stop mentioning a quiet record of context changes for a while",
+    )
+    parser.add_argument(
+        "--move-changes",
+        action="store_true",
+        help="store the context changes the new way, after the owner says yes",
+    )
+    parser.add_argument(
+        "--every-seat-updated",
+        action="store_true",
+        help="say that everyone who opens this base is on the current version",
+    )
+    parser.add_argument(
+        "--abandon-move",
+        action="store_true",
+        help="give up on an update that stopped partway and put back what is ours",
+    )
+    parser.add_argument(
+        "--not-now-move",
+        action="store_true",
+        help="record that the person does not want to be asked about this yet",
+    )
+    parser.add_argument(
+        "--check-move",
+        action="store_true",
+        help="say what the update would do and whether it would be offered",
     )
     parser.add_argument(
         "--report",
@@ -172,6 +210,77 @@ def main(argv=None):
         sys.stdout.write(report.render_summary(summary) + "\n")
         return EXIT_DONE
 
+    if options.check_move:
+        # Read only. It opens files and writes none, so it is the one thing
+        # somebody can run on a real base before deciding anything.
+        try:
+            said = changes.what_would_happen(resolution.root, resolution.base_id)
+            offer = changes.what_to_offer(resolution.root, resolution.base_id)
+        except GtmBaseError as failure:
+            sys.stderr.write(str(failure) + "\n")
+            return EXIT_REFUSED
+        except Exception:
+            sys.stderr.write(WENT_WRONG + "\n")
+            return EXIT_ERROR
+        sys.stdout.write(said + "\n")
+        sys.stdout.write(changes.offer_state_sentence(offer) + "\n")
+        return EXIT_DONE
+
+    if options.not_now_move:
+        try:
+            until = changes.not_now(resolution.base_id)
+        except GtmBaseError as failure:
+            sys.stderr.write(str(failure) + "\n")
+            return EXIT_REFUSED
+        except Exception:
+            sys.stderr.write(WENT_WRONG + "\n")
+            return EXIT_ERROR
+        sys.stdout.write(changes.PUT_OFF % until.isoformat() + "\n")
+        return EXIT_DONE
+
+    if options.abandon_move:
+        try:
+            given_up = changes.abandon(resolution.root, resolution.base_id)
+        except GtmBaseError as failure:
+            sys.stderr.write(str(failure) + "\n")
+            return EXIT_REFUSED
+        except Exception:
+            sys.stderr.write(WENT_WRONG + "\n")
+            return EXIT_ERROR
+        sys.stdout.write(given_up.sentence + "\n")
+        return EXIT_DONE if given_up.ok else EXIT_REFUSED
+
+    if options.move_changes:
+        if options.dry_run:
+            # A look only writes nothing at all, which is what the skill says
+            # a look only does. It says what would happen and stops.
+            try:
+                would = changes.what_would_happen(
+                    resolution.root, resolution.base_id
+                )
+            except GtmBaseError as failure:
+                sys.stderr.write(str(failure) + "\n")
+                return EXIT_REFUSED
+            except Exception:
+                sys.stderr.write(WENT_WRONG + "\n")
+                return EXIT_ERROR
+            sys.stdout.write(would + "\n")
+            return EXIT_DONE
+        try:
+            moved = changes.migrate(
+                resolution.root,
+                resolution.base_id,
+                every_seat_updated=options.every_seat_updated,
+            )
+        except GtmBaseError as failure:
+            sys.stderr.write(str(failure) + "\n")
+            return EXIT_REFUSED
+        except Exception:
+            sys.stderr.write(WENT_WRONG + "\n")
+            return EXIT_ERROR
+        sys.stdout.write(moved.sentence + "\n")
+        return EXIT_DONE if moved.ok else EXIT_REFUSED
+
     seat, _problems = state.load_seat(resolution.base_id)
     try:
         result = stale_check.run(
@@ -179,7 +288,7 @@ def main(argv=None):
             resolution.base_id,
             session_id=seat.get("session_id"),
             mode=_mode_of(options),
-            dismiss_ledger_behind=options.dismiss_ledger_behind,
+            dismiss_quiet_record=options.dismiss_quiet_record,
             dry_run=options.dry_run,
         )
     except GtmBaseError as failure:

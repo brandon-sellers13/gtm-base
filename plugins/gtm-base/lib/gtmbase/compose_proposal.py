@@ -4,7 +4,7 @@ The order matters, and every step is safe to repeat. The staged file is read
 and checked, the two conditions that stop anything leaving this computer are
 asked, everything the proposal would carry is read for things that must never
 leave, and only then is a working folder made. The edits are applied there, the
-decision and the record of what changed are written beside them, and the whole
+context change and the record of what changed are written beside them, and the whole
 lot is sent as one review.
 
 A base with no shared copy has nowhere to send a proposal, so it never reaches
@@ -26,6 +26,7 @@ import shutil
 from typing import Dict, List, Optional, Tuple
 
 from . import (
+    base_reader,
     constants,
     duplicate_check,
     formats,
@@ -207,16 +208,16 @@ def marker_problems(staging) -> List[Tuple[str, str]]:
         return [
             (
                 CODE_MARKER_ENTRY,
-                "This proposal says it carries a decision, but no decision is "
-                "written in it.",
+                "This proposal says it carries a context change, but no "
+                "change is written in it.",
             )
         ]
     if entry_id and entry_id != staging.staging_id and staging.decision_block:
         return [
             (
                 CODE_ENTRY_MISMATCH,
-                "This proposal names a decision the base already holds and "
-                "writes out a second copy of it, which it may not do.",
+                "This proposal names a context change the base already holds "
+                "and writes out a second copy of it, which it may not do.",
             )
         ]
     return []
@@ -451,11 +452,12 @@ def review_title(staging) -> str:
 
 
 def ledger_entry_for(staging, today: datetime.date) -> "formats.LedgerEntry":
-    """The decision this proposal carries, dated the day it was written down."""
+    """The context change this proposal carries, dated the day it was written."""
     entry = formats.LedgerEntry.parse(staging.decision_block)
     if entry.id != staging.staging_id:
         raise ValidationError(
-            "The decision in this proposal is named after a different proposal.",
+            "The context change in this proposal is named after a different "
+            "proposal.",
             code=CODE_ENTRY_MISMATCH,
         )
     entry.written_on = today.isoformat()
@@ -504,7 +506,7 @@ def scan_everything(staging, base_root: str, extra: Optional[List[str]] = None):
     hits = []
     pieces = [("the evidence", staging.excerpt), ("the proposal", staging.pr_body)]
     if staging.decision_block:
-        pieces.append(("the decision", staging.decision_block))
+        pieces.append(("the context change", staging.decision_block))
     for number, edit in enumerate(staging.edits, start=1):
         pieces.append(("edit %d" % number, edit.text))
         # The heading is written into the file too, whenever an edit adds a
@@ -935,7 +937,7 @@ def _prepare(
     base_root: str,
     codes: List[str],
 ) -> List[str]:
-    """Apply the edits, write the decision and the record, and save the lot."""
+    """Apply the edits, write the context change and the record, and save it."""
     ordered = edited_paths(staging)
     for edit in staging.edits:
         # Checked here and not only against the clone, because the same name
@@ -958,7 +960,7 @@ def _prepare(
     entry_path = None
     if staging.decision_block:
         entry = ledger_entry_for(staging, today)
-        entry_path = "%s/%s.md" % (constants.DECISIONS_DIR, entry.id)
+        entry_path = base_reader.where_to_write_the_entry(worktree_path, entry.id)
         atomic_write_text(
             os.path.join(worktree_path, entry_path),
             entry.render(),

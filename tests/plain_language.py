@@ -80,6 +80,175 @@ def find_dashes(text):
     return found
 
 
+# --- The words the rename took out of everything a person reads --------------
+
+# The two words Unit 1.4 took out of every sentence a person reads. "Decision"
+# is too narrow for what the base tracks, because a competitor's launch and a
+# price change are not decisions anybody made, and the live run needed three
+# explanations of it. "Ledger" is a bookkeeping word for a folder of dated
+# notes and nobody outside this code used it.
+FRONTMATTER_FENCE = "---"
+
+# A whole line of `name=value` pairs and nothing else, which is how a
+# confirmation is written down. It is a record, not a sentence, and each of its
+# values comes from a fixed vocabulary the file formats check.
+_RECORD_LINE_RE = re.compile(r"^(?:[a-z_]+=\S+)(?:\s+[a-z_]+=\S+)+$")
+
+# A span between backticks, which is a literal being named and not a word.
+_CODE_SPAN_RE = re.compile(r"`[^`]*`")
+
+# A settings line, which is what has to follow a line of three dashes before
+# that line counts as the top of a settings block.
+_SETTING_RE = re.compile(r"^[A-Za-z0-9_-]+:")
+
+# Settings whose value is a sentence somebody reads rather than a machine
+# value. A skill's description is shown in the list of skills.
+READ_AS_SENTENCES = ("description",)
+
+
+def _opens_a_block(lines, index):
+    """Whether the line of three dashes at this index opens a settings block."""
+    if index == 0:
+        return True
+    for line in lines[index + 1 :]:
+        if not line.strip():
+            continue
+        return bool(_SETTING_RE.match(line.strip()))
+    return False
+
+_PERSON_FACING_INFLECTIONS = {
+    "decision": ["decision", "decisions"],
+    "ledger": ["ledger", "ledgers"],
+}
+
+_PERSON_FACING_PATTERNS = [
+    (
+        word,
+        re.compile(
+            r"\b(?:"
+            + "|".join(
+                re.escape(form) for form in _PERSON_FACING_INFLECTIONS[word]
+            )
+            + r")\b",
+            re.IGNORECASE,
+        ),
+    )
+    for word in constants.BANNED_PERSON_FACING_WORDS
+]
+
+
+# The one place the older word still has to be written out: the name of the
+# folder a base set up before the rename really holds. A path is not a word for
+# what the base tracks, and a person told to look in the wrong folder is worse
+# off than one who read the word once.
+_LEGACY_FOLDER = constants.LEGACY_CHANGES_DIR
+
+# The other places the older word is somebody else's name for something and
+# not ours. The client's own tool-use interface calls the yes or no it returns
+# a permission decision, and its fields are spelled that way, so a file that
+# explains what it does with them has to write the name it is given.
+_NOT_OUR_WORD = (
+    "permission decision",
+    "permissionDecision",
+    "permissionDecisionReason",
+    "decision-control",
+)
+
+
+def _prose_lines(text):
+    """Every line of a document that a person reads as a sentence.
+
+    The settings block at the top of a file, and any settings block shown
+    inside an example, are left out. What is in one is a value from a fixed
+    vocabulary that the file formats check for themselves, such as `origin` or
+    `mode`. Some of those vocabularies were written before the rename and are
+    recorded in the files of every base that already exists, so they cannot be
+    spelled differently now without making those files unreadable. Nobody
+    reads them as words, and every sentence around them is checked.
+    """
+    lines = text.splitlines()
+    inside = False
+    for line_number, line in enumerate(lines, start=1):
+        if line.strip() == FRONTMATTER_FENCE:
+            if inside:
+                inside = False
+                continue
+            # A line of three dashes on its own is a rule far more often than
+            # it is the top of a settings block. It only opens one at the very
+            # top of a file, or when a setting really follows it. Reading
+            # every one of them as a block is how a rule halfway down a file
+            # switched the whole check off for everything below it.
+            if _opens_a_block(lines, line_number - 1):
+                inside = True
+            continue
+        if inside:
+            # The value of a description is the first thing a person reads
+            # about a skill, so it is read as a sentence and not as a setting.
+            name, separator, value = line.partition(":")
+            if separator and name.strip() in READ_AS_SENTENCES:
+                yield line_number, value
+            continue
+        if _RECORD_LINE_RE.match(line.strip()):
+            continue
+        yield line_number, line
+
+
+def find_banned_person_facing(text):
+    """Return a list of (word, line_number) for each word a person must not read."""
+    found = []
+    for line_number, line in _prose_lines(text):
+        # Anything in backticks is a literal being named rather than a word
+        # being used, which is how a file path, a setting, and this standard's
+        # own table of what is banned all say the older word without a person
+        # ever reading it as our name for anything.
+        readable = _CODE_SPAN_RE.sub(" ", line)
+        readable = readable.replace(_LEGACY_FOLDER, " ")
+        for phrase in _NOT_OUR_WORD:
+            readable = readable.replace(phrase, " ")
+        for word, pattern in _PERSON_FACING_PATTERNS:
+            if pattern.search(readable):
+                found.append((word, line_number))
+    return found
+
+
+# The short form only counts where it is being used as the name of a thing,
+# which in practice means a word like "the" or "this" in front of it. "Changes"
+# on its own is the ordinary English verb far more often than it is the name of
+# what the base tracks, and a check that fired on every one of those would be
+# turned off inside a week.
+_SHORT_FORM_RE = re.compile(
+    r"\b(?:the|a|an|this|that|each|one|every|these|those|its|their)\s+changes?\b",
+    re.IGNORECASE,
+)
+
+
+def find_short_form_first(text):
+    """Return the line number where "change" is read before "context change".
+
+    The short form is allowed, and the rule is only about which comes first.
+    A reader who meets a bare "change" before the full term has not been told
+    what kind of change is meant.
+
+    This is a floor and it says so. It only checks a text that uses the full
+    term somewhere, because "change" in ordinary English is the commonest word
+    in this whole repository and a check that fired on every one of them would
+    be turned off inside a week. A text that talks about what the base tracks
+    and never once says the full term is caught by the owner reading it aloud,
+    which is what `docs/ux-standard.md` says the standard is judged by.
+    """
+    # Line breaks become single spaces so a term wrapped across two lines is
+    # still one term. Nothing else moves, so every offset still points at the
+    # same character of the original.
+    flat = text.replace("\n", " ")
+    full_at = flat.lower().find(constants.CONTEXT_CHANGE_TERM)
+    if full_at < 0:
+        return None
+    short = _SHORT_FORM_RE.search(flat)
+    if short is None or short.start() >= full_at:
+        return None
+    return text.count("\n", 0, short.start()) + 1
+
+
 # --- The markers a document uses to say what a piece of it is ----------------
 
 # A section nobody named "Step something" opts itself in with this line.
@@ -466,6 +635,41 @@ PYTHON_SENTENCES = (
     ("approve_local", "KEPT"),
     ("approve_local", "DROPPED"),
     ("approve_local", "ASK"),
+    ("changes", "OFFER"),
+    ("changes", "MIGRATED"),
+    ("changes", "NOTHING_TO_MOVE"),
+    ("changes", "UNREADABLE_ENTRY"),
+    ("changes", "SAME_CHANGE_TWICE"),
+    ("changes", "TWICE_IN_ONE_FOLDER"),
+    ("changes", "THEIR_WORDS"),
+    ("changes", "CANNOT_READ_HISTORY"),
+    ("changes", "EVERY_SEAT_FIRST"),
+    ("changes", "CANNOT_FINISH"),
+    ("changes", "GAVE_UP"),
+    ("changes", "GAVE_UP_HALF_DONE"),
+    ("changes", "GAVE_UP_COULD_NOT"),
+    ("changes", "GAVE_UP_NOTE_UNREADABLE"),
+    ("changes", "CANNOT_PUT_BACK"),
+    ("changes", "COULD_NOT_SAVE_LEFT_HALF_DONE"),
+    ("changes", "PUT_OFF"),
+    ("changes", "OFFER_STATE_NOW"),
+    ("changes", "OFFER_STATE_EVERY_SEAT_FIRST"),
+    ("changes", "OFFER_STATE_NONE"),
+    ("confirm", "WRITTEN_TWICE"),
+    ("stale_check", "MALFORMED_ONE"),
+    ("changes", "GAVE_UP_LEFT_ALONE"),
+    ("changes", "WOULD_MOVE"),
+    ("changes", "WOULD_NOT"),
+    ("changes", "WOULD_FINISH"),
+    ("changes", "RECORD_WHAT_CHANGED"),
+    ("changes", "RECORD_WHY"),
+    ("changes", "NAME_IS_NOT_THE_ID"),
+    ("changes", "DESTINATION_TAKEN"),
+    ("changes", "UNSAVED_EDITS"),
+    ("changes", "NOT_ON_MAIN"),
+    ("changes", "COULD_NOT_SAVE"),
+    ("changes", "NOTE_UNREADABLE"),
+    ("changes", "PUT_BACK"),
     ("compose_proposal", "APPROVE_HERE"),
     ("compose_proposal", "CANNOT_TELL"),
     ("confirm", "UNKNOWN_ID"),
@@ -501,7 +705,7 @@ PYTHON_SENTENCES = (
     ("constants", "JOIN_LINK_NOT_IN_THIS_RELEASE"),
     ("constants", "SOURCES_READ_REFUSAL"),
     ("formats", "ABOUT_SENTENCE"),
-    ("formats", "KEEP_THE_DECISION_HINT"),
+    ("formats", "KEEP_THE_CHANGE_HINT"),
     ("join_flow", "NOTE_NOT_WRITTEN"),
     ("moment", "ABOUT_TO_USE"),
     ("moment", "FIX_IS_READY"),
@@ -518,6 +722,7 @@ PYTHON_SENTENCES = (
     ("moment", "COULD_NOT_READ"),
     ("moment", "INBOX_WAITING"),
     ("moment", "ALREADY_DECIDED"),
+    ("moment", "WRITTEN_TWICE"),
     ("moment", "NOT_YOUR_DOCUMENT"),
     ("moment", "TWO_ANSWERS"),
     ("join_flow", "NOTE_NOT_SAVED_MESSAGE"),
@@ -550,6 +755,8 @@ PYTHON_SENTENCES = (
     ("stale_check", "LEDGER_BEHIND_DISMISSED"),
     ("stale_check", "REVIEW_BY"),
     ("stale_check", "MALFORMED"),
+    ("stale_check", "WRITTEN_TWICE"),
+    ("stale_check", "CANNOT_VOUCH"),
     ("stale_check", "DROPPED"),
     ("stale_check", "FINDING_REQUIRED_FILE"),
     ("stale_check", "FINDING_BASELINE"),
@@ -583,6 +790,14 @@ NOT_PERSON_FACING = (
         "SOURCE_FENCE_SENTENCE",
         "An instruction to the assistant inside a rendered request, not a "
         "sentence said to a person.",
+    ),
+    (
+        "formats",
+        "LEGACY_KEEP_HINT",
+        "The words this sentence had before Unit 1.4. Nothing writes them any "
+        "more. It is here only so that a proposal raised before the rename, "
+        "which carries them, can still be read, so it is a thing searched for "
+        "rather than a thing said.",
     ),
 )
 
@@ -810,6 +1025,20 @@ def library_sentence_constants(lib_dir):
 
 # --- What a test calls -------------------------------------------------------
 
+def plugin_description_files():
+    """The two files holding the first sentence anybody reads about this.
+
+    They are JSON rather than markdown, so nothing else in this lint would
+    ever have looked at them, and they are the one sentence somebody reads
+    before they have installed anything at all.
+    """
+    here = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    return [
+        os.path.join(here, "plugins", "gtm-base", ".claude-plugin", "plugin.json"),
+        os.path.join(here, ".claude-plugin", "marketplace.json"),
+    ]
+
+
 def assert_plain(testcase, path):
     """Fail the test case when the file at path breaks either rule."""
     with open(str(path), encoding="utf-8") as handle:
@@ -821,6 +1050,18 @@ def assert_plain(testcase, path):
     dashes = find_dashes(text)
     testcase.assertEqual(
         [], dashes, "em or en dashes in %s: %s" % (path, dashes)
+    )
+    words = find_banned_person_facing(text)
+    testcase.assertEqual(
+        [],
+        words,
+        "words a person must never read in %s: %s" % (path, words),
+    )
+    short = find_short_form_first(text)
+    testcase.assertIsNone(
+        short,
+        '"change" is read before "context change" in %s, on line %s'
+        % (path, short),
     )
 
 

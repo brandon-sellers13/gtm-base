@@ -15,11 +15,11 @@ your terminal and following the prompt. You only need those two things to set up
 a base for yourself and use it on your own computer.
 
 Keep Claude Code up to date if you can. One thing GTM Base does needs a recent
-version: as a document from your base is read, GTM Base checks whether a change
-you recorded has already overtaken it, and says so before that document gets
-used for anything. Carrying that answer back is something Claude Code gained in
-a release of its own, so on an older version the check simply says nothing and
-everything else works exactly as described here. What holds either way is the
+version: as a document from your base is read, GTM Base checks whether a
+context change you recorded has already overtaken it, and says so before that
+document gets used for anything. Carrying that answer back is something Claude
+Code gained in a release of its own, so on an older version the check simply
+says nothing and everything else works exactly as described here. What holds either way is the
 instruction GTM Base gives the assistant to run the same check itself, and an
 instruction is followed most of the time rather than every time.
 
@@ -27,6 +27,33 @@ If you want to back the base up somewhere safe, or invite a teammate into it,
 you also need a GitHub account and the GitHub command line tool. You can add
 both later, and nothing asks you for them until the moment you want to back up
 or invite.
+
+Before you invite a second person, everybody who will open that base has to be
+on the current version of GTM Base. A base set up before the word for what it
+tracks was settled stores its context changes the older way, and GTM Base
+offers once to update them. Somebody running an older version reads an updated
+base as though it held nothing, so it would tell them nothing in their base is
+out of date at a moment when things really are. Updating everybody first costs
+nothing and avoids that entirely.
+
+On a base nobody else can reach, GTM Base simply offers. On a base that has a
+copy other people could reach, it does not offer at all: it tells you the
+condition instead and waits for you to say that everyone is on the current
+version. Either way nothing is touched until you say so, and if you say not
+now it stops asking for a month.
+
+You can see exactly where you stand before deciding anything. Ask for a check
+of the update and GTM Base says what it would do, which of your context
+changes it would touch, and whether it would offer it at all. That reads your
+base and writes nothing, so it is safe to run whenever you like. If anything
+in your base would stop the update, it names the file rather than the problem
+in general, so you know where to look.
+
+If an update ever stops partway, nothing is lost and nothing is left in a
+state only GTM Base understands. It either finishes where it stopped or puts
+back what it had done, and it will not take away a copy of anything unless it
+has confirmed another copy is there. If it cannot do either, it says so, keeps
+its note, and leaves your base alone until you ask again.
 
 ## Install the plugin
 

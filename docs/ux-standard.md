@@ -46,6 +46,46 @@ When to look again: 2026-12-19
 so no step has to remember it. The word for what the base tracks is "context
 change" everywhere a person reads it.
 
+## The words, and the two that are gone
+
+What the base tracks is a **context change**: anything that happened that makes
+a document in the base no longer true. It may be something the team settled, and
+it may equally be a competitor's launch, a price change, or something learned
+about how customers describe the problem. In running text it may be shortened to
+"change" once the full term has been used in that text, and never before.
+
+Two words are banned from anything a person reads, and `tests/plain_language.py`
+checks for both in their ordinary forms, alongside the version-control words
+that were already banned:
+
+| Banned | Why | Say instead |
+|---|---|---|
+| `decision`, `decisions` | Too narrow for what the base tracks, and the live setup run needed three explanations of it before it was understood. Most of what makes a document wrong is not something anybody decided. | context change, and then change |
+| `ledger`, `ledgers` | A bookkeeping word for a folder of dated notes. Nobody outside this code ever called it that. | the record of context changes, or name the folder, `work/changes` |
+
+The check has three deliberate exceptions, each of them a name somebody else
+owns rather than ours. The folder path `work/decisions`, which a base set up
+before the rename really holds and a person may have to look in. The settings
+block at the top of a file, and any settings block shown inside an example,
+where values such as `origin` and `mode` come from fixed vocabularies recorded
+in every base that already exists and cannot be spelled differently now. And
+the client's own tool-use interface, which calls the answer it returns a
+permission decision and spells its fields that way, so a file explaining what
+it does with them has to write the name it was given.
+
+The settings inside an entry read the same way. `happened_on` is the day the
+change happened, and `noted_by` is whoever wrote it down, because there is not
+always somebody who decided it.
+
+A sentence that says something went wrong names the document. "You have
+unsaved edits" sends somebody looking through their whole base; "there are
+words in this file that you have not saved" sends them to the file. Every
+refusal that knows which file it means says which file it means.
+
+An offer names no path. A person is offered a thing that happens to their
+base, not a folder it happens to. "Your context changes are stored the old
+way" is the offer; the folder it moves them into is GTM Base's business.
+
 ## The short wrapper and the complete artifact
 
 Two rules that look like they contradict each other both hold, and this is how.
@@ -118,6 +158,8 @@ four reads any change block, wherever it appears.
 | one-request | Counts the blocks marked `<!-- ask -->` and fails when a step holds more than one. A request may be a question or an imperative, which is why nothing counts question marks. | Notice a second request somebody wrote outside an ask block. |
 | prose | Counts a run of plain prose lines and fails over five. A list, a table, an ask block, and an artifact block are not prose. | Tell a dense five lines from an airy five lines. |
 | four-lines | Reads each block marked `<!-- change -->` and fails unless it is the four labels, in order, one per line. | Tell whether the four values are true. |
+| the two banned words | Reads every line a person reads as prose and fails on either of the two words in the table above, in any ordinary form. | Catch the idea said in other words. |
+| the full term first | Fails when a text that uses "context change" somewhere says a bare "the change" before it. | Catch a text that talks about what the base tracks and never once says the full term. That one is the read-aloud check's. |
 
 The counting rule behind the one-request check is worth stating, because an
 earlier draft of it was wrong. Revision 1 of the plan proposed counting

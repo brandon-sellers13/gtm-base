@@ -694,7 +694,9 @@ class TestNoAboutTheCalendar(unittest.TestCase):
             self.assertEqual("ledger", staging.origin)
             self.assertEqual("ledger", staging.intake_path)
             self.assertIsNone(staging.source_id)
-            self.assertEqual("## Decisions to reflect", staging.edits[0].heading)
+            self.assertEqual(
+            "## Context changes to reflect", staging.edits[0].heading
+        )
             self.assertEqual("add", staging.edits[0].op)
             self.assertIn("fifty seats", staging.edits[0].text)
             body = formats.parse_pr_body(staging.pr_body)
@@ -869,7 +871,7 @@ class TestTheAnswerGivenWhenAFileIsWritten(unittest.TestCase):
             )
             entry_id = "stg-" + "c" * 16
             base.write(
-                "%s/%s.md" % (constants.DECISIONS_DIR, entry_id),
+                "%s/%s.md" % (constants.CHANGES_DIR, entry_id),
                 builders.entry_text(
                     entry_id=entry_id,
                     affects=(POSITIONING,),

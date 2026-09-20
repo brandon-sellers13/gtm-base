@@ -143,7 +143,7 @@ class TestAChangeApprovedHere(unittest.TestCase):
             self.assertNotIn("Companies of any size.", icp)
 
             # The context change it carried is written down.
-            entry_path = "%s/%s.md" % (constants.DECISIONS_DIR, STAGING)
+            entry_path = "%s/%s.md" % (constants.CHANGES_DIR, STAGING)
             entry = formats.LedgerEntry.parse(
                 support.read(os.path.join(root, entry_path))
             )
@@ -993,7 +993,7 @@ class TestTheWholeWayThroughOnARealBase(unittest.TestCase):
 
             # A context change the person wrote down themselves.
             support.write(
-                os.path.join(root, constants.DECISIONS_DIR, HAND_ENTERED + ".md"),
+                os.path.join(root, constants.CHANGES_DIR, HAND_ENTERED + ".md"),
                 CHANGE_BY_HAND,
             )
             support.git(["add", "-A"], cwd=root)
@@ -1441,7 +1441,7 @@ class TestWhatIsShownIsWhatIsWritten(unittest.TestCase):
             self.assertEqual(approve_local.STATUS_SHOWN, shown.status, shown.reasons)
             for piece in body.split(", "):
                 self.assertIn(piece, shown.artifact)
-            self.assertIn("decided_on: 2026-06-01", shown.artifact)
+            self.assertIn("happened_on: 2026-06-01", shown.artifact)
 
     def test_the_full_reason_is_shown_and_never_cut_short(self):
         with support.Sandbox() as sandbox:
@@ -1851,7 +1851,7 @@ class TestAChangeTouchingTwoFiles(unittest.TestCase):
                 support.read(os.path.join(root, ICP)).replace("icp", "positioning"),
             )
             support.write(
-                os.path.join(root, constants.DECISIONS_DIR, STAGING + ".md"),
+                os.path.join(root, constants.CHANGES_DIR, STAGING + ".md"),
                 entry_block(affects=(ICP, other)),
             )
             support.git(["add", "-A"], cwd=root)

@@ -463,7 +463,7 @@ class TestTheBaseTheStaleLibraryReads(unittest.TestCase):
             entry_id = "stg-" + "d" * 16
             support.write(
                 os.path.join(
-                    result.root, constants.DECISIONS_DIR, entry_id + ".md"
+                    result.root, constants.CHANGES_DIR, entry_id + ".md"
                 ),
                 builders.entry_text(
                     entry_id=entry_id,

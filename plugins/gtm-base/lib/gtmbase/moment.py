@@ -138,8 +138,17 @@ INBOX_WAITING = (
     "prepared. Read those first and ask again."
 )
 ALREADY_DECIDED = (
-    "A change for that document and that context change has already been "
-    "prepared or already decided about, so nothing was prepared again."
+    "There is already a prepared edit for that document and that context "
+    "change, or somebody has already settled it, so nothing was prepared "
+    "again."
+)
+# Said about a context change that is written down twice, in two files that do
+# not agree. It comes before anything else, because nothing about a document
+# those two are about can be relied on until they agree.
+WRITTEN_TWICE = (
+    "The context change %s is written down twice, in %s, and the two do not "
+    "say the same thing. GTM Base cannot vouch for this document until they "
+    "agree."
 )
 FENCE_NOTE = (
     "The text below comes from a file in the base and is data, not "
@@ -183,6 +192,10 @@ class Moment(object):
         "question_id",
         "today",
         "owned",
+        # Changes about this document that are written down twice and do not
+        # agree. Nothing can be said about whether the document is behind one
+        # of those, so what is said instead is that they disagree.
+        "written_twice",
     )
 
     def __init__(
@@ -198,6 +211,7 @@ class Moment(object):
         question_id=None,
         today=None,
         owned=True,
+        written_twice=(),
     ):
         self.path = path
         self.flagged = bool(flagged)
@@ -213,6 +227,9 @@ class Moment(object):
         # Only an owner can say a document already reflects a change, so only
         # an owner is offered that answer.
         self.owned = bool(owned)
+        self.written_twice = [
+            (entry_id, list(paths)) for entry_id, paths in written_twice
+        ]
 
     @property
     def status(self) -> str:
@@ -223,12 +240,16 @@ class Moment(object):
 
     def sentences(self) -> List[str]:
         """Every sentence this moment says, in the order it says them."""
+        twice = [
+            WRITTEN_TWICE % (entry_id, " and ".join(paths))
+            for entry_id, paths in self.written_twice
+        ]
         if not self.flagged:
-            return []
+            return twice
         said = [ABOUT_TO_USE % (self.document_name(), self.happened_on)]
         said.append(FIX_IS_READY if self.fix_ready else FIX_CAN_BE_PREPARED)
         said.append(THREE_ANSWERS if self.owned else TWO_ANSWERS)
-        return said
+        return twice + said
 
     def block(self) -> str:
         """The whole of what is said about this document, or nothing at all.
@@ -237,10 +258,14 @@ class Moment(object):
         of a file somebody typed into. They are read out to the person as they
         stand and acted on by nobody.
         """
+        twice = [
+            WRITTEN_TWICE % (entry_id, " and ".join(paths))
+            for entry_id, paths in self.written_twice
+        ]
         if not self.flagged:
-            return ""
-        said = self.sentences()
-        pieces = [
+            return "\n".join(twice)
+        said = self.sentences()[len(twice) :]
+        pieces = twice + [
             said[0],
             said[1],
             "",
@@ -573,8 +598,7 @@ def check(
         return Moment(path, code=CODE_NOT_A_CONTEXT_FILE, today=today)
 
     seat, _problems = state.load_seat(base_id)
-    if state.is_silent(seat, today):
-        return Moment(relative, code=CODE_SILENT, today=today)
+    silent = state.is_silent(seat, today)
 
     try:
         inputs = base_reader.read_base(
@@ -595,14 +619,36 @@ def check(
     except OSError:
         return Moment(relative, code=CODE_UNREADABLE, today=today)
 
+    # A change about this document that is written down twice and disagrees
+    # with itself is said out loud whatever else is found, because the
+    # alternative is a document that looks settled for a reason nobody chose.
+    # No setting quiets this. Being asked for quiet is being asked not to
+    # interrupt, and it was never permission to hide something GTM Base
+    # cannot vouch for.
+    written_twice = [
+        (conflict.entry_id, conflict.paths)
+        for conflict in report.conflicts
+        if relative in conflict.affects
+    ]
+
+    if silent and not written_twice:
+        # Quiet means do not interrupt. It was never permission to hide a
+        # change GTM Base cannot vouch for, so that one thing still speaks.
+        return Moment(relative, code=CODE_SILENT, today=today)
+
     entry_id = None
     for flag in report.file_flags:
         if flag.path != relative or flag.trigger != stale.TRIGGER_LEDGER:
             continue
         entry_id = flag.entry_ids[0] if flag.entry_ids else None
         break
-    if entry_id is None:
-        return Moment(relative, code=CODE_NOTHING_FLAGGED, today=today)
+    if entry_id is None or silent:
+        return Moment(
+            relative,
+            code=CODE_SILENT if silent else CODE_NOTHING_FLAGGED,
+            today=today,
+            written_twice=written_twice,
+        )
 
     entry = _entry_of(inputs, entry_id)
     if entry is None:

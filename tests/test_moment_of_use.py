@@ -122,7 +122,7 @@ class Base(object):
 
     def add_change(self, text=None, entry_id=ENTRY):
         self.write(
-            "%s/%s.md" % (constants.DECISIONS_DIR, entry_id),
+            "%s/%s.md" % (constants.CHANGES_DIR, entry_id),
             text if text is not None else entry_text(entry_id=entry_id),
         )
         self.save("a context change")
@@ -1394,7 +1394,7 @@ class TestTheUnitReview(unittest.TestCase):
         with support.Sandbox() as sandbox:
             root, base_id, _remote = support.base_with_a_shared_copy(sandbox)
             support.write(
-                os.path.join(root, constants.DECISIONS_DIR, ENTRY + ".md"),
+                os.path.join(root, constants.CHANGES_DIR, ENTRY + ".md"),
                 entry_text(),
             )
             support.git(["add", "-A"], cwd=root)

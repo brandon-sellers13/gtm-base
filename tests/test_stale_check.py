@@ -132,9 +132,13 @@ class BaseFixture(object):
         if push and self.remote:
             support.git(["push", "-q", "origin", "main"], cwd=self.root)
 
-    def add_entry(self, text=None, entry_id=ENTRY, push=True):
+    def add_entry(self, text=None, entry_id=ENTRY, push=True, folder=None):
+        # The older folder is still the default, and `entry_text` above still
+        # writes the older settings, because SC1 below is the proof that a
+        # base set up before the rename is read exactly as it always was. The
+        # twin that writes today's layout passes the folder in.
         self.write(
-            "%s/%s.md" % (constants.DECISIONS_DIR, entry_id),
+            "%s/%s.md" % (folder or constants.LEGACY_CHANGES_DIR, entry_id),
             text if text is not None else entry_text(entry_id=entry_id),
         )
         self.save("a decision", push=push)
@@ -270,6 +274,111 @@ class TestOneHandEnteredDecisionWithNoConfirmation(unittest.TestCase):
             )
             self.assertIn("Update needed:", changed)
             self.assertEqual("main", support.branch_of(base.root))
+
+
+# --- SC1 again, on the layout written today ----------------------------------
+
+
+def new_layout_entry_text(entry_id=ENTRY, **options):
+    """The same context change as `entry_text`, in today's spelling."""
+    return (
+        entry_text(entry_id=entry_id, **options)
+        .replace("kind: decision", "kind: change")
+        .replace("decided_on:", "happened_on:")
+        .replace("decided_by:", "noted_by:")
+    )
+
+
+class TestOneHandEnteredChangeInTheNewLayout(unittest.TestCase):
+    """SC1's twin: the same scenario on a base written after the rename.
+
+    The class above is the old layout, kept exactly as it was as the proof
+    that a base set up before the rename still reads. This one writes the
+    folder and the settings every writer writes today, and both have to give
+    the same answer, because the layout a change happens to be written in is
+    not supposed to mean anything.
+    """
+
+    def base_with_one_change(self, sandbox):
+        base = BaseFixture(sandbox)
+        base.add_entry(
+            text=new_layout_entry_text(), folder=constants.CHANGES_DIR
+        )
+        return base
+
+    def test_it_prepares_exactly_one_change_that_cites_the_context_change(self):
+        with support.Sandbox() as sandbox:
+            base = self.base_with_one_change(sandbox)
+
+            result = run_check(base)
+
+            self.assertEqual(stale_check.STATUS_DONE, result.status)
+            prepared = staged_for(result)
+            self.assertEqual(1, len(prepared), result.lines())
+            self.assertEqual(
+                ids.staging_id(ENTRY, ICP, "ledger", 0), prepared[0].staging_id
+            )
+            self.assertEqual([ICP], prepared[0].target_paths)
+
+            staging = formats.ProposalStaging.parse(support.read(prepared[0].path))
+            staging.validate()
+            self.assertEqual("ledger", staging.origin)
+            self.assertEqual("ledger", staging.intake_path)
+            self.assertIsNone(staging.source_id)
+            self.assertFalse(staging.third_party)
+            self.assertEqual([ICP], staging.target_paths)
+            self.assertEqual(ICP, staging.edits[0].path)
+            self.assertEqual("## Firmographics", staging.edits[0].heading)
+
+            body = formats.parse_pr_body(staging.pr_body)
+            self.assertIn(ENTRY, body["evidence"])
+            self.assertIn("%s.md" % ENTRY, body["evidence"])
+            self.assertIn(TUESDAY, body["evidence"])
+            self.assertIn("twenty to two hundred people", body["evidence"])
+            self.assertEqual("medium", body["confidence"])
+            self.assertEqual("None", body["rule_changed"])
+
+    def test_the_change_it_reads_really_is_the_one_in_the_new_folder(self):
+        with support.Sandbox() as sandbox:
+            base = self.base_with_one_change(sandbox)
+
+            self.assertTrue(
+                os.path.isfile(
+                    os.path.join(
+                        base.root,
+                        constants.CHANGES_DIR.replace("/", os.sep),
+                        ENTRY + ".md",
+                    )
+                )
+            )
+            self.assertFalse(
+                os.path.isdir(
+                    os.path.join(
+                        base.root,
+                        constants.LEGACY_CHANGES_DIR.replace("/", os.sep),
+                    )
+                )
+            )
+            prepared = staged_for(run_check(base))
+            self.assertEqual(1, len(prepared))
+
+    def test_both_layouts_give_the_same_prepared_change(self):
+        with support.Sandbox() as sandbox:
+            old = BaseFixture(sandbox)
+            old.add_entry()
+            old_result = run_check(old)
+        with support.Sandbox() as sandbox:
+            new = self.base_with_one_change(sandbox)
+            new_result = run_check(new)
+
+        self.assertEqual(
+            [item.staging_id for item in staged_for(old_result)],
+            [item.staging_id for item in staged_for(new_result)],
+        )
+        self.assertEqual(
+            [item.target_paths for item in staged_for(old_result)],
+            [item.target_paths for item in staged_for(new_result)],
+        )
 
 
 # --- SC5 ---------------------------------------------------------------------
@@ -440,8 +549,10 @@ class TestADecisionThatNamesNoFiles(unittest.TestCase):
             self.assertEqual(sorted([ICP, POSITIONING]), sorted(staging.target_paths))
             for edit in staging.edits:
                 self.assertEqual("add", edit.op)
-                self.assertEqual("## Decisions to reflect", edit.heading)
-                self.assertIn("named by GTM Base as affected by decision", edit.text)
+                self.assertEqual("## Context changes to reflect", edit.heading)
+                self.assertIn(
+                    "named by GTM Base as affected by context change", edit.text
+                )
             body = formats.parse_pr_body(staging.pr_body)
             self.assertIn("does not say which files it affects", body["before"])
             self.assertIn("approving", body["why"])
@@ -488,7 +599,7 @@ class TestTheQuietLedger(unittest.TestCase):
         with support.Sandbox() as sandbox:
             base = self._base(sandbox)
 
-            run_check(base, dismiss_ledger_behind=True)
+            run_check(base, dismiss_quiet_record=True)
             later = run_check(base)
 
             self.assertIsNone(later.report.ledger_behind)
@@ -500,7 +611,7 @@ class TestTheQuietLedger(unittest.TestCase):
     def test_it_comes_back_once_the_window_has_passed(self):
         with support.Sandbox() as sandbox:
             base = self._base(sandbox)
-            run_check(base, dismiss_ledger_behind=True)
+            run_check(base, dismiss_quiet_record=True)
 
             after = stale_check.run(
                 base.root,
@@ -540,7 +651,8 @@ class TestItemsWaitingToBeRead(unittest.TestCase):
             )
             self.assertTrue(
                 any(
-                    "%s is out of date against decision %s" % (ICP, ENTRY) in line
+                    "%s is out of date against context change %s" % (ICP, ENTRY)
+                    in line
                     for line in result.lines()
                 ),
                 result.lines(),
@@ -1031,7 +1143,7 @@ class TestPreparedChangesWaitingToBeApprovedHere(unittest.TestCase):
         staging = stale_check.build_file_proposal(
             fixture.root,
             formats.LedgerEntry.parse(entry_text(entry_id=staging_id)),
-            "%s/%s.md" % (constants.DECISIONS_DIR, staging_id),
+            "%s/%s.md" % (constants.CHANGES_DIR, staging_id),
             ICP,
         )
         return stale_check.save_staging(fixture.root, staging)
@@ -1106,7 +1218,7 @@ class TestTheSkillAPersonReads(unittest.TestCase):
             "python3 scripts/stale_check.py",
             "--dry-run",
             "--first-run",
-            "--dismiss-ledger-behind",
+            "--dismiss-quiet-record",
             "--report",
         ):
             self.assertIn(command, text)
@@ -1157,6 +1269,162 @@ class TestTheSkillAPersonReads(unittest.TestCase):
             self.assertEqual(2, finished.returncode, message)
             self.assertEqual([], plain_language.find_banned(message))
             self.assertEqual([], plain_language.find_dashes(message))
+
+
+# --- The same scenarios on both layouts ---------------------------------------
+
+
+class BothLayouts(unittest.TestCase):
+    """One scenario, run twice: once as a base written before the rename.
+
+    The layout a context change is written in is not supposed to mean
+    anything, so every one of these asserts the same answer both ways rather
+    than asserting it once and hoping.
+    """
+
+    def each_layout(self):
+        """(a name for the failure message, the folder, the entry text)."""
+        return (
+            ("the older layout", constants.LEGACY_CHANGES_DIR, entry_text),
+            ("the layout written today", constants.CHANGES_DIR, new_layout_entry_text),
+        )
+
+    def base_with_one_change(self, sandbox, folder, build, **options):
+        base = BaseFixture(sandbox)
+        base.add_entry(text=build(**options), folder=folder)
+        return base
+
+    def test_a_change_that_names_no_files_prepares_the_list_the_same_way(self):
+        for label, folder, build in self.each_layout():
+            with support.Sandbox() as sandbox:
+                base = self.base_with_one_change(
+                    sandbox, folder, build, affects=()
+                )
+                result = run_check(base)
+                prepared = [
+                    item
+                    for item in result.staged
+                    if item.staging_id
+                    == ids.staging_id(ENTRY, constants.MAP_PATH, "ledger", 1)
+                ]
+                self.assertEqual(1, len(prepared), "%s: %s" % (label, result.lines()))
+
+    def test_a_review_date_that_has_passed_is_reported_the_same_way(self):
+        for label, folder, build in self.each_layout():
+            with support.Sandbox() as sandbox:
+                # The day after it happened, which is before today, so it is
+                # overdue without being dated before the change itself.
+                base = self.base_with_one_change(
+                    sandbox, folder, build, review_by=WEDNESDAY
+                )
+                result = run_check(base)
+                self.assertTrue(
+                    any(
+                        line.startswith("Context change %s came up for review" % ENTRY)
+                        for line in result.lines()
+                    ),
+                    "%s: %s" % (label, result.lines()),
+                )
+
+    def test_the_quiet_record_is_worked_out_the_same_way(self):
+        for label, folder, build in self.each_layout():
+            with support.Sandbox() as sandbox:
+                # Written down long enough ago that the record reads as quiet.
+                base = self.base_with_one_change(
+                    sandbox,
+                    folder,
+                    build,
+                    decided_on="2026-01-02",
+                    written_on="2026-01-02",
+                    review_by="2026-09-01",
+                )
+                result = run_check(base)
+                self.assertTrue(
+                    any(
+                        "is more than 30 days ago" in line
+                        for line in result.lines()
+                    ),
+                    "%s: %s" % (label, result.lines()),
+                )
+
+    def test_the_dismissal_works_the_same_way(self):
+        for label, folder, build in self.each_layout():
+            with support.Sandbox() as sandbox:
+                base = self.base_with_one_change(
+                    sandbox,
+                    folder,
+                    build,
+                    decided_on="2026-01-02",
+                    written_on="2026-01-02",
+                    review_by="2026-09-01",
+                )
+                run_check(base, dismiss_quiet_record=True)
+                later = run_check(base)
+                self.assertIsNone(later.report.ledger_behind, label)
+
+    def test_one_hand_entered_change_prepares_one_edit_either_way(self):
+        answers = []
+        for _label, folder, build in self.each_layout():
+            with support.Sandbox() as sandbox:
+                base = self.base_with_one_change(sandbox, folder, build)
+                result = run_check(base)
+                prepared = staged_for(result)
+                answers.append(
+                    [(item.staging_id, tuple(item.target_paths)) for item in prepared]
+                )
+        self.assertEqual(answers[0], answers[1])
+        self.assertEqual(1, len(answers[0]))
+
+
+# --- The proof that the old-layout scenario really is untouched ---------------
+
+# The source of the class above and of the helper that builds its entry, as
+# they stood when the rename landed. Requirement P3 says that scenario is
+# rerun unchanged across the rename, and a claim of "byte-identical" that
+# nothing checks is a claim somebody can quietly break. These two values are
+# only ever updated by somebody who means to change that scenario.
+SC1_CLASS_HASH = "3c95b8cb347129c2a685afcf2e08f8bdcef720b4c5da90c12aa27bae32f12b64"
+SC1_HELPER_HASH = "6b4841629621dc368463ebaf9a6754cb13f5aa30957a2ce8558114ee88b02132"
+
+
+def _source_between(start, stop):
+    with open(os.path.abspath(__file__), encoding="utf-8") as handle:
+        source = handle.read()
+    at = source.index(start)
+    to = source.index(stop, at)
+    return source[at:to]
+
+
+class TestTheOldLayoutScenarioIsByteIdentical(unittest.TestCase):
+    """P3: the scenario that proves tolerant reading is not quietly edited."""
+
+    def test_the_class_is_exactly_what_it_was(self):
+        import hashlib
+
+        source = _source_between(
+            "class TestOneHandEnteredDecisionWithNoConfirmation(unittest.TestCase):",
+            "# --- SC1 again, on the layout written today",
+        )
+        self.assertEqual(
+            SC1_CLASS_HASH,
+            hashlib.sha256(source.encode("utf-8")).hexdigest(),
+            "the old-layout SC1 scenario changed; it is meant to be untouched",
+        )
+
+    def test_the_helper_that_builds_its_entry_is_exactly_what_it_was(self):
+        import hashlib
+
+        source = _source_between("def entry_text(", "def context_text(")
+        self.assertEqual(
+            SC1_HELPER_HASH,
+            hashlib.sha256(source.encode("utf-8")).hexdigest(),
+            "the helper the old-layout scenario builds its entry with changed",
+        )
+
+    def test_that_scenario_really_does_write_the_older_layout(self):
+        self.assertIn("kind: decision", entry_text())
+        self.assertIn("decided_on:", entry_text())
+        self.assertIn("decided_by:", entry_text())
 
 
 if __name__ == "__main__":

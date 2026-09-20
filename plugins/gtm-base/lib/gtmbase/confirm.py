@@ -38,6 +38,7 @@ from . import (
     formats,
     gate,
     ids,
+    names,
     paths,
     scan,
     stale_check,
@@ -78,7 +79,12 @@ CODE_PUSH_FAILED = "push-failed"
 CODE_REVIEW_FAILED = "review-not-opened"
 CODE_UNSAVED_EDITS = "unsaved-edits"
 CODE_REASON_NEEDED = "reason-needed"
+# Older than the rename, and recorded in seats' own files, so it is left
+# alone. Nothing shows it to a person.
 CODE_ENTRY_MISSING = "decision-not-found"
+# A context change about this document is written down twice and the two
+# copies do not agree, so nothing may be recorded about that document.
+CODE_WRITTEN_TWICE = "one-change-written-twice"
 CODE_ALREADY_DRAFTED = "already-drafted"
 CODE_NOT_A_NEW_FILE = "not-a-new-file"
 CODE_NOTHING_PENDING = "nothing-pending"
@@ -99,7 +105,7 @@ FILE_HEADER = (
 # What the saved work says it is. The path and the reason, and nothing else.
 SAVE_SUBJECT = "Confirm %s (%s)"
 
-# The heading the reason goes under when a no has no decision behind it.
+# The heading the reason goes under when a no has no context change behind it.
 FALLBACK_HEADING = stale_check.FALLBACK_HEADING
 DRAFT_CONFIDENCE = stale_check.DRAFT_CONFIDENCE
 # How much of a reason a prepared change carries.
@@ -165,9 +171,17 @@ PROPOSAL_STAGED = (
     "GTM Base prepared a change for %s from what you said. Improve the wording "
     "and hand it to the propose-change skill."
 )
+# Said when somebody tries to settle a document a change disagrees with
+# itself about. Recording a yes there would settle the change against the
+# document for good, and neither copy of it has been read by anybody yet.
+WRITTEN_TWICE = (
+    "The context change %s is written down twice, in %s, and the two do not "
+    "say the same thing, so GTM Base cannot record anything about %s yet. "
+    "Decide which copy is right, take the other one away, and ask again."
+)
 ENTRY_MISSING = (
-    "GTM Base could not find the decision behind that question any more, so it "
-    "prepared nothing."
+    "GTM Base could not find the context change behind that question any more, "
+    "so it prepared nothing."
 )
 DRAFTED_ALREADY = (
     "This file already carries the answer given when it was written, so nothing "
@@ -198,6 +212,27 @@ class ConfirmResult(object):
 
     def __repr__(self) -> str:
         return "ConfirmResult(status=%r, codes=%r)" % (self.status, self.codes)
+
+
+def refusal_while_written_twice(base_root, base_id, path, today, git=None):
+    """The sentence to refuse with when a change about this file disagrees.
+
+    A document a context change is written down twice about, with the two
+    copies saying different things, cannot be settled by anybody yet.
+    Recording a yes would settle that change against it for good, and nobody
+    has read either copy.
+    """
+    found = base_reader.written_twice_about(
+        base_root, base_id, path, today, runner=git
+    )
+    if found is None:
+        return None
+    entry_id, files = found
+    return WRITTEN_TWICE % (
+        entry_id,
+        " and ".join(files),
+        names.document_name(path),
+    )
 
 
 def _refused(code: str, sentence: str) -> ConfirmResult:
@@ -388,6 +423,18 @@ def answer(
     waiting = state.unprocessed_rows(base_id)
     if waiting:
         return _refused(CODE_INBOX_WAITING, INBOX_WAITING % len(waiting))
+
+    # A document a context change is written down twice about, with the two
+    # copies disagreeing, cannot be settled by anybody. It is refused before
+    # the question is used up, so the question is still there to answer once
+    # the person has decided which copy is right. Putting it off is still
+    # allowed, because it settles nothing.
+    if answer != ANSWER_NOT_NOW:
+        disagreeing = refusal_while_written_twice(
+            base_root, base_id, path, today, git=git
+        )
+        if disagreeing is not None:
+            return _refused(CODE_WRITTEN_TWICE, disagreeing)
 
     def use_the_question():
         """Use the question up. Everything after this records the answer."""
@@ -787,7 +834,7 @@ def _no(
 def _no_about_a_decision(
     base_root, base_id, path, entry_id, reason, today, git
 ) -> ConfirmResult:
-    """The file is out of date and a decision already says why."""
+    """The file is out of date and a context change already says why."""
     inputs = base_reader.ledger(base_root, base_id, today)
     entry = None
     entry_file = ""

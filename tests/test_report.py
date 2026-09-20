@@ -61,7 +61,7 @@ def build_history(sandbox):
     root, base_id, _remote = support.base_with_a_shared_copy(sandbox)
 
     support.write(
-        os.path.join(root, constants.DECISIONS_DIR, CAUGHT_ENTRY + ".md"),
+        os.path.join(root, constants.CHANGES_DIR, CAUGHT_ENTRY + ".md"),
         entry(CAUGHT_ENTRY),
     )
     support.git(["add", "-A"], cwd=root)
@@ -71,7 +71,7 @@ def build_history(sandbox):
     )
 
     support.write(
-        os.path.join(root, constants.DECISIONS_DIR, TYPED_ENTRY + ".md"),
+        os.path.join(root, constants.CHANGES_DIR, TYPED_ENTRY + ".md"),
         entry(TYPED_ENTRY),
     )
     support.git(["add", "-A"], cwd=root)
@@ -244,7 +244,7 @@ class TestAChangeApprovedOnABaseWithNoSharedCopy(unittest.TestCase):
     def build(self, sandbox):
         root, base_id, _remote = support.base_with_a_shared_copy(sandbox)
         support.write(
-            os.path.join(root, constants.DECISIONS_DIR, self.LOCAL_ENTRY + ".md"),
+            os.path.join(root, constants.CHANGES_DIR, self.LOCAL_ENTRY + ".md"),
             entry(self.LOCAL_ENTRY),
         )
         support.write(
@@ -321,7 +321,7 @@ class TestAChangeApprovedOnABaseWithNoSharedCopy(unittest.TestCase):
         with support.Sandbox() as sandbox:
             root, base_id, _remote = support.base_with_a_shared_copy(sandbox)
             support.write(
-                os.path.join(root, constants.DECISIONS_DIR, TYPED_ENTRY + ".md"),
+                os.path.join(root, constants.CHANGES_DIR, TYPED_ENTRY + ".md"),
                 entry(TYPED_ENTRY),
             )
             support.write(

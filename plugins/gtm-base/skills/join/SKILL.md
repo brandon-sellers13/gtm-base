@@ -40,8 +40,8 @@ stopping. This is the first thing in the session and nothing else comes before
 it.
 
 - A company base is one folder on this computer holding your strategy, your
-  numbers, and the decisions behind them, in a form your AI can read at the
-  start of every session.
+  numbers, and the context changes behind them, in a form your AI can read at
+  the start of every session.
 - Setting it up means reading the marketing material you already have and
   writing two documents from it: who you sell to, and how you describe what
   you sell.

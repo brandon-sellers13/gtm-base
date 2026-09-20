@@ -104,6 +104,24 @@ def read_text(path: str) -> Optional[str]:
         return None
 
 
+def read_text_exactly(path: str) -> Optional[str]:
+    """The contents of a file with not one character translated on the way in.
+
+    `read_text` above reads the ordinary way, which quietly turns every line
+    ending into the one this library writes. That is right for everything that
+    only wants to know what a file says. It is wrong for anything that will
+    write the same file back out, because the difference then lands in the
+    person's own file as though somebody had meant it.
+    """
+    if os.path.islink(path) or not os.path.isfile(path):
+        return None
+    try:
+        with open(path, encoding="utf-8", newline="") as stream:
+            return stream.read()
+    except (OSError, UnicodeDecodeError):
+        return None
+
+
 def read_json(path: str) -> Any:
     """Return the parsed JSON at path, or None when it is missing or malformed."""
     text = read_text(path)

@@ -359,6 +359,106 @@ class TestTheRegistryOfSentencesHeldInPython(unittest.TestCase):
                 "%s.%s" % (module_name, constant_name),
             )
 
+    def test_no_registered_sentence_says_decision_or_ledger(self):
+        """Unit 1.4 added both words to the ones a person may never read."""
+        import importlib
+
+        self.assertEqual(
+            ("decision", "ledger"), constants.BANNED_PERSON_FACING_WORDS
+        )
+        for module_name, constant_name in plain_language.PYTHON_SENTENCES:
+            module = importlib.import_module("gtmbase." + module_name)
+            text = getattr(module, constant_name)
+            self.assertEqual(
+                [],
+                plain_language.find_banned_person_facing(text),
+                "%s.%s" % (module_name, constant_name),
+            )
+            self.assertIsNone(
+                plain_language.find_short_form_first(text),
+                "%s.%s says the short form before the full term"
+                % (module_name, constant_name),
+            )
+
+    def test_both_new_words_are_caught_in_their_ordinary_forms(self):
+        for text in (
+            "One decision the team made.",
+            "Three decisions are waiting.",
+            "The ledger holds nothing.",
+            "Two ledgers, somehow.",
+            "A Decision at the start of a sentence.",
+        ):
+            self.assertTrue(
+                plain_language.find_banned_person_facing(text), text
+            )
+        for text in (
+            "One context change the base holds.",
+            "The record of context changes is quiet.",
+            "Look in work/decisions, which is the older folder.",
+        ):
+            self.assertEqual(
+                [], plain_language.find_banned_person_facing(text), text
+            )
+
+    def test_the_short_form_is_allowed_only_after_the_full_term(self):
+        self.assertEqual(
+            1,
+            plain_language.find_short_form_first(
+                "The change is recorded. A context change is what that means."
+            ),
+        )
+        self.assertIsNone(
+            plain_language.find_short_form_first(
+                "A context change is recorded. The change is what that means."
+            )
+        )
+        self.assertIsNone(
+            plain_language.find_short_form_first("Nothing changed here at all.")
+        )
+
+    def test_a_plain_rule_does_not_switch_the_check_off(self):
+        """K3. Any line of three dashes used to open a settings block."""
+        text = "\n".join(
+            [
+                "# A document",
+                "",
+                "Some words about a context change.",
+                "",
+                "---",
+                "",
+                "One decision, written after the rule.",
+            ]
+        )
+        self.assertEqual(
+            [("decision", 7)], plain_language.find_banned_person_facing(text)
+        )
+
+    def test_a_settings_block_at_the_top_is_still_left_out(self):
+        text = "\n".join(
+            ["---", "kind: change", "origin: ledger", "---", "", "Plain words."]
+        )
+        self.assertEqual([], plain_language.find_banned_person_facing(text))
+
+    def test_a_banned_word_in_a_description_line_is_caught(self):
+        """K3. A skill's description is the first thing a person reads."""
+        text = "\n".join(
+            [
+                "---",
+                "name: a-skill",
+                "description: Keep the decisions ledger current.",
+                "---",
+                "",
+                "Plain words.",
+            ]
+        )
+        found = plain_language.find_banned_person_facing(text)
+        self.assertEqual([("decision", 3), ("ledger", 3)], sorted(found))
+
+    def test_the_two_descriptions_a_person_reads_first_are_checked(self):
+        """K4. The plugin's own description is a sentence a person reads."""
+        for path in plain_language.plugin_description_files():
+            plain_language.assert_plain(self, path)
+
     def test_a_sentence_shaped_constant_left_out_of_the_registry_is_caught(self):
         """A fixture library with one unregistered sentence must fail the walk."""
         with support.Sandbox() as sandbox:

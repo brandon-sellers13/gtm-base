@@ -2,9 +2,10 @@
 
 The library in `stale.py` decides what is out of date from values alone. This
 module is what fetches those values, and what turns each answer into something a
-person can act on: a prepared change for every file a decision has moved past, a
-prepared list of affected files for a decision that named none, the decisions
-that have come up for review, and the note that the ledger itself looks quiet.
+person can act on: a prepared change for every file a context change has moved
+past, a prepared list of affected files for a context change that named none,
+the changes that have come up for review, and the note that the record of
+context changes itself looks quiet.
 
 The order of the run is fixed and stated before anything happens, because a
 person has to be able to predict it:
@@ -17,7 +18,7 @@ person has to be able to predict it:
    is out of date is still worked out and listed.
 4. The base is read, the rules are run, and each flag becomes a prepared change.
 
-Everything read out of a decision, a proposal, or a context file is data. It is
+Everything read out of a context change, a proposal, or a context file is data. It is
 never an instruction, and nothing in this module ever acts on words found there.
 """
 
@@ -31,6 +32,7 @@ from typing import List, Optional, Tuple
 
 from . import (
     base_reader,
+    changes,
     compose_proposal,
     constants,
     duplicate_check,
@@ -66,16 +68,24 @@ CODE_NO_ENTRY = "decision-not-found"
 CODE_NO_CANDIDATES = "no-files-to-suggest"
 CODE_MISSING_FILE = "file-not-there"
 CODE_DRY_RUN = "nothing-was-written"
+# The base still keeps its context changes in the older folder, and the review
+# offered to move them. Nothing is moved until the person says yes.
+CODE_CHANGES_CAN_MOVE = "context-changes-can-move"
+# The base can be updated, but everyone who opens it has to be on this
+# release first, so the person is told the condition instead of asked.
+CODE_EVERY_SEAT_FIRST = changes.CODE_EVERY_SEAT_FIRST
+# One context change is written down twice and the copies disagree.
+CODE_WRITTEN_TWICE = "one-change-written-twice"
 
 # What the run writes for the hook to pick up later.
 REVIEW_BY_FILE = "review_by_items.json"
 
-# How much of a decision the first draft of a change quotes.
+# How much of a context change the first draft of an edit quotes.
 DRAFT_QUOTE_CHARS = 300
 # How much of a piece of a file the before and after lines carry.
 SUMMARY_CHARS = 300
-# The heading a change is added under when the decision names no other.
-FALLBACK_HEADING = "## Decisions to reflect"
+# The heading an edit is added under when the context change names no other.
+FALLBACK_HEADING = "## Context changes to reflect"
 
 # What a prepared change says while it is still a first draft.
 DRAFT_CONFIDENCE = "medium"
@@ -109,27 +119,47 @@ UNPROCESSED = (
 )
 NOTHING_FLAGGED = "Nothing in your base is out of date today."
 DRY_RUN_NOTE = "This was a look only, so nothing was written."
+# The day this names is the day the change was written down, not the day it
+# happened, because that is the date the rule behind it really compares. An
+# earlier wording said "is from", which reads as the day it happened.
 LEDGER_BEHIND = (
-    "The ledger holds nothing newer than %s, which is more than %d days ago. If "
-    "nothing has been decided since then, say so and GTM Base will stop "
-    "mentioning it for %d days."
+    "The last context change in your base was written down on %s, which is "
+    "more than %d days ago. If nothing about the business has changed since "
+    "then, say so and GTM Base will stop mentioning it for %d days."
 )
 LEDGER_BEHIND_EMPTY = (
-    "The ledger holds no decisions at all yet. If there is nothing to write "
+    "Your base has no context change recorded yet. If there is nothing to write "
     "down, say so and GTM Base will stop mentioning it for %d days."
 )
 LEDGER_BEHIND_DISMISSED = (
-    "GTM Base will not mention the quiet ledger again until %s."
+    "GTM Base will not mention the quiet record of context changes again until "
+    "%s."
 )
 REVIEW_BY = (
-    "Decision %s came up for review on %s, which was %d days ago."
+    "Context change %s came up for review on %s, which was %d days ago."
 )
 MALFORMED = (
     "%d things in your base could not be read, so they were left alone."
 )
+MALFORMED_ONE = (
+    "1 thing in your base could not be read, so it was left alone."
+)
+# Said whenever one context change is written down twice and the two copies
+# do not agree. It names the change and both files, because the answer is the
+# person's to give and they cannot give it without knowing where to look.
+WRITTEN_TWICE = (
+    "The context change %s is written down twice, in %s, and the two do not "
+    "say the same thing. GTM Base is not choosing between them. Decide which "
+    "one is right and take the other one away."
+)
+# Said about the documents that change is about, because a change nobody can
+# read is not a reason to treat those documents as settled.
+CANNOT_VOUCH = (
+    "Until those two agree, GTM Base cannot vouch for %s."
+)
 DROPPED = (
-    "%d file names in your decisions point outside the base, so they were "
-    "skipped."
+    "%d file names in your context changes point outside the base, so they "
+    "were skipped."
 )
 
 # The first-run findings, in the order the first run looks for them.
@@ -142,8 +172,8 @@ FINDING_REQUIRED_FILE = (
 # comes back. It never says that nothing is out of date, because nothing has
 # been checked against anything, and it never says there is no date to watch,
 # because each confirmation has one. It replaces the older sentence that said
-# no decision had been written down yet, which made a missing habit sound like
-# a missing step.
+# nothing had been written down yet, which made a missing habit sound like a
+# missing step.
 FINDING_BASELINE = (
     "You confirmed %s on %s and %s on %s. No context change is recorded yet, so "
     "GTM Base cannot yet check whether a change has made either document out of "
@@ -158,17 +188,23 @@ FINDING_BASELINE_UNCONFIRMED = (
     "you review your base."
 )
 FINDING_DOCUMENT_OLDER = (
-    "The material behind %s is dated %s, and decision %s was made on %s, so that "
-    "document is older than the decision it is meant to reflect. It is worth a "
-    "read."
+    "The material behind %s is dated %s, and context change %s happened on %s, "
+    "so that document is older than the change it is meant to reflect. It is "
+    "worth a read."
 )
 FINDING_NOTHING_YET = (
     "Nothing is out of date yet. The first date GTM Base will watch is %s, when "
-    "decision %s comes up for review."
+    "context change %s comes up for review."
 )
+# Reached when the base holds context changes but none of the open ones asks to
+# be looked at again. The older wording said there was no date to watch and
+# stopped there, which reads as though the base were finished with. It says
+# instead what is true and what would give it a date, in the same honest shape
+# as the baseline finding above.
 FINDING_NOTHING_YET_NO_DATE = (
-    "Nothing is out of date yet, and no decision has a review date set, so there "
-    "is no date to watch."
+    "Nothing is out of date yet. Every context change your base holds is either "
+    "closed or carries no date to look at it again, so there is no date ahead "
+    "for GTM Base to watch. The next context change you record will give it one."
 )
 # Said once for each prepared change still waiting on a base with no shared
 # copy, which is the one kind of base where the owner approves one in Claude.
@@ -363,7 +399,7 @@ def _section_text(text: str, heading: str) -> str:
 
 
 def _heading_named_by(entry_text: str, file_text: str) -> Optional[str]:
-    """The heading in the file that the decision itself talks about."""
+    """The heading in the file that the context change itself talks about."""
     haystack = (entry_text or "").lower()
     for heading in _headings_of(file_text):
         title = heading.lstrip("#").strip()
@@ -373,11 +409,11 @@ def _heading_named_by(entry_text: str, file_text: str) -> Optional[str]:
 
 
 def _entry_citation(entry, entry_file: str) -> str:
-    """The one sentence that says which decision this came from."""
+    """The one sentence that says which context change this came from."""
     name = (entry_file or "").rsplit("/", 1)[-1]
-    return "Decision %s, written down in %s, decided on %s." % (
+    return "Context change %s, written down in %s, and it happened on %s." % (
         entry.id,
-        name or "the ledger",
+        name or "the record of context changes",
         entry.decided_on,
     )
 
@@ -455,19 +491,19 @@ def _recorded_in_index(base_id: str, staging_id: str) -> bool:
 def draft_text_for(entry) -> str:
     """The first draft of the words that go into the file.
 
-    It is deliberately a plain sentence naming the decision, because the words
-    that end up in the file are the assistant's job to write from the decision
+    It is deliberately a plain sentence naming the change, because the words
+    that end up in the file are the assistant's job to write from the change
     and the file, and a first draft that pretends to be finished is worse than
     one that says what it is.
     """
     quoted = _collapse(entry.body, DRAFT_QUOTE_CHARS).rstrip(".")
-    return "Update needed: %s. This section should reflect that decision." % quoted
+    return "Update needed: %s. This section should reflect that change." % quoted
 
 
 def build_file_proposal(
     base_root: str, entry, entry_file: str, path: str
 ) -> "formats.ProposalStaging":
-    """The prepared change for one file one decision has moved past."""
+    """The prepared edit for one file one context change has moved past."""
     staging_id = ids.staging_id(entry.id, path, "ledger", 0)
     text = read_text(os.path.join(base_root, path))
     if text is None:
@@ -484,7 +520,7 @@ def build_file_proposal(
         operation = "add"
         before = ""
     if not before:
-        before = "This part of %s does not say anything about that decision yet." % path
+        before = "This part of %s does not say anything about that change yet." % path
     drafted = draft_text_for(entry)
 
     body = formats.render_pr_body(
@@ -492,7 +528,7 @@ def build_file_proposal(
             "before": before,
             "after": _collapse(drafted),
             "why": (
-                "The team wrote this decision down and %s was never brought in "
+                "This context change was written down and %s was never brought in "
                 "line with it. The words below are a first draft for the owner "
                 "to correct or replace." % path
             ),
@@ -523,9 +559,9 @@ def build_file_proposal(
 def build_affected_files_proposal(
     entry, entry_file: str, candidates: List[str]
 ) -> "formats.ProposalStaging":
-    """The prepared list of files a decision touches, when it named none.
+    """The prepared list of files a context change touches, when it named none.
 
-    A decision that names no files is not a change to any one file, so this
+    A context change that names no files is not an edit to any one file, so this
     proposal asks the owner to approve the list itself. Each named file gets one
     line saying it was named by GTM Base, and accepting the proposal is the
     owner saying the list is right.
@@ -536,21 +572,22 @@ def build_affected_files_proposal(
             path,
             FALLBACK_HEADING,
             "add",
-            "This file was named by GTM Base as affected by decision %s; confirm "
+            "This file was named by GTM Base as affected by context change %s; confirm "
             "or remove it.\n" % entry.id,
         )
         for path in candidates
     ]
     body = formats.render_pr_body(
         {
-            "before": "Decision %s does not say which files it affects." % entry.id,
-            "after": "Decision %s is marked as affecting %s."
+            "before": "Context change %s does not say which files it affects."
+            % entry.id,
+            "after": "Context change %s is marked as affecting %s."
             % (entry.id, ", ".join(candidates)),
             "why": (
-                "Whoever wrote this decision down left the list of files it "
+                "Whoever wrote this context change down left the list of files it "
                 "affects blank, so GTM Base worked out which files it most "
                 "likely touches. The owner is approving that list. Accepting "
-                "this marks each file named above as one the decision touches, "
+                "this marks each file named above as one the change touches, "
                 "and turning it down leaves the list as it was."
             ),
             "evidence": "%s\n\n%s" % (_entry_citation(entry, entry_file), _quote(entry.body)),
@@ -598,7 +635,7 @@ def save_staging(base_root: str, staging) -> str:
 
 
 def save_review_by_items(base_id: str, items, today: datetime.date) -> str:
-    """Write the decisions that have come up for review, for the next session."""
+    """Write the context changes that have come up for review, for the next session."""
     payload = {
         "schema": 1,
         "date": today.isoformat(),
@@ -619,7 +656,7 @@ def save_review_by_items(base_id: str, items, today: datetime.date) -> str:
 
 
 def load_review_by_items(base_id: str) -> List[dict]:
-    """The decisions the last run found waiting for review, or none."""
+    """The context changes the last run found waiting for review, or none."""
     payload = read_json(os.path.join(paths.seat_dir(base_id), REVIEW_BY_FILE))
     if not isinstance(payload, dict):
         return []
@@ -780,8 +817,9 @@ def run(
     now: Optional[datetime.date] = None,
     session_id: Optional[str] = None,
     mode: str = "normal",
-    dismiss_ledger_behind: bool = False,
+    dismiss_quiet_record: bool = False,
     dry_run: bool = False,
+    dismiss_ledger_behind: bool = False,
 ) -> StaleCheckResult:
     """Work out what is out of date, and prepare the change for each answer.
 
@@ -792,6 +830,10 @@ def run(
     asks, because nothing asks at the start of a session any more.
     """
     git = runner_or_default(runner)
+    # The older name for this is still answered to, for the same reason the
+    # option on the command line is: a session holding the older instructions
+    # asks by that name, and refusing it loses the answer just given.
+    dismiss_quiet_record = dismiss_quiet_record or dismiss_ledger_behind
     today = now or state.today()
     if isinstance(today, datetime.datetime):
         today = today.date()
@@ -881,7 +923,7 @@ def run(
     if not has_remote:
         _list_awaiting_local_approval(result, base_root, git)
 
-    if dismiss_ledger_behind and not dry_run:
+    if dismiss_quiet_record and not dry_run:
         window = report.settings.confirmation_threshold_days
         until = today + datetime.timedelta(days=window)
         state.set_ledger_behind_dismissed_until(base_id, until)
@@ -922,6 +964,8 @@ def _review(
         state.set_silent_until(base_id, None)
         result.sentences.append(REVIEW_SPEAKING_AGAIN)
 
+    _say_what_is_written_twice(result, report)
+
     waiting_to_be_read = state.unprocessed_rows(base_id)
     email = base_reader.repo_email(base_root, git)
     lines = _review_documents(
@@ -950,12 +994,20 @@ def _review(
         result.sentences.append(line.sentence)
     result.review = lines
 
+    _offer_the_update(result, base_root, base_id, today, git)
+
     if session_id and not dry_run and not waiting_to_be_read:
         # No question is issued while something is waiting to be read, because
         # every one of them would be refused on the way back, and a question
         # nobody can answer is a question that only spoils the yes rate.
+        # A document a change disagrees with itself about gets no question
+        # either. A yes there would settle that change against the document
+        # for good, and neither copy of it has been read by anybody yet.
+        cannot_vouch = _cannot_vouch_for(report)
         for line in lines:
             if line.kind != "document":
+                continue
+            if line.path in cannot_vouch:
                 continue
             line.question_id = _question_for_review(
                 base_id, line.path, line.trigger, line.entry_id, session_id, today
@@ -998,6 +1050,14 @@ def _question_for_review(base_id, path, trigger, entry_id, session_id, today):
     if not any(row.get("question_id") == question for row in rows):
         state.append_asked(base_id, question, path, trigger, "unanswered", today)
     return question
+
+
+def _cannot_vouch_for(report) -> set:
+    """Every document a change that disagrees with itself is about."""
+    named = set()
+    for conflict in report.conflicts:
+        named.update(conflict.affects)
+    return named
 
 
 def _review_documents(
@@ -1132,7 +1192,7 @@ def _prepared_elsewhere(base_root: str):
 
 
 def _ledger_flags(report) -> List[Tuple[str, str]]:
-    """Every (decision, file) pair a decision has moved past, in a fixed order."""
+    """Every (change, file) pair a context change has moved past, in a fixed order."""
     pairs = []
     for flag in report.file_flags:
         if flag.trigger != stale.TRIGGER_LEDGER:
@@ -1143,10 +1203,10 @@ def _ledger_flags(report) -> List[Tuple[str, str]]:
 
 
 def _list_without_preparing(result, report) -> None:
-    """Say what a decision has moved past without preparing anything for it."""
+    """Say what a context change has moved past without preparing anything for it."""
     for entry_id, path in _ledger_flags(report):
         result.sentences.append(
-            "%s is out of date against decision %s." % (path, entry_id)
+            "%s is out of date against context change %s." % (path, entry_id)
         )
 
 
@@ -1229,7 +1289,7 @@ def _already_done(
 def _prepare_everything(
     result, report, inputs, entry_files, base_root, base_id, gh, dry_run
 ) -> None:
-    """One prepared change per flag, and one per decision that named no files."""
+    """One prepared edit per flag, and one per context change that named no files."""
     for entry_id, path in _ledger_flags(report):
         entry = base_reader.entry_by_id(inputs, entry_id)
         if entry is None:
@@ -1257,7 +1317,7 @@ def _prepare_everything(
                 Skipped(None, proposal.entry_id, None, CODE_NO_CANDIDATES)
             )
             result.sentences.append(
-                "Decision %s does not say which files it affects, and GTM Base "
+                "Context change %s does not say which files it affects, and GTM Base "
                 "could not work out which files it touches." % proposal.entry_id
             )
             continue
@@ -1292,19 +1352,60 @@ def _write_one(
     )
     if kind == "affected-files":
         result.sentences.append(
-            "Decision %s named no files, so GTM Base prepared a list of the %d "
+            "Context change %s named no files, so GTM Base prepared a list of the %d "
             "files it looks like it touches, for you to approve."
             % (entry_id, len(target_paths))
         )
     else:
         result.sentences.append(
-            "%s is out of date against decision %s, and a change for it is "
+            "%s is out of date against context change %s, and an edit for it is "
             "prepared as %s." % (target_paths[0], entry_id, staging.staging_id)
         )
 
 
+def _offer_the_update(result, base_root, base_id, today, git) -> None:
+    """Offer to store this base's context changes the way they are stored now.
+
+    It comes after the review's own list, because the person asked for the
+    review and this is an aside. Nothing is applied on the strength of it: the
+    move runs only on their yes.
+
+    What to say is worked out rather than assumed. An offer somebody could say
+    yes to and then have refused is not an offer, so the checks the move
+    itself runs are run here first, and none of them writes anything.
+    """
+    offer = changes.what_to_offer(base_root, base_id, today=today, git=git)
+    if offer == changes.OFFER_NOW:
+        result.sentences.append(changes.OFFER)
+        result.codes.append(CODE_CHANGES_CAN_MOVE)
+    elif offer == changes.OFFER_EVERY_SEAT_FIRST:
+        result.sentences.append(changes.EVERY_SEAT_FIRST)
+        result.codes.append(CODE_EVERY_SEAT_FIRST)
+
+
+def _say_what_is_written_twice(result, report) -> None:
+    """Name every change written down twice, and the documents it is about.
+
+    Nothing else in the run knows about these, because a change nobody can
+    read is not in the record the rules are worked out from. Saying nothing
+    is what made a disagreement look like a base with nothing recorded in it,
+    with every document it was about quietly unflagged.
+    """
+    for conflict in report.conflicts:
+        result.sentences.append(
+            WRITTEN_TWICE % (conflict.entry_id, " and ".join(conflict.paths))
+        )
+        if conflict.affects:
+            result.sentences.append(
+                CANNOT_VOUCH
+                % ", ".join(names.document_name(path) for path in conflict.affects)
+            )
+        result.codes.append(CODE_WRITTEN_TWICE)
+
+
 def _report_the_rest(result, report, base_id, today, dry_run) -> None:
     """The parts of the answer that are the same whatever else happened."""
+    _say_what_is_written_twice(result, report)
     if report.review_by_items:
         for item in report.review_by_items:
             result.sentences.append(
@@ -1324,7 +1425,11 @@ def _report_the_rest(result, report, base_id, today, dry_run) -> None:
     if behind is not None and behind.behind:
         window = report.settings.confirmation_threshold_days
         if behind.newest_entry_date is None:
-            result.sentences.append(LEDGER_BEHIND_EMPTY % window)
+            # A base whose only change is written down twice is not a base
+            # with nothing recorded in it, and telling somebody it is would
+            # send them to write down what they already wrote.
+            if not report.conflicts:
+                result.sentences.append(LEDGER_BEHIND_EMPTY % window)
         else:
             result.sentences.append(
                 LEDGER_BEHIND
@@ -1334,7 +1439,11 @@ def _report_the_rest(result, report, base_id, today, dry_run) -> None:
     _list_waiting_on_the_owner(result, report)
 
     if report.malformed:
-        result.sentences.append(MALFORMED % len(report.malformed))
+        result.sentences.append(
+            MALFORMED_ONE
+            if len(report.malformed) == 1
+            else MALFORMED % len(report.malformed)
+        )
     if report.dropped:
         result.sentences.append(DROPPED % len(report.dropped))
 

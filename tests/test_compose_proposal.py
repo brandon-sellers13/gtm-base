@@ -94,7 +94,7 @@ class TestAProposalThatOpens(unittest.TestCase):
             self.assertNotIn("Companies of any size.", changed)
 
             # The decision it carries reads as a decision.
-            entry_path = "%s/%s.md" % (constants.DECISIONS_DIR, STAGING)
+            entry_path = "%s/%s.md" % (constants.CHANGES_DIR, STAGING)
             entry = formats.LedgerEntry.parse(show(remote, BRANCH, entry_path))
             entry.validate(TODAY)
             self.assertEqual(TODAY.isoformat(), entry.written_on)
@@ -967,7 +967,7 @@ class TestTheWholeWayRound(unittest.TestCase):
             fresh = os.path.join(sandbox.path, "fresh")
             support.git(["clone", "-q", remote, fresh], cwd=sandbox.path)
 
-            entry_path = "%s/%s.md" % (constants.DECISIONS_DIR, STAGING)
+            entry_path = "%s/%s.md" % (constants.CHANGES_DIR, STAGING)
             record_path = "%s/%s-%s.md" % (
                 constants.CORRECTIONS_DIR,
                 TODAY.isoformat(),

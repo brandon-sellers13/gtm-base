@@ -259,12 +259,25 @@ class LedgerInput(object):
     what a usable entry is.
     """
 
-    __slots__ = ("entry", "path", "error")
+    __slots__ = ("entry", "path", "error", "entry_id", "affects")
 
-    def __init__(self, entry=None, path: str = "", error: Optional[str] = None):
+    def __init__(
+        self,
+        entry=None,
+        path: str = "",
+        error: Optional[str] = None,
+        entry_id: Optional[str] = None,
+        affects: Optional[Sequence[str]] = None,
+    ):
         self.entry = entry
         self.path = path
         self.error = error
+        # What the file was about, even when it could not be used. A copy of
+        # one change that disagrees with another copy is still a change about
+        # some documents, and saying nothing about those documents is how a
+        # disagreement quietly settled them.
+        self.entry_id = entry_id or (entry.id if entry is not None else None)
+        self.affects = list(affects or [])
 
     def __repr__(self) -> str:
         return "LedgerInput(path=%r, error=%r)" % (self.path, self.error)
@@ -316,6 +329,9 @@ ReviewByItem = namedtuple("ReviewByItem", "entry_id review_by days_overdue")
 ReviewItem = namedtuple("ReviewItem", "path entry_id sources_date decided_on reason")
 LedgerBehind = namedtuple("LedgerBehind", "behind newest_entry_date window_days")
 MalformedItem = namedtuple("MalformedItem", "kind reference code")
+# One change written down twice, in two places, saying two different
+# things. Nothing chooses between them, and everything says so.
+Conflict = namedtuple("Conflict", "entry_id paths affects")
 DroppedPath = namedtuple("DroppedPath", "path_hash code entry_id")
 Question = namedtuple("Question", "path trigger entry_id reason")
 # One owner accepting a prepared change, kept as the evidence behind a file
@@ -345,6 +361,7 @@ class StaleReport(object):
         malformed,
         dropped,
         has_remote,
+        conflicts=(),
     ):
         self.today = today
         self.settings = settings
@@ -358,6 +375,7 @@ class StaleReport(object):
         self.ledger_behind = ledger_behind
         self.malformed = list(malformed)
         self.dropped = list(dropped)
+        self.conflicts = list(conflicts)
         self.has_remote = bool(has_remote)
         self.suppressions = {}
         # Keyed by path: the newest acceptance by one of that file's owners,
@@ -626,6 +644,7 @@ def compute(
         review_items=review_items,
         ledger_behind=ledger_behind,
         malformed=malformed,
+        conflicts=_conflicts_in(ledger),
         dropped=dropped,
         has_remote=seat.has_remote,
     )
@@ -645,6 +664,40 @@ def _index_files(files, malformed) -> "Dict[str, ContextFileInfo]":
             continue
         known[path] = info
     return known
+
+
+def _conflicts_in(ledger) -> "List[Conflict]":
+    """Every change written down twice and saying two different things.
+
+    One row per identifier, naming every file that holds a copy of it and
+    every document any of those copies says it affects. It is worked out here
+    rather than left to each caller, so the run, the review, and the check at
+    the moment of use cannot end up saying three different things about it.
+    """
+    from .base_reader import CODE_IN_BOTH_FOLDERS, CODE_TWICE_IN_ONE_FOLDER
+
+    codes = (CODE_IN_BOTH_FOLDERS, CODE_TWICE_IN_ONE_FOLDER)
+    by_id: "Dict[str, Conflict]" = {}
+    order: List[str] = []
+    for item in ledger:
+        if item.error not in codes or not item.entry_id:
+            continue
+        held = by_id.get(item.entry_id)
+        if held is None:
+            order.append(item.entry_id)
+            by_id[item.entry_id] = Conflict(item.entry_id, [], [])
+            held = by_id[item.entry_id]
+        if item.path and item.path not in held.paths:
+            held.paths.append(item.path)
+        for path in item.affects:
+            if path not in held.affects:
+                held.affects.append(path)
+    return [
+        Conflict(
+            entry_id, sorted(by_id[entry_id].paths), sorted(by_id[entry_id].affects)
+        )
+        for entry_id in order
+    ]
 
 
 def _usable_entries(ledger, day, malformed) -> list:

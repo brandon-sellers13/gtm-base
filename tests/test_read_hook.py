@@ -100,7 +100,7 @@ class Base(object):
 
     def add_change(self, text=None):
         support.write(
-            os.path.join(self.root, constants.DECISIONS_DIR, ENTRY + ".md"),
+            os.path.join(self.root, constants.CHANGES_DIR, ENTRY + ".md"),
             text if text is not None else entry_text(),
         )
         self.save("a context change")
@@ -151,7 +151,7 @@ class TestWhatItLeavesAlone(unittest.TestCase):
             base.add_change()
 
             self.assertIsNone(
-                answer(base, base.path_to(constants.DECISIONS_DIR + "/" + ENTRY + ".md"))
+                answer(base, base.path_to(constants.CHANGES_DIR + "/" + ENTRY + ".md"))
             )
 
     def test_a_context_file_nothing_has_overtaken_says_nothing(self):
@@ -343,7 +343,7 @@ class TestOneSessionIsToldOnce(unittest.TestCase):
 
             second_entry = "stg-" + "b" * 16
             support.write(
-                os.path.join(base.root, constants.DECISIONS_DIR,
+                os.path.join(base.root, constants.CHANGES_DIR,
                              second_entry + ".md"),
                 entry_text().replace(ENTRY, second_entry).replace(
                     "We stopped selling", "We moved upmarket and stopped selling"

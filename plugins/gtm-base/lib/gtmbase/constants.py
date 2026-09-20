@@ -11,8 +11,11 @@ syntax newer than Python 3.9, because the hooks run on the system interpreter.
 CONTEXT_DIR = "context"
 # The map: where everything lives, plus the two settings the plugin reads.
 MAP_PATH = "context/map.md"
-# One dated entry per decision the team made.
-DECISIONS_DIR = "work/decisions"
+# One dated entry per context change the base has been told about.
+CHANGES_DIR = "work/changes"
+# The folder a base written before the rename still holds. It is read and
+# joined with the one above, and nothing ever writes to it again.
+LEGACY_CHANGES_DIR = "work/decisions"
 # One append-only file per context file, holding the owner's yes lines.
 CONFIRMATIONS_DIR = "work/confirmations"
 # Dropped transcripts and notes waiting to be read. Not shared with the team.
@@ -42,7 +45,7 @@ TEMPLATE_TREE_DIRS = (
     "context/metrics",
     "context/plan",
     "context/notes",
-    "work/decisions",
+    CHANGES_DIR,
     "work/confirmations",
     "work/inbox",
     "work/proposals",
@@ -579,7 +582,7 @@ DRAFT_TOO_MUCH_MATERIAL = (
 # run's folder inside it.
 JOIN_SCRATCH_DIR = "join"
 # The three steps of setting a base up, in the order they happen.
-JOIN_STEPS = ("icp", "ledger-entry", "positioning")
+JOIN_STEPS = ("icp", "change-entry", "positioning")
 # Said once, before the first draft is written, because a person deciding
 # whether to approve a file has to know who may end up reading it.
 SHARING_NOTICE = (
@@ -649,3 +652,41 @@ ASKED_OUTCOMES_ALL = ASKED_OUTCOMES + (OUTCOME_USED_AS_IS,)
 # The outcomes the yes rate is worked out over. An answer that says nothing
 # about whether a document is right does not belong in that denominator.
 YES_RATE_OUTCOMES = ASKED_OUTCOMES
+
+
+# --- The rename to context change (added by Unit 1.4 of the 2026-09-19 plan) -
+
+# What an entry calls itself. A base written before the rename says
+# "decision" instead, and both are read. Only the first is ever written.
+ENTRY_KIND = "change"
+LEGACY_ENTRY_KIND = "decision"
+ENTRY_KINDS = (ENTRY_KIND, LEGACY_ENTRY_KIND)
+
+# The settings an entry carries, in the name it is written under today and the
+# name a base written before the rename holds. Both are read, and the first of
+# each pair is the only one ever written. The meanings are unchanged.
+ENTRY_FIELD_PAIRS = (
+    ("happened_on", "decided_on"),
+    ("noted_by", "decided_by"),
+)
+
+# Words that must never appear in a sentence a person reads. "Decision" is too
+# narrow for what the base tracks, and it needed three explanations in a live
+# run. "Ledger" is a bookkeeping word nobody outside this code uses for a
+# folder of dated notes. Both are checked in their ordinary inflections.
+BANNED_PERSON_FACING_WORDS = ("decision", "ledger")
+
+# The full term a person reads, and the short form that is allowed only once
+# the full term has already appeared in the same text.
+CONTEXT_CHANGE_TERM = "context change"
+
+# The note saved with the one change that moves a base's entries into the
+# folder above. It lives here rather than beside the migration because the
+# summary has to recognise it: an entry the move brought over was first added
+# under the older folder, and a look that stopped at the move would count the
+# catch it belongs to as something the person typed out themselves.
+MOVE_TO_CHANGES_SUBJECT = "Move the context changes into work/changes"
+
+# The name this had before the rename, kept readable as the plan said.
+# It is the older folder, which is still read and never written to.
+DECISIONS_DIR = LEGACY_CHANGES_DIR

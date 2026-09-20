@@ -178,35 +178,256 @@ def context_files(root: str) -> "List[stale.ContextFileInfo]":
     return files
 
 
+# The code a file gets when the same entry sits in both folders saying two
+# different things. Nothing chooses between them, because a reader that picks
+# one is a reader that quietly throws the other away.
+CODE_IN_BOTH_FOLDERS = "same-change-in-both-folders"
+# The same identifier written twice inside one folder. It is its own code
+# because it is a different thing to deal with: one of the two files is
+# almost certainly a copy somebody made and forgot, and neither the folder
+# nor a migration can tell which.
+CODE_TWICE_IN_ONE_FOLDER = "same-change-twice-in-one-folder"
+# A file whose name is not the identifier written inside it. Everything
+# that goes looking for one change looks for a file named after it, so a
+# file named anything else is a change half the product cannot find.
+CODE_NAME_IS_NOT_THE_ID = "the-file-name-is-not-the-change-it-holds"
+
+# The two folders a base may hold entries in, newest layout first. Only the
+# first is ever written to. The second is what a base written before the
+# rename holds, and it is read so that no entry is ever hidden, whatever a
+# migration did or did not manage to finish.
+ENTRY_DIRS = (constants.CHANGES_DIR, constants.LEGACY_CHANGES_DIR)
+
+
+def _what_it_says(entry) -> tuple:
+    """Everything one context change says, as plain values.
+
+    Two copies are compared on this rather than on the text a writer would
+    produce for them. Writing one out can fail on a value a reader accepted,
+    such as a comma inside an affected path, and a reader that cannot read a
+    base because one entry cannot be written back out is a reader that breaks
+    the review, the confirm step, and the whole check at once.
+
+    The one definition lives in `formats`, because the rename checks itself
+    against it and two definitions of what a change says would be two answers
+    to the same question.
+    """
+    return formats.entry_values(entry)
+
+
+def entry_path_and_text(root: str, entry_id: str):
+    """Where one context change is written on this base, and what it says.
+
+    Both folders are looked in, the one written today first, because a base
+    may hold either while a migration has not been run or a copy from before
+    it came back. What comes back is the path relative to the base and the
+    text, or a pair of Nones when no folder holds it.
+    """
+    for folder_name in ENTRY_DIRS:
+        relative = folder_name + "/" + entry_id + ".md"
+        text = read_text(os.path.join(root, relative.replace("/", os.sep)))
+        if text is not None:
+            return relative, text
+    return None, None
+
+
+def written_twice_about(root: str, base_id: str, path: str, today, runner=None):
+    """The one context change about this document that disagrees with itself.
+
+    It comes back as (the change's identifier, the files holding it), or None
+    when there is no such change. It is here rather than in each caller
+    because four different steps have to refuse the same thing, and four
+    answers to one question is how one of them ends up not refusing.
+    """
+    from . import stale
+
+    try:
+        inputs = read_base(
+            root, base_id, runner=runner, today=today, record_dropped=False
+        )
+        report = stale.compute(
+            today=today,
+            settings=inputs.settings,
+            files=inputs.files,
+            ledger=inputs.ledger,
+            confirmations=inputs.confirmations,
+            corrections=inputs.corrections,
+            seat=inputs.seat,
+            owner_email=None,
+        )
+    except (GtmBaseError, OSError):
+        # Nothing can be said about a base that cannot be read, and a refusal
+        # invented here would be a refusal nobody could act on.
+        return None
+    for conflict in report.conflicts:
+        if path in conflict.affects:
+            return conflict.entry_id, list(conflict.paths)
+    return None
+
+
+def where_to_write_the_entry(base_root: str, entry_id: str) -> str:
+    """Where one context change belongs on this base, as a path.
+
+    A base that has not been updated yet holds its changes in the older
+    folder. Writing a second copy of one into the newer folder would leave
+    two files with one identifier saying two different things, which is the
+    one state nothing here can resolve. So a change the base already holds is
+    written where it already is, and only a change nobody has written down
+    goes in the folder everything is written to today.
+    """
+    relative, _text = entry_path_and_text(base_root, entry_id)
+    if relative is not None:
+        return relative
+    return constants.CHANGES_DIR + "/" + entry_id + ".md"
+
+
+def _read_entry_folder(root: str, folder_name: str):
+    """Every file in one folder of entries, parsed or with the reason it was not."""
+    read = []
+    folder = os.path.join(root, folder_name.replace("/", os.sep))
+    if not os.path.isdir(folder):
+        return read
+    for name in sorted(os.listdir(folder)):
+        if not name.endswith(".md"):
+            continue
+        relative = folder_name + "/" + name
+        text = read_text(os.path.join(folder, name))
+        if text is None:
+            read.append((relative, None, None, "unreadable"))
+            continue
+        try:
+            entry = formats.ChangeEntry.parse(text)
+        except (ValidationError, PathError) as failure:
+            read.append((relative, None, text, failure.code))
+            continue
+        if name != entry.id + ".md":
+            # Everything that looks one change up looks for a file named
+            # after it, so a file named anything else is a change half of
+            # this product cannot find. It is reported rather than read.
+            read.append((relative, None, text, CODE_NAME_IS_NOT_THE_ID))
+            continue
+        read.append((relative, entry, text, None))
+    return read
+
+
 def ledger(
     root: str,
     base_id: str,
     today: datetime.date,
     collect: Optional[List[dict]] = None,
 ) -> "List[stale.LedgerInput]":
-    """Every decision the base holds, with any path that leaves it dropped.
+    """Every context change the base holds, with any path that leaves it dropped.
+
+    Both folders are read and joined by the entry's own identifier, so an
+    entry is never hidden by which folder it happens to sit in. One entry
+    comes back per identifier. An identifier that sits in both folders saying
+    two different things comes back as one problem naming it, and neither
+    version is used, because choosing between them is not a reader's call.
 
     A refused path is normally recorded in this seat's own files as it is
     found. When the caller hands in a list, the refusals are put in that list
     and nothing is written, which is what lets a run that is only looking leave
     this seat's folder exactly as it was.
     """
-    entries: List[stale.LedgerInput] = []
-    folder = os.path.join(root, constants.DECISIONS_DIR)
-    if not os.path.isdir(folder):
-        return entries
-    for name in sorted(os.listdir(folder)):
+    # Everything both folders hold, in the order it was read, so the answer is
+    # the same on every run. For each identifier the first copy read is the one
+    # that is kept, and a later copy of it only ever says whether the two
+    # disagree.
+    read: List[tuple] = []
+    kept_by_id: "Dict[str, dict]" = {}
+    for folder_name in ENTRY_DIRS:
+        for relative, entry, _text, error in _read_entry_folder(root, folder_name):
+            if entry is None:
+                read.append(("problem", relative, error, None))
+                continue
+            # Two copies are the same entry when they say the same thing,
+            # whichever spelling of the settings each was written with, so a
+            # migrated copy and the one it was migrated from agree.
+            said = _what_it_says(entry)
+            held = kept_by_id.get(entry.id)
+            if held is None:
+                kept_by_id[entry.id] = {
+                    "said": said,
+                    "conflict": None,
+                    "folder": folder_name,
+                    "affects": list(entry.affects),
+                    "copies": [relative],
+                }
+                read.append(("entry", relative, None, entry))
+                continue
+            held["copies"].append(relative)
+            for path in entry.affects:
+                if path not in held["affects"]:
+                    held["affects"].append(path)
+            if said == held["said"]:
+                continue
+            # Two files, one identifier, two different things said. Which of
+            # the two problems it is depends on whether they sit in one folder
+            # or in both, and the two are dealt with differently.
+            held["conflict"] = (
+                CODE_TWICE_IN_ONE_FOLDER
+                if folder_name == held["folder"]
+                else CODE_IN_BOTH_FOLDERS
+            )
+            read.append(("problem-copy", relative, held["conflict"], entry))
+
+    # A file nothing can read, named after a change we did read somewhere
+    # else, is two copies of one change and not one unnamed problem. Which of
+    # the two is right is the person's to say, so it is named as a change
+    # written down twice rather than counted as something unreadable.
+    for what, relative, _error, _entry in read:
+        if what != "problem":
+            continue
+        name = relative.split("/")[-1]
         if not name.endswith(".md"):
             continue
-        relative = constants.DECISIONS_DIR + "/" + name
-        text = read_text(os.path.join(folder, name))
-        if text is None:
-            entries.append(stale.LedgerInput(None, relative, "unreadable"))
+        held = kept_by_id.get(name[: -len(".md")])
+        if held is not None:
+            held["conflict"] = held["conflict"] or CODE_IN_BOTH_FOLDERS
+            if relative not in held["copies"]:
+                held["copies"].append(relative)
+
+    entries: List[stale.LedgerInput] = []
+    for what, relative, error, entry in read:
+        if what == "problem":
+            name = relative.split("/")[-1]
+            entry_id = name[: -len(".md")] if name.endswith(".md") else ""
+            held = kept_by_id.get(entry_id)
+            if held is not None and held["conflict"]:
+                entries.append(
+                    stale.LedgerInput(
+                        None,
+                        relative,
+                        held["conflict"],
+                        entry_id=entry_id,
+                        affects=held["affects"],
+                    )
+                )
+                continue
+            entries.append(stale.LedgerInput(None, relative, error))
             continue
-        try:
-            entry = formats.LedgerEntry.parse(text)
-        except (ValidationError, PathError) as failure:
-            entries.append(stale.LedgerInput(None, relative, failure.code))
+        held = kept_by_id[entry.id]
+        if what == "problem-copy":
+            entries.append(
+                stale.LedgerInput(
+                    None,
+                    relative,
+                    held["conflict"],
+                    entry_id=entry.id,
+                    affects=held["affects"],
+                )
+            )
+            continue
+        if held["conflict"]:
+            entries.append(
+                stale.LedgerInput(
+                    None,
+                    relative,
+                    held["conflict"],
+                    entry_id=entry.id,
+                    affects=held["affects"],
+                )
+            )
             continue
         kept = []
         for path in entry.affects:

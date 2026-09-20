@@ -19,4 +19,4 @@ The customer profile said any size. It now says twenty to two hundred people.
 
 ## Why
 
-The meeting on the twelfth of January decided it and the document was never brought in line.
+The meeting on the twelfth of January settled it and the document was never brought in line.

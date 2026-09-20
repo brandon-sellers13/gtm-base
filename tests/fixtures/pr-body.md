@@ -6,7 +6,7 @@ After: The customer profile says we sell to companies of twenty to two hundred p
 
 ## Why
 
-The team decided this on the twelfth of January and the document was never brought in line.
+The team settled this on the twelfth of January and the document was never brought in line.
 
 ## Evidence
 
@@ -24,6 +24,6 @@ None
 
 This proposal was drafted by an AI assistant from the evidence above and has not been reviewed by a person yet.
 
-If the decision is right but the edit is wrong, say keep the decision and drop the edit.
+If the context change is right but the edit is wrong, say keep the change and drop the edit.
 
 gtm-base proposal stg-0d15637d82690cc7 entry stg-0d15637d82690cc7 source src-f9b4fc4d3b3d46561948ee51

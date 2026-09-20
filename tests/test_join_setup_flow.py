@@ -107,8 +107,8 @@ class SetupRun(object):
         return self.approve("icp", text or captured("icp.md"))
 
     def decision(self, decided_on=DECIDED_IN_AUGUST):
-        text = captured("ledger-entry.md").replace(DECIDED_IN_AUGUST, decided_on)
-        return self.approve("ledger-entry", text)
+        text = captured("change-entry.md").replace(DECIDED_IN_AUGUST, decided_on)
+        return self.approve("change-entry", text)
 
     def positioning(self, text=None):
         return self.approve("positioning", text or captured("positioning.md"))
@@ -153,7 +153,7 @@ def confirmation_lines(root, relative):
 
 
 def decision_file(root):
-    folder = os.path.join(root, constants.DECISIONS_DIR)
+    folder = os.path.join(root, constants.CHANGES_DIR)
     names = sorted(name for name in os.listdir(folder) if name.endswith(".md"))
     return os.path.join(folder, names[0])
 
@@ -330,7 +330,7 @@ class TestASetupThatRecordsNoContextChange(unittest.TestCase):
             self.assertEqual(1, len(confirmation_lines(setup.root, ICP)))
             self.assertEqual(1, len(confirmation_lines(setup.root, POSITIONING)))
             self.assertEqual([], confirmation_lines(setup.root, constants.MAP_PATH))
-            folder = os.path.join(setup.root, constants.DECISIONS_DIR)
+            folder = os.path.join(setup.root, constants.CHANGES_DIR)
             self.assertEqual(
                 [], [name for name in os.listdir(folder) if name.endswith(".md")]
             )
@@ -412,7 +412,7 @@ class TestTheClosingFinding(unittest.TestCase):
             self.assertIn(ICP, finding)
             self.assertIn(SOURCE_DATE, finding)
             self.assertIn(DECIDED_IN_SEPTEMBER, finding)
-            self.assertIn("older than the decision", finding)
+            self.assertIn("older than the change", finding)
 
     def test_material_newer_than_the_decision_leaves_nothing_out_of_date(self):
         with support.Sandbox() as sandbox:
@@ -448,7 +448,7 @@ class TestTheFindingIsWorkedOutAgainEveryTime(unittest.TestCase):
             after = setup.close().finding
 
             self.assertIn("Nothing is out of date yet", before)
-            self.assertIn("older than the decision", after)
+            self.assertIn("older than the change", after)
             self.assertNotEqual(before, after)
 
 
@@ -716,8 +716,8 @@ class TestWritingHappensInTheFolderTheResolverSettledOn(unittest.TestCase):
             company_folder = os.path.dirname(setup.root)
 
             result = join_flow.approve_step(
-                "ledger-entry",
-                setup.write_draft("ledger-entry", captured("ledger-entry.md")),
+                "change-entry",
+                setup.write_draft("change-entry", captured("change-entry.md")),
                 setup.run,
                 base_root=company_folder,
                 now=NOW,

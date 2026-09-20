@@ -213,6 +213,20 @@ def content_hash(text: str) -> str:
     return _sha256_hex(normalized)
 
 
+def exact_hash(text: str) -> str:
+    """The hash of a piece of content with not one character changed first.
+
+    `content_hash` above makes line endings uniform, which is right when the
+    question is whether two people wrote the same thing. It is wrong when the
+    question is whether a file on the disk is the one this run wrote, because
+    an editor that saved it with different line endings changed that file and
+    the person has to be told so rather than having it quietly put back.
+    """
+    if text is None:
+        raise ValueError("text is required")
+    return _sha256_hex(text)
+
+
 def path_hash(path: str) -> str:
     """The hash of a path, recorded when the path itself must not be stored."""
     return _sha256_hex(str(path))

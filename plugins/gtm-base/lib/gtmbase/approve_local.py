@@ -87,6 +87,9 @@ CODE_GIT_FAILED = "git-failed"
 CODE_UNREADABLE = compose_proposal.CODE_UNREADABLE
 CODE_NOTE_UNREADABLE = "note-of-unfinished-work-unreadable"
 CODE_RESUMED = "unfinished-work-finished"
+# A context change about one of the documents this would change is
+# written down twice, and the two copies do not agree.
+CODE_WRITTEN_TWICE = "one-change-written-twice"
 CODE_UNDONE = "unfinished-work-undone"
 
 # The folder the assistant keeps its own settings in, which a prepared change
@@ -469,13 +472,11 @@ def _entry_for(base_root: str, staging, entry_id: Optional[str]):
         return carried
     if not entry_id:
         return None
-    text = read_text(
-        os.path.join(base_root, constants.DECISIONS_DIR, entry_id + ".md")
-    )
+    _relative, text = base_reader.entry_path_and_text(base_root, entry_id)
     if text is None:
         return None
     try:
-        return formats.LedgerEntry.parse(text)
+        return formats.ChangeEntry.parse(text)
     except (ValidationError, PathError):
         return None
 
@@ -608,7 +609,6 @@ def _read_and_check(base_root, base_id, staging_path, git, today):
     from. Both calls work from the same reading, so the words that get written
     can only be the words that were read out loud.
     """
-    del base_id
     state_of_it = compose_proposal.shared_copy_state(base_root, runner=git)
     if state_of_it == compose_proposal.SHARED_COPY_PRESENT:
         return _refused(STATUS_REFUSED, CODE_HAS_SHARED_COPY, HAS_SHARED_COPY), None
@@ -665,6 +665,25 @@ def _read_and_check(base_root, base_id, staging_path, git, today):
             ),
             None,
         )
+
+    # A document a context change is written down twice about, with the two
+    # copies disagreeing, is not one anybody can approve a change to yet.
+    # Applying one writes a confirmation naming that change, which would
+    # settle a change nobody has read either copy of.
+    for relative in _affects_of(staging) or list(staging.target_paths):
+        disagreeing = confirm.refusal_while_written_twice(
+            base_root, base_id, relative, today, git=git
+        )
+        if disagreeing is not None:
+            return (
+                _refused(
+                    STATUS_REFUSED,
+                    CODE_WRITTEN_TWICE,
+                    disagreeing,
+                    staging.staging_id,
+                ),
+                None,
+            )
 
     # The same screens an outgoing proposal gets, because a base with no shared
     # copy becomes the shared copy the first time it is backed up.
@@ -841,7 +860,7 @@ def _plan_the_writes(base_root, reading, today, moment, git) -> "_Plan":
     carried = _carried_entry(staging)
     if carried is not None:
         entry = compose_proposal.ledger_entry_for(staging, today)
-        entry_path = "%s/%s.md" % (constants.DECISIONS_DIR, entry.id)
+        entry_path = base_reader.where_to_write_the_entry(base_root, entry.id)
         if os.path.lexists(os.path.join(base_root, entry_path.replace("/", os.sep))):
             raise ValidationError(ALREADY_RECORDED, code=CODE_ALREADY_RECORDED)
         files.append((entry_path, entry.render(), False))

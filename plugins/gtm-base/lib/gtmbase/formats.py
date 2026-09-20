@@ -1,8 +1,8 @@
 """Every file GTM Base reads or writes, with one parser and one writer each.
 
 The files are markdown with a short block of settings at the top, because a
-person has to be able to read a proposal in a review and a decision in the
-ledger without any tool at all. The block is a deliberately small part of YAML:
+person has to be able to read a proposal in a review and a context change
+without any tool at all. The block is a deliberately small part of YAML:
 plain values, lists, and nothing nested. Anything more, and a file the whole
 team can edit becomes a place to hide behaviour.
 """
@@ -353,14 +353,17 @@ def section_order(body: str, level: int = 2) -> List[str]:
     ]
 
 
-# --- The ledger entry --------------------------------------------------------
+# --- The context change entry ------------------------------------------------
 
-LEDGER_FIELDS = (
+# The settings an entry is written with today. A base written before the
+# rename holds `decided_on` and `decided_by` instead, so both spellings of
+# each are accepted when an entry is read and only these are ever written.
+CHANGE_FIELDS = (
     "id",
     "kind",
-    "decided_on",
+    "happened_on",
     "written_on",
-    "decided_by",
+    "noted_by",
     "source",
     "affects",
     "review_by",
@@ -368,42 +371,128 @@ LEDGER_FIELDS = (
     "run_id",
     "status",
 )
-LEDGER_REQUIRED = (
+CHANGE_REQUIRED = (
     "id",
     "kind",
-    "decided_on",
+    "happened_on",
     "written_on",
-    "decided_by",
+    "noted_by",
     "source",
     "review_by",
     "origin",
     "status",
 )
+# Every name a reader will accept, which is the list above plus the older
+# spelling of the two settings that were renamed.
+CHANGE_FIELDS_READ = CHANGE_FIELDS + tuple(
+    old for _new, old in constants.ENTRY_FIELD_PAIRS
+)
 
 
-class LedgerEntry(object):
-    """One decision the team made, written down the day it was written down."""
+def _same_value(one: Any, other: Any) -> bool:
+    """Whether two settings values say the same thing, written either way."""
+    if isinstance(one, datetime.date):
+        one = one.isoformat()
+    if isinstance(other, datetime.date):
+        other = other.isoformat()
+    return str(one).strip() == str(other).strip()
 
-    kind = "decision"
+
+def _fold_field_names(fields: Dict[str, Any]) -> Dict[str, Any]:
+    """The same settings with each older name replaced by the name in use.
+
+    A file that gives one setting under both of its names and says two
+    different things in them is refused rather than resolved. Picking one of
+    the two dates somebody wrote is a statement about their business that
+    nothing here is entitled to make, and the version of this that quietly
+    kept one of them made exactly that statement without saying so.
+
+    Both names saying the same thing is not a problem and is folded into one.
+    """
+    folded = dict(fields)
+    for new, old in constants.ENTRY_FIELD_PAIRS:
+        if old not in folded:
+            continue
+        older = folded.pop(old)
+        current = folded.get(new)
+        empty = current is None or (
+            isinstance(current, str) and not current.strip()
+        )
+        if empty:
+            folded[new] = older
+            continue
+        if not _same_value(current, older):
+            raise ValidationError(
+                "the context change gives %s and %s and they do not say the "
+                "same thing" % (new, old),
+                code="two-spellings-disagree",
+            )
+    return folded
+
+
+# The names Unit 1.4 replaced. They are kept pointing at the new lists so a
+# caller that still imports them reads the same thing.
+LEDGER_FIELDS = CHANGE_FIELDS
+LEDGER_REQUIRED = CHANGE_REQUIRED
+
+
+class ChangeEntry(object):
+    """One context change the base was told about, written down when it was.
+
+    A context change is anything that happened that makes a document no longer
+    true: something the team settled, a competitor's launch, a price change,
+    something learned about how customers describe the problem.
+
+    An entry written before the rename says `kind: decision` and carries
+    `decided_on` and `decided_by`. It is read here exactly as a new one is,
+    and writing always produces the new spelling.
+    """
+
+    kind = constants.ENTRY_KIND
 
     def __init__(
         self,
         id,
-        decided_on,
-        written_on,
-        decided_by,
-        source,
-        review_by,
-        origin,
-        status,
+        happened_on=None,
+        written_on=None,
+        noted_by=None,
+        source=None,
+        review_by=None,
+        origin=None,
+        status=None,
         affects=None,
         run_id=None,
         body="",
+        decided_on=None,
+        decided_by=None,
     ):
+        # The two settings that were renamed are accepted under either name,
+        # for the same reason the parser accepts either: a caller that says
+        # `decided_on` is not wrong about the change, only about what it is
+        # called, and every one of them would otherwise have had to change on
+        # the day the folder moved. A caller that gives both names and says
+        # two different things in them is refused rather than resolved, which
+        # is the same rule the parser follows.
+        for new, old, given, older in (
+            ("happened_on", "decided_on", happened_on, decided_on),
+            ("noted_by", "decided_by", noted_by, decided_by),
+        ):
+            if given is None or older is None:
+                continue
+            if not _same_value(given, older):
+                raise ValidationError(
+                    "the context change gives %s and %s and they do not say "
+                    "the same thing" % (new, old),
+                    code="two-spellings-disagree",
+                )
+        if happened_on is None:
+            happened_on = decided_on
+        if noted_by is None:
+            noted_by = decided_by
         self.id = id
-        self.decided_on = decided_on
+        self.happened_on = happened_on
         self.written_on = written_on
-        self.decided_by = decided_by
+        self.noted_by = noted_by
         self.source = source
         self.review_by = review_by
         self.origin = origin
@@ -412,27 +501,47 @@ class LedgerEntry(object):
         self.run_id = run_id
         self.body = body
 
+    # The two settings that were renamed, still readable under the name they
+    # had before, because a caller reading an entry is not what this rename is
+    # about and every one of them would otherwise have to change on the same
+    # day the folder moved.
+    @property
+    def decided_on(self):
+        return self.happened_on
+
+    @decided_on.setter
+    def decided_on(self, value):
+        self.happened_on = value
+
+    @property
+    def decided_by(self):
+        return self.noted_by
+
+    @decided_by.setter
+    def decided_by(self, value):
+        self.noted_by = value
+
     @classmethod
-    def parse(cls, text: str) -> "LedgerEntry":
+    def parse(cls, text: str) -> "ChangeEntry":
         block, body = split_document(text)
-        fields = parse_frontmatter(block)
-        _reject_unknown(fields, LEDGER_FIELDS, "ledger entry")
-        for name in LEDGER_REQUIRED:
-            _require(fields, name, "ledger entry")
-        if str(fields["kind"]).strip() != cls.kind:
+        fields = _fold_field_names(parse_frontmatter(block))
+        _reject_unknown(fields, CHANGE_FIELDS, "context change")
+        for name in CHANGE_REQUIRED:
+            _require(fields, name, "context change")
+        if str(fields["kind"]).strip() not in constants.ENTRY_KINDS:
             raise ValidationError(
-                "this file is not a decision", code="wrong-kind"
+                "this file is not a context change", code="wrong-kind"
             )
         return cls(
             id=str(fields["id"]).strip(),
-            decided_on=str(fields["decided_on"]).strip(),
+            happened_on=str(fields["happened_on"]).strip(),
             written_on=str(fields["written_on"]).strip(),
-            decided_by=str(fields["decided_by"]).strip(),
+            noted_by=str(fields["noted_by"]).strip(),
             source=str(fields["source"]).strip(),
             review_by=str(fields["review_by"]).strip(),
             origin=str(fields["origin"]).strip(),
             status=str(fields["status"]).strip(),
-            affects=_as_list(fields.get("affects", []), "affects", "ledger entry"),
+            affects=_as_list(fields.get("affects", []), "affects", "context change"),
             run_id=_optional(fields.get("run_id")),
             body=body.strip("\n"),
         )
@@ -441,9 +550,9 @@ class LedgerEntry(object):
         fields: Dict[str, Any] = {
             "id": self.id,
             "kind": self.kind,
-            "decided_on": self.decided_on,
+            "happened_on": self.happened_on,
             "written_on": self.written_on,
-            "decided_by": self.decided_by,
+            "noted_by": self.noted_by,
             "source": self.source,
             "affects": list(self.affects),
             "review_by": self.review_by,
@@ -461,47 +570,228 @@ class LedgerEntry(object):
     def render(self) -> str:
         return render_document(self.frontmatter(), self.body)
 
-    def validate(self, today: Optional[datetime.date] = None) -> "LedgerEntry":
-        """Check every field, and the three rules the dates have to obey."""
+    def validate(self, today: Optional[datetime.date] = None) -> "ChangeEntry":
+        """Check every field, and the three rules the dates have to obey.
+
+        The codes below are older than the rename and are left as they are.
+        Nothing shows one to a person, and every seat's own records already
+        hold them, so changing them would only make old records unreadable.
+        """
         check_staging_id(self.id)
-        if not self.decided_by.strip():
+        # A value that is not there at all is a missing setting, not a crash.
+        # It used to die on an attribute here, and the step that reads a base
+        # catches a refusal and not that, so one entry took the whole check
+        # down with it.
+        for name in CHANGE_REQUIRED:
+            if name == "kind":
+                continue
+            if getattr(self, name, None) is None:
+                raise ValidationError(
+                    "the context change is missing %s" % name,
+                    code="missing-field",
+                )
+        if not self.noted_by.strip():
             raise ValidationError(
-                "the ledger entry is missing decided_by", code="missing-field"
+                "the context change does not say who noted it",
+                code="missing-field",
             )
         if not self.source.strip():
             raise ValidationError(
-                "the ledger entry is missing source", code="missing-field"
+                "the context change is missing source", code="missing-field"
             )
-        decided = _as_date(self.decided_on, "decided_on", "ledger entry")
-        written = _as_date(self.written_on, "written_on", "ledger entry")
-        review = _as_date(self.review_by, "review_by", "ledger entry")
+        happened = _as_date(self.happened_on, "happened_on", "context change")
+        written = _as_date(self.written_on, "written_on", "context change")
+        review = _as_date(self.review_by, "review_by", "context change")
         day = today or datetime.date.today()
-        if decided > day:
+        if happened > day:
             raise ValidationError(
-                "the ledger entry says the decision was made in the future",
+                "the context change says it happened in the future",
                 code="decided-in-future",
             )
-        if review < decided:
+        if review < happened:
             raise ValidationError(
-                "the ledger entry asks to review it before the decision was made",
+                "the context change asks to look at it again before it happened",
                 code="review-before-decision",
             )
-        if written < decided:
+        if written < happened:
             raise ValidationError(
-                "the ledger entry says it was written before the decision was made",
+                "the context change says it was written down before it happened",
                 code="written-before-decision",
             )
-        _in_vocabulary(self.origin, constants.LEDGER_ORIGINS, "origin", "ledger entry")
-        _in_vocabulary(self.status, constants.LEDGER_STATUSES, "status", "ledger entry")
+        _in_vocabulary(
+            self.origin, constants.LEDGER_ORIGINS, "origin", "context change"
+        )
+        _in_vocabulary(
+            self.status, constants.LEDGER_STATUSES, "status", "context change"
+        )
         if self.run_id is not None:
             check_run_id(self.run_id)
         for path in self.affects:
             check_context_path_syntax(path)
         if not self.body.strip():
             raise ValidationError(
-                "the ledger entry is missing the decision itself", code="missing-body"
+                "the context change does not say what changed", code="missing-body"
             )
         return self
+
+
+# The name this class had before Unit 1.4. It is kept so that nothing that
+# reads an entry had to change on the day the folder moved.
+LedgerEntry = ChangeEntry
+
+
+# The mark some editors put at the very start of a file. It is invisible, it
+# is not whitespace, and a scan that does not expect it reads the first fence
+# as part of the body.
+BYTE_ORDER_MARK = "\ufeff"
+
+
+def _value_of(raw: str) -> str:
+    """One settings value as it is meant, with any quotation marks taken off."""
+    value = raw.strip()
+    if len(value) >= 2 and value[0] == value[-1] and value[0] in ('"', "'"):
+        return value[1:-1]
+    return value
+
+
+def rewrite_entry_keys(text: str) -> str:
+    """One entry's own bytes with only its renamed settings changed.
+
+    Written as a line-level rename rather than as a parse and a re-render,
+    because a re-render is a rewrite of the whole file: it turns every line
+    ending into the one this library happens to use, folds runs of blank
+    lines, requotes values, and puts the settings back in its own order. None
+    of that is the rename, and all of it is the person's own file being
+    changed underneath them.
+
+    Three things change and nothing else. The two renamed setting names, each
+    at the start of its own line inside the settings block. The value of
+    `kind`, when it is the word this rename replaces, quoted or not. And a
+    line giving one setting under its older name when the same setting is
+    already there under its newer name saying the same thing, which is taken
+    away, because leaving both would put the same name on two lines and make
+    a file nothing can read.
+
+    Nothing here is trusted to have worked. `rewritten_safely` below reads the
+    answer back and refuses unless it says exactly what the file said.
+    """
+    if not isinstance(text, str):
+        raise ValidationError("this file is not text", code="not-text")
+    block, _body = split_document(text)
+    fields = parse_frontmatter(block)
+    # A setting given under both names is folded into one here, and this is
+    # what refuses the two of them disagreeing, so the rename below can never
+    # quietly keep one of two different answers.
+    _fold_field_names(fields)
+
+    mark = BYTE_ORDER_MARK if text.startswith(BYTE_ORDER_MARK) else ""
+    body = text[len(mark) :]
+    lines = body.split("\n")
+    fences = [
+        number
+        for number, line in enumerate(lines)
+        if line.strip() == FRONTMATTER_FENCE
+    ]
+    if len(fences) < 2:
+        raise ValidationError(
+            "the settings block at the top of this file is never closed",
+            code="unclosed-frontmatter",
+        )
+    start, stop = fences[0], fences[1]
+    renames = dict((old, new) for new, old in constants.ENTRY_FIELD_PAIRS)
+    kept = []
+    for number, line in enumerate(lines):
+        if not (start < number < stop):
+            kept.append(line)
+            continue
+        name, separator, value = line.partition(":")
+        if not separator:
+            kept.append(line)
+            continue
+        plain = name.strip()
+        if plain in renames:
+            newer = renames[plain]
+            if newer in fields and newer in parse_frontmatter(block):
+                # The newer name is already on a line of its own, and the two
+                # agree, or the fold above would have refused. One of the two
+                # lines has to go, and it is the older one.
+                continue
+            kept.append(name.replace(plain, renames[plain], 1) + ":" + value)
+            continue
+        if plain == "kind" and _value_of(value) == constants.LEGACY_ENTRY_KIND:
+            kept.append(
+                name
+                + ":"
+                + value.replace(
+                    constants.LEGACY_ENTRY_KIND, constants.ENTRY_KIND, 1
+                )
+            )
+            continue
+        kept.append(line)
+    return mark + "\n".join(kept)
+
+
+# What the rewrite refuses with, each of them a file it will not touch.
+CODE_REWRITE_CHANGES_IT = "the-rename-would-change-what-it-says"
+CODE_REWRITE_LEAVES_OLDER = "the-rename-left-the-older-words-behind"
+
+
+def entry_values(entry) -> tuple:
+    """Everything one context change says, as plain values.
+
+    It is the one definition, used to compare two copies of a change and to
+    check that a rename changed nothing but the names.
+    """
+    return (
+        entry.id,
+        str(entry.happened_on),
+        str(entry.written_on),
+        str(entry.noted_by),
+        str(entry.source),
+        str(entry.review_by),
+        str(entry.origin),
+        str(entry.status),
+        str(entry.run_id or ""),
+        tuple(str(path) for path in entry.affects),
+        entry.body,
+    )
+
+
+def rewritten_safely(text: str) -> str:
+    """The entry renamed, read back, and refused unless it says the same thing.
+
+    This is the invariant the whole move rests on: nothing is ever written to
+    a base in a form the reader cannot read back to exactly the values it read
+    before. A rename that produces something unreadable, something that says
+    anything different, or something still carrying the older words is a
+    refusal here, where nothing has been written yet, rather than a saved file
+    somebody finds out about later.
+    """
+    before = ChangeEntry.parse(text)
+    written = rewrite_entry_keys(text)
+    after = ChangeEntry.parse(written)
+    if entry_values(before) != entry_values(after):
+        raise ValidationError(
+            "renaming the settings in this file would change what it says",
+            code=CODE_REWRITE_CHANGES_IT,
+        )
+    block, _body = split_document(written)
+    fields = parse_frontmatter(block)
+    older = [old for _new, old in constants.ENTRY_FIELD_PAIRS if old in fields]
+    if older or _value_of(str(fields.get("kind", ""))) != constants.ENTRY_KIND:
+        raise ValidationError(
+            "renaming the settings in this file would leave the older words "
+            "behind",
+            code=CODE_REWRITE_LEAVES_OLDER,
+        )
+    # Doing it twice has to give the same answer, or the file is one this
+    # cannot be run on again safely.
+    if rewrite_entry_keys(written) != written:
+        raise ValidationError(
+            "renaming the settings in this file does not settle",
+            code=CODE_REWRITE_CHANGES_IT,
+        )
+    return written
 
 
 # --- The confirmation line ---------------------------------------------------
@@ -822,7 +1112,8 @@ class CorrectionsFile(object):
             )
         if entry != self.entry_id or source != self.source_id:
             raise ValidationError(
-                "the marker names a different decision or source", code="marker-mismatch"
+                "the marker names a different context change or source",
+                code="marker-mismatch",
             )
         if not self.what_changed.strip():
             raise ValidationError(
@@ -1032,7 +1323,16 @@ ABOUT_SENTENCE = (
     "This proposal was drafted by an AI assistant from the evidence above and "
     "has not been reviewed by a person yet."
 )
-KEEP_THE_DECISION_HINT = (
+KEEP_THE_CHANGE_HINT = (
+    "If the context change is right but the edit is wrong, say keep the change "
+    "and drop the edit."
+)
+# The name this sentence had before Unit 1.4, kept so nothing that imports it
+# breaks. Its words are the ones above.
+KEEP_THE_DECISION_HINT = KEEP_THE_CHANGE_HINT
+# The words it had before Unit 1.4. Nothing writes them any more, and a
+# proposal raised before the rename still carries them, so they are read.
+LEGACY_KEEP_HINT = (
     "If the decision is right but the edit is wrong, say keep the decision and "
     "drop the edit."
 )
@@ -1071,7 +1371,7 @@ def render_pr_body(fields: Dict[str, Any]) -> str:
             fields["confidence"].strip(),
             str(rule).strip(),
             ABOUT_SENTENCE,
-            KEEP_THE_DECISION_HINT,
+            KEEP_THE_CHANGE_HINT,
             marker,
         )
     )
@@ -1117,9 +1417,11 @@ def parse_pr_body(text: str) -> Dict[str, Any]:
             "the proposal body does not say that an assistant drafted it",
             code="missing-about-sentence",
         )
-    if KEEP_THE_DECISION_HINT not in about:
+    # A proposal raised before the rename carries the older sentence. It is
+    # still a proposal somebody is waiting on, so it is read as it is written.
+    if KEEP_THE_CHANGE_HINT not in about and LEGACY_KEEP_HINT not in about:
         raise ValidationError(
-            "the proposal body does not say how to keep the decision and drop the edit",
+            "the proposal body does not say how to keep the change and drop the edit",
             code="missing-hint",
         )
     lines = [line for line in text.strip().split("\n") if line.strip()]
@@ -1155,7 +1457,14 @@ STAGING_FIELDS = (
 )
 STAGING_SCHEMA = 1
 
-DECISION_SECTION = "Decision"
+# The heading the entry a proposal carries sits under. A proposal staged
+# before the rename says "Decision" instead, and both are read so that a
+# proposal already waiting is not thrown away by the rename.
+CHANGE_SECTION = "Context change"
+LEGACY_CHANGE_SECTION = "Decision"
+CHANGE_SECTIONS = (CHANGE_SECTION, LEGACY_CHANGE_SECTION)
+# The name this had before Unit 1.4, kept so nothing that imports it breaks.
+DECISION_SECTION = CHANGE_SECTION
 EDITS_SECTION = "Edits"
 EXCERPT_SECTION = "Excerpt"
 
@@ -1216,7 +1525,7 @@ class ProposalStaging(object):
     def render(self) -> str:
         parts = []
         if self.decision_block:
-            parts.append("## %s\n\n%s" % (DECISION_SECTION, _fenced(self.decision_block)))
+            parts.append("## %s\n\n%s" % (CHANGE_SECTION, _fenced(self.decision_block)))
         parts.append("## %s\n" % EDITS_SECTION)
         for number, edit in enumerate(self.edits, start=1):
             parts.append(
@@ -1250,11 +1559,13 @@ class ProposalStaging(object):
             _require(fields, name, "proposal")
         sections = split_sections(body)
         decision_block = None
-        if DECISION_SECTION in sections:
-            decision_text = sections[DECISION_SECTION].strip("\n")
-            if decision_text:
-                lines = decision_text.split("\n")
-                decision_block, _ = _read_fenced(lines, 0)
+        for heading in CHANGE_SECTIONS:
+            if heading not in sections:
+                continue
+            carried = sections[heading].strip("\n")
+            if carried:
+                decision_block, _ = _read_fenced(carried.split("\n"), 0)
+                break
         excerpt = ""
         if EXCERPT_SECTION in sections:
             excerpt_text = sections[EXCERPT_SECTION].strip("\n")

@@ -345,6 +345,10 @@ SEAT_DEFAULTS = {
     "weekly_line_said_on": None,
     # The day the base may speak up again, when somebody asked for quiet.
     "silent_until": None,
+    # The day the offer to store context changes the new way may be made
+    # again, when somebody said not now to it. Without this the offer came
+    # back at every single review, for ever, which is not an offer.
+    "changes_move_put_off_until": None,
 }
 
 # How long a week is, for the one line a week.

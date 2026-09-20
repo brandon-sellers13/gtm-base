@@ -1,6 +1,6 @@
 ---
 name: propose-change
-description: Turn a prepared change to a context file, or a change the person made by hand, into a proposal the team can review, carrying the decision behind it and a record of what changed. Use when a staged proposal is waiting, or when the person says they edited a file themselves and wants it raised for review.
+description: Raise one prepared edit to a context file, or an edit the person made by hand, as a proposal the team can review, carrying the context change behind it and a record of what was edited. Use when a staged proposal is waiting, or when the person says they edited a file themselves and wants it raised for review.
 ---
 
 # Propose a change
@@ -36,10 +36,10 @@ Ask which of the three answers they want before you write any of the change.
 ## The two ways a proposal starts
 
 The first way is a staged file another skill has already written. The stale
-check writes one for every file a decision has moved past, and the reading
+check writes one for every file a context change has moved past, and the reading
 skills write one for every change a meeting suggested. Each staged file names
 the file to change, the heading inside it, the new words, the evidence behind
-them, and the decision that prompted them.
+them, and the context change that prompted them.
 
 The second way is the person's own hand. Somebody reads a report, opens
 `context/strategy/icp.md`, changes a paragraph, and saves it. Their change stays
@@ -67,7 +67,7 @@ trust.
    review. Turned down before, and the run stops until the person says to raise
    it anyway.
 5. A working folder is prepared away from the person's own folder, the change is
-   applied there, the decision behind it is written beside the change, and so is
+   applied there, the context change behind it is written beside the edit, and so is
    the record of what changed and why.
 6. The whole lot is sent and the review is opened. The staged file is then kept
    as the copy a proposal can be raised from again, and the working folder is

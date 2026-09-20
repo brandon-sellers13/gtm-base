@@ -128,13 +128,13 @@ class TestTheDecisionPromptPresentsTheDate(unittest.TestCase):
     """The one date everything is measured against is read back for correction."""
 
     def test_it_asks_for_the_decided_date_to_be_corrected(self):
-        text = prompt(drafting.STEP_LEDGER)
+        text = prompt(drafting.STEP_CHANGE)
         self.assertIn("## Say the date out loud and ask about it", text)
         self.assertIn("correct it if it is wrong", flat(text))
         self.assertIn("Tell me if that is the wrong day", flat(text))
 
     def test_it_names_the_profile_the_decision_affects(self):
-        self.assertIn("{{icp_path}}", prompt(drafting.STEP_LEDGER))
+        self.assertIn("{{icp_path}}", prompt(drafting.STEP_CHANGE))
 
 
 class TestThePositioningPromptPutsTheirWordsFirst(unittest.TestCase):

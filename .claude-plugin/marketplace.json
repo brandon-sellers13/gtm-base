@@ -10,7 +10,7 @@
     {
       "name": "gtm-base",
       "source": "./plugins/gtm-base",
-      "description": "Keep a company's marketing context current: an inbox for meeting notes, proposals with evidence, a decisions ledger, and owner confirmations.",
+      "description": "Keep a company's marketing context current: an inbox for meeting notes, proposals with evidence, a dated record of context changes, and owner confirmations.",
       "version": "0.2.6",
       "author": {
         "name": "Brandon Sellers"

@@ -1,5 +1,9 @@
 # Approving a prepared change on a base with no shared copy
 
+A prepared change is an edit to one document, written because a context change
+has moved past it. Everything below calls that edit a change, and it names the
+context change behind it wherever the two could be confused.
+
 A base with no shared copy has nowhere to send a proposed change, so the owner
 approves it here instead. These are the rules that path follows, in plain
 words, so nobody has to read the code to know what it will and will not do.

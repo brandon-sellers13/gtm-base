@@ -8,7 +8,7 @@ import unittest
 import support
 from support import FIXTURES_DIR, TEMPLATES_DIR, read
 
-from gtmbase import formats
+from gtmbase import constants, formats
 from gtmbase.errors import PathError, ValidationError
 from gtmbase.validate import marker_line
 
@@ -441,10 +441,69 @@ class TestInboxItem(unittest.TestCase):
         self.assertFalse(item.partial)
 
 
+class TestTheLayoutABaseWrittenBeforeTheRenameHolds(unittest.TestCase):
+    """The kept fixtures are read, which is the whole point of keeping them."""
+
+    def older(self):
+        return read(os.path.join(FIXTURES_DIR, "ledger-entry.md"))
+
+    def newer(self):
+        return read(os.path.join(FIXTURES_DIR, "change-entry.md"))
+
+    def test_the_older_fixture_says_the_older_words(self):
+        text = self.older()
+        self.assertIn("kind: decision", text)
+        self.assertIn("decided_on:", text)
+        self.assertIn("decided_by:", text)
+
+    def test_it_reads_as_the_same_change_as_the_newer_one(self):
+        older = formats.ChangeEntry.parse(self.older())
+        newer = formats.ChangeEntry.parse(self.newer())
+        for name in (
+            "id",
+            "happened_on",
+            "written_on",
+            "noted_by",
+            "source",
+            "review_by",
+            "origin",
+            "status",
+            "body",
+        ):
+            self.assertEqual(
+                getattr(newer, name), getattr(older, name), name
+            )
+        self.assertEqual(newer.affects, older.affects)
+
+    def test_the_setting_that_names_a_person_is_readable_either_way(self):
+        older = formats.ChangeEntry.parse(self.older())
+        self.assertEqual(older.noted_by, older.decided_by)
+        self.assertEqual(older.happened_on, older.decided_on)
+
+    def test_writing_it_out_always_says_the_words_in_use_today(self):
+        rendered = formats.ChangeEntry.parse(self.older()).render()
+        self.assertIn("kind: change", rendered)
+        self.assertIn("happened_on:", rendered)
+        self.assertIn("noted_by:", rendered)
+        self.assertNotIn("decided_", rendered)
+
+    def test_the_rename_turns_the_older_fixture_into_the_newer_one(self):
+        self.assertEqual(
+            self.newer(), formats.rewrite_entry_keys(self.older())
+        )
+
+
 class TestTemplates(unittest.TestCase):
     def test_every_template_parses_with_its_own_parser(self):
-        entry = formats.LedgerEntry.parse(read(os.path.join(TEMPLATES_DIR, "ledger-entry.md")))
+        written = read(os.path.join(TEMPLATES_DIR, "change-entry.md"))
+        entry = formats.ChangeEntry.parse(written)
         entry.validate(TODAY)
+        # Asserted on the text rather than on the class, because the class
+        # says the same thing whatever the file happens to hold.
+        self.assertIn("kind: %s" % constants.ENTRY_KIND, written)
+        self.assertIn("happened_on:", written)
+        self.assertIn("noted_by:", written)
+        self.assertNotIn("decided_", written)
 
         lines, malformed = formats.parse_confirmations_file(
             read(os.path.join(TEMPLATES_DIR, "confirmation-line.md"))
@@ -469,7 +528,12 @@ class TestTemplates(unittest.TestCase):
         self.assertEqual("decision", item.mode)
 
     def test_every_template_uses_the_placeholder_values(self):
-        for name in ("ledger-entry.md", "corrections-file.md", "proposal-staging.md", "pr-body.md"):
+        for name in (
+            "change-entry.md",
+            "corrections-file.md",
+            "proposal-staging.md",
+            "pr-body.md",
+        ):
             text = read(os.path.join(TEMPLATES_DIR, name))
             self.assertIn("stg-0000000000000000", text, name)
 

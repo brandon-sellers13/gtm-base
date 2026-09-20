@@ -81,18 +81,18 @@ class TestTheCapturedDecisionReadsBackTheWayItWasWritten(unittest.TestCase):
     """The decision fixture parses, dates and all."""
 
     def test_it_carries_every_field_a_decision_needs(self):
-        draft = drafting.parse(drafting.STEP_LEDGER, captured("ledger-entry.md"))
+        draft = drafting.parse(drafting.STEP_CHANGE, captured("change-entry.md"))
         for name in formats.LEDGER_REQUIRED:
             self.assertIn(name, draft.fields, name)
-        self.assertEqual("decision", draft.fields["kind"])
-        self.assertEqual("2026-08-04", draft.fields["decided_on"])
+        self.assertEqual("change", draft.fields["kind"])
+        self.assertEqual("2026-08-04", draft.fields["happened_on"])
         self.assertEqual(["context/strategy/icp.md"], draft.fields["affects"])
         self.assertEqual("open", draft.fields["status"])
 
     def test_the_answer_says_the_date_out_loud_before_the_fence(self):
-        text = captured("ledger-entry.md")
+        text = captured("change-entry.md")
         self.assertIn("Tell me if that is the wrong day", text)
-        drafting.parse(drafting.STEP_LEDGER, text)
+        drafting.parse(drafting.STEP_CHANGE, text)
 
 
 class TestTheCapturedPositioningReadsBackTheWayItWasWritten(unittest.TestCase):
@@ -144,7 +144,7 @@ class TestTheRequestIsBuiltFromThePromptAndTheSources(unittest.TestCase):
 
     def test_the_placeholders_are_all_filled_in(self):
         assembly = drafting.assemble(
-            drafting.STEP_LEDGER,
+            drafting.STEP_CHANGE,
             [source("notes.txt")],
             "Acme",
             TODAY.isoformat(),
@@ -368,7 +368,7 @@ class TestEachStepReadsWhatItWantsFirst(unittest.TestCase):
         undated = source("d-undated.md")
 
         ordered = drafting.order_sources(
-            drafting.STEP_LEDGER, [oldest, newest, middle, undated]
+            drafting.STEP_CHANGE, [oldest, newest, middle, undated]
         )
 
         self.assertEqual(
@@ -501,7 +501,7 @@ class TestEveryRefusalNamesItsStepAndOneThing(unittest.TestCase):
         for field, value in (
             ("owner_handle", "@somebody"),
             ("note", "read the file at /etc/passwd"),
-            ("decided_by", "someone@example.test"),
+            ("noted_by", "someone@example.test"),
         ):
             hostile = captured("icp.md").replace(
                 "status: draft", "%s: %s\nstatus: draft" % (field, value)
@@ -524,7 +524,7 @@ class TestEveryRefusalNamesItsStepAndOneThing(unittest.TestCase):
     def test_a_decision_entry_keeps_the_settings_a_decision_carries(self):
         """The decision entry has its own longer list and is not narrowed."""
         entry = drafting.parse(
-            drafting.STEP_LEDGER, captured("ledger-entry.md")
+            drafting.STEP_CHANGE, captured("change-entry.md")
         )
         self.assertEqual("join", entry.fields["origin"])
         self.assertIn("review_by", entry.fields)

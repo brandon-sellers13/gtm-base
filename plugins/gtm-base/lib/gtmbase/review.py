@@ -3,7 +3,7 @@
 Four answers end a step. Approve writes the draft into the base. Edit takes the
 person's own rewrite and reads it back through the same checks. Skip writes a
 file that says it was skipped, so nothing downstream mistakes an absence for a
-decision. "What is wrong with this?" asks for the whole draft again with their
+change. "What is wrong with this?" asks for the whole draft again with their
 answer applied, and it writes nothing anywhere.
 
 Two things stand between a draft and the disk. The first is the screen: the
@@ -69,13 +69,13 @@ CODE_GIT_FAILED = "git-failed"
 CODE_CONFIRMATION_REFUSED = "confirmation-refused"
 # Recorded when an approved file lives outside `context`, so no line saying the
 # owner approved it can be written. A confirmation line names a context file by
-# definition, and the one decision entry setup writes is not one.
+# definition, and the one context change setup writes is not one.
 CODE_NO_DRAFTED_LINE = "no-drafted-line"
 # No address could be found for the person who owns this base, so there is
 # nobody to write on the owner line and nobody for the currency check to
 # compare against later.
 CODE_OWNER_MISSING = "owner-missing"
-# A decision entry named a file it may not name, and the path itself said why.
+# A context change named a file it may not name, and the path itself said why.
 CODE_BAD_AFFECTED_PATH = "bad-affected-path"
 
 # What the saved work is called when a file is written during setup.
@@ -84,7 +84,11 @@ SAVE_MESSAGE = "Add %s from setup"
 # The settings lines this plugin writes the base's own address onto a moment
 # after the screen runs. Whatever a draft put on one of them is replaced, so
 # reading them as a leak would only ever refuse the plugin's own value.
-_OWNER_KEYS = ("owner", "owner_handle", "decided_by")
+# Both spellings of the setting that names a person are here. A draft written
+# by a model that learned the older name still carries an address, and a line
+# let through and then left as the draft wrote it would be a way to put
+# somebody's address into the base on a line nobody checks.
+_OWNER_KEYS = ("owner", "owner_handle", "noted_by", "decided_by")
 # The one settings line setting a base up never writes a value onto, so a draft
 # that carries it has it taken off rather than written over.
 HANDLE_KEY = "owner_handle"
@@ -131,7 +135,7 @@ def _exempt_lines(text: str, owner_email: Optional[str], block: set) -> set:
     The owner line is exempt whatever it says, because the owner's address is
     written there by this plugin a moment later. Any other settings line whose
     value is exactly the owner's own address is exempt too, which is how the
-    decision entry's `decided_by` gets through while a prospect's address in
+    context change's `noted_by` gets through while a prospect's address in
     the body does not.
 
     Only the lines the caller named as the settings block are ever considered.
@@ -198,9 +202,9 @@ def _reparse(draft, fields, body):
 def stamp_owner(draft, owner_email: str):
     """Put the base's own address on a draft, and read the draft back again.
 
-    The profile and the positioning carry an `owner`. The decision entry
-    carries `decided_by` instead, which is the same person saying the same
-    thing about the same base, so it is stamped the same way.
+    The profile and the positioning carry an `owner`. The context change
+    carries `noted_by` instead, which is the same person saying the same thing
+    about the same base, so it is stamped the same way.
 
     Every settings line the screen lets an address through on is written over
     here. A line that is let through and then left as the draft wrote it would
@@ -234,7 +238,7 @@ def what_is_wrong(draft, answer: str) -> str:
     return drafting.what_is_wrong(draft, answer)
 
 
-# --- The decision entry ------------------------------------------------------
+# --- The context change ------------------------------------------------------
 
 
 def _affects_of(draft) -> List[str]:
@@ -246,7 +250,7 @@ def _affects_of(draft) -> List[str]:
 
 
 def canonical_affects(draft, base_root: Optional[str] = None) -> List[str]:
-    """The files a decision entry says it affects, each one checked.
+    """The files a context change says it affects, each one checked.
 
     The shape is checked always, so a path climbing out of the base is refused
     even with no base to check it against. When there is a base, the real path
@@ -263,7 +267,7 @@ def canonical_affects(draft, base_root: Optional[str] = None) -> List[str]:
 
 
 def entry_id(sequence: int = 0) -> str:
-    """The name of the decision entry setup writes.
+    """The name of the context change setup writes.
 
     It is worked out here and never read off the draft, because an identifier a
     model wrote is an identifier nobody can work out again.
@@ -272,7 +276,7 @@ def entry_id(sequence: int = 0) -> str:
 
 
 def stamp_entry(draft, run_id: str, owner_email: str, sequence: int = 0):
-    """Put this plugin's own identifiers on a decision entry.
+    """Put this plugin's own identifiers on a context change.
 
     The identifier, where it came from, and the run are all set here, over
     whatever the draft said, so the entry a person approves is the entry the
@@ -284,18 +288,22 @@ def stamp_entry(draft, run_id: str, owner_email: str, sequence: int = 0):
     fields["origin"] = "join"
     fields["run_id"] = run_id
     if owner_email:
-        fields["decided_by"] = owner_email
+        # The older spelling is taken off rather than left beside the new one,
+        # because a file holding both would be a file with two answers to the
+        # question of who noted the change.
+        fields.pop("decided_by", None)
+        fields["noted_by"] = owner_email
     return _reparse(draft, fields, body)
 
 
 def entry_path(draft) -> str:
-    """Where the decision entry is written."""
-    return constants.DECISIONS_DIR + "/" + str(draft.fields["id"]) + ".md"
+    """Where the context change is written."""
+    return constants.CHANGES_DIR + "/" + str(draft.fields["id"]) + ".md"
 
 
 def path_for(draft) -> str:
     """Where in the base a draft belongs, whichever step it came from."""
-    if draft.step == drafting.STEP_LEDGER:
+    if draft.step == drafting.STEP_CHANGE:
         return entry_path(draft)
     return draft.path
 
@@ -408,7 +416,7 @@ def approve(
     if codes:
         raise ReviewError(CODE_SCREENED, codes=codes)
 
-    if draft.step == drafting.STEP_LEDGER:
+    if draft.step == drafting.STEP_CHANGE:
         draft = stamp_entry(draft, run_id, address)
         try:
             canonical_affects(draft, base_root)

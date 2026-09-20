@@ -110,7 +110,7 @@ def show_pending(base_id):
 
 def _why(item):
     if item.get("trigger") == "ledger":
-        return "a decision the team wrote down has moved past it"
+        return "a context change written down in this base has moved past it"
     if item.get("trigger") == "drafted":
         return "it was written while the base was being set up"
     return "nobody has said it is still right for a while"

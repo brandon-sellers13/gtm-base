@@ -5,6 +5,10 @@ it, the GitHub page shows it, and the hosted view planned for later shows the
 same text again without changing a word of it. Nothing is rendered from
 anywhere else, so anything a reviewer needs has to be in here.
 
+A proposal carries an edit to one document and, where there is one, the context
+change behind that edit. Below, the edit is called a change, and the context
+change is named in full wherever the two could be confused.
+
 ## The parts, in this order
 
 1. **What changed.** One line starting `Before:` and one line starting `After:`,
@@ -19,11 +23,11 @@ anywhere else, so anything a reviewer needs has to be in here.
    reviewer alongside anything else.
 6. **About this proposal.** Two fixed sentences: that an assistant drafted it
    from the evidence above and that no person has reviewed it yet, and that the
-   reviewer can keep the decision and drop the change.
+   reviewer can keep the context change and drop the edit.
 
 The last line of the text is the marker. It reads
-`gtm-base proposal <proposal id> entry <decision id> source <source id>`, with a
-single dash standing in wherever there is no decision or no source.
+`gtm-base proposal <proposal id> entry <change id> source <source id>`, with a
+single dash standing in wherever there is no context change or no source.
 
 ## The marker is visible text, never a hidden note
 
@@ -42,35 +46,35 @@ Take every path in the `context` folder that the record itself lists in
 change leaves them. Put the texts end to end, one after another, and hash the
 result with line endings made uniform first. That single value is the hash.
 
-The record lists the files the proposal changes in that same order, followed by
-the decision it carries and anything else it adds. Those other files, and the
+The record lists the files the proposal edits in that same order, followed by
+the context change it carries and anything else it adds. Those other files, and the
 record itself, are not part of the hash, because only files in the `context`
 folder count.
 
 Anybody can work the hash out again from the change alone, which is the point.
-The step that decides whether an accepted record really does settle a decision
-for a file does exactly that: it reads each of those files as the accepted
+The step that decides whether an accepted record really does settle a context
+change for a file does exactly that: it reads each of those files as the accepted
 change left them, joins them in the listed order, hashes the result, and accepts
 the record only when the value matches the one the record carries. A record
 whose value does not match settles nothing, and it is reported.
 
-## Naming a decision the base already holds
+## Naming a context change the base already holds
 
-A proposal that carries a new decision writes that decision out in full, and the
-decision takes the same identifier as the proposal itself. A proposal that only
-brings a file in line with a decision the base already holds is different: it
-names that decision in its marker line and quotes it in the evidence, and it
-carries no decision of its own, because the decision is already written down.
-The two cases are told apart by the identifiers. A marker whose decision
-identifier is the proposal's own identifier means a new decision, and the
-proposal has to carry it. A marker naming any other decision means one that is
-already there, and the proposal must not carry a second copy of it.
+A proposal that carries a new context change writes that change out in full,
+and the change takes the same identifier as the proposal itself. A proposal
+that only brings a file in line with a change the base already holds is
+different, it names that change in its marker line and quotes it in the
+evidence, and it carries no change of its own, because the change is already
+written down. The two cases are told apart by the identifiers. A marker whose
+change identifier is the proposal's own identifier means a new context change,
+and the proposal has to carry it. A marker naming any other change means one
+that is already there, and the proposal must not carry a second copy of it.
 
 ## What can change after a proposal is raised, and what cannot
 
-Fixed from the moment it is raised: the decision it carries, the identifier of
-that decision, the identifier of the source, the identifier of the proposal, and
-the name of the line of work it sits on.
+Fixed from the moment it is raised: the context change it carries, the
+identifier of that change, the identifier of the source, the identifier of the
+proposal, and the name of the line of work it sits on.
 
 May still change: the words in the files it changes, the Before and After lines
 in the text, and the "What changed" part of the record along with its hash. The

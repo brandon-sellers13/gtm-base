@@ -273,7 +273,7 @@ def build_parser():
     parser = argparse.ArgumentParser(add_help=True)
     parser.add_argument("mode", help="which step of setting a base up to run")
     parser.add_argument("--run", help="the identifier of this setup run")
-    parser.add_argument("--step", help="icp, ledger-entry, or positioning")
+    parser.add_argument("--step", help="icp, change-entry, or positioning")
     parser.add_argument("--company", help="the company the base is for")
     parser.add_argument("--content-folder", help="the folder holding their material")
     parser.add_argument("--folder", help="the folder to list or to fix the list of")

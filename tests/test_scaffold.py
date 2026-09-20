@@ -232,8 +232,8 @@ class TestTemplateTree(unittest.TestCase):
         for open_path in (
             "work/confirmations/context--strategy--icp.md",
             "work/confirmations/.gitkeep",
-            "work/decisions/2026-01-01-a-decision.md",
-            "work/decisions/.gitkeep",
+            "work/changes/2026-01-01-a-change.md",
+            "work/changes/.gitkeep",
         ):
             self.assertFalse(
                 any_rule_matches(rules, open_path),

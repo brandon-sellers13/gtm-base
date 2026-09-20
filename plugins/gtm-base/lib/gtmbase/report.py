@@ -27,8 +27,8 @@ from .validate import MARKER_PREFIX
 # The window every number is counted over.
 WINDOW_DAYS = 28
 
-# The note saved with work a proposal prepared, which is how a decision nobody
-# typed by hand is told from one somebody did.
+# The note saved with work a proposal prepared, which is how a context change
+# nobody typed by hand is told from one somebody did.
 DRAFTED_COMMIT_PREFIX = "Proposal "
 # The note saved when the owner of a base with no shared copy approves a
 # prepared change in Claude. It is the same event as a proposal accepted on a
@@ -37,8 +37,8 @@ DRAFTED_COMMIT_PREFIX = "Proposal "
 LOCAL_APPROVAL_COMMIT_PREFIX = "Approved prepared change "
 DRAFTED_COMMIT_PREFIXES = (DRAFTED_COMMIT_PREFIX, LOCAL_APPROVAL_COMMIT_PREFIX)
 
-# The decisions a catch is counted for: ones that came out of a run rather than
-# out of somebody sitting down and writing them.
+# The context changes a catch is counted for: ones that came out of a run
+# rather than out of somebody sitting down and writing them.
 CAUGHT_ORIGINS = ("inbox", "ledger")
 
 # Most reviews the summary asks the shared copy for at once.
@@ -75,8 +75,8 @@ def _in_window(day: Optional[datetime.date], today: datetime.date) -> bool:
     return 0 <= (today - day).days < WINDOW_DAYS
 
 
-def _introducing_subject(base_root: str, relative: str, git: GitRunner) -> str:
-    """The note saved with the change that first added one file."""
+def _first_added_by(base_root: str, relative: str, git: GitRunner) -> str:
+    """The note saved with the change that first added one path, as it stands."""
     result = git.run(
         ["log", "--diff-filter=A", "--format=%s", "--", relative], cwd=base_root
     )
@@ -86,19 +86,62 @@ def _introducing_subject(base_root: str, relative: str, git: GitRunner) -> str:
     return subjects[-1] if subjects else ""
 
 
+def _introducing_subject(base_root: str, relative: str, git: GitRunner) -> str:
+    """The note saved with the change that first added one context change.
+
+    A context change that has been moved was first written under the older
+    path, so both names are asked about together and the oldest answer wins.
+    Both are always asked. An earlier version recognised the move by the note
+    it saves and asked the older path only then, which broke the moment
+    somebody tidied their own history and that note stopped existing. Nothing
+    here depends on what any note says any more.
+
+    This is also why the move carries no content change with it. A move and a
+    rewrite saved together is a file git reads as newly added under both
+    names, and then neither look finds where it came from.
+    """
+    name = relative.split("/")[-1]
+    both = [relative]
+    if relative.startswith(constants.CHANGES_DIR + "/"):
+        both.append(constants.LEGACY_CHANGES_DIR + "/" + name)
+    result = git.run(
+        ["log", "--diff-filter=A", "--format=%s", "--"] + both, cwd=base_root
+    )
+    if not result.ok:
+        return ""
+    subjects = [line.strip() for line in result.stdout.split("\n") if line.strip()]
+    return subjects[-1] if subjects else ""
+
+
+def _entry_path_and_text(base_root: str, entry_id: str):
+    """Where one context change is on this base, and what it says.
+
+    Both folders are looked in, newest layout first, because a base may hold
+    either one while a migration has not run or a copy from before it came
+    back.
+    """
+    for folder in (constants.CHANGES_DIR, constants.LEGACY_CHANGES_DIR):
+        relative = "%s/%s.md" % (folder, entry_id)
+        text = read_text(os.path.join(base_root, relative.replace("/", os.sep)))
+        if text is not None:
+            return relative, text
+    return None, None
+
+
 # --- Catches -----------------------------------------------------------------
 
 
 def catches(
     base_root: str, git: GitRunner, today: datetime.date
 ) -> Dict[str, Any]:
-    """Accepted records for decisions no person had entered before the run.
+    """Accepted records for context changes no person had entered before the run.
 
-    A decision counts as one nobody entered by hand when the file holding it was
-    first added by a prepared proposal, which the note saved with that change
-    says in its own first word. A decision somebody typed and saved themselves
-    carries their own note, so it is not counted, which is the point: a catch is
-    something the run found, not something the person already knew.
+    A context change counts as one nobody entered by hand when the file holding
+    it was first added by a prepared proposal, which the note saved with that
+    change says in its own first word. A change somebody typed and saved
+    themselves carries their own note, so it is not counted, which is the
+    point: a catch is something the run found, not something the person
+    already knew.
 
     A prepared change the owner approved in Claude, on a base with no shared
     copy, carries its own note and counts exactly as one accepted on a shared
@@ -120,12 +163,13 @@ def catches(
         considered += 1
         if not correction.entry_id:
             continue
-        entry_relative = "%s/%s.md" % (constants.DECISIONS_DIR, correction.entry_id)
-        entry_text = read_text(os.path.join(base_root, entry_relative))
+        entry_relative, entry_text = _entry_path_and_text(
+            base_root, correction.entry_id
+        )
         if entry_text is None:
             continue
         try:
-            entry = formats.LedgerEntry.parse(entry_text)
+            entry = formats.ChangeEntry.parse(entry_text)
         except (ValidationError, PathError):
             continue
         if entry.origin not in CAUGHT_ORIGINS:
@@ -303,8 +347,8 @@ def render_summary(summary: Dict[str, Any]) -> str:
     found = summary["catches"]
     lines.append(
         "Things GTM Base caught: %d. That is how many accepted records in this "
-        "window are about a decision GTM Base wrote down for you rather than one "
-        "you typed yourself. Accepted records in the window: %d."
+        "window are about a context change GTM Base wrote down for you rather "
+        "than one you typed yourself. Accepted records in the window: %d."
         % (found["count"], found["records_in_window"])
     )
 

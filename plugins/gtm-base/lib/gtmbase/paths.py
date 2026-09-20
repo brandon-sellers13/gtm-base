@@ -44,10 +44,14 @@ FORBIDDEN_PATH_CHARACTERS = (
     ">",
 )
 
-# The folders a proposal is allowed to change.
+# The folders a proposal is allowed to change. Both folders of context changes
+# are here: a proposal staged before the rename names the older one, and
+# refusing it afterwards would throw away work the person has already been
+# shown and may already have approved of.
 PROPOSAL_PATH_PREFIXES = (
     constants.CONTEXT_DIR + "/",
-    constants.DECISIONS_DIR + "/",
+    constants.CHANGES_DIR + "/",
+    constants.LEGACY_CHANGES_DIR + "/",
     constants.CORRECTIONS_DIR + "/",
 )
 
