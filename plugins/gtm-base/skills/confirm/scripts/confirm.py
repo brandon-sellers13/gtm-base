@@ -45,7 +45,7 @@ if _lib not in sys.path:
 
 import argparse  # noqa: E402
 
-from gtmbase import confirm, machine, paths, state  # noqa: E402
+from gtmbase import confirm, machine, moment, paths, state  # noqa: E402
 from gtmbase.errors import GtmBaseError  # noqa: E402
 
 EXIT_DONE = 0
@@ -87,6 +87,10 @@ def build_parser():
         action="store_true",
         help="send an answer that could not be sent last time",
     )
+    parser.add_argument(
+        "--show-document",
+        help="print the document this question is about, checked first",
+    )
     return parser
 
 
@@ -127,6 +131,21 @@ def main(argv=None):
 
     if options.pending:
         return show_pending(resolution.base_id)
+
+    if options.show_document:
+        seat, _problems = state.load_seat(resolution.base_id)
+        try:
+            text = moment.for_the_model(
+                resolution.root,
+                resolution.base_id,
+                options.show_document,
+                session_id=seat.get("session_id"),
+            )
+        except GtmBaseError as failure:
+            sys.stderr.write(str(failure) + "\n")
+            return EXIT_REFUSED
+        sys.stdout.write(text + "\n")
+        return EXIT_DONE
 
     seat, _problems = state.load_seat(resolution.base_id)
 

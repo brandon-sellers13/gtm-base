@@ -14,6 +14,15 @@ developer tools, which you can install by running `xcode-select --install` in
 your terminal and following the prompt. You only need those two things to set up
 a base for yourself and use it on your own computer.
 
+Keep Claude Code up to date if you can. One thing GTM Base does needs a recent
+version: as a document from your base is read, GTM Base checks whether a change
+you recorded has already overtaken it, and says so before that document gets
+used for anything. Carrying that answer back is something Claude Code gained in
+a release of its own, so on an older version the check simply says nothing and
+everything else works exactly as described here. What holds either way is the
+instruction GTM Base gives the assistant to run the same check itself, and an
+instruction is followed most of the time rather than every time.
+
 If you want to back the base up somewhere safe, or invite a teammate into it,
 you also need a GitHub account and the GitHub command line tool. You can add
 both later, and nothing asks you for them until the moment you want to back up

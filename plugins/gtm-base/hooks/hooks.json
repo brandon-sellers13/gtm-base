@@ -10,6 +10,16 @@
             "timeout": 20
           }
         ]
+      },
+      {
+        "matcher": "Read",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"${CLAUDE_PLUGIN_ROOT}\"/hooks/read-check.sh claude",
+            "timeout": 10
+          }
+        ]
       }
     ],
     "SessionStart": [

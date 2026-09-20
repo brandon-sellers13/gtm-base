@@ -202,10 +202,10 @@
   </figure>
 
   <h2 id="start">2. What happens when a session opens</h2>
-  <div class="text"><p>The session-start hook runs before your first message, every time. It asks one question at a time about the folder you opened, in this order, and stops at the first yes.</p></div>
+  <div class="text"><p>The session-start hook runs before your first message, every time. It asks one question at a time about the folder you opened, in this order, and stops at the first yes. It asks <em>you</em> nothing at all: since plugin 0.2.7 a session opens quietly.</p></div>
   <figure>
     <div class="frame">
-    <svg viewBox="0 0 900 560" role="img" aria-label="Decision tree the session-start hook follows for the folder that was opened">
+    <svg viewBox="0 0 900 580" role="img" aria-label="Decision tree the session-start hook follows for the folder that was opened">
       <defs>
         <marker id="a2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="currentColor"/></marker>
       </defs>
@@ -268,13 +268,15 @@
       <text x="780" y="419" text-anchor="middle">unless the folder is empty</text>
       <path d="M640,406 L680,406" class="edge" marker-end="url(#a2)" style="color: var(--ink-mid)"/>
 
-      <rect x="20" y="480" width="860" height="52" rx="6" class="seat"/>
-      <text x="36" y="502" class="title">Always, whatever the answer</text>
-      <text x="36" y="520" class="lbl">The session id is recorded so scripts can find it. The hook exits within 15 seconds, prints nothing on failure, and never shows a token, an address with a login, or an option value.</text>
+      <rect x="20" y="480" width="860" height="72" rx="6" class="seat"/>
+      <text x="36" y="498" class="title">Always, whatever the answer</text>
+      <text x="36" y="514" class="lbl">The session id is recorded so scripts can find it. The hook exits within 15 seconds, prints nothing on failure, and never shows a token, an address with a login, or an option value.</text>
+      <text x="36" y="530" class="lbl">No question is asked and no question id is issued here. What used to be asked here is asked in the review (figure 8) and at the moment of use (figure 5).</text>
+      <text x="36" y="546" class="lbl">A second check runs before each file read and exits at once unless the file is under a joined base's context folder; it never refuses a read and issues no question of its own. A miss runs no command at all (measured 0.3 ms in the check, 58 ms through the wrapper, 2026-09-20).</text>
     </svg>
     </div>
-    <figcaption>The order matters. A base you are standing in wins over everything, a folder that looks like a base is recognised as itself before any link is considered, and the offer is last. Two bases claiming one folder is a stop, not a guess.
-      <span class="meta"><span class="stamp">decided 2026-09-05, amended 2026-09-07</span> first plan Unit 3, join plan Unit 1, Amendments r2.1 and r2.3</span></figcaption>
+    <figcaption>The order matters. A base you are standing in wins over everything, a folder that looks like a base is recognised as itself before any link is considered, and the offer is last. Two bases claiming one folder is a stop, not a guess. What a session start does not do is speak: the question it used to lead with was taken out, because the first real return session opened by asking whether the base's own map was still right. One other check is declared beside the one that reads every command, on the file-reading tool, and it is the deterministic half of the moment of use: it leaves at once for any file outside a joined base's context folder, it never refuses a read and never decides a permission, and for a flagged file it hands back the same four lines figure 5 describes.
+      <span class="meta"><span class="stamp">decided 2026-09-05, amended 2026-09-07 and 2026-09-20</span> first plan Unit 3, join plan Unit 1, Amendments r2.1 and r2.3 · quiet by default, Amendment r2.5 and 2026-09-19 plan Unit 1.3, built in 0.2.7</span></figcaption>
   </figure>
 
   <h2 id="link">3. The link between your folder and the base</h2>
@@ -364,11 +366,11 @@
       <span class="meta"><span class="stamp">decided 2026-09-06</span> join plan Amendment r2.1, plugin 0.1.4 and 0.1.5</span></figcaption>
   </figure>
 
-  <h2 id="daily">5. The daily block</h2>
-  <div class="text"><p>What the base does for you at the start of a session once it is active. The whole point of the product, in one figure.</p></div>
+  <h2 id="daily">5. The session block, and the one moment the base speaks</h2>
+  <div class="text"><p>What the base does for you at the start of a session once it is active, and the one thing it raises on its own afterwards. The whole point of the product, in one figure.</p></div>
   <figure>
     <div class="frame">
-    <svg viewBox="0 0 900 300" role="img" aria-label="The steps of the daily block, from bringing the base up to date to asking one owner one question">
+    <svg viewBox="0 0 900 300" role="img" aria-label="The steps of the session block, from bringing the base up to date to the one moment the base speaks up">
       <defs>
         <marker id="a5" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="currentColor"/></marker>
       </defs>
@@ -383,9 +385,9 @@
       <text x="345" y="102" text-anchor="middle" class="lbl">plus "since your last session: N"</text>
 
       <rect x="480" y="40" width="190" height="80" rx="6" class="resolved"/>
-      <text x="575" y="64" text-anchor="middle" class="title">One question</text>
-      <text x="575" y="84" text-anchor="middle" class="lbl">a file you own, never the map,</text>
-      <text x="575" y="102" text-anchor="middle" class="lbl">one-time id, the rest listed as waiting</text>
+      <text x="575" y="64" text-anchor="middle" class="title">The rule, not a question</text>
+      <text x="575" y="84" text-anchor="middle" class="lbl">check a document before using it;</text>
+      <text x="575" y="102" text-anchor="middle" class="lbl">nothing is asked, no id is issued</text>
 
       <rect x="710" y="40" width="170" height="80" rx="6" class="seat"/>
       <text x="795" y="64" text-anchor="middle" class="title">Or continue setup</text>
@@ -404,16 +406,16 @@
       <text x="36" y="242" class="lbl">the shared copy cannot be reached. One fixed sentence each. Nothing else runs.</text>
 
       <rect x="480" y="160" width="400" height="130" rx="6" class="box"/>
-      <text x="496" y="184" class="title">Answering the question</text>
-      <text x="496" y="206" class="lbl">yes: one line in the confirmations file, saved and sent, nothing else touched</text>
-      <text x="496" y="224" class="lbl">not now: that file is left alone for a set number of days</text>
-      <text x="496" y="242" class="lbl">no: becomes a prepared change with your reason as the evidence</text>
-      <text x="496" y="260" class="lbl">with no shared copy, its owner is shown that change, and answers in a second run</text>
-      <text x="496" y="278" class="lbl">the id is spent on first use and expires after an hour</text>
+      <text x="496" y="184" class="title">A document you are about to use has been overtaken</text>
+      <text x="496" y="206" class="lbl">only an open context change raises this; a marker alone never does</text>
+      <text x="496" y="224" class="lbl">it names the document, the change and its date, and asks before any work</text>
+      <text x="496" y="242" class="lbl">use it as it stands: nothing written, the document stays flagged</text>
+      <text x="496" y="260" class="lbl">fix it first: the change is prepared and waits for the owner to approve it</text>
+      <text x="496" y="278" class="lbl">it already reflects this: one confirmation line, naming that one change only</text>
     </svg>
     </div>
-    <figcaption>Slices, never dumps: the map is the one file read every session; everything else is read on demand by path. Anything that could run code on your machine is refused rather than pulled.
-      <span class="meta"><span class="stamp">decided 2026-09-04, amended 2026-09-19</span> first plan Unit 3 and Unit 10, origin R23 to R26 · the map left out of the question by its kind, 2026-09-19 plan Unit 1.2 · a no ending in a local approval, Unit 1.2b</span></figcaption>
+    <figcaption>Slices, never dumps: the map is the one file read every session; everything else is read on demand by path. Anything that could run code on your machine is refused rather than pulled. The base now says nothing until a document is about to be used, which is the one case where being interrupted is worth it. Inside a skill that check runs before the document is read. Outside one it rests on the injected rule, which is an instruction and not a guarantee, with the read hook behind it as the deterministic backstop. Silence from the check means one thing only, that nothing overtook the document: a path it will not answer about, and records it could not read, both say so and end badly rather than quietly. One answer settles one change, so a document behind two changes is still behind the second one afterwards.
+      <span class="meta"><span class="stamp">decided 2026-09-04, amended 2026-09-19 and 2026-09-20</span> first plan Unit 3 and Unit 10, origin R23 to R26 · the map left out of the question by its kind, 2026-09-19 plan Unit 1.2 · a no ending in a local approval, Unit 1.2b · quiet by default and the moment of use, Amendment r2.5 and Unit 1.3, built in 0.2.7</span></figcaption>
   </figure>
 
   <h2 id="gate">6. What the safety check reads</h2>

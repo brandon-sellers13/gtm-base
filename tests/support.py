@@ -50,6 +50,62 @@ class FakeGitRunner(object):
         return result
 
 
+# --- A runner that cannot reach a remote -------------------------------------
+
+# Anything that could carry a byte off this computer. `remote get-url` is not
+# one of them: it reads the base's own settings and asks nobody anything. This
+# lives here rather than in one test file because two paths are held to it: a
+# change approved locally, and the moment-of-use check of Unit 1.3.
+REMOTE_COMMANDS = (
+    "push",
+    "fetch",
+    "pull",
+    "clone",
+    "ls-remote",
+    "request-pull",
+    "submodule",
+    "bundle",
+    "daemon",
+)
+
+
+class NoRemoteRunner(object):
+    """The real runner, with every command that could reach a remote refused.
+
+    It fails the test rather than returning an error, because a path that tried
+    to reach a remote and was politely refused is still a path that tried.
+    """
+
+    def __init__(self):
+        from gtmbase.gitcmd import GitRunner
+
+        self.inner = GitRunner()
+        self.calls = []
+
+    def _check(self, args):
+        arguments = [str(item) for item in args]
+        self.calls.append(arguments)
+        words = [item for item in arguments if not item.startswith("-")]
+        first = words[0] if words else ""
+        if first in REMOTE_COMMANDS:
+            raise AssertionError("this path tried to reach a remote: %s" % arguments)
+        if first == "remote" and len(words) > 1:
+            # Listing them, and reading one address out of the base's own
+            # settings, are both local reads. Anything else changes something.
+            if words[1] not in ("get-url", "show"):
+                raise AssertionError("this path changed a remote: %s" % arguments)
+        if first == "archive" and "--remote" in arguments:
+            raise AssertionError("this path tried to reach a remote: %s" % arguments)
+
+    def run(self, args, cwd=None, timeout=20, input=None):
+        self._check(args)
+        return self.inner.run(args, cwd=cwd, timeout=timeout, input=input)
+
+    def check(self, args, cwd=None, timeout=20, input=None):
+        self._check(args)
+        return self.inner.check(args, cwd=cwd, timeout=timeout, input=input)
+
+
 class CountingRunner(object):
     """The real runner, with every call and the folder it ran in written down."""
 

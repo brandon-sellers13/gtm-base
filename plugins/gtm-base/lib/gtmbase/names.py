@@ -38,6 +38,15 @@ CHANGE_WITHOUT_A_LINE = "the change you recorded"
 
 _SEPARATORS_RE = re.compile(r"[-_]+")
 _WHITESPACE_RE = re.compile(r"\s+")
+# What a file name may be made of before it is read aloud. A name comes out of
+# the base, and a name is read out in the middle of an instruction the
+# assistant follows, so a name carrying anything else is not repeated back. The
+# session-start hook held file names to the same rule before Unit 1.3 moved the
+# text it was guarding, and this is that rule in the one place names are made.
+_PLAIN_STEM_RE = re.compile(r"^[A-Za-z0-9 ._-]{1,80}$")
+
+# What a document with a name nobody can safely read aloud is called instead.
+DOCUMENT_WITHOUT_A_PLAIN_NAME = "one of your documents"
 
 
 def _normalize(path: str) -> str:
@@ -73,6 +82,8 @@ def document_name(path: str) -> str:
     stem = os.path.basename(normalized)
     if stem.endswith(".md"):
         stem = stem[: -len(".md")]
+    if not _PLAIN_STEM_RE.match(stem):
+        return DOCUMENT_WITHOUT_A_PLAIN_NAME
     words = _words(stem)
     if not words:
         raise ValueError("a document name needs a file name to work from")

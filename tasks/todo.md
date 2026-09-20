@@ -446,3 +446,123 @@ Brandon's call: context first, skills after. Units 1.4b and 1.4c above are withd
       Recorded as residual in the CHANGELOG: the turned down rate still comes
       only from a shared copy, and the command check reads commands only, which
       belongs to the release security pass.
+
+- [x] 2026-09-20: Unit 1.3 built, quiet by default. A session start records the
+      session, updates from the shared copy, hands over the map and the change
+      summary and the moment-of-use rule, and asks nothing: no question text, no
+      question identifier, no line in the asked log. The question machinery moved
+      whole into a review mode on `stale_check.run`, entered by saying "review my
+      base", which lists one line per item using `names.py`, issues one
+      single-use identifier per document it asks about, and lists prepared
+      changes waiting for a local yes as items with no question. New
+      `moment.py` holds the action contract: detect by local lookup, say a fix is
+      ready only when a staged change for that file is really waiting, pause, and
+      three answers, one of which writes nothing, one of which prepares a change
+      for `approve_local`, and one of which is the confirmation that already
+      exists. The three Phase 1 entry points that hand a context file to the
+      model each gained `--show-document`, which runs the check first and fences
+      the file, and each is tested on what its own script really prints. The
+      weekly line and a month of quiet live in seat state.
+
+      The read hook was evaluated and NOT built. Claude Code's hook
+      documentation (https://code.claude.com/docs/en/hooks, read 2026-09-20)
+      names the events whose plain output reaches the assistant as
+      UserPromptSubmit, UserPromptExpansion, SessionStart and PostModelSwitch,
+      and the tool-use event is not among them; the only documented answer shape
+      for a tool-use hook is a permission decision. There is no documented way
+      for it to deliver the flag without blocking the read, so building it would
+      have been a guess. Recorded in the CHANGELOG in those terms.
+
+      Tests moved rather than deleted, each with its reason written in the test:
+      six scenarios in `tests/test_session_start.py` that pinned the question,
+      the single-use identifier, the also-waiting list, whose yes counts, the
+      map, and the refused path, plus one in `tests/test_confirm.py` that held
+      the injected text to naming the confirm script. What they proved is proved
+      of the review in `tests/test_moment_of_use.py`.
+
+      Carried forward, and not done here: the review lists unanswered markers
+      only once Unit 1.7b makes a marker a state of its own, so this unit proves
+      only that a marker alone never interrupts. The measured trial of the
+      injected instruction is Brandon's to run, and nothing about its
+      reliability is claimed anywhere.
+
+- [x] 2026-09-20: Unit 1.3's read hook built after the first verdict was
+      overturned. The verdict was wrong. I had read the rule about which events
+      put plain output into the assistant's context and treated the absence of a
+      tool-use example as the answer; the decision-control table on the same
+      page settles it the other way. Re-read at
+      https://code.claude.com/docs/en/hooks on 2026-09-20 and quoted in the
+      CHANGELOG: the tool-use event honours `permissionDecision`,
+      `permissionDecisionReason`, and `additionalContext`, the last described as
+      "Text added to Claude's context before the tool call runs, shown in the
+      transcript". The page also says the same events fire in the terminal, the
+      IDE extensions, the Desktop app and cloud sessions, and that all matching
+      hooks run in parallel.
+
+      Built as `lib/gtmbase/read_hook.py`, `scripts/read_check.py`, and
+      `hooks/read-check.sh`, declared with matcher Read beside the untouched
+      Bash entry; the manifest still does not name hooks.json. It leaves at once
+      for anything outside a joined base's context folder, resolves through
+      `machine.load_machine_state` plus `paths.resolve_base` plus
+      `paths.canonical_context_path` rather than a new resolver, folds letter
+      case with `trust_surface.normalize_component` and recovers the spelling
+      the disk uses, follows links and refuses one leading out of the base,
+      never sets any permission decision, always exits 0, reaches nothing, and
+      writes only this seat's own `read_notices.json`.
+
+      Double asking is prevented twice over. The hook issues no question
+      identifier at all, and `moment.check` now hands back a question already
+      open for the same document in the same session instead of issuing a
+      second, so the hook and the script the rule names can never add up to two.
+      The hook also says a given document once per session.
+
+      Two things reported to me I could not verify and therefore did not print
+      anywhere a person reads: the Claude Code changelog entries said to be at
+      2.1.9 and 2.1.110 (the public CHANGELOG.md is truncated at 2.1.267, so it
+      neither confirms nor refutes them, and the release-notes page is a 404),
+      and the statement that the read tool's `file_path` is always absolute.
+      The CHANGELOG and the join guide therefore say "a release of its own"
+      rather than a version number, and the hook resolves a relative path
+      against the session folder rather than assuming an absolute one.
+
+- [x] 2026-09-20: Unit 1.3 corrected after two outside reviews, every FIX item
+      closed. The eight they reproduced were real. In the order they were
+      fixed: the refused path used to hand back any file on the computer (S2);
+      the injected rule's own script reported a flagged document as clear for
+      the absolute path an assistant actually passes, and printed nothing on
+      every kind of failure, so silence did not mean what the rule says it
+      means (C1); the four lines were an injection channel through the change
+      body, the source, and file names (S1); a question was handed back across
+      sessions and across changes (C2); one answer settled every older change
+      on the file (C3); nothing could record the three answers or set the
+      weekly line and quiet (C4). Then the mediums: shell characters in paths
+      and unquoted paths in the rule (S3), the miss path's cost (S4), false
+      flags from an exhausted budget (S6), the review hiding files and ids and
+      inflating the asked log (C5, C6, C7), told-once ignoring new changes
+      (C10), and a prepared change for another change counting as a fix (C11).
+      Then the lows: the case-folded prefix (S7), one document listed twice
+      (C12), the review's empty and shared-copy cases (C13), the unfilled
+      plugin path (C14), what a not now does and does not do (C15), and the
+      two-pass fill (S9).
+
+      C3 changed `stale._line_confirms`, which the whole product rests on. Not
+      one existing test needed changing: `test_stale`, `test_stale_check`,
+      `test_approve_local` and `test_confirm` all pass untouched, 244 of them.
+      The reason is that the rule only narrowed a case nothing else relied on,
+      a line that names one change being read as an answer about another.
+
+      Two things measured rather than asserted, on this computer on 2026-09-20:
+      the miss path went from 11.0 to 0.3 milliseconds at the median and from
+      201 to 4.4 at its worst with one base joined, and from 10.5 to 0.2 with
+      five bases joined and four of their folders gone; the whole wrapper end
+      to end is 58 milliseconds a miss, nearly all of it starting Python. The
+      scripts are in the scratchpad and the numbers are in the CHANGELOG.
+
+      One existing scenario of mine was rewritten rather than deleted: a
+      prepared change waiting on a document that is also due used to be its own
+      item and is now folded into that document's one line, which is finding
+      C12, and the test says so.
+
+      Recorded as open in the CHANGELOG and not fixed: two sessions in one base
+      at once, the backstop writing "told" before the client delivers the text,
+      and unsalted path hashes.

@@ -319,6 +319,10 @@ def pending_questions(
                 "trigger": record.get("trigger"),
                 "entry_id": record.get("entry_id"),
                 "issued_at": record.get("issued_at"),
+                # Which session it belongs to. A question is refused when it
+                # is answered from another session, so anything deciding
+                # whether to hand this one back has to be able to see that.
+                "session_id": record.get("session_id"),
             }
         )
     return open_ones

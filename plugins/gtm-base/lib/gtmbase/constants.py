@@ -636,3 +636,16 @@ BASES_FOLDER_NAME = "GTM Bases"
 # check can tell that this change was already decided about and never prepare
 # the same one again.
 PROPOSALS_DROPPED_DIR = "work/proposals/dropped"
+
+
+# One more thing a question can end as, added by Unit 1.3. Saying "use it as it
+# stands" is not an answer about whether the document is right, so it is
+# recorded and then left out of the count the yes rate is worked out over. The
+# older four are unchanged, and `ASKED_OUTCOMES` keeps its meaning of every
+# outcome a row may carry.
+OUTCOME_USED_AS_IS = "used-as-is"
+ASKED_OUTCOMES_ALL = ASKED_OUTCOMES + (OUTCOME_USED_AS_IS,)
+
+# The outcomes the yes rate is worked out over. An answer that says nothing
+# about whether a document is right does not belong in that denominator.
+YES_RATE_OUTCOMES = ASKED_OUTCOMES

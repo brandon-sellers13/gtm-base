@@ -797,8 +797,14 @@ def _line_confirms(line, entry) -> bool:
     decided = _as_date(entry.decided_on)
     written = _as_date(entry.written_on)
     line_date = _as_date(line.date)
-    if line.entry and line.entry == entry.id:
-        return True
+    if line.entry:
+        # A line that names a change settles that change and nothing else.
+        # Falling through to the date rule from here was how one answer about
+        # one change quietly settled every older open change on the same file,
+        # including ones the person was never shown (Unit 1.3 review, C3).
+        # Somebody shown one change and asked whether the document already
+        # reflects it has said one thing about one change.
+        return line.entry == entry.id
     if (
         line.trigger == TRIGGER_DRAFTED
         and line.run

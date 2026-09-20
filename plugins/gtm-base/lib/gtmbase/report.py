@@ -158,7 +158,11 @@ def yes_rate(base_id: str, today: datetime.date) -> Dict[str, Any]:
     is doing well.
     """
     rows, _problems = state.load_asked(base_id)
-    counts = {outcome: 0 for outcome in constants.ASKED_OUTCOMES}
+    # Only the outcomes that say something about whether a document is right.
+    # "Use it as it stands" is permission to carry on with a document that is
+    # behind, which is not a statement that the document is fine, so counting
+    # it here would move the rate for a reason nobody decided.
+    counts = {outcome: 0 for outcome in constants.YES_RATE_OUTCOMES}
     for row in rows:
         if not _in_window(_as_date(row.get("date")), today):
             continue

@@ -44,7 +44,7 @@ if _lib not in sys.path:
 
 import argparse  # noqa: E402
 
-from gtmbase import compose_proposal, machine, paths  # noqa: E402
+from gtmbase import compose_proposal, machine, moment, paths, state  # noqa: E402
 from gtmbase.errors import GtmBaseError  # noqa: E402
 
 EXIT_DONE = 0
@@ -67,6 +67,10 @@ def build_parser():
     )
     parser.add_argument("--source", help="where the change came from, in your words")
     parser.add_argument("--reopen", help="raise a kept proposal again by its id")
+    parser.add_argument(
+        "--show-document",
+        help="print the document a change is about, with the check run first",
+    )
     return parser
 
 
@@ -85,6 +89,27 @@ def report(result):
 def main(argv=None):
     parser = build_parser()
     options = parser.parse_args(argv)
+
+    if options.show_document:
+        here = os.getcwd()
+        resolution = paths.resolve_base(here, machine.load_machine_state())
+        if not resolution.joined or not resolution.root or not resolution.base_id:
+            sys.stderr.write(NOT_JOINED + "\n")
+            return EXIT_ERROR
+        seat, _problems = state.load_seat(resolution.base_id)
+        try:
+            text = moment.for_the_model(
+                resolution.root,
+                resolution.base_id,
+                options.show_document,
+                session_id=seat.get("session_id"),
+            )
+        except GtmBaseError as failure:
+            sys.stderr.write(str(failure) + "\n")
+            return EXIT_REFUSED
+        sys.stdout.write(text + "\n")
+        return EXIT_DONE
+
     chosen = [bool(options.staging), bool(options.local_edit), bool(options.reopen)]
     if sum(1 for value in chosen if value) != 1:
         sys.stderr.write(

@@ -45,7 +45,7 @@ if _lib not in sys.path:
 
 import argparse  # noqa: E402
 
-from gtmbase import machine, paths, report, stale_check, state  # noqa: E402
+from gtmbase import machine, moment, paths, report, stale_check, state  # noqa: E402
 from gtmbase.errors import GtmBaseError  # noqa: E402
 
 EXIT_DONE = 0
@@ -81,7 +81,62 @@ def build_parser():
         action="store_true",
         help="show the four numbers for the last four weeks",
     )
+    parser.add_argument(
+        "--review",
+        action="store_true",
+        help="walk what is due and what has been prepared, one line each",
+    )
+    parser.add_argument(
+        "--show-document",
+        help="print one context file, with the check run before it is read",
+    )
     return parser
+
+
+def print_review(result):
+    """The review as the assistant reads it: a line to say, then a line to use.
+
+    Every item is one sentence for the person and one machine line underneath
+    it. The machine line carries the path and the question identifier, which
+    are the two things the assistant needs to show the document and to record
+    an answer, and which are the two things nobody wants read aloud. The skill
+    says plainly that the second line is never said out loud.
+    """
+    said = set()
+    for line in result.lines():
+        sys.stdout.write(line + "\n")
+        item = _item_for(result, line)
+        if item is None or id(item) in said:
+            continue
+        said.add(id(item))
+        if item.kind == "document":
+            sys.stdout.write(
+                "   [for the assistant] path=%s question=%s\n"
+                % (item.path, item.question_id or "-")
+            )
+        else:
+            sys.stdout.write(
+                "   [for the assistant] path=%s prepared=%s\n"
+                % (item.path, item.entry_id or "-")
+            )
+    return EXIT_REFUSED if result.stopped else EXIT_DONE
+
+
+def _item_for(result, sentence):
+    """The item one sentence of the review came from, when it came from one."""
+    for item in result.review:
+        if item.sentence == sentence:
+            return item
+    return None
+
+
+def _mode_of(options):
+    """Which of the three ways of running this the person asked for."""
+    if options.first_run:
+        return "first-run"
+    if options.review:
+        return "review"
+    return "normal"
 
 
 def main(argv=None):
@@ -92,6 +147,21 @@ def main(argv=None):
     if not resolution.joined or not resolution.root or not resolution.base_id:
         sys.stderr.write(NOT_JOINED + "\n")
         return EXIT_ERROR
+
+    if options.show_document:
+        seat, _problems = state.load_seat(resolution.base_id)
+        try:
+            text = moment.for_the_model(
+                resolution.root,
+                resolution.base_id,
+                options.show_document,
+                session_id=seat.get("session_id"),
+            )
+        except GtmBaseError as failure:
+            sys.stderr.write(str(failure) + "\n")
+            return EXIT_REFUSED
+        sys.stdout.write(text + "\n")
+        return EXIT_DONE
 
     if options.report:
         try:
@@ -108,7 +178,7 @@ def main(argv=None):
             resolution.root,
             resolution.base_id,
             session_id=seat.get("session_id"),
-            mode="first-run" if options.first_run else "normal",
+            mode=_mode_of(options),
             dismiss_ledger_behind=options.dismiss_ledger_behind,
             dry_run=options.dry_run,
         )
@@ -118,6 +188,9 @@ def main(argv=None):
     except Exception:
         sys.stderr.write(WENT_WRONG + "\n")
         return EXIT_ERROR
+
+    if options.review:
+        return print_review(result)
 
     for line in result.lines():
         sys.stdout.write(line + "\n")

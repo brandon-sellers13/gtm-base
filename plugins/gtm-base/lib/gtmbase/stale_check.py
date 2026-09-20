@@ -31,6 +31,7 @@ from typing import List, Optional, Tuple
 
 from . import (
     base_reader,
+    compose_proposal,
     constants,
     duplicate_check,
     formats,
@@ -175,6 +176,53 @@ AWAITING_LOCAL_APPROVAL = (
     "%s has a prepared change waiting for you to approve it here."
 )
 
+# --- The review a person asks for --------------------------------------------
+#
+# Amendment r2.5 moved the question out of the start of a session and into the
+# review. The question identifiers, the log of what was asked, a not now, and a
+# no that becomes a prepared change all work exactly as they did; the review
+# issues them instead of the session-start hook. Ruling 3 of the acceptance
+# matrix is why each item is one line and the document is there on request.
+
+REVIEW_OPENING = (
+    "Here is everything in your base due a look today, one line each. Say the "
+    "number of any one of them to read the document itself."
+)
+REVIEW_NOTHING = (
+    "Nothing in your base is due a look today, and no change is waiting for "
+    "you to approve it."
+)
+REVIEW_ITEM_CHANGE = (
+    "%s. %s has not caught up with a context change recorded on %s."
+)
+REVIEW_ITEM_THRESHOLD = (
+    "%s. Nobody has said %s is still right for longer than this base allows."
+)
+REVIEW_NO_SESSION = (
+    "GTM Base does not know which session this is, so it listed what is due "
+    "without anything to answer with. Start a new session and ask again."
+)
+REVIEW_NOTHING_OWNED = (
+    "No document in this base is recorded as yours, so there is nothing here "
+    "for you to answer. Whoever owns them is asked about them on their own "
+    "computer."
+)
+REVIEW_ITEM_WAITING_HERE = (
+    "%s. %s has not caught up with a context change recorded on %s, and a "
+    "change for it is prepared and waiting for you to approve it."
+)
+REVIEW_ITEM_WAITING_THERE = (
+    "%s. %s has a prepared change waiting for somebody to review it."
+)
+REVIEW_INBOX_WAITING = (
+    "There are %d items waiting to be read in your inbox, so nothing can be "
+    "answered yet. Read those first and ask for the review again."
+)
+REVIEW_SPEAKING_AGAIN = (
+    "You asked GTM Base to stay quiet until you asked for a review. This is "
+    "that review, so it will speak up again from now on."
+)
+
 
 # --- What comes back ---------------------------------------------------------
 
@@ -210,6 +258,33 @@ class Skipped(object):
         return "Skipped(staging_id=%r, code=%r)" % (self.staging_id, self.code)
 
 
+class ReviewLine(object):
+    """One thing the review listed, and the question it asked about it.
+
+    A line about a document carries the single-use question this session may
+    answer it with. A line about a prepared change carries none, because what
+    happens to a prepared change is approving it and not answering a question.
+    """
+
+    __slots__ = ("number", "path", "kind", "trigger", "entry_id", "question_id", "sentence")
+
+    def __init__(self, number, path, kind, trigger, entry_id, question_id, sentence):
+        self.number = number
+        self.path = path
+        self.kind = kind
+        self.trigger = trigger
+        self.entry_id = entry_id
+        self.question_id = question_id
+        self.sentence = sentence
+
+    def __repr__(self) -> str:
+        return "ReviewLine(number=%r, kind=%r, path=%r)" % (
+            self.number,
+            self.kind,
+            self.path,
+        )
+
+
 class StaleCheckResult(object):
     """Everything one run of the stale check has to say."""
 
@@ -226,6 +301,8 @@ class StaleCheckResult(object):
         self.drafting_refused = False
         self.unprocessed_count = 0
         self.dry_run = False
+        # One entry per thing the review walked, in the order it listed them.
+        self.review: List[ReviewLine] = []
 
     @property
     def stopped(self) -> bool:
@@ -706,12 +783,20 @@ def run(
     dismiss_ledger_behind: bool = False,
     dry_run: bool = False,
 ) -> StaleCheckResult:
-    """Work out what is out of date, and prepare the change for each answer."""
+    """Work out what is out of date, and prepare the change for each answer.
+
+    There are three ways to run this. The normal run prepares a change for
+    every flag. The first run says the one honest thing a base with nothing
+    recorded against it can be told. The review walks what is due and what has
+    been prepared as one short list, one line per item, and it is the one that
+    asks, because nothing asks at the start of a session any more.
+    """
     git = runner_or_default(runner)
     today = now or state.today()
     if isinstance(today, datetime.datetime):
         today = today.date()
-    result = StaleCheckResult(mode="first-run" if mode == "first-run" else "normal")
+    known = ("first-run", "review")
+    result = StaleCheckResult(mode=mode if mode in known else "normal")
     result.dry_run = bool(dry_run)
 
     on_default, _code = paths.head_is_default_branch(base_root, runner=git)
@@ -768,6 +853,20 @@ def run(
             _list_awaiting_local_approval(result, base_root, git)
         return result
 
+    if result.mode == "review":
+        _review(
+            result,
+            report,
+            inputs,
+            base_root,
+            base_id,
+            session_id,
+            today,
+            git,
+            dry_run,
+        )
+        return result
+
     if not result.drafting_refused:
         _prepare_everything(
             result, report, inputs, entry_files, base_root, base_id, gh, dry_run
@@ -792,6 +891,244 @@ def run(
         result.codes.append(CODE_DRY_RUN)
         result.sentences.append(DRY_RUN_NOTE)
     return result
+
+
+def _happened_on(inputs, entry_id: Optional[str]) -> str:
+    """The day one context change happened, read off the change itself."""
+    if not entry_id:
+        return ""
+    entry = base_reader.entry_by_id(inputs, entry_id)
+    return getattr(entry, "decided_on", "") or ""
+
+
+def _review(
+    result, report, inputs, base_root, base_id, session_id, today, git, dry_run
+) -> None:
+    """Walk what is due and what has been prepared, as one short list.
+
+    Every document due a look gets one line and one single-use question bound
+    to this session, issued here exactly as the session-start hook used to
+    issue it, and written into the log of what was asked with no answer yet. A
+    document that also has a change prepared for it is one line and not two,
+    because it is one document and somebody is going to deal with it once.
+    Prepared changes that belong to no listed document are listed after them.
+    The three answers are explained once by the skill, at the top, and never
+    once per item.
+    """
+    # Quiet asked for until the person asks again ends here, because asking
+    # for a review is the asking it was waiting for.
+    seat, _problems = state.load_seat(base_id)
+    if state.silent_until_asked(seat) and not dry_run:
+        state.set_silent_until(base_id, None)
+        result.sentences.append(REVIEW_SPEAKING_AGAIN)
+
+    waiting_to_be_read = state.unprocessed_rows(base_id)
+    email = base_reader.repo_email(base_root, git)
+    lines = _review_documents(
+        result, report, inputs, base_root, base_id, email, today, dry_run
+    )
+    _review_prepared_changes(result, report, base_root, git, lines)
+
+    for number, line in enumerate(lines, start=1):
+        line.number = number
+        line.sentence = line.sentence % number
+
+    if not lines:
+        result.sentences.append(
+            REVIEW_NOTHING_OWNED if _owns_nothing(report, email) else REVIEW_NOTHING
+        )
+        return
+
+    result.sentences.append(REVIEW_OPENING)
+    if waiting_to_be_read:
+        # Every question below would be refused while these are unread, so it
+        # is said once at the top rather than found out one answer at a time.
+        result.sentences.append(REVIEW_INBOX_WAITING % len(waiting_to_be_read))
+    if not session_id:
+        result.sentences.append(REVIEW_NO_SESSION)
+    for line in lines:
+        result.sentences.append(line.sentence)
+    result.review = lines
+
+    if session_id and not dry_run and not waiting_to_be_read:
+        # No question is issued while something is waiting to be read, because
+        # every one of them would be refused on the way back, and a question
+        # nobody can answer is a question that only spoils the yes rate.
+        for line in lines:
+            if line.kind != "document":
+                continue
+            line.question_id = _question_for_review(
+                base_id, line.path, line.trigger, line.entry_id, session_id, today
+            )
+
+
+def _owns_nothing(report, email) -> bool:
+    """Whether this seat's address owns no document in the base at all."""
+    if not email:
+        return True
+    for info in report.files.values():
+        if getattr(info, "present", False) and email in (info.owners or []):
+            return False
+    return True
+
+
+def _question_for_review(base_id, path, trigger, entry_id, session_id, today):
+    """One question for one item, reusing an open one rather than adding one.
+
+    The review can be asked for twice in one sitting, and a document can be
+    listed by two runs of it. Issuing a second question each time would say the
+    base asked twice and heard nothing twice, and the yes rate is worked out
+    over exactly those lines.
+    """
+    from . import confirm
+
+    for record in confirm.pending_questions(base_id):
+        if (
+            record.get("file") == path
+            and record.get("trigger") == trigger
+            and record.get("session_id") == session_id
+            and (record.get("entry_id") or None) == (entry_id or None)
+            and record.get("id")
+        ):
+            return record.get("id")
+    question = state.issue_question_id(
+        base_id, path, trigger, session_id, entry_id, None
+    )
+    rows, _problems = state.load_asked(base_id)
+    if not any(row.get("question_id") == question for row in rows):
+        state.append_asked(base_id, question, path, trigger, "unanswered", today)
+    return question
+
+
+def _review_documents(
+    result, report, inputs, base_root, base_id, email, today, dry_run
+) -> List["ReviewLine"]:
+    """One line per document due a look, and every document, not one per change.
+
+    The flags are read rather than the questions, because one context change
+    can leave three documents behind and a review that names one of them is a
+    review that hides two. The filters are the ones the questions use: a
+    document this seat's address owns, not one set aside for now, and never the
+    base's own map.
+    """
+    lines: List[ReviewLine] = []
+    for flag in report.file_flags:
+        info = report.files.get(flag.path)
+        if info is None or not info.present:
+            continue
+        if stale.is_map(info):
+            continue
+        if email is not None and email not in (info.owners or []):
+            continue
+        if report.suppressions and flag.path in report.suppressions:
+            if state.is_suppressed(base_id, flag.path, today):
+                continue
+        try:
+            path = paths.canonical_context_path(base_root, flag.path)
+        except (PathError, ValidationError):
+            if not dry_run:
+                entry_id = flag.entry_ids[0] if flag.entry_ids else None
+                state.append_dropped_path(
+                    base_id, flag.path, "dropped-path", entry_id, today
+                )
+            continue
+        entry_id = flag.entry_ids[0] if flag.entry_ids else None
+        if flag.trigger == stale.TRIGGER_LEDGER:
+            sentence = REVIEW_ITEM_CHANGE % (
+                "%s",
+                names.document_name(path),
+                _happened_on(inputs, entry_id),
+            )
+        else:
+            sentence = REVIEW_ITEM_THRESHOLD % ("%s", names.document_name(path))
+        lines.append(
+            ReviewLine(
+                None, path, "document", flag.trigger, entry_id, None, sentence
+            )
+        )
+    del result
+    return lines
+
+
+def _review_prepared_changes(result, report, base_root, git, lines) -> None:
+    """Every prepared change, folded into its document's line or added after.
+
+    A base with a shared copy has its prepared changes reviewed there, so they
+    are listed all the same and said differently, because a person who is told
+    nothing is waiting when something is waiting will believe it.
+    """
+    del result
+    here = not report.has_remote
+    waiting = (
+        awaiting_local_approval(base_root, runner=git)
+        if here
+        else _prepared_elsewhere(base_root)
+    )
+    for staging_id, targets in waiting:
+        for path in targets:
+            folded = False
+            for line in lines:
+                if line.path != path or line.kind != "document":
+                    continue
+                folded = True
+                if line.trigger != stale.TRIGGER_LEDGER:
+                    line.sentence = (
+                        line.sentence.rstrip(".")
+                        + ", and a prepared change for it is waiting."
+                    )
+                    continue
+                when = line.sentence.split("recorded on ")[-1].rstrip(".")
+                if here:
+                    line.sentence = REVIEW_ITEM_WAITING_HERE % (
+                        "%s",
+                        names.document_name(path),
+                        when,
+                    )
+                else:
+                    line.sentence = REVIEW_ITEM_CHANGE % (
+                        "%s",
+                        names.document_name(path),
+                        when,
+                    )
+                    line.sentence = (
+                        line.sentence.rstrip(".")
+                        + ", and a prepared change for it is waiting for "
+                        "somebody to review it."
+                    )
+            if folded:
+                continue
+            if any(line.path == path and line.kind == "change" for line in lines):
+                continue
+            sentence = (
+                "%s. " + (AWAITING_LOCAL_APPROVAL % names.document_name(path))
+                if here
+                else REVIEW_ITEM_WAITING_THERE % ("%s", names.document_name(path))
+            )
+            lines.append(
+                ReviewLine(None, path, "change", None, staging_id, None, sentence)
+            )
+
+
+def _prepared_elsewhere(base_root: str):
+    """Every prepared change waiting, on a base whose review happens elsewhere."""
+    found = []
+    folder = os.path.join(base_root, constants.PROPOSALS_PENDING_DIR)
+    if not os.path.isdir(folder):
+        return found
+    for name in sorted(os.listdir(folder)):
+        if not name.endswith(".md"):
+            continue
+        text = read_text(os.path.join(folder, name))
+        if text is None:
+            continue
+        try:
+            staging = formats.ProposalStaging.parse(text).validate()
+        except (ValidationError, PathError):
+            continue
+        targets = compose_proposal.edited_paths(staging)
+        if targets:
+            found.append((staging.staging_id, targets))
+    return found
 
 
 def _ledger_flags(report) -> List[Tuple[str, str]]:
@@ -838,10 +1175,28 @@ def _list_waiting_on_the_owner(result, report) -> None:
                 )
 
 
-def _already_done(
-    base_root: str, base_id: str, staging, entry_id: str, target_paths, gh
+def already_prepared(
+    base_root: str, base_id: str, staging, entry_id: str, target_paths, gh=None
 ) -> Optional[str]:
-    """The reason this exact change does not need preparing again, or nothing."""
+    """Whether this exact change has already been prepared or decided about.
+
+    Every path that prepares a change asks this, so a change prepared at the
+    moment somebody was about to use a document is held to the same rule as one
+    prepared by an ordinary run: never twice, and never one somebody has
+    already turned down.
+
+    Only what this computer holds is read. The moment-of-use flag promises to
+    reach nothing, and asking a shared copy what proposals are open on it is
+    reaching something, so that question belongs to the run that is allowed to
+    ask it and not to this one.
+    """
+    return _already_here(base_root, base_id, staging, entry_id, target_paths)
+
+
+def _already_here(
+    base_root: str, base_id: str, staging, entry_id: str, target_paths
+) -> Optional[str]:
+    """The reason this change is already dealt with on this computer."""
     if _staging_exists(base_root, staging.staging_id):
         return CODE_ALREADY_STAGED
     if _recorded_in_index(base_id, staging.staging_id):
@@ -853,6 +1208,16 @@ def _already_done(
             continue
         if any(path in correction.touched_paths for path in target_paths):
             return CODE_ALREADY_ACCEPTED
+    return None
+
+
+def _already_done(
+    base_root: str, base_id: str, staging, entry_id: str, target_paths, gh
+) -> Optional[str]:
+    """The reason this exact change does not need preparing again, or nothing."""
+    here = _already_here(base_root, base_id, staging, entry_id, target_paths)
+    if here is not None:
+        return here
     found = duplicate_check.check(staging, base_root, gh=gh)
     if found.kind == duplicate_check.KIND_MERGED:
         return CODE_ALREADY_ACCEPTED

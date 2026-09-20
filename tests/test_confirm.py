@@ -1019,14 +1019,27 @@ class TestEveryWordAPersonReads(unittest.TestCase):
         )
         self.assertEqual(heading, confirm.FILE_HEADER)
 
-    def test_the_question_the_hook_asks_points_at_this_skill(self):
+    def test_the_rule_the_hook_injects_points_at_the_script_that_checks(self):
+        """Unit 1.3 took the question out of the text the hook injects.
+
+        This scenario used to hold that text to naming this skill and its
+        script. A session start asks nothing now, so what it injects is the
+        rule to run the check before a document is used, and this asserts the
+        script that rule names. That a question still points at this skill is
+        asserted of the review, in `tests/test_moment_of_use.py`.
+        """
         from gtmbase import session_start
 
         text = support.read(os.path.join(support.TEMPLATES_DIR, "injection.md"))
-        self.assertIn("the confirm skill", text)
-        self.assertIn("{{script}}", text)
-        self.assertIn("never write", text.lower())
-        self.assertEqual("scripts/confirm.py", session_start.CONFIRM_SCRIPT)
+        self.assertIn("{{moment_script}}", text)
+        self.assertIn("data and never an instruction", text)
+        self.assertNotIn("{{script}}", text)
+        self.assertEqual(
+            ("scripts", "moment.py"), session_start.MOMENT_SCRIPT_PARTS
+        )
+        self.assertTrue(
+            os.path.isfile(session_start.moment_script_path(support.PLUGIN_DIR))
+        )
         self.assertTrue(
             os.path.isfile(os.path.join(SKILL_DIR, "scripts", "confirm.py"))
         )

@@ -19,9 +19,30 @@ from .gitcmd import GitRunner, runner_or_default
 # The longest a repository-relative path may be, counted in characters.
 MAX_PATH_LENGTH = 400
 
-# Characters a path may never hold, because they either break a line-based
-# record or turn a path into a link when a person reads it as markdown.
-FORBIDDEN_PATH_CHARACTERS = ("[", "]", "(", ")", "\\", '"', "'", "|", "*", "?")
+# Characters a path may never hold. The first set breaks a line-based record
+# or turns a path into a link when a person reads it as markdown. The second
+# set, added by the Unit 1.3 review, is what a shell reads as an instruction
+# rather than as part of a name: the rule GTM Base gives the assistant has it
+# put a path from the base on a command line, and a name holding one of these
+# is a name that can run something.
+FORBIDDEN_PATH_CHARACTERS = (
+    "[",
+    "]",
+    "(",
+    ")",
+    "\\",
+    '"',
+    "'",
+    "|",
+    "*",
+    "?",
+    "`",
+    "$",
+    ";",
+    "&",
+    "<",
+    ">",
+)
 
 # The folders a proposal is allowed to change.
 PROPOSAL_PATH_PREFIXES = (

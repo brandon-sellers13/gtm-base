@@ -4,9 +4,11 @@ Four things can happen here, and exactly one of them happens per session.
 
 1. The current folder is a base this account has opened before. The session is
    recorded, and once a day's work begins (a session that started fresh or was
-   picked up again) the base is brought up to date with the shared copy, the
-   map is added to the session, and at most one file's owner is asked to say
-   their file is still right.
+   picked up again) the base is brought up to date with the shared copy and the
+   map is added to the session. Nothing is asked. Amendment r2.5 of the
+   2026-09-04 plan took the question out of here: it is asked in the review a
+   person asks for, and at the moment a document a context change has overtaken
+   is about to be used.
 2. The folder looks like a base but this account has never opened it. Nothing
    is read or installed. The whole folder is checked for anything that would
    run on trusting it, and only then is the person asked whether this is their
@@ -24,8 +26,8 @@ one JSON object or as plain text and never as both. The first part prints only
 the sentence the person sees, as one object holding that message. It writes
 nothing at all and reaches nothing over the network. The second part prints
 only the text the assistant reads, as plain text, and it is the one that
-records the session, brings the base up to date, issues the question id, and
-installs the safeguard. Both parts work the same decision out from the same
+records the session, brings the base up to date, says the weekly line when it
+is due, and installs the safeguard. Both parts work the same decision out from the same
 inputs, so what the person is told and what the assistant is primed with always
 agree.
 
@@ -65,7 +67,6 @@ from . import (
     trust_surface,
 )
 from . import gitcmd
-from .errors import PathError, ValidationError
 from .fsutil import read_text
 from .gitcmd import GitRunner, runner_or_default  # noqa: F401
 
@@ -91,9 +92,14 @@ LOCAL_TIMEOUT_SECONDS = 5
 # the client with nothing to show for it.
 GIT_BUDGET_SECONDS = 12
 
-# The one script allowed to write a confirmation line. The injected question
-# names it, so the assistant runs it rather than writing the record itself.
-CONFIRM_SCRIPT = "scripts/confirm.py"
+# The script that says whether a document about to be used has been overtaken
+# by a context change. The injected instruction names it by its full path,
+# because the instruction is followed outside any skill.
+MOMENT_SCRIPT_PARTS = ("scripts", "moment.py")
+
+# The script that changes what this seat is told and when. The same instruction
+# names it, for the same reason: it is run outside any skill.
+SEAT_SCRIPT_PARTS = ("scripts", "seat.py")
 
 # The one script allowed to write down the answer to the setup offer. The offer
 # is made in a reply and answered in words, so the priming names this script by
@@ -265,6 +271,31 @@ def offer_script_path(root_of_plugin: Optional[str] = None) -> str:
     return os.path.normpath(os.path.join(library, "..", *OFFER_SCRIPT_PARTS))
 
 
+def seat_script_path(root_of_plugin: Optional[str] = None) -> str:
+    """The full path of the script that changes what this seat is told."""
+    return _script_path(SEAT_SCRIPT_PARTS, root_of_plugin)
+
+
+def _script_path(parts, root_of_plugin: Optional[str]) -> str:
+    """One of the plugin's own scripts, wherever the plugin was installed."""
+    if root_of_plugin:
+        named = os.path.normpath(os.path.join(root_of_plugin, *parts))
+        if os.path.isfile(named):
+            return named
+    library = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    return os.path.normpath(os.path.join(library, "..", *parts))
+
+
+def moment_script_path(root_of_plugin: Optional[str] = None) -> str:
+    """The full path of the script that checks a document before it is used.
+
+    It is worked out the same way the answer script is, because the instruction
+    that names it is read outside any skill and a relative name would be read
+    against whatever folder the person happens to be in.
+    """
+    return _script_path(MOMENT_SCRIPT_PARTS, root_of_plugin)
+
+
 def load_blocks(root: str, name: str) -> Dict[str, str]:
     """Read one template into its named blocks, comments left out."""
     text = read_text(os.path.join(root, "templates", name))
@@ -283,12 +314,27 @@ def load_blocks(root: str, name: str) -> Dict[str, str]:
     return {name: "\n".join(lines).strip("\n") for name, lines in blocks.items()}
 
 
+_PLACEHOLDER_RE = re.compile(r"\{\{([A-Za-z0-9_]+)\}\}")
+
+
 def fill(text: str, values: Dict[str, Any]) -> str:
-    """Put the values into a fixed template, one place at a time."""
-    filled = text
-    for key, value in values.items():
-        filled = filled.replace("{{%s}}" % key, "" if value is None else str(value))
-    return filled
+    """Put the values into a fixed template, in one pass over the text.
+
+    One pass, because the values come out of the base. Filling one place at a
+    time meant a value holding the name of another place had that place filled
+    inside it on a later turn of the loop, so a map with the right two words in
+    it had the rest of the injected text copied into the middle of the fenced
+    part. Nothing a value carries is looked at again here.
+    """
+
+    def value_for(found):
+        key = found.group(1)
+        if key not in values:
+            return found.group(0)
+        value = values[key]
+        return "" if value is None else str(value)
+
+    return _PLACEHOLDER_RE.sub(value_for, text)
 
 
 # --- The entry points -------------------------------------------------------
@@ -792,13 +838,13 @@ def _daily_work(
 
     on_default, _code = paths.head_is_default_branch(root, runner=git)
     if not on_default:
-        return _stalled(blocks, root, git, NOT_DEFAULT_BRANCH, part)
+        return _stalled(blocks, root, git, root_of_plugin, NOT_DEFAULT_BRANCH, part)
 
     status = git.run(
         ["status", "--porcelain"], cwd=root, timeout=LOCAL_TIMEOUT_SECONDS
     )
     if not status.ok or status.out():
-        return _stalled(blocks, root, git, DIRTY_TREE, part)
+        return _stalled(blocks, root, git, root_of_plugin, DIRTY_TREE, part)
 
     has_remote = paths.remote_url(root, runner=git) is not None
 
@@ -808,21 +854,7 @@ def _daily_work(
         # for it to say is the offer to finish a setup that stopped halfway,
         # and the base itself answers that.
         return _render(
-            part,
-            None,
-            _question_text(
-                root,
-                base_id,
-                session_id,
-                now,
-                git,
-                blocks,
-                _settings_of(_map_text(root)),
-                has_remote,
-                root_of_plugin,
-                part,
-            ).visible
-            or None,
+            part, None, _setup_offer(root, root_of_plugin).visible or None
         )
 
     branch = git.run(
@@ -839,7 +871,7 @@ def _daily_work(
             timeout=constants.FETCH_TIMEOUT_SECONDS,
         )
         if not fetched.ok:
-            return _stalled(blocks, root, git, UNREACHABLE % _as_of(root, git), part)
+            return _stalled(blocks, root, git, root_of_plugin, UNREACHABLE % _as_of(root, git), part)
         target = "origin/" + branch
         incoming = git.run(
             ["diff", "--name-only", "HEAD.." + target],
@@ -847,7 +879,7 @@ def _daily_work(
             timeout=LOCAL_TIMEOUT_SECONDS,
         )
         if not incoming.ok:
-            return _stalled(blocks, root, git, UNREACHABLE % _as_of(root, git), part)
+            return _stalled(blocks, root, git, root_of_plugin, UNREACHABLE % _as_of(root, git), part)
         names = [line.strip() for line in incoming.stdout.split("\n") if line.strip()]
         refused = [name for name in names if _is_refused_path(name)]
         refused.extend(
@@ -855,7 +887,7 @@ def _daily_work(
         )
         if refused:
             _record_pull_refusal(base_id, refused, now.date(), part, left_again)
-            return _stalled(blocks, root, git, PULL_REFUSED, part)
+            return _stalled(blocks, root, git, root_of_plugin, PULL_REFUSED, part)
         if names:
             before = git.run(
                 ["rev-parse", "HEAD"], cwd=root, timeout=LOCAL_TIMEOUT_SECONDS
@@ -867,7 +899,12 @@ def _daily_work(
             )
             if not merged.ok:
                 return _stalled(
-                    blocks, root, git, COULD_NOT_UPDATE % _as_of(root, git), part
+                    blocks,
+                    root,
+                    git,
+                    root_of_plugin,
+                    COULD_NOT_UPDATE % _as_of(root, git),
+                    part,
                 )
             after = git.run(
                 ["rev-parse", "HEAD"], cwd=root, timeout=LOCAL_TIMEOUT_SECONDS
@@ -884,7 +921,7 @@ def _daily_work(
             state.update_seat(base_id, last_seen_commit=after)
             trust_note = _trust_after_update(root, base_id, now.date(), git)
             if trust_note:
-                return _stalled(blocks, root, git, trust_note, part)
+                return _stalled(blocks, root, git, root_of_plugin, trust_note, part)
         else:
             head = git.run(
                 ["rev-parse", "HEAD"], cwd=root, timeout=LOCAL_TIMEOUT_SECONDS
@@ -900,20 +937,10 @@ def _daily_work(
 
     map_text = _map_text(root)
     settings = _settings_of(map_text)
-    question = _question_text(
-        root,
-        base_id,
-        session_id,
-        now,
-        git,
-        blocks,
-        settings,
-        has_remote,
-        root_of_plugin,
-        part,
-    )
-    context = _fill_main(blocks, map_text, settings, changes, "", question.context)
-    return _render(part, context, question.visible or None)
+    offer = _setup_offer(root, root_of_plugin)
+    tail = _tail(blocks, root, base_id, root_of_plugin, offer, now, part)
+    context = _fill_main(blocks, map_text, settings, changes, "", tail)
+    return _render(part, context, offer.visible or None)
 
 
 def _trust_after_update(root, base_id, today, git) -> Optional[str]:
@@ -952,14 +979,16 @@ class _Question(object):
         self.visible = visible
 
 
-def _stalled(blocks, root, git, sentence, part):
+def _stalled(blocks, root, git, root_of_plugin, sentence, part):
     """Say the one sentence, add the map as it stands, and ask nothing."""
     if part.name == "visible":
         return _render(part, None, sentence)
     map_text = _map_text(root)
     settings = _settings_of(map_text)
     note = AS_OF % _as_of(root, git)
-    context = _fill_main(blocks, map_text, settings, 0, note, "")
+    context = _fill_main(
+        blocks, map_text, settings, 0, note, _moment_block(blocks, root_of_plugin)
+    )
     return _render(part, context, sentence)
 
 
@@ -987,41 +1016,17 @@ def _fill_main(blocks, map_text, settings, changes, status_note, question_text):
             "map": shown_map,
             "threshold_days": settings.confirmation_threshold_days,
             "not_now_days": settings.not_now_days,
-            "question": question_text,
+            "tail": question_text,
         },
     )
     return text[: constants.MAX_INJECTION_CHARS]
 
 
-# --- Reading the base for the question --------------------------------------
-
-
-def _newest_date_in(value) -> Optional[str]:
-    return base_reader.newest_date_in(value)
+# --- Reading the base ---------------------------------------------------
 
 
 def _context_files(root: str) -> List[stale.ContextFileInfo]:
     return base_reader.context_files(root)
-
-
-def _ledger(root: str, base_id: str, today: datetime.date) -> List[stale.LedgerInput]:
-    return base_reader.ledger(root, base_id, today)
-
-
-def _line_authors(root: str, relative: str, git: GitRunner) -> Dict[int, str]:
-    return base_reader.line_authors(root, relative, git)
-
-
-def _confirmations(root: str, git: GitRunner) -> List[stale.ConfirmationRecord]:
-    return base_reader.confirmations(root, git)
-
-
-def _corrections(root: str, git: GitRunner) -> List[stale.CorrectionRecord]:
-    return base_reader.corrections(root, git)
-
-
-def _seat_input(base_id: str, has_remote: bool) -> stale.SeatInput:
-    return base_reader.seat_input(base_id, has_remote)
 
 
 def _missing_required(files: Dict[str, stale.ContextFileInfo]) -> List[str]:
@@ -1029,129 +1034,68 @@ def _missing_required(files: Dict[str, stale.ContextFileInfo]) -> List[str]:
     return base_reader.missing_required(files)
 
 
-def _question_text(
-    root,
-    base_id,
-    session_id,
-    now,
-    git,
-    blocks,
-    settings,
-    has_remote,
-    root_of_plugin,
-    part,
-) -> _Question:
-    """The one question this session asks, or the reason it asks none.
+def _setup_offer(root, root_of_plugin) -> _Question:
+    """The offer to finish a setup that stopped halfway, or nothing at all.
 
-    Only one thing here is ever said out loud, which is the offer to finish a
-    setup that stopped halfway, so the part that prints what a person sees works
-    that out from the same files and then stops. Which file is asked about is
-    text the assistant reads, and settling it reads the base line by line and
-    issues an id that may be issued once, so neither belongs in a part that must
-    write nothing.
+    This is the one thing a session start still says out loud. Amendment r2.5
+    took the question away from here: a session records itself, brings the base
+    up to date, hands over the map and what has changed, and asks nothing. Both
+    halves of the session start work this out from the same files, and neither
+    of them writes anything down to do it.
     """
-    today = state.today(now)
-    files = _context_files(root)
-    ledger = _ledger(root, base_id, today)
-    by_path = {info.path: info for info in files}
-
-    # Setup is finished when both required documents are there. A base that
-    # holds no context change yet is a finished base with nothing recorded
-    # against it, not a half made one, so it is never offered setup again
-    # (Unit 1.2 of the 2026-09-19 plan, requirement P1).
+    by_path = {info.path: info for info in _context_files(root)}
     missing = _missing_required(by_path)
-    if missing:
-        setup = load_blocks(root_of_plugin, "continue-setup.md")
-        named = ", ".join(missing)
-        return _Question(
-            fill(setup.get("context", ""), {"missing": named}),
-            fill(setup.get("visible", ""), {"missing": named}),
-        )
-
-    if not part.writes:
+    if not missing:
         return _Question("", "")
-
-    email = _repo_email(root, git)
-    owned = [path for path, info in by_path.items() if email and email in info.owners]
-    if not owned:
-        return _Question(blocks.get("no-owner", ""), "")
-
-    report = stale.compute(
-        today=today,
-        settings=settings,
-        files=files,
-        ledger=ledger,
-        confirmations=_confirmations(root, git),
-        corrections=_corrections(root, git),
-        seat=_seat_input(base_id, has_remote),
-        owner_email=email,
+    setup = load_blocks(root_of_plugin, "continue-setup.md")
+    named = ", ".join(missing)
+    return _Question(
+        fill(setup.get("context", ""), {"missing": named}),
+        fill(setup.get("visible", ""), {"missing": named}),
     )
-    candidates = report.candidate_questions(email)
-    chosen = None
-    rest: List[str] = []
-    for candidate in candidates:
-        try:
-            path = paths.canonical_context_path(root, candidate.path)
-        except (PathError, ValidationError) as failure:
-            state.append_dropped_path(
-                base_id, candidate.path, "dropped-path", candidate.entry_id, today
-            )
-            continue
-        if chosen is None:
-            chosen = (candidate, path)
-        else:
-            rest.append(path)
-    if chosen is None:
-        return _Question("", "")
 
-    candidate, path = chosen
-    question = state.issue_question_id(
-        base_id, path, candidate.trigger, session_id, candidate.entry_id, now
-    )
-    state.append_asked(base_id, question, path, candidate.trigger, "unanswered", today)
 
-    entry_note = ""
-    entry_show = ""
-    trigger_note = blocks.get("trigger-threshold", "")
-    if candidate.trigger == stale.TRIGGER_LEDGER and candidate.entry_id:
-        trigger_note = blocks.get("trigger-ledger", "")
-        entry_file = _entry_file_name(ledger, candidate.entry_id)
-        block = "entry-note" if entry_file else "entry-note-plain"
-        entry_note = fill(
-            blocks.get(block, ""),
-            {"entry_id": candidate.entry_id, "entry_file": entry_file},
-        )
-        if entry_note:
-            entry_note += "\n"
-        entry_show = blocks.get("entry-show", "")
-    also = ""
-    if rest:
-        also = fill(blocks.get("also-waiting", ""), {"paths": ", ".join(rest)})
-
-    text = fill(
-        blocks.get("question", ""),
+def _moment_block(blocks, root_of_plugin=None) -> str:
+    """The hard rule about using a document, with the script named in full."""
+    return fill(
+        blocks.get("moment", ""),
         {
-            "path": path,
-            "trigger_note": trigger_note,
-            "entry_note": entry_note,
-            "entry_show": entry_show,
-            "question_id": question,
-            "script": CONFIRM_SCRIPT,
-            "also_waiting": also,
+            "moment_script": moment_script_path(root_of_plugin),
+            "seat_script": seat_script_path(root_of_plugin),
         },
     )
-    return _Question(text, "")
 
 
-def _entry_file_name(ledger: Sequence[stale.LedgerInput], entry_id: str) -> str:
-    """The name of the file one decision was written in, when it is plain.
+def _weekly_block(base_id, root_of_plugin, now, part) -> str:
+    """The one line a week, when it is on, due, and not being kept quiet.
 
-    The name comes out of the shared copy, and it lands outside the fenced part
-    of the injection, so a name holding anything but plain letters, digits, and
-    the three marks below is left out rather than passed on.
+    The day it was said is written down by the half of the session start that
+    writes, which is the same half that says it, so a line said once is never
+    said twice by the other half a moment later. It carries no count of what is
+    due, because nothing has been counted by this point in the session.
     """
-    for item in ledger:
-        if item.entry is not None and item.entry.id == entry_id:
-            name = (item.path or "").rsplit("/", 1)[-1]
-            return name if _PLAIN_FILE_NAME.match(name) else ""
-    return ""
+    if not part.writes:
+        return ""
+    today = state.today(now)
+    seat, _problems = state.load_seat(base_id)
+    if not state.weekly_line_due(seat, today):
+        return ""
+    blocks = load_blocks(root_of_plugin, "weekly-line.md")
+    text = blocks.get("context", "")
+    if not text:
+        return ""
+    try:
+        state.record_weekly_line(base_id, today)
+    except Exception:
+        return ""
+    return text
+
+
+def _tail(blocks, root, base_id, root_of_plugin, offer, now, part) -> str:
+    """Everything that follows the map: the setup offer, the rule, the line."""
+    pieces = [
+        offer.context,
+        _moment_block(blocks, root_of_plugin),
+        _weekly_block(base_id, root_of_plugin, now, part),
+    ]
+    return "\n".join(piece for piece in pieces if piece)

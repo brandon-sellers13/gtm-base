@@ -153,16 +153,28 @@ class TestManifests(unittest.TestCase):
         hooks = read_json(HOOKS_PATH)
         self.assertEqual({"PreToolUse", "SessionStart"}, set(hooks["hooks"].keys()))
 
-        before_a_send = hooks["hooks"]["PreToolUse"]
-        self.assertEqual(1, len(before_a_send))
-        self.assertEqual("Bash", before_a_send[0]["matcher"])
-        self.assertEqual(1, len(before_a_send[0]["hooks"]))
+        # Two entries before a tool runs, one per tool. Unit 1.3 added the one
+        # on the file-reading tool; matching hooks for one event run in
+        # parallel, so the one that reads every command is unaffected and is
+        # asserted below exactly as it was.
+        before_a_tool = hooks["hooks"]["PreToolUse"]
+        by_tool = {entry["matcher"]: entry for entry in before_a_tool}
+        self.assertEqual({"Bash", "Read"}, set(by_tool))
+        self.assertEqual(2, len(before_a_tool))
+        self.assertEqual(1, len(by_tool["Bash"]["hooks"]))
 
-        declared = before_a_send[0]["hooks"][0]
+        declared = by_tool["Bash"]["hooks"][0]
         self.assertEqual("command", declared["type"])
         self.assertEqual(20, declared["timeout"])
         self.assertIn("${CLAUDE_PLUGIN_ROOT}", declared["command"])
         self.assertTrue(declared["command"].endswith("/hooks/pre-push-gate.sh claude"))
+
+        self.assertEqual(1, len(by_tool["Read"]["hooks"]))
+        reading = by_tool["Read"]["hooks"][0]
+        self.assertEqual("command", reading["type"])
+        self.assertLessEqual(reading["timeout"], 15)
+        self.assertIn("${CLAUDE_PLUGIN_ROOT}", reading["command"])
+        self.assertTrue(reading["command"].endswith("/hooks/read-check.sh claude"))
 
         # Two entries: the first prints only what the person sees, the second
         # only what the assistant reads, because a client reads a hook's output
@@ -189,7 +201,7 @@ class TestManifests(unittest.TestCase):
                 session["command"],
             )
 
-        for name in ("pre-push-gate.sh", "session-start.sh"):
+        for name in ("pre-push-gate.sh", "session-start.sh", "read-check.sh"):
             script = os.path.join(PLUGIN_DIR, "hooks", name)
             self.assertTrue(os.path.isfile(script), name)
             self.assertTrue(os.access(script, os.X_OK), "%s must be executable" % name)

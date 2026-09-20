@@ -20,7 +20,7 @@ import re
 from typing import Dict, List, Optional, Sequence
 
 from . import constants, formats, ids, paths, stale, state, validate
-from .errors import PathError, ValidationError
+from .errors import GtmBaseError, PathError, ValidationError
 from .fsutil import read_text
 from .gitcmd import GitRunner, runner_or_default
 
@@ -231,15 +231,35 @@ def ledger(
     return entries
 
 
+class AuthorsUnavailable(GtmBaseError):
+    """Who wrote the lines could not be read, so nothing may be concluded.
+
+    An empty answer and an unreadable answer mean opposite things here. Empty
+    says nobody owns any of these lines, which makes every confirmation in the
+    file count for nothing and every document it settles look out of date.
+    Unreadable says the question was not answered. Handing the first back for
+    the second is how a settled document gets flagged and somebody is asked to
+    confirm something they already confirmed.
+    """
+
+
 def line_authors(root: str, relative: str, git: GitRunner) -> "Dict[int, str]":
-    """Who added each line of one file, which is the only identity we trust."""
+    """Who added each line of one file, which is the only identity we trust.
+
+    A file nobody has saved yet has no authors and that is an answer. A read
+    that failed or ran out of time is not an answer, and it raises rather than
+    coming back looking like the first one.
+    """
     result = git.run(
         ["blame", "--line-porcelain", "--", relative],
         cwd=root,
         timeout=LOCAL_TIMEOUT_SECONDS,
     )
     if not result.ok:
-        return {}
+        raise AuthorsUnavailable(
+            "who wrote the lines of %s could not be read" % relative,
+            code="unreadable",
+        )
     authors: Dict[int, str] = {}
     current: Optional[int] = None
     for line in result.stdout.split("\n"):
@@ -253,7 +273,12 @@ def line_authors(root: str, relative: str, git: GitRunner) -> "Dict[int, str]":
 
 
 def confirmations(root: str, git: GitRunner) -> "List[stale.ConfirmationRecord]":
-    """Every confirmation line, paired with the person who added it."""
+    """Every confirmation line, paired with the person who added it.
+
+    It raises when who wrote the lines cannot be read, because a confirmation
+    with nobody behind it settles nothing, and a run that quietly treated one
+    as unowned would flag documents their owners had already confirmed.
+    """
     records: List[stale.ConfirmationRecord] = []
     folder = os.path.join(root, constants.CONFIRMATIONS_DIR)
     if not os.path.isdir(folder):

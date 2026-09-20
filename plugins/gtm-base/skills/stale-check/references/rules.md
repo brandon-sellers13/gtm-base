@@ -171,3 +171,59 @@ looked for never changes:
 
 The wording never claims more than the dates show, and the finding is worked out
 fresh every time it is asked for, never remembered from a previous run.
+
+## What the review asks, and what the moment of use asks
+
+Nothing is asked at the start of a session. Two things ask, and they ask under
+different rules.
+
+1. **The review a person asks for**, by saying "review my base". It lists every
+   document the rules above call out of date and that this seat's address owns,
+   one line each, and it issues one single-use question identifier per document
+   listed. A document set aside for now is not listed until the day it comes
+   back. The base's own map is never listed, whatever its dates say. Every
+   prepared change waiting for the owner's yes is listed too, with no question
+   identifier, because approving a change is not answering a question.
+2. **The moment a document is about to be used.** This raises itself, and it is
+   the only thing that does. It fires for one reason only: an open context
+   change has moved past that document. A document nobody has confirmed for
+   longer than the threshold does not raise it, and neither does an unanswered
+   marker in the document; both of those wait for the review. It says a fix is
+   ready only when a prepared change for that document is really waiting, and
+   otherwise it offers to prepare one.
+
+While the base has been asked to stay quiet, neither the weekly line nor the
+moment of use says anything, and a review the person asks for still works.
+Quiet asked for until they ask again ends the moment they ask for a review, and
+the review says so in its first sentence. Quiet asked for as a month ends on
+its own day, and no quiet lasts longer than a month however it was written
+down.
+
+## What one answer settles, and what it leaves alone
+
+Each of these is one answer about one thing, and none of them reaches further
+than what the person was shown.
+
+1. **Use it as it stands.** Nothing is written about the document. The flag
+   still stands, the document is still listed in the next review, and the next
+   check says the same thing. What is recorded is only how the question ended,
+   in this seat's own log, counted apart from the times somebody said a
+   document was still right.
+2. **It already reflects this change.** One confirmation line is written and it
+   names that one change. It settles that change for that document and no
+   other. A document behind two changes is still behind the second one
+   afterwards, and the next check says so, because the person was shown one
+   change and answered about one change.
+3. **Not now**, inside a review. The document is left out of reviews for the
+   number of days the map sets. It does not stop the moment of use. A document
+   somebody is about to use, that a recorded change has overtaken, is the one
+   case the base speaks up for, and setting a question aside in a review is not
+   a statement that the document is fine to use.
+4. **Fix it first.** A change is prepared for that document and that change,
+   and nothing happens to the document until its owner approves it. A change
+   already prepared for that pair is never prepared twice, and nothing is
+   prepared at all while items are waiting to be read in the inbox.
+
+Somebody who does not own the document can still carry on or stop, but the
+confirmation is the owner's to give and is refused for anybody else before any
+question is used up.

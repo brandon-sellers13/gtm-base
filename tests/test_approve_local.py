@@ -44,54 +44,10 @@ SKILL_DIR = os.path.join(support.PLUGIN_DIR, "skills", "propose-change")
 
 # --- The runner every scenario uses ------------------------------------------
 
-# Anything that could carry a byte off this computer. `remote get-url` is not
-# one of them: it reads the base's own settings and asks nobody anything.
-REMOTE_COMMANDS = (
-    "push",
-    "fetch",
-    "pull",
-    "clone",
-    "ls-remote",
-    "request-pull",
-    "submodule",
-    "bundle",
-    "daemon",
-)
-
-
-class NoRemoteRunner(object):
-    """The real runner, with every command that could reach a remote refused.
-
-    It fails the test rather than returning an error, because a path that tried
-    to reach a remote and was politely refused is still a path that tried.
-    """
-
-    def __init__(self):
-        self.inner = GitRunner()
-        self.calls = []
-
-    def _check(self, args):
-        arguments = [str(item) for item in args]
-        self.calls.append(arguments)
-        words = [item for item in arguments if not item.startswith("-")]
-        first = words[0] if words else ""
-        if first in REMOTE_COMMANDS:
-            raise AssertionError("this path tried to reach a remote: %s" % arguments)
-        if first == "remote" and len(words) > 1:
-            # Listing them, and reading one address out of the base's own
-            # settings, are both local reads. Anything else changes something.
-            if words[1] not in ("get-url", "show"):
-                raise AssertionError("this path changed a remote: %s" % arguments)
-        if first == "archive" and "--remote" in arguments:
-            raise AssertionError("this path tried to reach a remote: %s" % arguments)
-
-    def run(self, args, cwd=None, timeout=20, input=None):
-        self._check(args)
-        return self.inner.run(args, cwd=cwd, timeout=timeout, input=input)
-
-    def check(self, args, cwd=None, timeout=20, input=None):
-        self._check(args)
-        return self.inner.check(args, cwd=cwd, timeout=timeout, input=input)
+# It lives in `support.py` now, because Unit 1.3 needs the same proof for the
+# moment-of-use check and two copies of one safety net is one copy too many.
+REMOTE_COMMANDS = support.REMOTE_COMMANDS
+NoRemoteRunner = support.NoRemoteRunner
 
 
 # --- Fixtures ----------------------------------------------------------------

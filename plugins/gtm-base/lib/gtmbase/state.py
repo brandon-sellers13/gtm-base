@@ -70,6 +70,7 @@ ASKED_LOG_FILE = "asked_log.jsonl"
 SUPPRESSIONS_FILE = "suppressions.json"
 DISMISSALS_FILE = "dismissals.json"
 DROPPED_PATHS_FILE = "dropped_paths.jsonl"
+READ_NOTICES_FILE = "read_notices.json"
 CAPTURE_MARKER_FILE = "capture_marker.json"
 
 _KEY_SHAPE = re.compile(
@@ -338,7 +339,29 @@ SEAT_DEFAULTS = {
     "first_push_reviewed": False,
     "git_hook_installed": False,
     "git_hook_code": None,
+    # The weekly one line. It is off until somebody turns it on, and the day it
+    # was last said is kept so it is said once in a week and never twice.
+    "weekly_line": False,
+    "weekly_line_said_on": None,
+    # The day the base may speak up again, when somebody asked for quiet.
+    "silent_until": None,
 }
+
+# How long a week is, for the one line a week.
+WEEKLY_LINE_DAYS = 7
+
+# How long quiet lasts when somebody asks for a month of it, and the longest
+# any quiet may last. A date further out than this is not honoured, so nothing
+# that goes wrong, and nothing anybody edits by hand, can silence a base for a
+# year without somebody choosing that.
+SILENCE_DAYS = 30
+
+# What is written down when somebody asks for quiet until they ask again
+# rather than for a month. The review a person asks for clears it, which is
+# what "until they ask" means.
+SILENT_UNTIL_ASKED = "until-asked"
+
+_DAY_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 
 
 # What one held confirmation remembers while it waits to be sent.
@@ -401,9 +424,18 @@ def load_seat(base_id: str) -> Tuple[dict, List[str]]:
     if seat["client"] is not None and seat["client"] not in constants.CLIENTS:
         seat["client"] = None
         problems.append("bad-value")
-    for name in ("first_push_reviewed", "git_hook_installed"):
+    for name in ("first_push_reviewed", "git_hook_installed", "weekly_line"):
         if not isinstance(seat[name], bool):
             seat[name] = False
+            problems.append("bad-value")
+    for name in ("weekly_line_said_on", "silent_until"):
+        value = seat[name]
+        allowed = isinstance(value, str) and (
+            _DAY_RE.match(value)
+            or (name == "silent_until" and value == SILENT_UNTIL_ASKED)
+        )
+        if value is not None and not allowed:
+            seat[name] = None
             problems.append("bad-value")
     for name in (
         "pending_confirmation",
@@ -460,6 +492,180 @@ def update_seat(base_id: str, **values) -> dict:
     seat, _problems = load_seat(base_id)
     seat.update(values)
     return save_seat(base_id, seat)
+
+
+# --- The weekly line, and being asked for quiet ------------------------------
+
+
+def _day_of(value) -> Optional[str]:
+    """One day as the base writes it, from a date or from a string."""
+    if value is None:
+        return None
+    if isinstance(value, datetime.datetime):
+        return value.date().isoformat()
+    if isinstance(value, datetime.date):
+        return value.isoformat()
+    text = str(value).strip()
+    return text if _DAY_RE.match(text) else None
+
+
+def set_weekly_line(base_id: str, on: bool) -> dict:
+    """Turn the weekly one line on or off. It ships off."""
+    return update_seat(base_id, weekly_line=bool(on))
+
+
+def set_silent_until(base_id: str, until) -> dict:
+    """Keep the base quiet up to a day, or let it speak again with None.
+
+    A day further out than the longest quiet anybody can ask for is written
+    down as that longest day instead, so what is stored can never say more
+    than what somebody chose.
+    """
+    if until == SILENT_UNTIL_ASKED:
+        return update_seat(base_id, silent_until=SILENT_UNTIL_ASKED)
+    day = _day_of(until)
+    if day:
+        longest = _day_of(datetime.date.today() + datetime.timedelta(days=SILENCE_DAYS))
+        if day > longest:
+            day = longest
+    return update_seat(base_id, silent_until=day)
+
+
+def is_silent(seat: dict, today: datetime.date) -> bool:
+    """Whether the base has been asked to stay quiet right now.
+
+    Quiet holds up to, but not including, the day the base speaks again. Quiet
+    asked for until the person asks again holds until the review clears it. A
+    day further out than the longest quiet anybody can ask for is not honoured
+    at all, whatever put it there.
+    """
+    stored = (seat or {}).get("silent_until")
+    if stored == SILENT_UNTIL_ASKED:
+        return True
+    until = _day_of(stored)
+    if not until:
+        return False
+    day = today if isinstance(today, datetime.date) else datetime.date.today()
+    longest = _day_of(day + datetime.timedelta(days=SILENCE_DAYS))
+    if until > longest:
+        return False
+    return _day_of(day) < until
+
+
+def weekly_line_due(seat: dict, today: datetime.date) -> bool:
+    """Whether the weekly line is on, not silenced, and not said this week."""
+    if not (seat or {}).get("weekly_line"):
+        return False
+    if is_silent(seat, today):
+        return False
+    said = _day_of((seat or {}).get("weekly_line_said_on"))
+    if not said:
+        return True
+    try:
+        last = datetime.date(*[int(part) for part in said.split("-")])
+    except (TypeError, ValueError):
+        return True
+    day = today if isinstance(today, datetime.date) else datetime.date.today()
+    return (day - last).days >= WEEKLY_LINE_DAYS
+
+
+def silent_until_asked(seat: dict) -> bool:
+    """Whether the quiet in force is the kind a review is meant to clear."""
+    return (seat or {}).get("silent_until") == SILENT_UNTIL_ASKED
+
+
+def record_weekly_line(base_id: str, today) -> dict:
+    """Write down the day the weekly line was said, so it is said once."""
+    return update_seat(base_id, weekly_line_said_on=_day_of(today))
+
+
+# --- What has already been said about a document this session ----------------
+
+# How many of these are kept. They exist to stop one session saying the same
+# thing twice, so the oldest are dropped once a session is long past.
+NOTICES_KEPT = 100
+
+
+def load_read_notices(base_id: str) -> Tuple[List[dict], List[str]]:
+    """Everything this seat has already said about a document, by session."""
+    payload = read_json(_path(base_id, READ_NOTICES_FILE))
+    if payload is None:
+        return [], []
+    if not isinstance(payload, dict) or not isinstance(payload.get("said"), list):
+        return [], ["malformed"]
+    problems: List[str] = []
+    kept: List[dict] = []
+    for row in payload["said"]:
+        if not isinstance(row, dict):
+            problems.append("bad-row")
+            continue
+        session = row.get("session")
+        path_hash = row.get("path_hash")
+        if not isinstance(session, str) or not isinstance(path_hash, str):
+            problems.append("bad-row")
+            continue
+        entry_id = row.get("entry_id")
+        kept.append(
+            {
+                "session": session,
+                "path_hash": path_hash,
+                "entry_id": entry_id if isinstance(entry_id, str) else None,
+                "at": row.get("at"),
+            }
+        )
+    return kept, problems
+
+
+def notice_was_said(
+    base_id: str, session_id: str, path: str, entry_id: Optional[str] = None
+) -> bool:
+    """Whether this session has already been told this about this document.
+
+    The change is part of what is remembered, not only the document. A second
+    change can be written down in the middle of a session, and a session that
+    was told about the first one is not a session that has heard about the
+    second.
+
+    The path is kept as a hash and never as itself, because a path can name a
+    customer and this file is read back in plain sight.
+    """
+    if not session_id:
+        return False
+    wanted = ids.path_hash(path)
+    rows, _problems = load_read_notices(base_id)
+    return any(
+        row["session"] == session_id
+        and row["path_hash"] == wanted
+        and (row.get("entry_id") or None) == (entry_id or None)
+        for row in rows
+    )
+
+
+def record_notice(
+    base_id: str, session_id: str, path: str, entry_id: Optional[str] = None
+) -> None:
+    """Write down that this session has been told this about this document."""
+    if not session_id:
+        return
+    rows, _problems = load_read_notices(base_id)
+    row = {
+        "session": session_id,
+        "path_hash": ids.path_hash(path),
+        "entry_id": entry_id or None,
+        "at": iso_utc(),
+    }
+    if any(
+        item["session"] == row["session"]
+        and item["path_hash"] == row["path_hash"]
+        and (item.get("entry_id") or None) == (row["entry_id"] or None)
+        for item in rows
+    ):
+        return
+    rows.append(row)
+    atomic_write_json(
+        _path(base_id, READ_NOTICES_FILE),
+        {"schema": 1, "said": rows[-NOTICES_KEPT:]},
+    )
 
 
 # --- Question ids ------------------------------------------------------------
@@ -592,7 +798,7 @@ def load_asked(base_id: str) -> Tuple[List[dict], List[str]]:
                 problems.append("unknown-key")
                 continue
             record[key] = value
-        if record.get("outcome") not in constants.ASKED_OUTCOMES:
+        if record.get("outcome") not in constants.ASKED_OUTCOMES_ALL:
             problems.append("bad-value")
             continue
         kept.append(record)
@@ -612,7 +818,7 @@ def append_asked(
     The date is the day it is where the person is sitting, so it lines up with
     the dates the report counts over.
     """
-    if outcome not in constants.ASKED_OUTCOMES:
+    if outcome not in constants.ASKED_OUTCOMES_ALL:
         raise StateError("that is not an answer we record", code="bad-value")
     ids.check_question_id(question)
     row = {
@@ -629,7 +835,7 @@ def append_asked(
 
 
 def set_outcome(base_id: str, question: str, outcome: str) -> bool:
-    if outcome not in constants.ASKED_OUTCOMES:
+    if outcome not in constants.ASKED_OUTCOMES_ALL:
         raise StateError("that is not an answer we record", code="bad-value")
     rows, _problems = load_asked(base_id)
     found = False

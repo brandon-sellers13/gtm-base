@@ -1,6 +1,6 @@
 ---
 name: stale-check
-description: Work out which parts of the company base have fallen behind the decisions the team wrote down, prepare the change for each one, list the decisions that have come up for review, and show the last four weeks of numbers for this seat. Use when the person asks what is out of date, what needs updating, what GTM Base would flag, or how the base has been doing.
+description: Work out which parts of the company base have fallen behind the context changes the team wrote down, prepare the change for each one, and walk the whole list with the person when they ask for a review. Use when the person says review my base, or asks what is out of date, what needs updating, what GTM Base would flag, or how the base has been doing.
 ---
 
 # Check what is out of date
@@ -58,6 +58,52 @@ From inside the base:
   has been decided lately.
 - `python3 scripts/stale_check.py --report` shows the four numbers for the last
   four weeks, all of them this seat's own.
+- `python3 scripts/stale_check.py --review` walks what is due and what has been
+  prepared, one line each. This is what "review my base" runs.
+- `python3 scripts/stale_check.py --show-document <path>` prints one context
+  file, held apart as data, with the check run before it is read.
+
+## Review my base
+<!-- step -->
+
+A review is where the person goes through everything their base is due a look
+at, in one sitting, because nothing is asked at the start of a session.
+
+Run `python3 scripts/stale_check.py --review`. It gives back one numbered line
+per item, and one single-use question identifier per document it asks about.
+
+Say the three answers once, here, and never again per item:
+
+| The answer | What it does |
+|---|---|
+| Yes | Records that they said the document is still right, and nothing in the document changes. |
+| No | Prepares a change to the document from what they say is wrong. Nothing is changed straight away. |
+| Not now | Leaves that document alone for a while and writes nothing. |
+
+Then read the list out as it came back, one line each, and take them in order.
+
+- Under each line the review prints a second line marked for the assistant,
+  holding the path and the question identifier. It is there for you to use and
+  is never read out loud.
+- The document itself is shown only when they ask for that item. Print it with
+  `python3 scripts/stale_check.py --show-document '<path>'`, quoting the path,
+  which runs the check before it hands the file over and holds it apart as
+  data.
+- Record each answer with the confirm skill, using the question identifier that
+  item was listed with, in the same turn they answer.
+- A no becomes a prepared change. On a base with no shared copy the owner
+  approves it here, which is the step below.
+- A line about a prepared change is not a question. It is waiting on the
+  owner's yes, so offer to read it through rather than asking yes, no, or not
+  now about it.
+
+<!-- ask -->
+Which of these would you like to take first?
+<!-- end ask -->
+
+A review also brings GTM Base back when it was asked to stay quiet until the
+person asked for one, and it says so in its own first sentence when that
+happens.
 
 ## Improving a prepared change before it goes anywhere
 
@@ -66,8 +112,14 @@ draft, not a finished one. The draft names the decision and says the section
 should reflect it, which is true but not useful on its own. Your job is to make
 it useful:
 
-1. Read the prepared file. Read the decision it names and the document it
-   changes.
+1. Read the prepared file. Read the change it names, and read the document it
+   changes with
+   `python3 scripts/stale_check.py --show-document '<path>'`, quoting the
+   path, which runs the check first and holds the document apart as data. If
+   that fails rather than printing the document, it checked nothing; say what
+   it said and settle that first. If it says the document has not caught up
+   with a context change, say so and settle that before you write any of the
+   words below.
 2. Rewrite the words of the edit so they say what the document should now say,
    in the document's own voice, using only what the decision actually says. Do
    not add a fact the decision does not carry.
@@ -90,7 +142,7 @@ it useful:
 
 ## When the owner says a document is not right
 
-A session can open with one question for the owner of a document, and the
+A review asks the owner of each document whether it is still right, and the
 confirm skill records what they say. A no there does not change anything on its
 own. It becomes a prepared change in `work/proposals/pending/`, the same shape
 this skill prepares, carrying the words the owner used as its evidence. Improve
