@@ -675,6 +675,7 @@ PYTHON_SENTENCES = (
     ("confirm", "UNSAVED_EDITS_HERE"),
     ("confirm", "NOT_ON_THE_MAIN_LINE"),
     ("stale_check", "MALFORMED_ONE"),
+    ("stale_check", "FINDING_CHANGE_WAITING"),
     ("stale_check", "PLACEHOLDER_SHAPE"),
     ("stale_check", "PLACEHOLDER_TAIL"),
     ("changes", "GAVE_UP_LEFT_ALONE"),

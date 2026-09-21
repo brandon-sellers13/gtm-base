@@ -452,14 +452,61 @@ def _recorded_already(base_root: str, staging_id: str) -> bool:
 class _Walk(object):
     """Every file this change rewrites, and what each part said before and after."""
 
-    __slots__ = ("texts", "steps", "ordered")
+    __slots__ = ("texts", "steps", "ordered", "leave_alone")
 
-    def __init__(self, texts, steps, ordered):
+    def __init__(self, texts, steps, ordered, leave_alone=None):
         # texts maps a path to the whole file as this change would leave it.
         self.texts = texts
         # steps is one (path, heading, before, after) for each edit, in order.
         self.steps = steps
         self.ordered = ordered
+        # The paths this change does not write at all, because the file in
+        # front of the person already is the change (finding N1).
+        self.leave_alone = set(leave_alone or [])
+
+
+def _walk_a_hand_edit(base_root: str, staging, git: GitRunner) -> "_Walk":
+    """What a change somebody made by hand would leave, which is what is there.
+
+    Finding N1 of the final confirmation pass. This used to apply the staged
+    edits on top of the document they were taken from and ask for the answer
+    to equal the document. That only holds where applying an edit twice is the
+    same as applying it once, and six ordinary shapes of edit are not: a
+    document with no newline at its end, an edit that takes that newline away
+    or leaves two blank lines, a part added by hand, a heading renamed, and
+    words under a part that has smaller parts under it. Every one of them was
+    refused as moved straight after being prepared.
+
+    So nothing is applied. The document as it sits on the disk is what saying
+    yes saves, byte for byte, which also stops a document whose lines end the
+    other way being rewritten on the way through (finding N8). What each part
+    said before is read from the last saved version, and what it says now is
+    read from the document.
+    """
+    texts: Dict[str, str] = {}
+    steps: List[Tuple[str, str, str, str]] = []
+    ordered = compose_proposal.edited_paths(staging)
+    for relative in ordered:
+        now = read_text_exactly(
+            os.path.join(base_root, relative.replace("/", os.sep))
+        )
+        if now is None:
+            raise compose_proposal.ConflictError(
+                "the file is not there any more", code=CODE_CONFLICT
+            )
+        texts[relative] = now
+    for one in staging.edits:
+        relative = paths.canonical_context_path(base_root, one.path)
+        was = _head_text(base_root, relative, git) or ""
+        steps.append(
+            (
+                relative,
+                one.heading,
+                _section_now(was, one.heading),
+                _section_now(texts[relative], one.heading),
+            )
+        )
+    return _Walk(texts, steps, ordered, leave_alone=ordered)
 
 
 def _walk_the_edits(base_root: str, staging) -> "_Walk":
@@ -687,7 +734,10 @@ def _shown_hash(staged_text: str, base_root: str, ordered: List[str]) -> str:
     parts = [staged_text]
     for relative in ordered:
         parts.append(
-            read_text(os.path.join(base_root, relative.replace("/", os.sep))) or ""
+            read_text_exactly(
+                os.path.join(base_root, relative.replace("/", os.sep))
+            )
+            or ""
         )
     return _hash_of_parts(parts)
 
@@ -718,6 +768,27 @@ class _Reading(object):
         self.artifact = artifact
         self.shown_hash = shown_hash
         self.by_hand = by_hand
+
+
+def _a_document_that_moved_on(base_root: str, staging) -> Optional[str]:
+    """The first document this change was made from that is not what it was.
+
+    Findings H2 of the third look and N1 of the final pass together. A change
+    somebody made by hand is the document in front of them, so the question is
+    whether that document still holds the bytes the change was prepared from,
+    and the prepared change carries those bytes as a value. A change prepared
+    by an older build carries none, and for that one there is nothing to
+    compare, so it is left to the rest of the checks.
+    """
+    ordered = compose_proposal.edited_paths(staging)
+    recorded = list(getattr(staging, "target_bytes", None) or [])
+    if len(recorded) != len(ordered):
+        return None
+    for relative, wanted in zip(ordered, recorded):
+        data = read_bytes(os.path.join(base_root, relative.replace("/", os.sep)))
+        if data is None or ids.bytes_hash(data) != wanted:
+            return relative
+    return None
 
 
 def _made_by_hand(staging) -> bool:
@@ -828,8 +899,25 @@ def _read_and_check(base_root, base_id, staging_path, git, today):
             None,
         )
 
+    by_hand = _made_by_hand(staging)
+    if by_hand:
+        moved = _a_document_that_moved_on(base_root, staging)
+        if moved is not None:
+            return (
+                _refused(
+                    STATUS_MOVED,
+                    CODE_PREPARED_FROM_OLDER,
+                    PREPARED_FROM_OLDER % names.document_name(moved),
+                    staging.staging_id,
+                ),
+                None,
+            )
     try:
-        walk = _walk_the_edits(base_root, staging)
+        walk = (
+            _walk_a_hand_edit(base_root, staging, git)
+            if by_hand
+            else _walk_the_edits(base_root, staging)
+        )
     except compose_proposal.ConflictError:
         first = compose_proposal.edited_paths(staging)
         return (
@@ -873,30 +961,6 @@ def _read_and_check(base_root, base_id, staging_path, git, today):
     if owner_problems:
         return _many(STATUS_REFUSED, staging.staging_id, owner_problems), None
 
-    by_hand = _made_by_hand(staging)
-    if by_hand:
-        # Finding H2 of the third look. A change made by hand is the unsaved
-        # file, so the moment the file says something the change does not, the
-        # change is a record of an older afternoon. Applying it wrote that
-        # older wording over the newer one while showing the newer one as what
-        # would be written.
-        for relative in walk.ordered:
-            now = read_text(os.path.join(base_root, relative.replace("/", os.sep)))
-            # What is compared is what the two say, not how their lines end,
-            # because a document saved with the other line endings is the same
-            # document and the person has said nothing new in it.
-            if now is None or ids.content_hash(now) != ids.content_hash(
-                walk.texts[relative]
-            ):
-                return (
-                    _refused(
-                        STATUS_MOVED,
-                        CODE_PREPARED_FROM_OLDER,
-                        PREPARED_FROM_OLDER % names.document_name(relative),
-                        staging.staging_id,
-                    ),
-                    None,
-                )
     differences = (
         whole_difference(base_root, walk.ordered, git) if by_hand else None
     )
@@ -1018,15 +1082,27 @@ def _name_of(staging_path: str) -> str:
 class _Plan(object):
     """Every path this run will write, with the content it will put there."""
 
-    __slots__ = ("files", "confirmations", "subject", "staging", "ordered")
+    __slots__ = (
+        "files",
+        "confirmations",
+        "subject",
+        "staging",
+        "ordered",
+        "leave_alone",
+    )
 
-    def __init__(self, files, confirmations, subject, staging, ordered):
+    def __init__(
+        self, files, confirmations, subject, staging, ordered, leave_alone=None
+    ):
         # Each item is (path, text, whether the base already holds that path).
         self.files = files
         self.confirmations = confirmations
         self.subject = subject
         self.staging = staging
         self.ordered = ordered
+        # The paths already holding what this change says, which are saved as
+        # they stand rather than written over (finding N1).
+        self.leave_alone = set(leave_alone or [])
 
     def everything(self):
         return list(self.files) + list(self.confirmations)
@@ -1059,6 +1135,7 @@ def _plan_the_writes(base_root, reading, today, moment, git) -> "_Plan":
     files: List[Tuple[str, str, bool]] = []
     for relative in walk.ordered:
         files.append((relative, walk.texts[relative], _in_head(base_root, relative, git)))
+    leave_alone = set(walk.leave_alone)
 
     touched = list(walk.ordered)
     carried = _carried_entry(staging)
@@ -1108,7 +1185,14 @@ def _plan_the_writes(base_root, reading, today, moment, git) -> "_Plan":
             text = existing + line.render() + "\n"
         confirmations.append((target, text, _in_head(base_root, target, git)))
 
-    return _Plan(files, confirmations, _subject(staging), staging, list(walk.ordered))
+    return _Plan(
+        files,
+        confirmations,
+        _subject(staging),
+        staging,
+        list(walk.ordered),
+        leave_alone,
+    )
 
 
 # --- The note that makes a half finished run recoverable ----------------------
@@ -1437,7 +1521,7 @@ def _finish_unfinished_work(
         staged = os.path.join(
             base_root, constants.PROPOSALS_PENDING_DIR, its_id + ".md"
         )
-        compose_proposal.retire(base_root, staged, its_id)
+        compose_proposal.retire(base_root, staged, its_id, base_id=base_id)
         _clear_journal(base_id)
         if its_id != staging_id:
             return None
@@ -1478,12 +1562,13 @@ def _write_the_files(base_root: str, plan: "_Plan") -> List[str]:
     """Put down every file this change rewrites, and the records beside them."""
     written = []
     for relative, text, _in_head in plan.files:
-        atomic_write_text(
-            os.path.join(base_root, relative.replace("/", os.sep)),
-            text,
-            mode=0o644,
-            inside=base_root,
-        )
+        if relative not in plan.leave_alone:
+            atomic_write_text(
+                os.path.join(base_root, relative.replace("/", os.sep)),
+                text,
+                mode=0o644,
+                inside=base_root,
+            )
         written.append(relative)
     return written
 
@@ -1688,7 +1773,9 @@ def approve(
             reasons=[COULD_NOT_SAVE],
         )
 
-    compose_proposal.retire(base_root, staging_path, plan.staging.staging_id)
+    compose_proposal.retire(
+        base_root, staging_path, plan.staging.staging_id, base_id=base_id
+    )
     _clear_journal(base_id)
     return LocalResult(
         STATUS_APPLIED,
@@ -1747,6 +1834,9 @@ def drop(
 
     folder = ensure_dir(os.path.join(base_root, constants.PROPOSALS_DROPPED_DIR))
     shutil.move(resolved, os.path.join(folder, staging_id + ".md"))
+    # A change nobody wanted is off this seat's record of unfinished notes,
+    # which only ever grew before (finding N4).
+    compose_proposal._forget_the_first_draft(base_id, staging_id)
     return LocalResult(
         STATUS_DROPPED, staging_id=staging_id, codes=codes, reasons=[DROPPED]
     )

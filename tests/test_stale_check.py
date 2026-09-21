@@ -1157,7 +1157,11 @@ class TestTheFirstRunFinding(unittest.TestCase):
 
             self.assertEqual(stale.FINDING_NOTHING_OUT_OF_DATE, result.finding.code)
             self.assertIn("2026-09-01", result.finding_sentence)
-            self.assertIn(ENTRY, result.finding_sentence)
+            # The change is named the way a person names one, not by its
+            # identifier. Finding G5 of the final confirmation pass: no
+            # sentence a person reads carries one of those.
+            self.assertNotIn(ENTRY, result.finding_sentence)
+            self.assertIn("for the change about", result.finding_sentence)
 
     def test_the_finding_is_worked_out_again_every_time_it_is_asked_for(self):
         with support.Sandbox() as sandbox:

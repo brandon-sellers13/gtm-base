@@ -2431,17 +2431,30 @@ class TestOnlyAHandEditMayBeUnsaved(unittest.TestCase):
             self.assertEqual([], corrections_in(root))
 
     def test_the_whole_difference_is_what_a_hand_edit_is_approved_against(self):
+        """Including what no part of the change is about.
+
+        The settings at the top of a document are not a part of it that a
+        change is ever described by, so nothing in the prepared change
+        mentions this one. Saying yes saves it all the same, because what is
+        saved is the document, so it has to be in what was shown.
+        """
         with support.Sandbox() as sandbox:
             root, base_id = local_base(sandbox)
-            a_second_section(root)
             runner = NoRemoteRunner()
-            staged = a_hand_edit(root, base_id, runner)
-            # Something else in the same document, changed and not saved, that
-            # the prepared change says nothing about.
-            whole = support.read(os.path.join(root, ICP))
+            whole = os.path.join(root, ICP)
             support.write(
-                os.path.join(root, ICP),
-                whole.replace("Ten dollars a seat.", "Twenty dollars a seat."),
+                whole,
+                support.read(whole)
+                .replace("Companies of any size.", BIGGER_COMPANIES)
+                .replace("status: draft", "status: confirmed"),
+            )
+            staged = compose_proposal.stage_local_edit(
+                root, base_id, HAND_EDIT_SOURCE, runner=runner, now=TODAY
+            )
+            self.assertEqual(
+                ["## Firmographics"],
+                [one.heading for one in compose_proposal.load_staging(staged).edits],
+                "the settings at the top are not described as a part",
             )
 
             shown = approve_local.show(
@@ -2450,11 +2463,11 @@ class TestOnlyAHandEditMayBeUnsaved(unittest.TestCase):
 
             self.assertEqual(approve_local.STATUS_SHOWN, shown.status, shown.reasons)
             self.assertIn(
-                "Twenty dollars a seat.",
+                "status: confirmed",
                 shown.artifact,
-                "an unsaved change elsewhere in the document was not shown",
+                "a change no part of this one is about was not shown",
             )
-            self.assertIn("Ten dollars a seat.", shown.artifact)
+            self.assertIn("status: draft", shown.artifact)
 
     def test_moving_anything_in_the_document_after_it_was_shown_is_refused(self):
         with support.Sandbox() as sandbox:
@@ -2703,6 +2716,213 @@ class TestTheKeptCopyIsTheExactBytes(unittest.TestCase):
 
             self.assertTrue(shown.refused, shown.status)
             self.assertEqual(theirs, bytes_of(full))
+
+
+
+
+# --- N1 and N8 of the final confirmation pass --------------------------------
+
+
+class TestEveryOrdinaryShapeOfHandEdit(unittest.TestCase):
+    """N1. The check for a document that had moved on re-applied the edits.
+
+    It took the edits a hand edit was described by, applied them again on top
+    of a file that already held them, and asked for the result to equal the
+    file. That only holds where applying an edit twice is the same as applying
+    it once, and for six ordinary shapes of edit it is not, so a change was
+    refused as moved straight after being prepared, with a sentence that was
+    untrue and advice that failed the same way. What the reviewer wrote is the
+    list below.
+
+    Nothing is re-applied now. A change somebody made by hand is the document
+    in front of them, so what is saved is that document, exactly as it sits on
+    the disk, and what says it moved is the bytes themselves.
+    """
+
+    SHAPES = (
+        (
+            "a plain one-line edit",
+            None,
+            lambda text: text.replace(
+                "Companies of any size.", "Companies of twenty to two hundred."
+            ),
+        ),
+        (
+            "a document with no newline at its end",
+            lambda text: text.rstrip("\n"),
+            lambda text: text.replace(
+                "Companies of any size.", "Companies of twenty to two hundred."
+            ).rstrip("\n"),
+        ),
+        (
+            "an edit that takes the final newline away",
+            None,
+            lambda text: text.replace(
+                "Companies of any size.", "Companies of twenty to two hundred."
+            ).rstrip("\n"),
+        ),
+        (
+            "an edit leaving two blank lines at the end",
+            None,
+            lambda text: text.replace(
+                "Companies of any size.", "Companies of twenty to two hundred."
+            )
+            + "\n\n",
+        ),
+        (
+            "a new part added by hand at the end",
+            None,
+            lambda text: text + "\n## Pricing\n\nTen dollars a seat.\n",
+        ),
+        (
+            "a new part added by hand in the middle",
+            None,
+            lambda text: text.replace(
+                "## Firmographics",
+                "## Buyers\n\nHeads of operations.\n\n## Firmographics",
+            ),
+        ),
+        (
+            "a heading renamed",
+            None,
+            lambda text: text.replace("## Firmographics", "## Company size"),
+        ),
+        (
+            "the words directly under a part that has smaller parts under it",
+            lambda text: text
+            + "\n## Segments\n\nIntro words.\n\n### Large\n\nBig ones.\n",
+            lambda text: text.replace("Intro words.", "New intro words."),
+        ),
+        (
+            "the same heading twice, the second one edited",
+            lambda text: text
+            + "\n## Notes\n\nFirst words.\n\n## Notes\n\nSecond words.\n",
+            lambda text: text.replace("Second words.", "Second words, edited."),
+        ),
+        (
+            "a document whose lines end the other way",
+            lambda text: text.replace("\n", "\r\n"),
+            lambda text: text.replace(
+                "Companies of any size.", "Companies of twenty to two hundred."
+            ),
+        ),
+        (
+            "two parts edited at once",
+            lambda text: text + "\n## Pricing\n\nTen dollars a seat.\n",
+            lambda text: text.replace(
+                "Companies of any size.", "Companies of twenty to two hundred."
+            ).replace("Ten dollars", "Twenty dollars"),
+        ),
+        (
+            "a part deleted and another edited",
+            lambda text: text + "\n## Pricing\n\nTen dollars a seat.\n",
+            lambda text: text.replace(
+                "Companies of any size.", "Companies of twenty to two hundred."
+            ).replace("\n## Pricing\n\nTen dollars a seat.\n", ""),
+        ),
+        (
+            "trailing spaces on the edited line",
+            None,
+            lambda text: text.replace(
+                "Companies of any size.", "Companies of twenty to two hundred.   "
+            ),
+        ),
+        (
+            "a blank line added inside the part",
+            None,
+            lambda text: text.replace(
+                "Companies of any size.", "Companies of any size.\n\nAnd growing."
+            ),
+        ),
+        (
+            "an edit alongside a change to the settings at the top",
+            None,
+            lambda text: text.replace(
+                "Companies of any size.", "Companies of twenty to two hundred."
+            ).replace("status: draft", "status: confirmed"),
+        ),
+    )
+
+    def put(self, path, text):
+        with open(path, "w", encoding="utf-8", newline="") as handle:
+            handle.write(text)
+
+    def take(self, path):
+        with open(path, encoding="utf-8", newline="") as handle:
+            return handle.read()
+
+    def test_each_shape_ends_applied_with_the_bytes_the_person_had(self):
+        for name, prepare, mutate in self.SHAPES:
+            with self.subTest(shape=name):
+                with support.Sandbox() as sandbox:
+                    root, base_id = local_base(sandbox)
+                    full = os.path.join(root, ICP)
+                    if prepare is not None:
+                        self.put(full, prepare(self.take(full)))
+                        support.git(
+                            ["-c", "core.autocrlf=false", "add", "-A"], cwd=root
+                        )
+                        support.git(["commit", "-q", "-m", "as it was"], cwd=root)
+                    self.put(full, mutate(self.take(full)))
+                    theirs = bytes_of(full)
+                    runner = NoRemoteRunner()
+                    staged = compose_proposal.stage_local_edit(
+                        root, base_id, HAND_EDIT_SOURCE, runner=runner, now=TODAY
+                    )
+
+                    shown = approve_local.show(
+                        staged, root, base_id, runner=runner, now=TODAY
+                    )
+                    self.assertEqual(
+                        approve_local.STATUS_SHOWN, shown.status, shown.reasons
+                    )
+                    applied = approve_local.approve(
+                        staged, root, base_id, shown.shown_hash,
+                        runner=runner, now=NOW,
+                    )
+
+                    self.assertEqual(
+                        approve_local.STATUS_APPLIED, applied.status, applied.reasons
+                    )
+                    self.assertEqual(theirs, saved_bytes(root, ICP))
+                    self.assertEqual(theirs, bytes_of(full))
+
+    def test_a_document_that_really_moved_on_is_still_refused(self):
+        with support.Sandbox() as sandbox:
+            root, base_id = local_base(sandbox)
+            runner = NoRemoteRunner()
+            staged = a_hand_edit(root, base_id, runner)
+            full = os.path.join(root, ICP)
+            support.write(
+                full,
+                support.read(full).replace(
+                    BIGGER_COMPANIES, "Companies of fifty to five hundred people."
+                ),
+            )
+            theirs = bytes_of(full)
+
+            shown = approve_local.show(
+                staged, root, base_id, runner=runner, now=TODAY
+            )
+
+            self.assertEqual(approve_local.STATUS_MOVED, shown.status)
+            self.assertEqual(theirs, bytes_of(full))
+            self.assertEqual([], corrections_in(root))
+
+    def test_even_one_invisible_character_counts_as_moved(self):
+        with support.Sandbox() as sandbox:
+            root, base_id = local_base(sandbox)
+            runner = NoRemoteRunner()
+            staged = a_hand_edit(root, base_id, runner)
+            full = os.path.join(root, ICP)
+            with open(full, "ab") as handle:
+                handle.write(b" ")
+
+            shown = approve_local.show(
+                staged, root, base_id, runner=runner, now=TODAY
+            )
+
+            self.assertEqual(approve_local.STATUS_MOVED, shown.status)
 
 
 

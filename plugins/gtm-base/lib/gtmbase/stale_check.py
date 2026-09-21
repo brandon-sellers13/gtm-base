@@ -233,8 +233,16 @@ FINDING_WRITTEN_TWICE = (
     "is out of date."
 )
 FINDING_NOTHING_YET = (
-    "Nothing is out of date yet. The first date GTM Base will watch is %s, when "
-    "context change %s comes up for review."
+    "Nothing is out of date yet. The first date GTM Base will watch is %s, for "
+    "the change about %s."
+)
+# Said when GTM Base has prepared a change and nobody has answered it yet. It
+# is said instead of any all-clear, because a base with one waiting has
+# something to do (finding G5).
+FINDING_CHANGE_WAITING = (
+    "%s has a change waiting for you to approve it, so there is something to "
+    "do before anything here is settled. Ask for a review of your base to read "
+    "it."
 )
 # Reached when the base holds context changes but none of the open ones asks to
 # be looked at again. The older wording said there was no date to watch and
@@ -482,6 +490,33 @@ def awaiting_local_approval(
     from . import approve_local
 
     return approve_local.waiting(base_root, runner=runner)
+
+
+def _documents_with_a_change_waiting(base_root: str) -> List[str]:
+    """Every document a prepared change is waiting on, first draft or not.
+
+    It reads the folder prepared changes wait in and nothing else, so a change
+    nobody can approve yet counts exactly as much as one they can: either way
+    there is something to do and nothing is settled (finding G5).
+    """
+    found: List[str] = []
+    folder = os.path.join(base_root, constants.PROPOSALS_PENDING_DIR)
+    if not os.path.isdir(folder):
+        return found
+    for name in sorted(os.listdir(folder)):
+        if not name.endswith(".md"):
+            continue
+        text = read_text(os.path.join(folder, name))
+        if text is None:
+            continue
+        try:
+            staging = formats.ProposalStaging.parse(text).validate()
+        except (ValidationError, PathError):
+            continue
+        for path in compose_proposal.edited_paths(staging):
+            if path not in found:
+                found.append(path)
+    return found
 
 
 def _list_awaiting_local_approval(result, base_root: str, git) -> None:
@@ -879,9 +914,26 @@ def finding_sentence(report, finding) -> str:
             finding.entry_id,
             decided,
         )
+    if finding.code == stale.FINDING_CHANGE_WAITING:
+        return FINDING_CHANGE_WAITING % names.document_name(finding.path)
     if finding.date is None:
         return FINDING_NOTHING_YET_NO_DATE
-    return FINDING_NOTHING_YET % (finding.date, finding.entry_id)
+    # The change is named the way a person names one, never by its identifier
+    # (finding G5, and the standard every other sentence already follows).
+    return FINDING_NOTHING_YET % (
+        finding.date,
+        _the_change_called(report, finding.entry_id),
+    )
+
+
+def _the_change_called(report, entry_id) -> str:
+    """One context change, named the way somebody would say it out loud."""
+    for entry in getattr(report, "entries", None) or []:
+        if getattr(entry, "id", None) == entry_id:
+            return names.change_name(
+                getattr(entry, "body", ""), getattr(entry, "decided_on", None)
+            )
+    return "the one you recorded"
 
 
 def first_run_text(result) -> str:
@@ -983,6 +1035,11 @@ def run(
         owner_email=None,
     )
     result.report = report
+    # Every document with a change waiting on an answer, which is checked
+    # before any all-clear (finding G5). It is read here, where the folder is,
+    # rather than worked out from the record, because a prepared change is a
+    # file and the record does not know about it.
+    report.changes_waiting = _documents_with_a_change_waiting(base_root)
     entry_files = inputs.entry_files()
 
     if result.mode == "first-run":

@@ -63,9 +63,17 @@ Read what they say and decide one thing only.
 
 - An answer about the business, such as "we moved up to companies of twenty to
   two hundred people, because everyone smaller churned", is a context change.
-  Write their words to a file of your own and pass
-  `--what-changed-file <path> --records-a-change`. It travels with the
-  proposal and is written into the base when the proposal is accepted.
+
+  Ask for somewhere to put their words:
+
+  ```
+  python3 scripts/propose.py --new-words-file what-changed
+  ```
+
+  Write them to the path it prints, and pass
+  `--what-changed-file <the path it printed> --records-a-change`. It travels
+  with the proposal and is written into the base when the proposal is
+  accepted.
 - An answer about a spelling mistake, a broken link, or a heading is not a
   context change. Pass neither, and the proposal is exactly what it would have
   been before they were asked. Never turn a typo into a context change, and
@@ -88,10 +96,17 @@ A sentence a person wrote can hold a dollar sign, a bracket, or a pair of
 backticks, and each of those is an instruction to the shell the moment their
 words are written into a command.
 
-- Write their words to a file of your own with the file-writing tool first,
-  somewhere outside the base and outside GTM Base's own records.
-- Give the command the path to that file, never the words.
-- The commands that take words this way all end in `-file`.
+- Ask for somewhere to put them first with
+  `python3 scripts/propose.py --new-words-file <kind>`.
+
+- It prints `words=<path>`. Write their words to that path.
+
+- Give the command that path, never the words.
+
+- Every command that takes words this way ends in `-file`.
+
+- A path GTM Base did not hand out is refused, and each file is read once and
+  then taken away, so ask for a fresh one every time.
 
 ## What happens, in this order
 

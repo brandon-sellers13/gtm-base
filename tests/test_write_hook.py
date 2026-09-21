@@ -944,12 +944,13 @@ class TestTheWrapperWhenThePythonHalfCannotLoad(unittest.TestCase):
     def test_a_write_naming_a_protected_place_is_refused(self):
         with support.Sandbox() as sandbox:
             root = self.a_broken_copy(sandbox)
+            base = Base(sandbox)
             for named in (
                 os.path.join(paths.seat_home_path(), "machine.json"),
                 os.path.join(root, "lib", "gtmbase", "gate.py"),
-                os.path.join(sandbox.path, "base", "." + "g" + "it", "config"),
+                os.path.join(base.root, "." + "g" + "it", "config"),
                 os.path.join(
-                    sandbox.path, "base", "." + "claude", "settings.json"
+                    base.root, "." + "claude", "settings.json"
                 ),
             ):
                 finished = self.call(request(named), root)
@@ -1089,14 +1090,21 @@ class TestTheFallbackLeavesOrdinaryWorkAlone(unittest.TestCase):
             )
 
     def test_the_places_it_keeps_are_still_refused(self):
+        """A real base, because the map beside them is what tells them apart.
+
+        This named a folder that was not there before finding N2, which the
+        smaller check refused on its name alone. It refuses those two folder
+        names only where a base really is now, so this builds one.
+        """
         with support.Sandbox() as sandbox:
             root = self.a_broken_copy(sandbox)
+            base = Base(sandbox)
             vcs = "." + "g" + "it"
             for named in (
                 os.path.join(paths.seat_home_path(), "machine.json"),
                 os.path.join(root, "lib", "gtmbase", "gate.py"),
-                os.path.join(sandbox.path, "base", vcs, "config"),
-                os.path.join(sandbox.path, "base", "." + "claude", "settings.json"),
+                os.path.join(base.root, vcs, "config"),
+                os.path.join(base.root, "." + "claude", "settings.json"),
             ):
                 with self.subTest(file=named):
                     self.assertTrue(self.answer(request(named), root))
@@ -1218,6 +1226,130 @@ class TestTheSettingsThatDecideWhetherTheCheckRuns(unittest.TestCase):
 
             self.assertEqual(
                 "nothing", self.decision(os.path.join(sandbox.path, "notes.md"))
+            )
+
+
+
+
+# --- N2, N3 and N6 of the final confirmation pass ----------------------------
+
+
+class TestTheFallbackRefusesOnlyWhatTheRealCheckRefuses(unittest.TestCase):
+    """N2. While it is broken it used to refuse far more than the real one.
+
+    Any path holding either folder name anywhere in it was refused, which is
+    an ordinary repository's own exclude file, a project's folder of assistant
+    commands, and everything the assistant keeps under the person's home
+    folder, its own memory included. A Mac with no developer tools stays in
+    that state, so what the smaller check refuses has to be what the real one
+    refuses and nothing besides.
+    """
+
+    def a_broken_copy(self, sandbox):
+        import shutil
+
+        root = os.path.join(sandbox.path, "installed", "gtm-base")
+        os.makedirs(os.path.dirname(root), exist_ok=True)
+        shutil.copytree(PLUGIN_DIR, root)
+        support.write(
+            os.path.join(root, "scripts", "write_check.py"),
+            "raise SystemExit(70)\n",
+        )
+        return root
+
+    def answer(self, payload, root):
+        environment = dict(os.environ)
+        environment["CLAUDE_PLUGIN_ROOT"] = root
+        finished = subprocess.run(
+            ["sh", os.path.join(root, "hooks", "write-check.sh"), "claude"],
+            input=json.dumps(payload).encode("utf-8"),
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            env=environment,
+        )
+        self.assertEqual(0, finished.returncode)
+        return b'"deny"' in finished.stdout
+
+    def test_the_two_folder_names_outside_a_base_are_left_alone(self):
+        vcs = "." + "g" + "it"
+        assistant = "." + "claude"
+        with support.Sandbox() as sandbox:
+            home = os.path.expanduser("~")
+            root = self.a_broken_copy(sandbox)
+            ordinary = os.path.join(sandbox.path, "repo")
+            os.makedirs(ordinary)
+            for named in (
+                os.path.join(ordinary, vcs, "info", "exclude"),
+                os.path.join(ordinary, assistant, "commands", "x.md"),
+                os.path.join(
+                    home, assistant, "projects", "p", "memory", "MEMORY.md"
+                ),
+                os.path.join(home, assistant, "plans", "a-plan.md"),
+            ):
+                with self.subTest(file=named):
+                    self.assertFalse(self.answer(request(named), root))
+
+    def test_the_same_two_folders_inside_a_base_are_refused(self):
+        vcs = "." + "g" + "it"
+        with support.Sandbox() as sandbox:
+            root = self.a_broken_copy(sandbox)
+            base = Base(sandbox)
+            for named in (
+                os.path.join(base.root, vcs, "hooks", "pre-push"),
+                os.path.join(base.root, "." + "claude", "settings.json"),
+            ):
+                with self.subTest(file=named):
+                    self.assertTrue(self.answer(request(named), root))
+
+    def test_a_folder_name_in_other_letters_finds_the_same_base(self):
+        """N3. The candidate is folded before it is matched."""
+        with support.Sandbox() as sandbox:
+            root = self.a_broken_copy(sandbox)
+            base = Base(sandbox)
+            named = os.path.join(
+                base.root, "." + "G" + "IT", "hooks", "pre-push"
+            )
+
+            self.assertTrue(self.answer(request(named), root))
+
+    def test_a_path_under_a_name_ending_in_path_is_read(self):
+        """N3. A tool may carry its path under a name of its own."""
+        with support.Sandbox() as sandbox:
+            root = self.a_broken_copy(sandbox)
+            payload = request(os.path.join(sandbox.path, "ok.txt"))
+            payload["tool_input"]["other_path"] = os.path.join(
+                paths.seat_home_path(), "machine.json"
+            )
+
+            self.assertTrue(self.answer(payload, root))
+
+
+class TestTheFolderThePluginsLiveIn(unittest.TestCase):
+    """N6. The next update is installed from the copy of the marketplace."""
+
+    def decision(self, path):
+        answer = write_hook.run(request(path))
+        return answer["hookSpecificOutput"]["permissionDecision"] if answer else "nothing"
+
+    def test_anything_under_it_is_asked_about(self):
+        with support.Sandbox() as sandbox:
+            Base(sandbox)
+            folder = write_hook.client_plugins_dir()
+            for name in (
+                os.path.join("config.json"),
+                os.path.join("marketplaces", "m", "plugins", "p", "hooks", "hooks.json"),
+                os.path.join("installed_plugins.json"),
+            ):
+                with self.subTest(file=name):
+                    self.assertEqual("ask", self.decision(os.path.join(folder, name)))
+
+    def test_the_running_plugin_is_still_refused(self):
+        with support.Sandbox() as sandbox:
+            Base(sandbox)
+            root = write_hook.plugin_roots()[0]
+
+            self.assertEqual(
+                "deny", self.decision(os.path.join(root, "hooks", "hooks.json"))
             )
 
 

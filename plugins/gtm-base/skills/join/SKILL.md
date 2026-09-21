@@ -38,12 +38,23 @@ Three rules hold for the whole session.
 
 A sentence a person wrote can hold a dollar sign, a bracket, or a pair of
 backticks, and each of those is an instruction to the shell the moment their
-words are written into a command.
+words are written into a command. So their words will travel in a file, and
+the command will carry the path to it.
 
-- Write their words to a file of your own with the file-writing tool first,
-  somewhere outside the base and outside GTM Base's own records.
-- Give the command the path to that file, never the words.
-- The commands that take words this way all end in `-file`.
+- Ask for somewhere to put them first, with this:
+
+  ```
+  python3 scripts/join.py words-file --run <run identifier> --for <kind>
+  ```
+
+- It prints `words=<path>`. Write their words to that path.
+
+- Give the command that path, never the words.
+
+- Every command that takes words this way ends in `-file`.
+
+- A path GTM Base did not hand out is refused, and each file is read once and
+  then taken away, so ask for a fresh one every time.
 
 ### Step 1. Say what setting up a base does
 
@@ -153,8 +164,14 @@ marketing material sits in, and that it will look at nothing but file names and
 first headings while it does. Then run:
 
 ```
+python3 scripts/join.py words-file --run <run identifier> --for folder
 python3 scripts/join.py survey --folder-file <the path it printed> --run <run identifier>
 ```
+
+The first command prints `words=<path>`. Write the folder they named into that
+path and pass it back. A folder name is whatever somebody called their folder,
+so it never goes in the command itself, and the file is read once and then
+taken away, so ask for a fresh one before each of the three steps below.
 
 It prints one sentence and then one `place=<folder> score=<number>` line for
 each place it found, with a count of each kind of document after it, and a
@@ -171,7 +188,8 @@ Wait for their answer. On a plain yes, and on any answer that adds or drops
 folders, run the list for the places they settled on:
 
 ```
-python3 scripts/join.py list-sources --folder-file <a fresh folder file> --run <run identifier> --from-survey
+python3 scripts/join.py words-file --run <run identifier> --for folder
+python3 scripts/join.py list-sources --folder-file <the path it printed> --run <run identifier> --from-survey
 ```
 
 Add one `--add <folder>` for each folder they named to add and one
@@ -209,7 +227,8 @@ When they name the folders, run the same command again with one
 `--only-folder <name>` for each folder they named:
 
 ```
-python3 scripts/join.py list-sources --folder-file <a fresh folder file> --run <run identifier> --only-folder <number> --only-folder <number>
+python3 scripts/join.py words-file --run <run identifier> --for folder
+python3 scripts/join.py list-sources --folder-file <the path it printed> --run <run identifier> --only-folder <number> --only-folder <number>
 ```
 
 Name the folders by the number the listing printed beside each one, as above.
@@ -249,7 +268,8 @@ told about it before it happens, because nothing is lost by it.
 On a plain yes, run:
 
 ```
-python3 scripts/join.py freeze-sources --folder-file <a fresh folder file> --session <session id> --run <run identifier>
+python3 scripts/join.py words-file --run <run identifier> --for folder
+python3 scripts/join.py freeze-sources --folder-file <the path it printed> --session <session id> --run <run identifier>
 ```
 
 This takes their yes against the list they were actually shown. It looks at the
@@ -331,12 +351,13 @@ Only when they have said what to draft from, build the request, carrying the
 same narrowing if they gave one:
 
 ```
-python3 scripts/join.py assemble --step <step> --run <run identifier> --company-file <the path from step 4> --email <their address>
+python3 scripts/join.py words-file --run <run identifier> --for company
+python3 scripts/join.py assemble --step <step> --run <run identifier> --company-file <the path it printed> --email <their address>
 ```
 
-Ask for a fresh company file with `words-file --run <run identifier> --for
-company` if the one from step 4 has already been read, because each one is read
-once and then taken away.
+The company file from step 4 has already been read and taken away, so this
+step asks for a fresh one, and so does every step after it that needs the
+name.
 
 Add `--paste-file <path>` once for each piece of text held in step 5. The
 command prints `prompt=<path>` along with the labels of what went in and what
@@ -447,8 +468,19 @@ nothing else is asked.
 What they just said is not a context change until they have read the whole of
 what GTM Base would write down from it, because the day it happened, the
 documents it affects, and the day it will come back are all worked out rather
-than given. Write the change from `references/prompts/draft-change-entry.md`, check
-it with `review --step change-entry`, then run:
+than given. Build the request the same way every other draft is built, which is
+also what names the file the draft goes in:
+
+```
+python3 scripts/join.py words-file --run <run identifier> --for company
+python3 scripts/join.py assemble --step change-entry --run <run identifier> --company-file <the path it printed> --email <their address>
+```
+
+It prints `prompt=` and `draft=`. Write the change from
+`references/prompts/draft-change-entry.md` into the file it named as `draft=`,
+which is the only place this step will read one from, check it with
+`review --step change-entry --run <run identifier> --draft <draft file>`, and
+then run:
 
 ```
 python3 scripts/join.py preview-change --draft <draft file> --run <run identifier> --base <base folder>
@@ -503,9 +535,17 @@ time, never two in one breath, in the order it printed them:
 Does your customer profile already say what that change says?
 <!-- end ask -->
 
-Record each answer on its own with
-`python3 scripts/join.py reconcile-answer --base <base folder> --entry <id> --file <the path it printed> --answer yes`,
-or `--answer no`, and say the one sentence it prints.
+Record each answer on its own, and say the one sentence it prints. A yes is:
+
+```
+python3 scripts/join.py reconcile-answer --base <base folder> --entry <id> --file <the path it printed> --answer yes
+```
+
+A no is the same command with the other answer:
+
+```
+python3 scripts/join.py reconcile-answer --base <base folder> --entry <id> --file <the path it printed> --answer no
+```
 
 - **Yes** writes down that the document already says it, naming that one change.
 - **No** leaves the document flagged and prepares a change for it. Setting a
@@ -525,11 +565,21 @@ wording, and it is not approvable while it is still that.
    `python3 ../propose-change/scripts/approve_local.py --staging <path> --sections`,
    read them out, and ask which one this is about. It prints one numbered line
    for each part.
-4. Write it in with
-   `python3 ../propose-change/scripts/approve_local.py --staging <path> --wording --words <the path it printed>`,
-   adding `--section <the number they chose>` when you asked. Wording that is
-   the note over again is refused, and so is a file this skill did not hand
-   out.
+4. Write it in. When you asked which part it is about, name that part:
+
+   ```
+   python3 ../propose-change/scripts/approve_local.py --staging <path> --wording --words <the path it printed> --section <number>
+   ```
+
+   When the prepared change already says which part it is about, leave the
+   part off:
+
+   ```
+   python3 ../propose-change/scripts/approve_local.py --staging <path> --wording --words <the path it printed>
+   ```
+
+   Wording that is the note over again is refused, and so is a file this skill
+   did not hand out.
 5. Show them what that part says today and what it would say instead, in that
    order, both in full.
 6. Ask whether to approve it. Asking before the wording is written in is
@@ -570,7 +620,9 @@ Three sentences reach this skill at any time, from any session, and each one is
 one command. None of them needs a base to be open in the session, which matters,
 because the folder somebody wants to link is their own folder and is not a base.
 
-Say "link this folder to my base" and run
+Say "link this folder to my base", ask for somewhere to put the folder with
+`python3 scripts/join.py words-file --base <base folder or company name> --for folder`,
+write the folder into the path it prints, and run
 `python3 scripts/join.py link --base <base folder or company name> --folder-file <the path it printed>`,
 using the folder they are working in when they did not name one. The base can be
 named by its folder or by the company it is for, so "link this folder to my Acme

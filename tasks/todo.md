@@ -1020,3 +1020,52 @@ them is the one thing the smaller check will not allow. Your own client
 settings are yours, so they are asked about rather than refused. A number is
 not somebody else's text, so every choice off a list GTM Base printed is made
 by number.
+
+
+## Release A, final confirmation pass (2026-09-20)
+
+One reviewer drove every path end to end and one took the code apart. Every
+path but setting a base up worked. The list is
+`scratchpad/release-a-findings-round4.md`. A failing test came first for every
+item, built from the reviewers' own scripts.
+
+- [x] N1 and N8. The check for a hand edit that had moved on applied the parts
+      the change was described by a second time and asked for the answer to
+      equal the document, which only holds where applying an edit twice is the
+      same as applying it once. Six ordinary shapes are not. Nothing is
+      applied now: the document is saved as it stands, byte for byte, and the
+      bytes recorded when the change was prepared are what say it moved.
+- [x] G1. Setting a base up printed a command for a file nothing handed out,
+      and the walk carried a hand-written copy with the old spelling. There is
+      a command for it now, the skill prints it, and the walk takes every
+      command line out of the skill text, fills the placeholders from a table,
+      runs them, and fails when one was never run.
+- [x] G2, G3 and G4. Three passages telling the assistant to write words to a
+      file of its own, a company file reused after it had been taken away, and
+      a step that never named where its draft goes.
+- [x] G5, which is the first round's A7 still open. No all-clear while a
+      prepared change is waiting, and the change is named the way a person
+      names one rather than by its identifier.
+- [x] G7. Raising a change by hand on a base with no shared copy ends well.
+- [x] N2 and N3. The smaller check refuses only the plugin's folder, the
+      records folder, and the two folders inside a real base. It folds the
+      spelling, joins a path onto the folder the session is open in, and reads
+      a path under any name ending in the same word.
+- [x] N4. A first draft can always be finished: approval and the command that
+      clears it ask one question, and dropping, approving or raising a change
+      takes its name off this seat's record.
+- [x] N5. What counts as a first draft no longer rests on the origin written
+      in the same unprotected file.
+- [x] N6. The folder the client keeps its plugins in is asked about.
+- [x] N7. The two ways of taking a whole section away are refused, and a
+      command that only reads a setting is allowed.
+
+### What was decided along the way
+
+A change somebody made by hand is the document in front of them, so the
+document is what is saved and nothing is rebuilt from the parts it was
+described by. The walk may hold the knowledge that two documented commands are
+alternative answers to one thing, because that is the flow rather than a copy
+of a command, and it takes one of each per pass. The smaller check that runs
+when the real one cannot has to refuse what the real one refuses and no more,
+because a Mac without the developer tools stays in that state.

@@ -40,7 +40,13 @@ from . import (
     worktree,
 )
 from .errors import GitError, GtmBaseError, PathError, ValidationError
-from .fsutil import atomic_write_text, ensure_dir, read_text, remove
+from .fsutil import (
+    atomic_write_text,
+    ensure_dir,
+    read_bytes,
+    read_text,
+    remove,
+)
 from .gitcmd import GitRunner, runner_or_default
 from .validate import find_marker, marker_line
 
@@ -147,13 +153,20 @@ def still_a_first_draft(staging, base_id=None) -> bool:
     marked = getattr(staging, "first_draft", None)
     if marked:
         return True
-    if str(getattr(staging, "origin", "")) == LEDGER_ORIGIN:
-        if marked is None:
-            return True
-        for edit in staging.edits:
-            if edit.op == "add" and edit.heading == stale_check.FALLBACK_HEADING:
-                return True
+    if marked is None:
+        # A prepared change that says nothing about this is one an older
+        # build wrote, and nothing is not the same as no. Finding N5 of the
+        # final confirmation pass took the origin out of this: the origin is
+        # a field in the same unprotected file, so a copy of a first draft
+        # under a new name with another origin was approved with the note
+        # still in it.
+        return True
     for edit in staging.edits:
+        if edit.op == "add" and edit.heading == stale_check.FALLBACK_HEADING:
+            # It would add a part of its own rather than replacing the part
+            # that went out of date, so the claim it corrects would still be
+            # standing afterwards, whatever the words now say.
+            return True
         if stale_check.still_the_note(getattr(edit, "text", None)):
             return True
     return False
@@ -650,8 +663,25 @@ def _record_row(base_id: str, source_id: Optional[str], staging_id: str, number,
     )
 
 
-def retire(base_root: str, staging_path: str, staging_id: str) -> str:
+def _forget_the_first_draft(base_id, staging_id) -> None:
+    """Take a prepared change off this seat's record of unfinished notes.
+
+    Finding N4. That record only ever grew, so a name reused after a change
+    was dropped or raised carried the old one's refusal with it.
+    """
+    if not base_id:
+        return
+    try:
+        state.clear_first_draft(base_id, staging_id)
+    except Exception:
+        pass
+
+
+def retire(
+    base_root: str, staging_path: str, staging_id: str, base_id=None
+) -> str:
     """Put the staged file where a proposal that is under review is kept."""
+    _forget_the_first_draft(base_id, staging_id)
     folder = ensure_dir(os.path.join(base_root, constants.PROPOSALS_OPENED_DIR))
     destination = os.path.join(folder, staging_id + ".md")
     if os.path.abspath(staging_path) != os.path.abspath(destination):
@@ -1169,7 +1199,11 @@ def write_the_wording(
     the claim it corrected went on standing in the part above.
     """
     staging = load_staging(staging_path)
-    if not getattr(staging, "first_draft", False):
+    # The same question approval asks, because a prepared change refused by
+    # one and not the other can never be finished at all. Finding N4: the
+    # marker line reading false, a change written before that line existed,
+    # and a name left on this seat's record each did exactly that.
+    if not still_a_first_draft(staging, base_id):
         raise ValidationError(NOT_A_FIRST_DRAFT, code=CODE_NOT_A_FIRST_DRAFT)
     from . import stale_check
 
@@ -1492,6 +1526,24 @@ def stage_local_edit(
             "marker": marker,
         }
     )
+    # The exact bytes of each document this change was made from, so that
+    # whether it has moved on since is a question about the document rather
+    # than about what happens when the edits are applied twice (finding N1).
+    ordered_for_bytes: List[str] = []
+    for one in edits:
+        if one.path not in ordered_for_bytes:
+            ordered_for_bytes.append(one.path)
+    target_bytes = []
+    for relative in ordered_for_bytes:
+        data = read_bytes(os.path.join(base_root, relative.replace("/", os.sep)))
+        if data is None:
+            raise ValidationError(
+                "GTM Base could not read %s as it stands, so it prepared "
+                "nothing." % relative,
+                code=CODE_UNREADABLE,
+            )
+        target_bytes.append(ids.bytes_hash(data))
+
     staging = formats.ProposalStaging(
         staging_id=staging_id,
         origin=LOCAL_EDIT_ORIGIN,
@@ -1506,6 +1558,7 @@ def stage_local_edit(
         decision_block=entry.render() if entry is not None else None,
         edits=edits,
         excerpt=source_text.strip(),
+        target_bytes=target_bytes,
     )
     ordered: List[str] = []
     for path in staging.target_paths:

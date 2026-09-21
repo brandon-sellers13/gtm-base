@@ -16,6 +16,9 @@ printed. This checks that no command line in any skill carries one.
 import importlib.util
 import os
 import re
+import shlex
+import subprocess
+import sys
 import unittest
 
 import support
@@ -198,10 +201,22 @@ NEEDS_A_KEY = (
 )
 SAYS_THE_KEY = ("--run", "--session")
 
+# The flags that read a words file and take it away, so the next step has to
+# ask for one of its own.
+CONSUMES_WORDS = (
+    "--folder-file",
+    "--company-file",
+    "--label-file",
+    "--answer-file",
+    "--got-in-the-way-file",
+    "--reason-file",
+    "--source-file",
+    "--what-changed-file",
+    "--words",
+)
+
 # One documented command per script that is actually run, with the placeholders
 # filled in, so that a command nobody has ever run cannot ship again.
-import subprocess  # noqa: E402
-import sys  # noqa: E402
 
 
 class TestEveryCommandThatNamesAFileSaysWhichRunItIsFor(unittest.TestCase):
@@ -232,19 +247,73 @@ class TestEveryCommandThatNamesAFileSaysWhichRunItIsFor(unittest.TestCase):
         self.assertEqual([], problems)
 
 
-class TestTheWholeJoinSkillAsItIsWritten(unittest.TestCase):
-    """H3. Every command the join skill prints, run in order, in a sandbox.
+class TestTheSkillsAsTheyAreWritten(unittest.TestCase):
+    """Every command a skill prints, taken from the skill, filled in, and run.
 
-    Parsing a command proves it would be accepted. It does not prove it would
-    do anything, and the company step was refused every single time while
-    every test supplied an argument the skill does not print.
+    Finding G1 of the final confirmation pass, and the reason this is built
+    the way it is. The walk before this held a hand-written copy of the
+    commands, and the copy still said `--folder` after the skill had started
+    saying `--folder-file`, so the documented step was never run and setting a
+    base up could not be followed as written. That was the fourth round in a
+    row to ship a documented command that does not work.
+
+    So nothing is hand written here. The command lines come out of the skill
+    documents as text, the angle-bracket placeholders are filled from one
+    table, and a placeholder with no filler is a failure rather than a skip.
+    At the end every documented command line must have been run.
     """
 
-    SCRIPT = SCRIPTS["join.py"]
+    # Which documents are walked, and which script each one is about. A
+    # document not named here is still read by the checks above; it is only
+    # the running that is listed, because running a command needs a state to
+    # run it against.
+    WALKED = (
+        "join/SKILL.md",
+        "propose-change/SKILL.md",
+        "confirm/SKILL.md",
+        "stale-check/SKILL.md",
+    )
 
-    def run_join(self, arguments, cwd):
+    # The commands a skill prints on purpose to say they are refused in this
+    # release. They are run like everything else and have to be refused.
+    REFUSED_ON_PURPOSE = ("backup", "invite", "join-link")
+
+    def document(self, relative):
+        return os.path.join(SKILLS_DIR, relative.replace("/", os.sep))
+
+    # --- the sandbox this walk happens in ---------------------------------
+
+    def material(self):
+        """A folder of somebody's own marketing material, in two places."""
+        home = os.environ["HOME"]
+        support.write(
+            os.path.join(home, ".gitconfig"),
+            "[user]\n\temail = dana@acme.test\n\tname = Dana\n",
+        )
+        folder = os.path.join(home, "marketing")
+        support.write(
+            os.path.join(folder, "customers", "acme-icp.md"),
+            "# Who we sell to\n\nSmall teams selling to other businesses.\n",
+        )
+        support.write(
+            os.path.join(folder, "customers", "personas.md"),
+            "# Buyer personas\n\nThe head of marketing.\n",
+        )
+        support.write(
+            os.path.join(folder, "positioning", "messaging.md"),
+            "# Messaging\n\nWe win on setup time.\n",
+        )
+        support.write(
+            os.path.join(folder, "positioning", "pricing-notes.txt"),
+            "We lead with the monthly number now.\n",
+        )
+        return folder
+
+    def run_line(self, command, cwd):
+        words = shlex.split(command)
+        script = SCRIPTS[os.path.basename(words[0])]
         return subprocess.run(
-            [sys.executable, self.SCRIPT] + [str(item) for item in arguments],
+            [sys.executable, script] + words[1:],
             cwd=cwd,
             env=dict(os.environ),
             stdout=subprocess.PIPE,
@@ -260,262 +329,424 @@ class TestTheWholeJoinSkillAsItIsWritten(unittest.TestCase):
                 return value
         return None
 
-    def done(self, finished, what):
-        printed = finished.stdout.decode("utf-8")
-        self.assertEqual(
-            0,
-            finished.returncode,
-            "%s was refused: %s %s"
-            % (what, printed, finished.stderr.decode("utf-8")),
-        )
-        return printed
+    # --- filling in the angle brackets ------------------------------------
 
-    def words_file(self, cwd, run_id, kind, text):
-        """Ask the skill for somewhere to put words, exactly as it says to."""
-        printed = self.done(
-            self.run_join(
-                ["words-file", "--run", run_id, "--for", kind], cwd
-            ),
-            "words-file --for " + kind,
+    def fill(self, command, state):
+        """One documented command with every placeholder replaced.
+
+        A placeholder nobody has a filler for stops the walk, because a
+        command this cannot fill in is a command nobody has run.
+        """
+        found = re.findall(r"<[^<>]+>", command)
+        for placeholder in found:
+            filler = self.FILLERS.get(placeholder)
+            if filler is None:
+                raise AssertionError(
+                    "no filler for %s, in: %s" % (placeholder, command)
+                )
+            value = filler(self, state, command)
+            self.assertIsNotNone(
+                value, "nothing to fill %s with, in: %s" % (placeholder, command)
+            )
+            # Quoted, because a real value holds spaces and a real folder
+            # name can hold anything at all. The skill tells a person to put
+            # the value in; what a shell does with it afterwards is the
+            # shell's, and this stands in for that faithfully.
+            command = command.replace(placeholder, shlex.quote(str(value)), 1)
+        return command
+
+    def a_words_file(self, state, kind, text):
+        """Ask the skill's own command for a path, and put the words in it."""
+        arguments = ["words-file", "--for", kind]
+        if state.get("run"):
+            arguments += ["--run", state["run"]]
+        else:
+            arguments += ["--base", state["base"]]
+        finished = self.run_line(
+            "join.py " + " ".join(shlex.quote(item) for item in arguments),
+            state["cwd"],
         )
+        printed = finished.stdout.decode("utf-8")
+        self.assertEqual(0, finished.returncode, printed + finished.stderr.decode())
         path = self.value_of(printed, "words")
         self.assertTrue(path, printed)
         support.write(path, text)
         return path
 
-    def test_the_steps_the_skill_prints_all_run(self):
+    def a_run(self, state):
+        """The run this walk is in, started the moment a command needs one.
+
+        A skill says how words travel before it says how a setup run begins,
+        so the first command that names a run comes before the one that makes
+        it. Making one here rather than skipping that command is the point:
+        every command the skill prints has to be one that runs.
+        """
+        if not state.get("run"):
+            finished = self.run_line("join.py new-run", state["cwd"])
+            printed = finished.stdout.decode("utf-8")
+            self.assertEqual(0, finished.returncode, printed)
+            state["run"] = self.value_of(printed, "run")
+        return state["run"]
+
+    def _the_path_it_printed(self, state, command):
+        """The last path a command printed, which depends on the command.
+
+        Two steps of the skill fill this in: one with the file a words command
+        handed out, and one with the document the reconcile step named.
+        """
+        if "--file" in shlex.split(command):
+            return self.a_document_to_ask_about(state)
+        return state.get("words")
+
+    def a_kept_proposal(self, state):
+        """A proposal that was raised and kept, which is what is raised again.
+
+        The skill's last way of raising one is for a change that was turned
+        down or set aside, so there is one of those waiting in the folder they
+        are kept in. It is a second one, never the one still waiting to be
+        approved, because a person has both.
+        """
+        from gtmbase import constants
+
+        folder = os.path.join(state["base"], constants.PROPOSALS_OPENED_DIR)
+        kept = state.get("kept_id")
+        if kept is None:
+            staged = state["staged"]
+            kept = "stg-" + "d" * 16
+            text = support.read(staged).replace(
+                os.path.basename(staged)[: -len(".md")], kept
+            )
+            support.write(os.path.join(folder, kept + ".md"), text)
+            state["kept_id"] = kept
+        return kept
+
+    def a_document_to_ask_about(self, state):
+        """The next document the reconcile step said to ask about."""
+        waiting = state.get("ask_about") or []
+        if not waiting:
+            return None
+        return waiting.pop(0) if len(waiting) > 1 else waiting[0]
+
+    FILLERS = {
+        "<run identifier>": lambda self, state, command: self.a_run(state),
+        "<session id>": lambda self, state, command: "sess-1",
+        "<their address>": lambda self, state, command: "dana@acme.test",
+        "<step>": lambda self, state, command: state.get("step", "icp"),
+        "<number>": lambda self, state, command: state.get("folder_number", "1"),
+        "<base folder>": lambda self, state, command: state.get("base"),
+        "<base folder or company name>": lambda self, state, command: state.get("base"),
+        "<the parent from step 4>": lambda self, state, command: state.get("parent"),
+        "<draft file>": lambda self, state, command: state.get("draft"),
+        "<the path it printed>": _the_path_it_printed,
+        "<id>": lambda self, state, command: (
+            state.get("question")
+            if "--question" in shlex.split(command)
+            else state.get("change")
+        ),
+        "<the id the approve printed>": lambda self, state, command: state.get("change"),
+        "<folder>": lambda self, state, command: state.get("material"),
+        "<kind>": lambda self, state, command: "answer",
+        "<path>": lambda self, state, command: (
+            state.get("document")
+            if "--show-document" in shlex.split(command)
+            else state.get("staged")
+        ),
+        "<a short label>": lambda self, state, command: "a note from the call",
+        "<file you wrote it to>": lambda self, state, command: state.get("paste"),
+        "<the path from step 4>": lambda self, state, command: state.get("words"),
+        "<a fresh company file>": lambda self, state, command: state.get("words"),
+        "<a fresh folder file>": lambda self, state, command: state.get("words"),
+        "<proposal id>": lambda self, state, command: self.a_kept_proposal(state),
+        "<path to the staged file>": lambda self, state, command: state.get("staged"),
+        "<the path it printed for the words>": lambda self, state, command: state.get("words"),
+        "<path to the prepared change>": lambda self, state, command: state.get("staged"),
+        "<the shown value>": lambda self, state, command: state.get("shown"),
+    }
+
+    # --- what each command needs before it, and what it leaves behind ------
+
+    def before(self, mode, state, command):
+        """Put the state this documented command needs in place first."""
+        # A step the skill names outright, rather than leaving to be filled
+        # in, says which document the commands around it are about.
+        words = shlex.split(command)
+        for index, word in enumerate(words):
+            if word == "--step" and index + 1 < len(words):
+                named = words[index + 1]
+                if not named.startswith("<"):
+                    state["step"] = named
+        if mode == "words-file":
+            return
+        for flag, kind in (
+            ("--words", "answer"),
+            ("--folder-file", "folder"),
+            ("--company-file", "company"),
+            ("--label-file", "label"),
+            ("--answer-file", "answer"),
+            ("--got-in-the-way-file", "got-in-the-way"),
+            ("--reason-file", "reason"),
+            ("--source-file", "source"),
+            ("--what-changed-file", "what-changed"),
+        ):
+            if flag in words and state.get("words_kind") != kind:
+                # Only when the skill did not print the hand-out itself. A
+                # step that prints one is walked through that one, which is
+                # the whole point of reading the commands out of the skill.
+                state["words"] = self.a_words_file(
+                    state,
+                    kind,
+                    state["material"] if kind == "folder" else self.WORDS[kind],
+                )
+                state["words_kind"] = kind
+        if "--local-edit" in words:
+            # A change made by hand is a document the person has edited, so
+            # there has to be one for this command to have anything to do.
+            full = os.path.join(state["base"], state["document"])
+            support.write(
+                full,
+                support.read(full).replace(
+                    "Companies of any size.",
+                    "Companies of twenty to two hundred people.",
+                ),
+            )
+        if mode == "add-paste":
+            state["paste"] = os.path.join(state["cwd"], "pasted.txt")
+            support.write(state["paste"], "We win on setup time.\n")
+        if mode in ("review", "approve", "preview-change") and state.get("draft"):
+            support.write(state["draft"], self.a_draft_for(state["step"]))
+
+    # What a walk writes into each kind of words file. They are the words a
+    # person would really type at that step, and nothing here is the note GTM
+    # Base writes asking for wording, which every path refuses.
+    WORDS = {
+        "answer": "We sell to companies of twenty to two hundred people.",
+        "company": "Acme",
+        "got-in-the-way": "The folder took a while to find.",
+        "label": "a note from the call",
+        "reason": "We moved up market, so this is out of date now.",
+        "source": "The quarterly review deck, slide four, said so.",
+        "what-changed": "We moved up market because the small ones churned.",
+    }
+
+    def handed_out(self, state, command, printed):
+        """Fill in whatever a documented hand-out command just made room for."""
+        words = shlex.split(command)
+        kind = None
+        for index, word in enumerate(words):
+            if word in ("--for", "--new-words-file") and index + 1 < len(words):
+                kind = words[index + 1]
+        if kind is None:
+            return
+        path = self.value_of(printed, "words")
+        if not path:
+            return
+        text = self.WORDS.get(kind)
+        if kind == "folder":
+            text = state["material"]
+        self.assertIsNotNone(kind, command)
+        support.write(path, text or "Acme")
+        state["words"] = path
+        state["words_kind"] = kind
+
+    def after(self, mode, state, printed):
+        """Read out of what it printed whatever the next commands need."""
+        for name in ("run", "parent", "draft", "base", "change", "prompt"):
+            value = self.value_of(printed, name)
+            if value:
+                state[name] = value
+        if mode == "reconcile":
+            state["ask_about"] = [
+                line[len("file=") :].strip()
+                for line in printed.split("\n")
+                if line.startswith("file=")
+            ]
+        prepared = self.value_of(printed, "prepared")
+        if prepared:
+            state["staged"] = prepared
+        shown = None
+        for line in printed.split("\n"):
+            if line.startswith("Shown value: "):
+                shown = line[len("Shown value: ") :].strip()
+        if shown:
+            state["shown"] = shown
+        if mode == "list-sources":
+            for line in printed.split("\n"):
+                if line.startswith("folder=") and " number=" in line:
+                    state["folder_number"] = line.split(" number=")[1].split(" ")[0]
+                    break
+
+    def a_draft_for(self, step):
+        import test_join_setup_flow as flow
+
+        if step == "change-entry":
+            # The change names the part of the document it is about, which is
+            # what lets the wording go in without a part being named.
+            return flow.change_draft(
+                body="Firmographics changed: we stopped selling to companies "
+                "under twenty people."
+            )
+        return flow.captured("icp.md" if step == "icp" else "positioning.md")
+
+    # --- the walk itself ---------------------------------------------------
+
+    # Some documented commands are alternative answers to one thing, and a
+    # person gives one of them. Approving a document and skipping it are two
+    # answers to one document; yes, no and not now are three answers to one
+    # question; the wording names the part of a document or leaves it off.
+    # The walk is made once for each alternative and every documented command
+    # line has to have run in one of those passes.
+
+    def _group_of(self, words, command):
+        """Which set of alternatives this command belongs to, and which one."""
+        script = os.path.basename(words[0])
+        mode = words[1] if len(words) > 1 and not words[1].startswith("-") else ""
+        if "--wording" in words:
+            return "the wording", "--section" in words
+        if "--answer" in words and script == "confirm.py":
+            return "the answer", words[words.index("--answer") + 1]
+        for answer in ("--approve", "--not-yet", "--drop"):
+            if answer in words and script == "approve_local.py":
+                # Approving a prepared change, leaving it, and throwing it
+                # away are three answers to one change.
+                return "the answer about a prepared change", answer
+        if mode in ("approve", "skip") and "<step>" in command and "--parent" not in command:
+            # A command that names its own step is about one document and has
+            # no alternative, and the first document somebody approves is what
+            # makes the base, so neither of those is in this set.
+            return "the answer about a document", mode
+        return None, None
+
+    def _alternatives(self, lines):
+        """Every set of alternatives this document prints, in the order shown."""
+        found = {}
+        for _number, command in lines:
+            words = shlex.split(command)
+            if not words or os.path.basename(words[0]) not in SCRIPTS:
+                continue
+            key, member = self._group_of(words, command)
+            if key is None:
+                continue
+            members = found.setdefault(key, [])
+            if member not in members:
+                members.append(member)
+        return found
+
+    def _taken_this_pass(self, words, command, index):
+        """Whether this line is the alternative this pass is taking."""
+        key, member = self._group_of(words, command)
+        if key is None:
+            return True
+        members = self.alternatives.get(key) or []
+        if len(members) < 2:
+            return True
+        return member == members[index % len(members)]
+
+    def test_every_documented_command_runs_as_it_is_written(self):
+        for relative in self.WALKED:
+            with self.subTest(document=relative):
+                lines = commands_in(self.document(relative))
+                self.assertTrue(lines, "no commands found in %s" % relative)
+                self.document_walked = relative
+                self.alternatives = self._alternatives(lines)
+                passes = max(
+                    [2] + [len(members) for members in self.alternatives.values()]
+                )
+                ran = set()
+                for index in range(passes):
+                    ran.update(self.walk(lines, index))
+                never = [
+                    "%d: %s" % (number, command)
+                    for number, command in lines
+                    if number not in ran
+                    and os.path.basename(shlex.split(command)[0]) in SCRIPTS
+                ]
+                self.assertEqual([], never, "a documented command was never run")
+
+    def a_base_already_set_up(self, sandbox, state):
+        """A base with a change recorded and a document behind it.
+
+        Every skill but the one that sets a base up is run inside a base, so
+        one is built here the way the other scenarios build one, with enough
+        in it for the commands the skills print to have something to work on.
+        """
+        import test_first_draft_marker as first_draft
+        import test_moment_of_use as moment_tests
+
+        base = moment_tests.Base(sandbox)
+        base.add_change()
+        state["base"] = base.root
+        state["cwd"] = base.root
+        state["document"] = moment_tests.ICP
+        # A first draft that says which part of the document it is about, so
+        # that both shapes of the wording command the skills print can be run.
+        state["staged"] = first_draft.a_first_draft(
+            base.root, body=first_draft.NAMES_THE_PART
+        )
+        waiting = [line for line in base.review().review if line.question_id]
+        state["question"] = waiting[0].question_id if waiting else None
+        return base
+
+    def walk(self, lines, index):
+        ran = []
         with support.Sandbox() as sandbox:
-            home = os.environ["HOME"]
-            support.write(
-                os.path.join(home, ".gitconfig"),
-                "[user]\n\temail = dana@acme.test\n\tname = Dana\n",
-            )
-            material = os.path.join(home, "marketing")
-            support.write(
-                os.path.join(material, "acme-icp.md"),
-                "# Who we sell to\n\nSmall teams selling to other businesses.\n",
-            )
-            support.write(
-                os.path.join(material, "pricing-notes.txt"),
-                "We lead with the monthly number now.\n",
-            )
-            work = os.path.join(sandbox.path, "work")
-            os.makedirs(work)
-
-            # Step 1. The run.
-            printed = self.done(self.run_join(["new-run"], work), "new-run")
-            run_id = self.value_of(printed, "run")
-            self.assertTrue(run_id, printed)
-
-            # Step 4. The company name, and where the base will go.
-            company = self.words_file(work, run_id, "company", "Acme")
-            printed = self.done(
-                self.run_join(
-                    ["propose-location", "--company-file", company,
-                     "--run", run_id],
-                    work,
-                ),
-                "propose-location",
-            )
-            parent = self.value_of(printed, "parent")
-            self.assertTrue(parent, printed)
-
-            # Step 5. What would be read, and the yes that fixes it.
-            self.done(
-                self.run_join(
-                    ["survey", "--folder", material, "--run", run_id], work
-                ),
-                "survey",
-            )
-            printed = self.done(
-                self.run_join(
-                    ["list-sources", "--folder", material, "--run", run_id],
-                    work,
-                ),
-                "list-sources",
-            )
-            self.assertIn("read=", printed)
-            self.done(
-                self.run_join(
-                    ["freeze-sources", "--folder", material,
-                     "--session", "sess-1", "--run", run_id],
-                    work,
-                ),
-                "freeze-sources",
-            )
-
-            # Step 5, the pasted piece, with its label in a file.
-            pasted = os.path.join(sandbox.path, "pasted.txt")
-            support.write(pasted, "We win on setup time.\n")
-            label = self.words_file(work, run_id, "label", "a note from the call")
-            self.done(
-                self.run_join(
-                    ["add-paste", "--run", run_id, "--label-file", label,
-                     "--session", "sess-1", "--from", pasted],
-                    work,
-                ),
-                "add-paste",
-            )
-
-            # Step 6, for each drafted document in turn.
-            root = None
-            for step in ("icp", "positioning"):
-                self.done(
-                    self.run_join(
-                        ["preview", "--step", step, "--run", run_id], work
-                    ),
-                    "preview " + step,
-                )
-                company = self.words_file(work, run_id, "company", "Acme")
-                printed = self.done(
-                    self.run_join(
-                        ["assemble", "--step", step, "--run", run_id,
-                         "--company-file", company,
-                         "--email", "dana@acme.test"],
-                        work,
-                    ),
-                    "assemble " + step,
-                )
-                draft = self.value_of(printed, "draft")
-                self.assertTrue(draft, printed)
-                support.write(draft, a_draft_for(step))
-
-                # Step 7, the check before it is shown.
-                printed = self.done(
-                    self.run_join(
-                        ["review", "--step", step, "--run", run_id,
-                         "--draft", draft],
-                        work,
-                    ),
-                    "review " + step,
-                )
-                self.assertIn("ready", printed)
-
-                # Step 7, what is wrong with this.
-                answer = self.words_file(
-                    work, run_id, "answer", "The wording is too formal."
-                )
-                self.done(
-                    self.run_join(
-                        ["what-is-wrong", "--step", step, "--run", run_id,
-                         "--answer-file", answer],
-                        work,
-                    ),
-                    "what-is-wrong " + step,
-                )
-
-                # Step 7, approve the first document, which is what makes the
-                # base, and skip the second, which is the other answer the
-                # skill offers from the second document onward.
-                if root is None:
-                    company = self.words_file(work, run_id, "company", "Acme")
-                    printed = self.done(
-                        self.run_join(
-                            ["approve", "--step", step, "--draft", draft,
-                             "--run", run_id, "--parent", parent,
-                             "--company-file", company],
-                            work,
-                        ),
-                        "approve " + step,
+            state = {
+                "cwd": os.path.join(sandbox.path, "work"),
+                "material": self.material(),
+                "step": "icp",
+            }
+            os.makedirs(state["cwd"])
+            if self.document_walked != "join/SKILL.md":
+                self.a_base_already_set_up(sandbox, state)
+            for line_number, command in lines:
+                words = shlex.split(command)
+                if os.path.basename(words[0]) not in SCRIPTS:
+                    continue
+                mode = words[1] if len(words) > 1 and not words[1].startswith("-") else ""
+                if not self._taken_this_pass(words, command, index):
+                    continue
+                self.before(mode, state, command)
+                filled = self.fill(command, state)
+                finished = self.run_line(filled, state["cwd"])
+                printed = finished.stdout.decode("utf-8")
+                if mode in self.REFUSED_ON_PURPOSE:
+                    self.assertNotEqual(
+                        0, finished.returncode, "%d: %s" % (line_number, filled)
                     )
-                    root = self.value_of(printed, "base")
-                    self.assertTrue(root, printed)
+                    self.assertNotEqual(b"", finished.stdout)
                 else:
-                    self.done(
-                        self.run_join(
-                            ["skip", "--step", step, "--base", root], root
+                    self.assertEqual(
+                        0,
+                        finished.returncode,
+                        "line %d was refused: %s\n%s\n%s"
+                        % (
+                            line_number,
+                            filled,
+                            printed,
+                            finished.stderr.decode("utf-8"),
                         ),
-                        "skip " + step,
                     )
+                self.handed_out(state, filled, printed)
+                self.after(mode, state, printed)
+                if "--local-edit" in shlex.split(filled):
+                    # The hand edit that story needed is put back, because the
+                    # next story in the same skill is a different one and
+                    # starts on a base with nothing half done in it.
+                    support.git(
+                        ["checkout", "HEAD", "--", state["document"]],
+                        cwd=state["base"],
+                    )
+                if any(flag in shlex.split(filled) for flag in CONSUMES_WORDS):
+                    # A words file is read once and taken away, so the next
+                    # step has to ask for one of its own.
+                    state.pop("words", None)
+                    state.pop("words_kind", None)
+                if mode in ("approve", "skip") and state.get("base"):
+                    state["cwd"] = state["base"]
+                    if state["step"] == "icp":
+                        state["step"] = "positioning"
+                ran.append(line_number)
 
-            # Step 8, the closing question and the change it leads to.
-            self.done(self.run_join(["closing-question"], root), "closing-question")
-            printed = self.done(
-                self.run_join(
-                    ["assemble", "--step", "change-entry", "--run", run_id,
-                     "--company-file",
-                     self.words_file(work, run_id, "company", "Acme"),
-                     "--email", "dana@acme.test"],
-                    root,
-                ),
-                "assemble change-entry",
-            )
-            change_draft_path = self.value_of(printed, "draft")
-            support.write(change_draft_path, a_draft_for("change-entry"))
-            self.done(
-                self.run_join(
-                    ["preview-change", "--draft", change_draft_path,
-                     "--run", run_id, "--base", root],
-                    root,
-                ),
-                "preview-change",
-            )
-            printed = self.done(
-                self.run_join(
-                    ["approve", "--step", "change-entry",
-                     "--draft", change_draft_path, "--run", run_id,
-                     "--base", root],
-                    root,
-                ),
-                "approve change-entry",
-            )
-            change_id = self.value_of(printed, "change")
-            self.assertTrue(change_id, printed)
-
-            # Step 9, one question per document.
-            printed = self.done(
-                self.run_join(
-                    ["reconcile", "--base", root, "--entry", change_id], root
-                ),
-                "reconcile",
-            )
-            asked = self.value_of(printed, "file")
-            self.assertTrue(asked, printed)
-            self.done(
-                self.run_join(
-                    ["reconcile-answer", "--base", root, "--entry", change_id,
-                     "--file", asked, "--answer", "yes"],
-                    root,
-                ),
-                "reconcile-answer",
-            )
-
-            # Step 10, the closing, with what got in the way.
-            got = self.words_file(
-                work, run_id, "got-in-the-way", "The folder took a while to find."
-            )
-            self.done(
-                self.run_join(
-                    ["close", "--base", root, "--run", run_id,
-                     "--got-in-the-way-file", got],
-                    root,
-                ),
-                "close",
-            )
-
-            # The folder commands, and the two that are refused on purpose.
-            self.done(
-                self.run_join(
-                    ["link", "--base", root, "--folder", material], root
-                ),
-                "link",
-            )
-            self.done(self.run_join(["links"], root), "links")
-            self.done(self.run_join(["unlink", "--base", root], root), "unlink")
-            for mode in ("backup", "invite", "join-link"):
-                finished = self.run_join([mode], root)
-                self.assertEqual(1, finished.returncode, mode)
-                self.assertNotEqual(b"", finished.stdout, mode)
-
-
-def a_draft_for(step):
-    """A draft of the shape each step's request asks for."""
-    import test_join_setup_flow as flow
-
-    if step == "change-entry":
-        return flow.change_draft()
-    return flow.captured("icp.md" if step == "icp" else "positioning.md")
-
+        return ran
 
 
 

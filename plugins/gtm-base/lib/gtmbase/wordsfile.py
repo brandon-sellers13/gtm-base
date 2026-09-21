@@ -54,6 +54,7 @@ PARENT_POINTER = "drafts-parent"
 KINDS = (
     "answer",
     "company",
+    "folder",
     "got-in-the-way",
     "label",
     "reason",

@@ -695,8 +695,22 @@ def _classify_git(
         # it away. Finding F3 of the third look, from both sides: taking it off
         # a base was unremarked, and putting it on an ordinary repository made
         # that repository answer for a base.
-        for token in rest:
-            if paths.BASE_ID_CONFIG_KEY in str(token).lower():
+        #
+        # Finding N7 of the final pass narrowed and widened this at once. A
+        # command that only reads a setting changes nothing and is allowed, a
+        # command working on a file of its own is not about a base at all, and
+        # the two ways of taking a whole section away were missed.
+        lowered = [str(token).lower() for token in rest]
+        section = paths.BASE_ID_CONFIG_KEY.split(".")[0]
+        if any(name in ("-f", "--file", "--global", "--system") for name in lowered):
+            return
+        if any(name in ("--get", "--get-all", "--get-regexp", "--list", "-l") for name in lowered):
+            return
+        for index, token in enumerate(lowered):
+            if token in ("--remove-section", "--rename-section"):
+                if index + 1 < len(lowered) and lowered[index + 1] == section:
+                    result.deny(REASON_BASE_NAME)
+            if paths.BASE_ID_CONFIG_KEY in token:
                 result.deny(REASON_BASE_NAME)
         return
     if subcommand not in ("push", "send-pack"):

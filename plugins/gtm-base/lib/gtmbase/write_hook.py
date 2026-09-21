@@ -82,6 +82,7 @@ CODE_SEAT_FOLDER = "in-the-records-folder"
 CODE_BASE_REPOSITORY = "in-a-bases-own-repository-folder"
 CODE_BASE_ASSISTANT_FOLDER = "in-a-bases-assistant-folder"
 CODE_PLUGIN_CODE = "in-the-plugins-own-folder"
+CODE_PLUGINS_FOLDER = "in-the-folder-plugins-are-kept-in"
 
 # What the client calls the folder it installed this plugin into.
 PLUGIN_ROOT_ENV = "CLAUDE_PLUGIN_ROOT"
@@ -246,6 +247,20 @@ def plugin_roots() -> List[str]:
     return [item for item in found if item]
 
 
+# Where the client keeps every plugin it has, including the copy of the
+# marketplace the next update is installed from. Finding N6: a write in there
+# is not this plugin's own code, so it is not refused outright, and it is not
+# an ordinary file either, so it is not waved through.
+CLIENT_PLUGINS_DIR = "plugins"
+
+
+def client_plugins_dir() -> str:
+    """The folder under the person's home folder holding their plugins."""
+    return os.path.join(
+        os.path.expanduser("~"), ASSISTANT_DIR_NAME, CLIENT_PLUGINS_DIR
+    )
+
+
 def client_settings_files() -> List[str]:
     """The files that say whether this plugin's own checks run at all.
 
@@ -332,6 +347,8 @@ def problem_with(named: str, real_file: str) -> Optional[str]:
     for settings in client_settings_files():
         if _reaches(named, real_file, settings):
             return CODE_CLIENT_SETTINGS
+    if _reaches(named, real_file, client_plugins_dir()):
+        return CODE_CLIENT_SETTINGS
 
     if not _names_a_guarded_folder(named, real_file):
         return None

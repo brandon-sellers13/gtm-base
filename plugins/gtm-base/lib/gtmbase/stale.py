@@ -77,6 +77,12 @@ FINDING_CHANGE_WRITTEN_TWICE = "one-change-written-twice"
 # nothing was out of date while the report from the same run flagged a
 # document.
 FINDING_DOCUMENT_BEHIND = "document-behind-a-change"
+# A change GTM Base has prepared and nobody has answered yet. It comes before
+# any all-clear, because a base with one of these waiting is not a base with
+# nothing to do (finding G5, which is finding A7 of the first round still
+# open: a no at the closing about a change dated before today produced an
+# all-clear in the same breath as the change it had just prepared).
+FINDING_CHANGE_WAITING = "a-change-is-waiting"
 FINDING_NOTHING_OUT_OF_DATE = "nothing-out-of-date-yet"
 
 # The kind the base's own map carries. A file of this kind is left out of
@@ -387,6 +393,10 @@ class StaleReport(object):
         self.dropped = list(dropped)
         self.conflicts = list(conflicts)
         self.has_remote = bool(has_remote)
+        # Every document with a change GTM Base has prepared and nobody has
+        # answered. The run fills this in; a report built without it says
+        # nothing is waiting, which is what a report knows on its own.
+        self.changes_waiting: List[str] = []
         self.suppressions = {}
         # Keyed by path: the newest acceptance by one of that file's owners,
         # which is why the file may carry a confirmation nobody typed.
@@ -549,6 +559,12 @@ class StaleReport(object):
                 None,
                 first.entry_ids[0] if first.entry_ids else None,
             )
+        # A prepared change nobody has answered. It is checked before every
+        # all-clear below, including the baseline, because a base with one
+        # waiting has something to do whatever its dates say.
+        waiting = list(getattr(self, "changes_waiting", None) or [])
+        if waiting:
+            return Finding(FINDING_CHANGE_WAITING, waiting[0], None, None)
         if not self.entries:
             items = self.baseline_items(required_files)
             unconfirmed = [item.path for item in items if item.confirmed_on is None]

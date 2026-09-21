@@ -252,7 +252,14 @@ def main(argv=None):
         return EXIT_REFUSED
 
     sys.stdout.write(report(result) + "\n")
-    if result.status in (compose_proposal.STATUS_OPENED, compose_proposal.STATUS_RESUMED):
+    if result.status in (
+        compose_proposal.STATUS_OPENED,
+        compose_proposal.STATUS_RESUMED,
+        # A base with no shared copy has nowhere to send a change, and the
+        # prepared change waiting for its owner to approve it here is the
+        # ordinary ending on such a base rather than a failure (finding G7).
+        compose_proposal.STATUS_APPROVE_HERE,
+    ):
         return EXIT_DONE
     return EXIT_REFUSED
 

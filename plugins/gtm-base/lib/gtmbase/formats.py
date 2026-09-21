@@ -1455,6 +1455,7 @@ STAGING_FIELDS = (
     "confidence",
     "third_party",
     "first_draft",
+    "target_bytes",
 )
 STAGING_SCHEMA = 1
 
@@ -1494,6 +1495,7 @@ class ProposalStaging(object):
         excerpt="",
         schema=STAGING_SCHEMA,
         first_draft=False,
+        target_bytes=None,
     ):
         self.schema = schema
         self.staging_id = staging_id
@@ -1517,6 +1519,13 @@ class ProposalStaging(object):
         # as nothing at all, because a file written before this setting
         # existed says nothing rather than saying no (finding M1).
         self.first_draft = first_draft if first_draft is None else bool(first_draft)
+        # One value per target path, in the same order, standing for the exact
+        # bytes that file held when the change was prepared from it. Only a
+        # change somebody made by hand carries these, and finding N1 of the
+        # final confirmation pass is why: whether such a document has moved on
+        # is a question about its bytes, and it used to be answered by applying
+        # the edits again and asking whether the answer matched.
+        self.target_bytes = list(target_bytes or [])
 
     def frontmatter(self) -> Dict[str, Any]:
         return {
@@ -1531,6 +1540,7 @@ class ProposalStaging(object):
             "confidence": self.confidence,
             "third_party": bool(self.third_party),
             "first_draft": bool(self.first_draft),
+            "target_bytes": list(self.target_bytes),
         }
 
     def render(self) -> str:
@@ -1611,6 +1621,9 @@ class ProposalStaging(object):
                 _as_bool(fields["first_draft"], "first_draft", "proposal")
                 if "first_draft" in fields
                 else None
+            ),
+            target_bytes=_as_list(
+                fields.get("target_bytes", []), "target_bytes", "proposal"
             ),
             decision_block=decision_block,
             edits=edits,

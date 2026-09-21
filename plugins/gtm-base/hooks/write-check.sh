@@ -63,28 +63,59 @@ refuse_without_checking() {
 # not a file anything here is writing.
 named_files() {
   printf '%s' "$request" |
-    grep -o '"\(file_path\|notebook_path\|path\)"[[:space:]]*:[[:space:]]*"[^"]*"' 2> /dev/null |
+    grep -o '"[a-z_]*path"[[:space:]]*:[[:space:]]*"[^"]*"' 2> /dev/null |
+    grep -v '^"transcript_path"' |
     sed 's/^[^:]*:[[:space:]]*"//; s/"$//'
 }
 
-# Whether one path is inside one of the places GTM Base keeps. The two folder
-# names are matched as whole pieces of a path, with a separator on both sides,
-# so a file called `.gitignore` and a folder of workflows are somebody's
-# ordinary work and are left alone.
+# Whether one path is inside one of the places GTM Base keeps. Finding N2 of
+# the final confirmation pass narrowed this a long way. It used to refuse any
+# path holding either folder name anywhere in it, which is an ordinary
+# repository's own exclude file, a project's folder of assistant commands, and
+# everything the assistant keeps under the person's home folder, including its
+# own memory. A Mac without the developer tools stays in this state for ever,
+# so what it refuses has to be what the real check refuses and no more.
+#
+# Three things, then. The folder the plugin is installed in. The folder GTM
+# Base keeps its records in. And the two folders inside a base, which are told
+# apart from the same two names anywhere else by looking for the map beside
+# them, the way the real check does by walking up from the file.
 is_protected() {
-  candidate="$1/"
+  candidate=$(printf '%s' "$1" | tr '[:upper:]' '[:lower:]')
+  lower_plugin=$(printf '%s' "$plugin_root" | tr '[:upper:]' '[:lower:]')
   case "$candidate" in
-    */.git/* | */.claude/* | */.gtm-base/*) return 0 ;;
+    "$lower_plugin" | "$lower_plugin"/*) return 0 ;;
   esac
-  case "$1" in
-    "$plugin_root" | "$plugin_root"/*) return 0 ;;
+  seat="${GTM_BASE_HOME:-$HOME/.gtm-base}"
+  lower_seat=$(printf '%s' "$seat" | tr '[:upper:]' '[:lower:]')
+  case "$candidate" in
+    "$lower_seat" | "$lower_seat"/*) return 0 ;;
   esac
-  if [ -n "${GTM_BASE_HOME:-}" ]; then
-    case "$1" in
-      "$GTM_BASE_HOME" | "$GTM_BASE_HOME"/*) return 0 ;;
+  for name in ".git" ".claude"; do
+    case "$candidate/" in
+      */"$name"/*)
+        # Everything before that folder name is the folder holding it, and a
+        # folder holding the map is a base. The length is measured on the
+        # folded spelling and the characters are taken from the one on the
+        # disk, so a name written in other letters finds the same folder.
+        folded=${candidate%%/"$name"/*}
+        before=$(printf '%s' "$1" | cut -c "1-${#folded}")
+        if [ -f "$before/context/map.md" ]; then
+          return 0
+        fi
+        ;;
     esac
-  fi
+  done
   return 1
+}
+
+# The folder the session is open in, which a path written from where somebody
+# is standing is joined onto.
+here() {
+  printf '%s' "$request" |
+    grep -o '"cwd"[[:space:]]*:[[:space:]]*"[^"]*"' 2> /dev/null |
+    sed 's/^[^:]*:[[:space:]]*"//; s/"$//' |
+    head -n 1
 }
 
 # The smaller check. Nothing at all comes back when no path could be read out
@@ -95,8 +126,13 @@ fall_back() {
   fi
   found=$(named_files)
   [ -n "$found" ] || return
+  cwd=$(here)
   printf '%s\n' "$found" | while IFS= read -r named; do
     [ -n "$named" ] || continue
+    case "$named" in
+      /*) ;;
+      *) [ -n "$cwd" ] && named="$cwd/$named" ;;
+    esac
     if is_protected "$named"; then
       refuse_without_checking
       break

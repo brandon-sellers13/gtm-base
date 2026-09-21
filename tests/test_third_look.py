@@ -326,5 +326,218 @@ class TestTheSharedCopyPathRefusesAFirstDraftToo(unittest.TestCase):
             )
 
 
+
+# --- The final confirmation pass ---------------------------------------------
+
+
+class TestAFirstDraftCanAlwaysBeFinished(unittest.TestCase):
+    """N4. It could be refused by approval and by the only command that clears it.
+
+    Three ways, all of them honest users and no tampering: the marker line
+    reading false, a prepared change written before that line existed, and a
+    name left behind on this seat's record by a change that was dropped.
+    """
+
+    SCRIPT = os.path.join(
+        support.PLUGIN_DIR, "skills", "propose-change", "scripts", "approve_local.py"
+    )
+
+    def a_draft(self, sandbox):
+        import test_first_draft_marker as first_draft
+
+        root, base_id = first_draft.local_base(sandbox)
+        staged = first_draft.a_first_draft(root, body=first_draft.NAMES_THE_PART)
+        return root, base_id, staged
+
+    def wording(self, root, base_id, staged):
+        part = compose_proposal.parts_of(
+            root, compose_proposal.load_staging(staged)
+        )[0]
+        return compose_proposal.write_the_wording(
+            root,
+            staged,
+            "We sell to companies of fifty people and up.",
+            part=part,
+            base_id=base_id,
+        )
+
+    def test_the_marker_line_reading_false_is_not_the_last_word(self):
+        with support.Sandbox() as sandbox:
+            root, base_id, staged = self.a_draft(sandbox)
+            support.write(
+                staged,
+                support.read(staged).replace(
+                    "first_draft: true", "first_draft: false"
+                ),
+            )
+
+            shown = approve_local.show(
+                staged, root, base_id, runner=support.NoRemoteRunner(), now=TODAY
+            )
+            self.assertEqual(approve_local.STATUS_REFUSED, shown.status)
+
+            self.wording(root, base_id, staged)
+
+            after = approve_local.show(
+                staged, root, base_id, runner=support.NoRemoteRunner(), now=TODAY
+            )
+            self.assertEqual(approve_local.STATUS_SHOWN, after.status, after.reasons)
+
+    def test_a_change_written_before_the_marker_existed_can_be_finished(self):
+        with support.Sandbox() as sandbox:
+            root, base_id, staged = self.a_draft(sandbox)
+            support.write(
+                staged,
+                support.read(staged).replace("first_draft: true\n", ""),
+            )
+            state.clear_first_draft(
+                base_id, os.path.basename(staged)[: -len(".md")]
+            )
+
+            shown = approve_local.show(
+                staged, root, base_id, runner=support.NoRemoteRunner(), now=TODAY
+            )
+            self.assertEqual(approve_local.STATUS_REFUSED, shown.status)
+
+            self.wording(root, base_id, staged)
+
+            after = approve_local.show(
+                staged, root, base_id, runner=support.NoRemoteRunner(), now=TODAY
+            )
+            self.assertEqual(approve_local.STATUS_SHOWN, after.status, after.reasons)
+
+    def test_a_change_nobody_wanted_is_off_the_record(self):
+        with support.Sandbox() as sandbox:
+            root, base_id, staged = self.a_draft(sandbox)
+            staging_id = os.path.basename(staged)[: -len(".md")]
+            self.assertTrue(state.is_a_first_draft(base_id, staging_id))
+
+            approve_local.drop(staged, root, base_id)
+
+            self.assertFalse(state.is_a_first_draft(base_id, staging_id))
+
+    def test_an_approved_change_is_off_the_record_too(self):
+        with support.Sandbox() as sandbox:
+            root, base_id, staged = self.a_draft(sandbox)
+            staging_id = os.path.basename(staged)[: -len(".md")]
+            self.wording(root, base_id, staged)
+            runner = support.NoRemoteRunner()
+            shown = approve_local.show(staged, root, base_id, runner=runner, now=TODAY)
+            approve_local.approve(
+                staged, root, base_id, shown.shown_hash, runner=runner, now=NOW
+            )
+
+            self.assertFalse(state.is_a_first_draft(base_id, staging_id))
+
+
+class TestACopyOfAFirstDraftUnderAnotherName(unittest.TestCase):
+    """N5. The rules leaned on a field in the same unprotected file."""
+
+    def test_the_origin_written_in_the_file_decides_nothing(self):
+        import test_first_draft_marker as first_draft
+
+        with support.Sandbox() as sandbox:
+            root, base_id = first_draft.local_base(sandbox)
+            staged = first_draft.a_first_draft(root)
+            staging = compose_proposal.load_staging(staged)
+            twin_id = "stg-" + "b" * 16
+            text = (
+                support.read(staged)
+                .replace(staging.staging_id, twin_id)
+                .replace("first_draft: true", "first_draft: false")
+                .replace(
+                    staging.edits[0].text.strip(),
+                    "TODO rewrite this part to match the new direction",
+                )
+            )
+            for origin in ("inbox", "ledger"):
+                twin = os.path.join(os.path.dirname(staged), twin_id + ".md")
+                support.write(
+                    twin, text.replace("origin: %s" % staging.origin, "origin: %s" % origin)
+                )
+
+                shown = approve_local.show(
+                    twin, root, base_id, runner=support.NoRemoteRunner(), now=TODAY
+                )
+
+                self.assertEqual(
+                    approve_local.STATUS_REFUSED, shown.status, origin
+                )
+                self.assertIn(
+                    approve_local.CODE_STILL_A_PLACEHOLDER, shown.codes, origin
+                )
+                self.assertIn(
+                    "Companies of any size.",
+                    support.read(os.path.join(root, ICP)),
+                )
+
+
+class TestTheNameABaseIsKnownByAndTheCommandsAroundIt(unittest.TestCase):
+    """N7. The section forms were missed and pure reads were refused."""
+
+    def check(self, command, cwd):
+        return gate.check_command(command, cwd, "sess-1")
+
+    def test_taking_the_whole_section_away_is_refused(self):
+        with support.Sandbox() as sandbox:
+            root, _base_id = local_base(sandbox)
+            for command in (
+                "git config --local --remove-section gtmbase",
+                "git config --local --rename-section gtmbase other",
+                "git config --local --unset-all GTMBASE.ID",
+            ):
+                with self.subTest(command=command):
+                    self.assertTrue(self.check(command, root))
+
+    def test_reading_a_setting_changes_nothing_and_is_allowed(self):
+        with support.Sandbox() as sandbox:
+            root, _base_id = local_base(sandbox)
+            for command in (
+                "git config --get gtmbase.id",
+                "git config --local --list",
+                "git config -f other.cfg gtmbase.id anything",
+            ):
+                with self.subTest(command=command):
+                    self.assertIsNone(self.check(command, root))
+
+
+class TestNoAllClearWhileAChangeIsWaiting(unittest.TestCase):
+    """G5, which is the first round's A7 still open."""
+
+    def test_a_prepared_change_waiting_is_said_instead_of_an_all_clear(self):
+        import test_first_draft_marker as first_draft
+        from gtmbase import stale, stale_check
+
+        with support.Sandbox() as sandbox:
+            root, base_id = first_draft.local_base(sandbox)
+            # The base holds both documents a first run looks for, so that
+            # what it says is about the change waiting rather than about a
+            # document nobody has written.
+            support.write(
+                os.path.join(root, "context", "strategy", "positioning.md"),
+                support.ICP_TEXT.replace("kind: icp", "kind: positioning"),
+            )
+            support.git(["add", "-A"], cwd=root)
+            support.git(["commit", "-q", "-m", "positioning"], cwd=root)
+            first_draft.a_first_draft(root, body=first_draft.NAMES_THE_PART)
+
+            result = stale_check.run(
+                root,
+                base_id,
+                runner=support.NoRemoteRunner(),
+                gh=support.RecordingGh(),
+                now=NOW,
+                session_id="sess-1",
+                mode="first-run",
+            )
+
+            self.assertEqual(
+                stale.FINDING_CHANGE_WAITING, result.finding.code, result.sentences
+            )
+            self.assertIn("waiting for you to approve", result.finding_sentence)
+            self.assertNotIn("Nothing is out of date", result.finding_sentence)
+
+
+
 if __name__ == "__main__":
     unittest.main()
