@@ -174,10 +174,22 @@ FINDING_REQUIRED_FILE = (
 # because each confirmation has one. It replaces the older sentence that said
 # nothing had been written down yet, which made a missing habit sound like a
 # missing step.
-FINDING_BASELINE = (
-    "You confirmed %s on %s and %s on %s. No context change is recorded yet, so "
-    "GTM Base cannot yet check whether a change has made either document out of "
-    "date. GTM Base will ask about %s again on %s, and about %s on %s."
+# It is three short lines, one thought each, rather than the one long
+# sentence it was when Unit 1.2 wrote it. Both dates are named once when they
+# are one date, which is what setting a base up in a single sitting produces,
+# and separately when setting up was resumed on a later day and they really
+# are two days. Each line is true in every state that reaches it.
+FINDING_BASELINE_CONFIRMED_ONE_DAY = "You confirmed %s and %s on %s."
+FINDING_BASELINE_CONFIRMED_TWO_DAYS = "You confirmed %s on %s and %s on %s."
+FINDING_BASELINE_NOTHING_TO_CHECK = (
+    "No context change is recorded yet, so there is nothing to check either "
+    "document against."
+)
+FINDING_BASELINE_ASK_ONE_DAY = (
+    "GTM Base will ask about both of them again on %s."
+)
+FINDING_BASELINE_ASK_TWO_DAYS = (
+    "GTM Base will ask about %s again on %s, and about %s on %s."
 )
 # The same baseline for a base where a required document carries no owner
 # confirmation at all, which is the one case where there is no date to name.
@@ -731,11 +743,15 @@ def _retry_pending(base_id: str, base_root: str, git: GitRunner) -> None:
 def _baseline_sentence(report, finding) -> str:
     """The honest baseline, said about the two documents the base holds.
 
-    Each document is named the way a person names it and carries its own two
-    dates, because setup can be resumed on a later day and then the two
-    confirmations fall on different days. A document nobody has confirmed has
-    no review date to give, so that case is said in its own words rather than
-    with a date invented for it.
+    Each document is named the way a person names it. A date is named once
+    when both documents share it and twice when they do not, because setting
+    up can be resumed on a later day and then the two confirmations really do
+    fall on different days. A document nobody has confirmed has no review date
+    to give, so that case is said in its own words rather than with a date
+    invented for it.
+
+    What comes back is three short lines: what was confirmed and when, that
+    nothing is recorded to check it against, and when the base will ask again.
     """
     items = report.baseline_items()
     unnamed = [item for item in items if item.confirmed_on is None]
@@ -743,16 +759,31 @@ def _baseline_sentence(report, finding) -> str:
         path = finding.path or (items[0].path if items else constants.REQUIRED_CONTEXT_FILES[0])
         return FINDING_BASELINE_UNCONFIRMED % names.document_name(path)
     first, second = items[0], items[1]
-    return FINDING_BASELINE % (
-        names.document_name(first.path),
-        first.confirmed_on,
-        names.document_name(second.path),
-        second.confirmed_on,
-        names.document_name(first.path),
-        first.review_on,
-        names.document_name(second.path),
-        second.review_on,
-    )
+    one_name = names.document_name(first.path)
+    other_name = names.document_name(second.path)
+    if str(first.confirmed_on) == str(second.confirmed_on):
+        confirmed = FINDING_BASELINE_CONFIRMED_ONE_DAY % (
+            one_name,
+            other_name,
+            first.confirmed_on,
+        )
+    else:
+        confirmed = FINDING_BASELINE_CONFIRMED_TWO_DAYS % (
+            one_name,
+            first.confirmed_on,
+            other_name,
+            second.confirmed_on,
+        )
+    if str(first.review_on) == str(second.review_on):
+        ask_again = FINDING_BASELINE_ASK_ONE_DAY % first.review_on
+    else:
+        ask_again = FINDING_BASELINE_ASK_TWO_DAYS % (
+            one_name,
+            first.review_on,
+            other_name,
+            second.review_on,
+        )
+    return "\n".join([confirmed, FINDING_BASELINE_NOTHING_TO_CHECK, ask_again])
 
 
 def finding_sentence(report, finding) -> str:
@@ -981,6 +1012,10 @@ def _review(
         result.sentences.append(
             REVIEW_NOTHING_OWNED if _owns_nothing(report, email) else REVIEW_NOTHING
         )
+        # A base with nothing due is exactly the base whose record of context
+        # changes is most likely to be the thing that is quiet, so the ask
+        # happens here too rather than only when something was listed.
+        _quiet_record_ask(result, report, base_id, session_id, dry_run)
         return
 
     result.sentences.append(REVIEW_OPENING)
@@ -994,6 +1029,7 @@ def _review(
         result.sentences.append(line.sentence)
     result.review = lines
 
+    _quiet_record_ask(result, report, base_id, session_id, dry_run)
     _offer_the_update(result, base_root, base_id, today, git)
 
     if session_id and not dry_run and not waiting_to_be_read:
@@ -1403,6 +1439,39 @@ def _say_what_is_written_twice(result, report) -> None:
         result.codes.append(CODE_WRITTEN_TWICE)
 
 
+def _quiet_record_ask(result, report, base_id, session_id, dry_run) -> None:
+    """Mention the quiet record of context changes, inside the review only.
+
+    Requirement P17, and Codex condition C. Nothing says this at the start of
+    a session any more, because the base is quiet until somebody asks it
+    something, and nothing says it twice in one sitting: asking for the review
+    a second time is not a second reason to be told. A dismissal is what
+    `stale.compute` already reads, so a dismissed reminder never gets here at
+    all until the window it was dismissed for has passed.
+    """
+    behind = report.ledger_behind
+    if behind is None or not behind.behind:
+        return
+    seat, _problems = state.load_seat(base_id)
+    if session_id and seat.get("quiet_record_said_in_session") == session_id:
+        return
+    window = report.settings.confirmation_threshold_days
+    if behind.newest_entry_date is None:
+        # A base whose only change is written down twice is not a base with
+        # nothing recorded in it, and telling somebody it is would send them
+        # to write down what they already wrote.
+        if report.conflicts:
+            return
+        result.sentences.append(LEDGER_BEHIND_EMPTY % window)
+    else:
+        result.sentences.append(
+            LEDGER_BEHIND
+            % (behind.newest_entry_date.isoformat(), behind.window_days, window)
+        )
+    if session_id and not dry_run:
+        state.update_seat(base_id, quiet_record_said_in_session=session_id)
+
+
 def _report_the_rest(result, report, base_id, today, dry_run) -> None:
     """The parts of the answer that are the same whatever else happened."""
     _say_what_is_written_twice(result, report)
@@ -1420,21 +1489,6 @@ def _report_the_rest(result, report, base_id, today, dry_run) -> None:
             )
         if not dry_run:
             save_review_by_items(base_id, report.review_by_items, today)
-
-    behind = report.ledger_behind
-    if behind is not None and behind.behind:
-        window = report.settings.confirmation_threshold_days
-        if behind.newest_entry_date is None:
-            # A base whose only change is written down twice is not a base
-            # with nothing recorded in it, and telling somebody it is would
-            # send them to write down what they already wrote.
-            if not report.conflicts:
-                result.sentences.append(LEDGER_BEHIND_EMPTY % window)
-        else:
-            result.sentences.append(
-                LEDGER_BEHIND
-                % (behind.newest_entry_date.isoformat(), behind.window_days, window)
-            )
 
     _list_waiting_on_the_owner(result, report)
 

@@ -56,6 +56,31 @@ no finding at all, say that plainly rather than inventing one.
 Say the finding once, in the words the command printed, before the closing
 message.
 
+## The closing question
+
+A context change is anything that happened that makes a document in your base
+no longer true. GTM Base wants one because a base that holds documents and
+nothing about what has moved since cannot tell you when a document has been
+overtaken. What it does with one is check it against each document it affects,
+and speak up when a document you are about to use is behind it.
+
+For example: you stopped selling to companies under twenty people in August,
+so the part of your customer profile that says who you sell to is no longer
+true.
+
+Tell me if anything about the context of the business changed that we should account for. One sentence is enough, or say skip.
+
+## The words of that request never change
+
+The request above is fixed. It is written here once, it is said as it is
+written, and nothing is added to it. It carries no question mark, which is on
+purpose, because "or say skip" is the second half of the request and turning
+the whole thing into a question would make skip sound like a failure to
+answer. Skip is a whole answer and the person who gives it has finished this
+step.
+
+## Both versions of the closing message
+
 There are two versions of the closing message, and which one is said depends on
 whether the base was linked to the folder the person's marketing material lives
 in. The command works that out and prints the right one. Both are below word for

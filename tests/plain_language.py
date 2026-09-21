@@ -707,6 +707,15 @@ PYTHON_SENTENCES = (
     ("formats", "ABOUT_SENTENCE"),
     ("formats", "KEEP_THE_CHANGE_HINT"),
     ("join_flow", "NOTE_NOT_WRITTEN"),
+    ("join_flow", "WHY_FROM_THE_CLOSING"),
+    ("join_flow", "ENTRY_PREVIEW_ASK"),
+    ("join_flow", "RECONCILE_ASK"),
+    ("join_flow", "RECONCILE_RECORDED"),
+    ("join_flow", "RECONCILE_FLAGGED"),
+    ("join_flow", "RECONCILE_NOT_PREPARED"),
+    ("join_flow", "OTHERS_FLAGGED_ONE"),
+    ("join_flow", "OTHERS_FLAGGED_MANY"),
+    ("join_flow", "SKIP_RECORDED"),
     ("moment", "ABOUT_TO_USE"),
     ("moment", "FIX_IS_READY"),
     ("moment", "FIX_CAN_BE_PREPARED"),
@@ -759,7 +768,11 @@ PYTHON_SENTENCES = (
     ("stale_check", "CANNOT_VOUCH"),
     ("stale_check", "DROPPED"),
     ("stale_check", "FINDING_REQUIRED_FILE"),
-    ("stale_check", "FINDING_BASELINE"),
+    ("stale_check", "FINDING_BASELINE_CONFIRMED_ONE_DAY"),
+    ("stale_check", "FINDING_BASELINE_CONFIRMED_TWO_DAYS"),
+    ("stale_check", "FINDING_BASELINE_NOTHING_TO_CHECK"),
+    ("stale_check", "FINDING_BASELINE_ASK_ONE_DAY"),
+    ("stale_check", "FINDING_BASELINE_ASK_TWO_DAYS"),
     ("stale_check", "FINDING_BASELINE_UNCONFIRMED"),
     ("stale_check", "FINDING_DOCUMENT_OLDER"),
     ("stale_check", "FINDING_NOTHING_YET"),
@@ -905,22 +918,6 @@ EXEMPTIONS = (
         "The step carries several prose runs over the cap, including the "
         "per-draft narrowing ask ruling 2 removes. Unit 1.6 owns it.",
         "1.6",
-    ),
-    Exemption(
-        _JOIN_SKILL,
-        "purpose",
-        "Step 7. The closing",
-        "The closing step opens with an order. Unit 1.5 rewrites this step "
-        "when it adds the closing question and the reconciliation.",
-        "1.5",
-    ),
-    Exemption(
-        _JOIN_SKILL,
-        "prose",
-        "Step 7. The closing",
-        "The closing runs six plain prose lines. Unit 1.5 rewrites the "
-        "closing under ruling 4 of the acceptance matrix.",
-        "1.5",
     ),
 )
 

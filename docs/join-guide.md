@@ -145,13 +145,29 @@ draft as a whole document and either approve it, edit it, or skip it. Nothing is
 saved until you approve it, and you can stop at any point and pick up where you
 left off.
 
+Before the very end you are asked one question about the business itself. You
+are told first what a context change is, which is anything that happened that
+makes a document in your base no longer true, why the base wants one, and what
+it does with one, with one example. Then you are asked to say in one sentence
+whether anything about the context of the business changed that the base should
+account for. Saying skip is a whole answer and it writes nothing at all.
+
+If you do give a sentence, you are shown the whole of what would be written
+down before a word of it is written. That includes the day it happened, who
+noted it, which documents it affects, and when it comes back for a look, and
+every one of those is yours to correct. Once you approve it, you are asked
+separately about each of your two documents whether that document already says
+what the change says. Saying yes writes that down against that one change.
+Saying no leaves the document flagged and prepares a change for it, which waits
+for you to approve it, because setting up never edits a document it has already
+written for you.
+
 At the end you get one real finding about your own context rather than a
-congratulations message. When your base is brand new, that finding is an honest
-one: it says both documents were confirmed today, that nothing has been recorded
-yet about what has changed in your business, and that the base therefore cannot
-tell you yet whether either document has gone out of date. It also gives you the
-date each document comes up for review. Once you have recorded something that
-changed, the finding tells you whether a document is now behind it.
+congratulations message. When your base is brand new and you recorded nothing,
+that finding is three short lines: what you confirmed and when, that nothing is
+recorded yet to check either document against, and when the base will ask you
+about them again. Once you have recorded something that changed, the finding
+tells you instead whether a document is now behind it.
 
 ## Where the base lives
 

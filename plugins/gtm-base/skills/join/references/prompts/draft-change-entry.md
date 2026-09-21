@@ -37,18 +37,23 @@ source: the label of the piece of material the change came from
 affects: [{{icp_path}}]
 review_by: three months after it happened, or sooner if it needs it
 origin: join
-run_id: leave this exactly as the word pending
 status: open
 ```
 
-Two of those settings are named by GTM Base itself after the person approves
-the entry, so write the word pending for both and change nothing about them.
-Both dates you do write have to be real dates in the form year, month, day, and
-the change cannot be dated in the future or after the day it was written down.
+The identifier is named by GTM Base itself after the person approves the entry,
+so write the word pending for it and change nothing about it. Both dates you do
+write have to be real dates in the form year, month, day, and the change cannot
+be dated in the future or after the day it was written down.
 
 The `affects` setting lists the files in the base whose meaning this change
-alters. It is normally just the ideal customer profile at `{{icp_path}}`. Every
-path listed has to sit inside the `context` folder.
+alters. It is normally just the ideal customer profile at `{{icp_path}}`, and it
+lists the positioning as well when the change alters how the company describes
+what it sells. Every path listed has to sit inside the `context` folder.
+
+Do not write a run of setting up onto this entry. A change somebody gave at the
+closing is not something they were shown beside the documents that were drafted
+earlier in the same sitting, and writing the run on it would make the base treat
+those documents as though they had already caught up with it.
 
 The body is two or three short paragraphs: what changed, what it replaced, and
 why. Use the company's own words for it wherever the material gives them to

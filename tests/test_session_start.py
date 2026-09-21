@@ -213,6 +213,26 @@ class SessionStartTest(SessionStartHelpers):
         self.assertEqual(before, support.head_of(root))
         self.assertEqual(untouched, self.seat_snapshot())
 
+    def test_neither_part_ever_mentions_the_quiet_record(self):
+        """Requirement P17: that ask lives inside a review, never at the start.
+
+        This base holds no context change at all, which is the state that is
+        behind immediately, so it is the state that would say it if anything
+        at session start said it.
+        """
+        from gtmbase import stale_check
+
+        root, _base_id = self.joined_base()
+        self.add_files(root)
+
+        visible = self.run_hook(root, part="visible")
+        context = self.run_hook(root, part="context")
+
+        said = "%s %s" % (visible or "", context or "")
+        self.assertNotIn(stale_check.LEDGER_BEHIND_EMPTY % 30, said)
+        self.assertNotIn("record of context changes", said)
+        self.assertNotIn("is more than", said)
+
     def test_the_context_part_pulls_and_prints_the_map_as_plain_text(self):
         root, base_id = self.joined_base()
         self.add_files(root)

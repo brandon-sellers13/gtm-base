@@ -8,7 +8,6 @@ source: src-000000000000000000000000
 affects: [context/strategy/icp.md]
 review_by: 2026-04-01
 origin: ledger
-run_id: run-2026-01-01-00000000
 status: open
 ---
 

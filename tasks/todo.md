@@ -738,3 +738,53 @@ Brandon's call: context first, skills after. Units 1.4b and 1.4c above are withd
       when it stopped after. It now says only what it can know. That is the
       same mistake as the one I recorded last pass, in a sentence rather than
       in code: a claim about a state that varies, written as though it did not.
+
+## Unit 1.5: Habit hooks (2026-09-20)
+
+- [x] `stamp_entry` takes the run off a context change setup writes, and
+      `review.approve` hands it nothing for the change step. P5, and the
+      reason is Codex condition B: a matching run on a file and on a change
+      settled the one against the other with nobody having read them side by
+      side.
+- [x] The closing question, its three sentences and its example, written into
+      `skills/join/references/closing-rules.md` and read out of there by
+      `join_flow.closing_question`, the same way the closing message already
+      was. P4's wording is fixed word for word.
+- [x] `join_flow.preview_change`: the four labeled lines, the four facts that
+      are the person's to correct, and the whole entry as an artifact. P5.
+- [x] `join_flow.reconcile_plan`, `reconcile_yes`, `reconcile_no`: one
+      question per required document, a confirmation naming that one change,
+      or a flagged document with a change prepared for it. Everything else
+      affected is left flagged and counted in one line. P6 and ruling 4.
+- [x] `join_flow.skip_the_closing_question` and `confirm.against_change`. Skip
+      writes nothing, rests the reminder for the base's own threshold, and is
+      outside the yes-rate denominator, which `tests/test_report.py` asserts
+      on the number itself. P7.
+- [x] `compose_proposal.stage_local_edit` asks one more thing, what changed
+      and why. A strategic answer becomes the proposal's change entry and
+      `decision_block` stops being unconditionally None; a typo answer leaves
+      the proposal byte for byte what it was, which a test asserts by
+      comparing the two files. P16.
+- [x] The quiet-record ask moved out of the run that prepares changes and into
+      the review, at most once a session, kept in the seat by session id. P17.
+- [x] The baseline closing rewritten as three short lines, with a shared day
+      named once, and Unit 1.2's tests rewritten with the reason recorded.
+- [x] Join skill step 7 rewritten as steps 7 to 10, one request each, marked
+      with the step, ask, artifact and change markers, and both of this unit's
+      exemptions removed from `tests/plain_language.py`.
+- [x] Atlas figures 5, 7 and 8, the join guide, the propose-change skill, the
+      drafting prompt, the change entry template, and the changelog.
+
+### Review
+
+What I would flag to whoever picks this up. The closing question, the entry
+preview and the reconciliation are library functions plus four new commands on
+`skills/join/scripts/join.py`; the skill orchestrates them, because there is no
+single call that can ask a person four things in turn. The owner's call on the
+baseline wording is still open: the old sentence is preserved in this session's
+report so he can take it back, and taking it back is one constant and two tests.
+
+The lesson I carried in held. `FINDING_BASELINE` was one sentence naming four
+dates, and on a base set up in one sitting it named the same day twice and the
+same review date twice, which reads as though they were different days. The
+rewrite has one form per state and a test in each state.

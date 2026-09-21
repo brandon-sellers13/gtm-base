@@ -392,7 +392,12 @@ class TestTheDecisionEntryLandsAsOnePieceOfWork(unittest.TestCase):
             )
             entry.validate(today=TODAY)
             self.assertEqual("join", entry.origin)
-            self.assertEqual(setup.run, entry.run_id)
+            # Changed by Unit 1.5 on 2026-09-20. The entry used to carry the
+            # run it was written in, and requirement P5 takes that off,
+            # because a run on both the file and the change is what made the
+            # currency rules treat a document as already confirmed against a
+            # change nobody had read it beside (Codex condition B).
+            self.assertIsNone(entry.run_id)
             self.assertEqual(EMAIL, entry.noted_by)
             self.assertEqual([ICP], entry.affects)
             self.assertEqual("open", entry.status)
@@ -487,16 +492,18 @@ class TestTheStaleLibraryCountsEachFileAsConfirmed(unittest.TestCase):
             }
             self.assertEqual({ICP, POSITIONING}, confirmed)
 
-    def test_the_positioning_and_the_profile_are_both_settled_by_the_same_run(self):
+    def test_the_change_leaves_the_profile_flagged_and_the_positioning_settled(self):
         """What the stale rules make of a run, exactly as they are today.
 
-        The positioning has nothing pointing at it, so its own line settles it.
-        The profile is the file the decision affects, and the decision and the
-        profile were put in front of the owner together, in one run, which is
-        what the run identifier on both of them records. This run wrote the
-        entry today about a decision made in August, and the profile is settled
-        against it all the same, because a base is never flagged as behind
-        itself.
+        Rewritten by Unit 1.5 on 2026-09-20. It used to assert that both files
+        came out settled, because setup wrote the run onto the change as well
+        as onto both confirmations and the currency rules read that as the
+        owner having been shown the change and the file together.
+
+        Requirement P5 takes the run off the change, so the profile the change
+        affects is flagged until somebody says it already reflects it. The
+        positioning has nothing pointing at it, so its own line still settles
+        it, and that half is unchanged.
         """
         with support.Sandbox() as sandbox:
             write_gitconfig()
@@ -518,7 +525,7 @@ class TestTheStaleLibraryCountsEachFileAsConfirmed(unittest.TestCase):
             )
             reasons = {flag.path: flag.reason for flag in report.file_flags}
             self.assertNotIn(POSITIONING, reasons)
-            self.assertNotIn(ICP, reasons)
+            self.assertIn(ICP, reasons)
 
 
 class TestASecondLineForTheSameFileIsRefused(unittest.TestCase):

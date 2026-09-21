@@ -31,14 +31,18 @@ import shutil
 from typing import List, Optional, Sequence
 
 from . import (
+    base_reader,
+    confirm,
     constants,
     create_base,
     drafting,
     extract,
+    formats,
     ids,
     location,
     machine,
     marker,
+    names,
     paths,
     review,
     sources as sources_module,
@@ -49,8 +53,10 @@ from .errors import (
     ConsentError,
     DraftError,
     GtmBaseError,
+    PathError,
     ReviewError,
     SourceRejected,
+    ValidationError,
 )
 from .fsutil import atomic_write_json, atomic_write_text, ensure_dir, read_json, read_text
 from .gitcmd import GitRunner, runner_or_default
@@ -106,6 +112,73 @@ NOTE_NOT_SAVED_MESSAGE = (
 CLOSING_RULES = os.path.join("skills", "join", "references", "closing-rules.md")
 CLOSING_MARKER = "## The closing message"
 CLOSING_LINKED_MARKER = "## The closing message when a folder is linked"
+# The three sentences, the example, and the one request that make up the
+# closing question live in the same document for the same reason the closing
+# message does: they are words a person reads, so they belong somewhere a
+# person can read and edit them rather than in a string in this file.
+CLOSING_QUESTION_MARKER = "## The closing question"
+
+# The four labels one context change is shown by, and the markers around them.
+# `docs/ux-standard.md` is where the form comes from and
+# `plugins/gtm-base/templates/change-four-lines.md` holds it as a template.
+CHANGE_OPEN = "<!-- change -->"
+CHANGE_CLOSE = "<!-- end change -->"
+ARTIFACT_OPEN = "<!-- artifact -->"
+ARTIFACT_CLOSE = "<!-- end artifact -->"
+CHANGE_LABELS = (
+    "What changed:",
+    "Why:",
+    "What it affects:",
+    "When to look again:",
+)
+
+# The four facts about a change that are the person's to correct before it is
+# written down, each one named the way they would say it. Requirement P5.
+DETAIL_LABELS = (
+    "The day it happened",
+    "Who noted it",
+    "What it affects",
+    "When to look at it again",
+)
+
+# Said as the "why" line when the sentence somebody gave at the closing is one
+# sentence and holds no separate reason. It is only ever reached for a change
+# that came out of the closing question, where it is the whole of the truth.
+WHY_FROM_THE_CLOSING = (
+    "You said so when you were setting your base up."
+)
+ENTRY_PREVIEW_ASK = (
+    "Approve this, correct anything in it, skip it, or say what is wrong with it."
+)
+# One reconciliation question, asked once per document and never about two at
+# once. Requirement P6, and Codex condition B: a document is only settled
+# against a change by somebody saying it is.
+RECONCILE_ASK = "Does %s already say what that change says?"
+RECONCILE_RECORDED = (
+    "%s is written down as already saying what that change says."
+)
+RECONCILE_FLAGGED = (
+    "%s has not caught up with that change, so it stays flagged and GTM Base "
+    "has prepared a change for it to be approved."
+)
+RECONCILE_NOT_PREPARED = (
+    "%s has not caught up with that change, so it stays flagged. GTM Base "
+    "could not prepare a change for it, so that one is yours to make."
+)
+# Ruling 4 of the acceptance matrix. Only the two required documents are asked
+# about at the closing, and everything else the change reaches is said in one
+# line and picked up by the review.
+OTHERS_FLAGGED_ONE = (
+    "One other document this change affects is left flagged for your next review."
+)
+OTHERS_FLAGGED_MANY = (
+    "%d other documents this change affects are left flagged for your next review."
+)
+# Skip is a whole answer. Requirement P7.
+SKIP_RECORDED = (
+    "Nothing was written down, and GTM Base will not mention the quiet record "
+    "of context changes again until %s."
+)
 
 
 class Assembled(object):
@@ -1199,6 +1272,303 @@ def closing_message(
     if content_root:
         message = message.replace("{{content}}", content_root)
     return message + "\n"
+
+
+def closing_question(plugin_root: Optional[str] = None) -> str:
+    """The one question the closing asks about the business, word for word.
+
+    What comes back is the three plain sentences that say what a context
+    change is, why the base wants one, and how it is used, the one concrete
+    example, and then the request itself. Requirement P4 fixes the request
+    word for word, and it is read out of the closing rules rather than built
+    here so that the words a person hears are the words somebody can read and
+    change in one place.
+    """
+    root = plugin_root or drafting.plugin_root_default()
+    text = read_text(os.path.join(root, CLOSING_RULES))
+    if text is None:
+        raise GtmBaseError("the closing question is missing", "no-closing-rules")
+    _before, found, after = text.partition(CLOSING_QUESTION_MARKER)
+    if not found:
+        raise GtmBaseError("the closing question is missing", "no-closing-rules")
+    return after.split("\n## ")[0].strip("\n") + "\n"
+
+
+# --- The change somebody gives at the closing --------------------------------
+
+
+class ProposedChange(object):
+    """One context change, shown whole before a word of it is written down."""
+
+    __slots__ = ("entry", "four_lines", "details", "artifact", "affects")
+
+    def __init__(self, entry, four_lines, details, artifact, affects):
+        self.entry = entry
+        self.four_lines = four_lines
+        # Each item is (label, value), in the order they are read out.
+        self.details = list(details)
+        self.artifact = artifact
+        self.affects = list(affects)
+
+    def __repr__(self) -> str:
+        return "ProposedChange(entry=%r)" % (getattr(self.entry, "id", None),)
+
+
+def _one_line(text: str) -> str:
+    """One run of words with every line break taken out of it."""
+    return " ".join(str(text or "").split())
+
+
+def _what_changed(entry) -> str:
+    """The first line of the change, which is the sentence somebody gave."""
+    return names.change_name(entry.body, None)
+
+
+def _why_of(entry) -> str:
+    """The reason the change gives, or the plain truth when it gives none."""
+    lines = [line.strip() for line in str(entry.body or "").split("\n")]
+    seen_first = False
+    for line in lines:
+        if not line:
+            continue
+        if not seen_first:
+            seen_first = True
+            continue
+        return _one_line(line)
+    return WHY_FROM_THE_CLOSING
+
+
+def four_lines_for(entry) -> str:
+    """One context change as the four labeled lines, and nothing else."""
+    values = (
+        _what_changed(entry),
+        _why_of(entry),
+        ", ".join(names.document_name(path) for path in entry.affects)
+        or "nothing yet",
+        str(entry.review_by),
+    )
+    lines = [CHANGE_OPEN]
+    for label, value in zip(CHANGE_LABELS, values):
+        lines.append("%s %s" % (label, value))
+    lines.append(CHANGE_CLOSE)
+    return "\n".join(lines)
+
+
+def preview_change(draft) -> ProposedChange:
+    """Everything about a proposed context change, before it is written.
+
+    The four labeled lines are the wrapper, readable at a glance. The four
+    facts below them are the ones requirement P5 makes the person's to
+    correct. The whole entry, exactly as it would be written down, is the
+    artifact, and it is shown whole on purpose.
+    """
+    if draft.step != drafting.STEP_CHANGE:
+        raise DraftError(draft.step, "not-a-context-change")
+    entry = formats.ChangeEntry.parse(draft.text)
+    affected = ", ".join(names.document_name(path) for path in entry.affects)
+    details = (
+        (DETAIL_LABELS[0], str(entry.happened_on)),
+        (DETAIL_LABELS[1], str(entry.noted_by)),
+        (DETAIL_LABELS[2], affected or "nothing yet"),
+        (DETAIL_LABELS[3], str(entry.review_by)),
+    )
+    artifact = "\n".join(
+        [ARTIFACT_OPEN, draft.text.rstrip("\n"), ARTIFACT_CLOSE]
+    ) + "\n"
+    return ProposedChange(
+        entry, four_lines_for(entry), details, artifact, list(entry.affects)
+    )
+
+
+# --- Asking, once per document, whether it already says this -----------------
+
+
+class Reconciliation(object):
+    """Which documents the closing asks about, and which it leaves flagged."""
+
+    __slots__ = ("ask_about", "left_flagged", "sentence")
+
+    def __init__(self, ask_about, left_flagged, sentence=None):
+        self.ask_about = list(ask_about)
+        self.left_flagged = list(left_flagged)
+        self.sentence = sentence
+
+    def questions(self) -> List[str]:
+        """The one question to ask about each document, in the order asked."""
+        return [RECONCILE_ASK % names.document_name(path) for path in self.ask_about]
+
+    def __repr__(self) -> str:
+        return "Reconciliation(ask_about=%r, left_flagged=%d)" % (
+            self.ask_about,
+            len(self.left_flagged),
+        )
+
+
+def reconcile_plan(
+    base_root: str,
+    base_id: str,
+    affects: Sequence[str],
+    today=None,
+    runner: Optional[GitRunner] = None,
+) -> Reconciliation:
+    """Work out which documents the closing asks about, one question each.
+
+    Only the two documents a base needs are asked about here, because a change
+    can name a dozen files once a base holds segments and the closing is the
+    worst place in the product to ask a dozen questions (ruling 4 of
+    `docs/plans/2026-09-19-001-acceptance-matrix.md`). Everything else the
+    change affects is left flagged and said in one line, and the review picks
+    it up.
+
+    A document a context change is written down twice about is left flagged
+    too and never asked about, because settling it would settle a change
+    nobody has read either copy of.
+    """
+    git = runner_or_default(runner)
+    day = today or state.today()
+    if isinstance(day, datetime.datetime):
+        day = day.date()
+    ask_about: List[str] = []
+    left_flagged: List[str] = []
+    required = list(constants.REQUIRED_CONTEXT_FILES)
+    for path in affects:
+        if path not in required:
+            left_flagged.append(path)
+            continue
+        if not os.path.isfile(os.path.join(base_root, path.replace("/", os.sep))):
+            left_flagged.append(path)
+            continue
+        if confirm.refusal_while_written_twice(
+            base_root, base_id, path, day, git=git
+        ) is not None:
+            left_flagged.append(path)
+            continue
+        ask_about.append(path)
+    ask_about.sort(key=required.index)
+    sentence = None
+    if len(left_flagged) == 1:
+        sentence = OTHERS_FLAGGED_ONE
+    elif left_flagged:
+        sentence = OTHERS_FLAGGED_MANY % len(left_flagged)
+    return Reconciliation(ask_about, left_flagged, sentence)
+
+
+class Reconciled(object):
+    """What one answer to one reconciliation question led to."""
+
+    __slots__ = ("path", "answered_yes", "sentence", "staging_path", "codes")
+
+    def __init__(self, path, answered_yes, sentence, staging_path=None, codes=None):
+        self.path = path
+        self.answered_yes = bool(answered_yes)
+        self.sentence = sentence
+        self.staging_path = staging_path
+        self.codes = list(codes or [])
+
+    def __repr__(self) -> str:
+        return "Reconciled(path=%r, answered_yes=%r)" % (self.path, self.answered_yes)
+
+
+def entry_in_base(base_root: str, base_id: str, entry_id: str, day=None):
+    """One context change the base holds, and the file it is written in."""
+    if day is None:
+        day = state.today()
+    if isinstance(day, datetime.datetime):
+        day = day.date()
+    for item in base_reader.ledger(base_root, base_id, day):
+        if item.entry is not None and item.entry.id == entry_id:
+            return item.entry, (item.path or "").rsplit("/", 1)[-1]
+    return None, ""
+
+
+def reconcile_yes(
+    base_root: str,
+    base_id: str,
+    path: str,
+    entry_id: str,
+    now=None,
+    runner: Optional[GitRunner] = None,
+) -> Reconciled:
+    """The person says this document already says what the change says."""
+    result = confirm.against_change(
+        base_root, base_id, path, entry_id, now=now, runner=runner
+    )
+    if result.status != confirm.STATUS_RECORDED:
+        return Reconciled(path, False, result.reasons[0] if result.reasons else "",
+                          codes=list(result.codes or []))
+    return Reconciled(path, True, RECONCILE_RECORDED % names.document_name(path))
+
+
+def reconcile_no(
+    base_root: str,
+    base_id: str,
+    path: str,
+    entry_id: str,
+    now=None,
+    runner: Optional[GitRunner] = None,
+) -> Reconciled:
+    """The document has not caught up, so it stays flagged and a fix is prepared.
+
+    Setting a base up never edits a file it has already written, so the fix
+    does not happen here. What happens here is that a change is prepared, and
+    it waits for the person to approve it the way every other prepared change
+    does.
+    """
+    day = now or state.today()
+    if isinstance(day, datetime.datetime):
+        day = day.date()
+    entry, entry_file = entry_in_base(base_root, base_id, entry_id, day)
+    document = names.document_name(path)
+    if entry is None:
+        return Reconciled(
+            path, False, RECONCILE_NOT_PREPARED % document,
+            codes=[stale_check.CODE_NO_ENTRY],
+        )
+    try:
+        staging = stale_check.build_file_proposal(base_root, entry, entry_file, path)
+    except (ValidationError, PathError) as failure:
+        return Reconciled(
+            path,
+            False,
+            RECONCILE_NOT_PREPARED % document,
+            codes=[failure.code or stale_check.CODE_MISSING_FILE],
+        )
+    already = stale_check.already_prepared(
+        base_root, base_id, staging, entry_id, [path]
+    )
+    if already is not None:
+        return Reconciled(
+            path,
+            False,
+            RECONCILE_FLAGGED % document,
+            staging_path=stale_check.staging_path_for(base_root, staging.staging_id),
+            codes=[already],
+        )
+    written = stale_check.save_staging(base_root, staging)
+    return Reconciled(path, False, RECONCILE_FLAGGED % document, staging_path=written)
+
+
+def skip_the_closing_question(
+    base_root: str, base_id: str, today=None
+) -> str:
+    """Skip is a whole answer: nothing is written, and the reminder rests.
+
+    Requirement P7. Nothing goes into the base and nothing goes into the log
+    of questions the base asked, so the rate at which its questions are
+    answered yes is untouched by this. What it does is put off the reminder
+    that the record of context changes looks quiet, for exactly as long as
+    this base lets a confirmation stand, which is the same window the review
+    itself uses.
+    """
+    day = today or state.today()
+    if isinstance(day, datetime.datetime):
+        day = day.date()
+    settings = base_reader.settings_of(base_reader.map_text(base_root))
+    until = day + datetime.timedelta(
+        days=int(settings.confirmation_threshold_days)
+    )
+    state.set_ledger_behind_dismissed_until(base_id, until)
+    return SKIP_RECORDED % until.isoformat()
 
 
 def _linked_folder_of(resolution) -> Optional[str]:

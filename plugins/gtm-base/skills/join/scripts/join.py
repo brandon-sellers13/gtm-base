@@ -86,6 +86,14 @@ NO_BASE_HERE = (
     "to."
 )
 WENT_WRONG = "GTM Base could not finish that step, so nothing was written."
+CHANGE_NOT_IN_THE_BASE = (
+    "That context change is not in this base, so there is nothing to ask "
+    "about. Approve the change first, then run this again."
+)
+RECONCILE_ANSWER_UNKNOWN = (
+    "That answer has to be yes or no, so nothing was recorded. Ask again and "
+    "run this with the answer they gave."
+)
 NEEDS_EMAIL = (
     "GTM Base needs your work email address for this base. Ask for it, then "
     "run approve again with --email <address>."
@@ -316,6 +324,8 @@ def build_parser():
         help="only the files in this folder of the list, once per folder",
     )
     parser.add_argument("--answer", help="what the person said, in their own words")
+    parser.add_argument("--entry", help="the context change this step is about")
+    parser.add_argument("--file", dest="file", help="the one document to record an answer about")
     parser.add_argument("--base", help="the base folder to write into")
     parser.add_argument("--parent", help="the folder the base will be created in")
     parser.add_argument("--email", help="the address this base records work under")
@@ -728,6 +738,10 @@ def run_approve(options, out):
     )
     line(out, "base", result.root)
     line(out, "file", result.path)
+    if drafting.step_named(step) == drafting.STEP_CHANGE:
+        # The two steps after this one are about this one change, and they
+        # need its name rather than the file it landed in.
+        line(out, "change", os.path.basename(result.path)[: -len(".md")])
     for code in result.codes:
         line(out, "note", code)
     if create_base.CODE_LINK_FAILED in (result.codes or []):
@@ -752,6 +766,102 @@ def run_skip(options, out):
         "That one is written down as skipped, and the next session will offer "
         "to finish it.\n"
     )
+    return EXIT_DONE
+
+
+def base_and_id(options, out):
+    """The base this step works in, and the name this account knows it by."""
+    root = options.base or os.getcwd()
+    resolution = paths.resolve_base(root, machine.load_machine_state())
+    if not resolution.active or not resolution.root or not resolution.base_id:
+        out.write(NO_BASE_HERE + "\n")
+        return None, None
+    return resolution.root, resolution.base_id
+
+
+def run_closing_question(options, out):
+    """Print the three sentences, the example, and the one request."""
+    del options
+    out.write(join_flow.closing_question())
+    return EXIT_DONE
+
+
+def run_preview_change(options, out):
+    """Show the whole of what would be written down, before writing any of it."""
+    draft = need(options, "draft", out)
+    if not draft:
+        return EXIT_ERROR
+    reviewed = join_flow.review_step(
+        drafting.STEP_CHANGE, draft, base_root=options.base
+    )
+    if not reviewed.ready:
+        line(out, "codes", ",".join(reviewed.codes))
+        out.write(
+            "That draft holds something that must not be written down, so write "
+            "it again from the same request.\n"
+        )
+        return EXIT_REFUSED
+    proposed = join_flow.preview_change(reviewed.draft)
+    out.write(proposed.four_lines + "\n\n")
+    for label, value in proposed.details:
+        out.write("%s: %s\n" % (label, value))
+    out.write("\n" + proposed.artifact + "\n")
+    out.write(join_flow.ENTRY_PREVIEW_ASK + "\n")
+    return EXIT_DONE
+
+
+def run_reconcile(options, out):
+    """Say which documents to ask about, and how many are left flagged."""
+    entry_id = need(options, "entry", out)
+    if not entry_id:
+        return EXIT_ERROR
+    root, base_id = base_and_id(options, out)
+    if root is None:
+        return EXIT_ERROR
+    entry, _file = join_flow.entry_in_base(root, base_id, entry_id)
+    if entry is None:
+        out.write(CHANGE_NOT_IN_THE_BASE + "\n")
+        return EXIT_REFUSED
+    plan = join_flow.reconcile_plan(root, base_id, entry.affects)
+    for path, question in zip(plan.ask_about, plan.questions()):
+        line(out, "file", path)
+        out.write(question + "\n")
+    if plan.sentence:
+        out.write(plan.sentence + "\n")
+    return EXIT_DONE
+
+
+def run_reconcile_answer(options, out):
+    """Record one answer about one document, and say what it led to."""
+    entry_id = need(options, "entry", out)
+    relative = need(options, "file", out)
+    answer = need(options, "answer", out)
+    if not entry_id or not relative or not answer:
+        return EXIT_ERROR
+    if answer not in ("yes", "no"):
+        out.write(RECONCILE_ANSWER_UNKNOWN + "\n")
+        return EXIT_REFUSED
+    root, base_id = base_and_id(options, out)
+    if root is None:
+        return EXIT_ERROR
+    if answer == "yes":
+        result = join_flow.reconcile_yes(root, base_id, relative, entry_id)
+    else:
+        result = join_flow.reconcile_no(root, base_id, relative, entry_id)
+    if result.staging_path:
+        line(out, "prepared", result.staging_path)
+    for code in result.codes:
+        line(out, "note", code)
+    out.write(result.sentence + "\n")
+    return EXIT_DONE
+
+
+def run_skip_change(options, out):
+    """Skip is a whole answer, so nothing is written and the reminder rests."""
+    root, base_id = base_and_id(options, out)
+    if root is None:
+        return EXIT_ERROR
+    out.write(join_flow.skip_the_closing_question(root, base_id) + "\n")
     return EXIT_DONE
 
 
@@ -888,6 +998,11 @@ MODES = {
     "what-is-wrong": run_what_is_wrong,
     "approve": run_approve,
     "skip": run_skip,
+    "closing-question": run_closing_question,
+    "preview-change": run_preview_change,
+    "reconcile": run_reconcile,
+    "reconcile-answer": run_reconcile_answer,
+    "skip-change": run_skip_change,
     "close": run_close,
     "link": run_link,
     "unlink": run_unlink,

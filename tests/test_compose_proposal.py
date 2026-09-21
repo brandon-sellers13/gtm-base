@@ -918,6 +918,130 @@ class TestAChangeSomebodyMadeByHand(unittest.TestCase):
             )
 
 
+class TestWhatChangedAndWhy(unittest.TestCase):
+    """Unit 1.5, requirement P16: one more question, and what each answer does."""
+
+    STRATEGIC = (
+        "We moved up to companies of twenty to two hundred people, because "
+        "everyone smaller than that churned inside two quarters."
+    )
+    TYPO = "I spelled marketers wrong."
+
+    def test_the_one_thing_it_asks_is_what_changed_and_why(self):
+        self.assertEqual("What changed, and why?", compose_proposal.LOCAL_EDIT_ASK)
+
+    def test_an_answer_about_the_business_travels_as_the_change(self):
+        with support.Sandbox() as sandbox:
+            root, base_id, _remote = base_with_a_shared_copy(sandbox)
+            hand_edit(root)
+
+            staged = compose_proposal.stage_local_edit(
+                root,
+                base_id,
+                STATED_SOURCE,
+                now=TODAY,
+                what_changed=self.STRATEGIC,
+                records_a_change=True,
+            )
+
+            staging = formats.ProposalStaging.parse(support.read(staged)).validate()
+            self.assertIsNotNone(staging.decision_block)
+            entry = formats.ChangeEntry.parse(staging.decision_block).validate(TODAY)
+            self.assertEqual(staging.staging_id, entry.id)
+            self.assertEqual("local-edit", entry.origin)
+            self.assertIsNone(entry.run_id)
+            self.assertEqual([ICP], entry.affects)
+            self.assertIn("churned inside two quarters", entry.body)
+            self.assertEqual([], compose_proposal.marker_problems(staging))
+            # The source they stated is still the evidence, and still all of it.
+            self.assertIn(STATED_SOURCE, staging.excerpt)
+            self.assertIn(
+                STATED_SOURCE, formats.parse_pr_body(staging.pr_body)["evidence"]
+            )
+
+    def test_an_answer_about_a_typo_records_no_change_and_is_not_blocked(self):
+        with support.Sandbox() as sandbox:
+            root, base_id, _remote = base_with_a_shared_copy(sandbox)
+            hand_edit(root)
+
+            staged = compose_proposal.stage_local_edit(
+                root,
+                base_id,
+                STATED_SOURCE,
+                now=TODAY,
+                what_changed=self.TYPO,
+                records_a_change=False,
+            )
+
+            staging = formats.ProposalStaging.parse(support.read(staged)).validate()
+            self.assertIsNone(staging.decision_block)
+            self.assertEqual([], compose_proposal.marker_problems(staging))
+            self.assertEqual([ICP], staging.target_paths)
+            self.assertNotIn(self.TYPO, formats.parse_pr_body(staging.pr_body)["why"])
+            self.assertIn(
+                "one to five marketers", support.read(os.path.join(root, ICP))
+            )
+
+    def test_the_proposal_with_no_answer_at_all_is_the_one_it_always_was(self):
+        """The path that shipped before this unit, byte for byte."""
+        with support.Sandbox() as sandbox:
+            root, base_id, _remote = base_with_a_shared_copy(sandbox)
+            hand_edit(root)
+            without = support.read(
+                compose_proposal.stage_local_edit(
+                    root, base_id, STATED_SOURCE, now=TODAY
+                )
+            )
+
+            with_a_typo = support.read(
+                compose_proposal.stage_local_edit(
+                    root, base_id, STATED_SOURCE, now=TODAY, what_changed=self.TYPO
+                )
+            )
+
+            self.assertEqual(without, with_a_typo)
+
+    def test_a_change_asked_for_with_no_words_for_it_is_refused(self):
+        with support.Sandbox() as sandbox:
+            root, base_id, _remote = base_with_a_shared_copy(sandbox)
+            hand_edit(root)
+            with self.assertRaises(Exception) as caught:
+                compose_proposal.stage_local_edit(
+                    root, base_id, STATED_SOURCE, records_a_change=True
+                )
+            self.assertEqual(
+                compose_proposal.CODE_NO_CHANGE_WORDS,
+                getattr(caught.exception, "code", None),
+            )
+
+    def test_a_refused_proposal_leaves_the_edit_and_the_source_in_place(self):
+        """Their own words are theirs, and a refusal never takes them back."""
+        with support.Sandbox() as sandbox:
+            root, base_id, _remote = base_with_a_shared_copy(sandbox)
+            hand_edit(root)
+            staged = compose_proposal.stage_local_edit(
+                root,
+                base_id,
+                STATED_SOURCE,
+                now=TODAY,
+                what_changed=self.STRATEGIC,
+                records_a_change=True,
+            )
+
+            broken = RecordingGh(raise_on_create=True)
+            with self.assertRaises(RuntimeError):
+                compose_proposal.propose(
+                    staged, root, base_id, gh=broken, now=TODAY, session_id="sess-1"
+                )
+
+            self.assertIn(
+                "one to five marketers", support.read(os.path.join(root, ICP))
+            )
+            staging = formats.ProposalStaging.parse(support.read(staged)).validate()
+            self.assertIn(STATED_SOURCE, staging.excerpt)
+            self.assertIn("churned inside two quarters", staging.decision_block)
+
+
 # --- The whole way round ------------------------------------------------------
 
 

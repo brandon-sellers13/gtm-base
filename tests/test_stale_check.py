@@ -584,15 +584,93 @@ class TestTheQuietLedger(unittest.TestCase):
         )
         return base
 
-    def test_it_is_reported_with_the_way_to_stop_it(self):
+    def test_it_is_reported_inside_the_review_with_the_way_to_stop_it(self):
+        """Rewritten by Unit 1.5 on 2026-09-20, requirement P17.
+
+        It used to ask for the ordinary run, because that is where this was
+        said. It is said inside the review and nowhere else now, so the same
+        base is asked the same thing by asking for a review.
+        """
+        with support.Sandbox() as sandbox:
+            base = self._base(sandbox)
+
+            result = run_check(base, mode="review")
+
+            self.assertTrue(result.report.ledger_behind.behind)
+            self.assertTrue(
+                any("2026-01-06" in line for line in result.lines()), result.lines()
+            )
+
+    def test_the_run_that_prepares_changes_never_mentions_it(self):
+        """P17: nothing says this outside the review, and nothing says it first."""
         with support.Sandbox() as sandbox:
             base = self._base(sandbox)
 
             result = run_check(base)
 
             self.assertTrue(result.report.ledger_behind.behind)
+            self.assertFalse(
+                any("is more than 30 days ago" in line for line in result.lines()),
+                result.lines(),
+            )
+
+    def test_the_review_mentions_it_once_a_session_and_not_twice(self):
+        """P17: asking for the review twice in one sitting is not two reasons."""
+        with support.Sandbox() as sandbox:
+            base = self._base(sandbox)
+
+            first = run_check(base, mode="review")
+            second = run_check(base, mode="review")
+
             self.assertTrue(
-                any("2026-01-06" in line for line in result.lines()), result.lines()
+                any("2026-01-06" in line for line in first.lines()), first.lines()
+            )
+            self.assertFalse(
+                any("2026-01-06" in line for line in second.lines()), second.lines()
+            )
+
+    def test_after_a_dismissal_it_is_silent_and_then_returns_once(self):
+        """P17 and condition C: the dismissal lasts the base's own threshold."""
+        with support.Sandbox() as sandbox:
+            base = self._base(sandbox)
+            run_check(base, dismiss_quiet_record=True)
+
+            inside = stale_check.run(
+                base.root,
+                base.base_id,
+                gh=support.RecordingGh(),
+                now=TODAY + datetime.timedelta(days=29),
+                session_id="sess-2",
+                mode="review",
+            )
+            after = stale_check.run(
+                base.root,
+                base.base_id,
+                gh=support.RecordingGh(),
+                now=TODAY + datetime.timedelta(days=40),
+                session_id="sess-3",
+                mode="review",
+            )
+            again = stale_check.run(
+                base.root,
+                base.base_id,
+                gh=support.RecordingGh(),
+                now=TODAY + datetime.timedelta(days=40),
+                session_id="sess-3",
+                mode="review",
+            )
+
+            self.assertFalse(
+                any("is more than 30 days ago" in line for line in inside.lines()),
+                inside.lines(),
+            )
+            self.assertTrue(
+                any("is more than 30 days ago" in line for line in after.lines()),
+                after.lines(),
+            )
+            self.assertFalse(
+                any("is more than 30 days ago" in line for line in again.lines()),
+                again.lines(),
             )
 
     def test_after_it_is_dismissed_it_stays_quiet_for_the_window(self):
@@ -930,11 +1008,17 @@ class TestTheFirstRunFinding(unittest.TestCase):
         return base
 
     def test_then_the_honest_baseline_when_nothing_has_been_recorded_yet(self):
-        """Rewritten by Unit 1.2 on 2026-09-19.
+        """Rewritten by Unit 1.2 on 2026-09-19 and again by Unit 1.5 on
+        2026-09-20.
 
-        This scenario used to assert the sentence saying that no decision had
-        been written down. Setup no longer requires one (P1), so the closing
-        now says what it holds and what it cannot check yet (P2).
+        Unit 1.2 replaced the sentence saying that no decision had been
+        written down, because setup no longer requires one (P1) and the
+        closing has to say what it holds and what it cannot check yet (P2).
+
+        Unit 1.5 rewrote that one long sentence as three short lines, one
+        thought each, and named a day once when both documents share it, which
+        is what setting a base up in a single sitting produces. Nothing about
+        what the finding claims changed.
         """
         with support.Sandbox() as sandbox:
             base = self._confirmed(sandbox)
@@ -943,33 +1027,36 @@ class TestTheFirstRunFinding(unittest.TestCase):
 
             self.assertEqual(stale.FINDING_BASELINE_NO_CHANGES, result.finding.code)
             self.assertEqual(
-                "You confirmed your customer profile on 2026-06-05 and your "
-                "positioning on 2026-06-05. No context change is recorded yet, "
-                "so GTM Base cannot yet check whether a change has made either "
-                "document out of date. GTM Base will ask about your customer "
-                "profile again on 2026-07-06, and about your positioning on "
-                "2026-07-06.",
+                "You confirmed your customer profile and your positioning on "
+                "2026-06-05.\n"
+                "No context change is recorded yet, so there is nothing to "
+                "check either document against.\n"
+                "GTM Base will ask about both of them again on 2026-07-06.",
                 result.finding_sentence,
             )
+            self.assertEqual(3, len(result.finding_sentence.split("\n")))
+            self.assertEqual(1, result.finding_sentence.count("2026-06-05"))
             self.assertNotIn("nothing is out of date", result.finding_sentence.lower())
             self.assertNotIn("no date to watch", result.finding_sentence)
             self.assertNotIn(".md", result.finding_sentence)
 
     def test_the_baseline_names_each_date_when_setup_was_resumed_later(self):
+        """Two days really are two days, so each is named with its document."""
         with support.Sandbox() as sandbox:
             base = self._confirmed(sandbox, icp_date=WEDNESDAY)
 
             result = run_check(base, mode="first-run")
 
-            self.assertIn("your customer profile on 2026-06-03", result.finding_sentence)
-            self.assertIn("your positioning on 2026-06-05", result.finding_sentence)
-            self.assertIn(
-                "ask about your customer profile again on 2026-07-04",
+            self.assertEqual(
+                "You confirmed your customer profile on 2026-06-03 and your "
+                "positioning on 2026-06-05.\n"
+                "No context change is recorded yet, so there is nothing to "
+                "check either document against.\n"
+                "GTM Base will ask about your customer profile again on "
+                "2026-07-04, and about your positioning on 2026-07-06.",
                 result.finding_sentence,
             )
-            self.assertIn(
-                "about your positioning on 2026-07-06", result.finding_sentence
-            )
+            self.assertEqual(3, len(result.finding_sentence.split("\n")))
 
     def test_a_second_seat_reading_the_same_base_says_the_same_thing(self):
         """Two computers, one base, one sentence. The rules read dates only."""
@@ -1338,7 +1425,9 @@ class BothLayouts(unittest.TestCase):
                     written_on="2026-01-02",
                     review_by="2026-09-01",
                 )
-                result = run_check(base)
+                # Asked inside the review and nowhere else since Unit 1.5
+                # (requirement P17), so the review is what this asks for.
+                result = run_check(base, mode="review")
                 self.assertTrue(
                     any(
                         "is more than 30 days ago" in line

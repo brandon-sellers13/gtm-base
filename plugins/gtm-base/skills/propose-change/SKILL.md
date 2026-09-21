@@ -43,10 +43,43 @@ them, and the context change that prompted them.
 
 The second way is the person's own hand. Somebody reads a report, opens
 `context/strategy/icp.md`, changes a paragraph, and saves it. Their change stays
-exactly where they put it, and this skill builds the proposal around it. It asks
-one thing first: where the change came from, in their own words. That answer
-becomes the evidence the reviewer reads, so nobody has to take the change on
-trust.
+exactly where they put it, and this skill builds the proposal around it. Two
+things are asked before it is built, one at a time and never in one breath.
+
+## The hand edit, and the two things it asks
+<!-- step -->
+
+An edit somebody made themselves is the one moment the base can learn why a
+document changed without anybody having to remember to tell it, so it asks,
+once, and their answer decides whether a context change is written down at all.
+The first question is where the edit came from; their answer becomes the
+evidence the reviewer reads, and it is passed as `--source`. Then ask this:
+
+<!-- ask -->
+What changed, and why?
+<!-- end ask -->
+
+Read what they say and decide one thing only.
+
+- An answer about the business, such as "we moved up to companies of twenty to
+  two hundred people, because everyone smaller churned", is a context change.
+  Pass it as `--what-changed "<their words>"` with `--records-a-change`. It
+  travels with the proposal and is written into the base when the proposal is
+  accepted.
+- An answer about a spelling mistake, a broken link, or a heading is not a
+  context change. Pass neither, and the proposal is exactly what it would have
+  been before they were asked. Never turn a typo into a context change, and
+  never make somebody invent one to get a typo fixed.
+
+When a context change does travel with the proposal, show it once, as the four
+labeled lines, before the proposal is raised:
+
+<!-- change -->
+What changed: We moved up to companies of twenty to two hundred people.
+Why: Everyone smaller than that churned inside two quarters.
+What it affects: your customer profile
+When to look again: 2026-12-19
+<!-- end change -->
 
 ## What happens, in this order
 
@@ -96,7 +129,9 @@ second review.
 From inside the base:
 
 - `python3 scripts/propose.py --staging <path to the staged file>`
-- `python3 scripts/propose.py --local-edit --source "<where the change came from, in your words>"`
+- `python3 scripts/propose.py --local-edit --source "<where the change came from, in your words>"`,
+  adding `--what-changed "<their words>" --records-a-change` when what they
+  said was about the business rather than about a typo
 - `python3 scripts/propose.py --reopen <proposal id>`
 
 The last one raises a proposal again from the copy kept when it was first sent.

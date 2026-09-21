@@ -280,29 +280,70 @@ class TestOneWholeSetupRun(unittest.TestCase):
 # --- The same run settles what it wrote --------------------------------------
 
 
-class TestABaseIsNeverBehindItself(unittest.TestCase):
-    """A decision made in August, written down and approved in one sitting."""
+class TestAChangeGivenAtTheClosingSettlesNothingByItself(unittest.TestCase):
+    """A change that happened in August, written down in one sitting.
 
-    def test_the_profile_is_confirmed_against_the_decision_it_was_shown_with(self):
+    Rewritten by Unit 1.5 on 2026-09-20. This class used to assert the
+    opposite, that a profile drafted in the same run as a change was already
+    confirmed against it, because setup wrote the run's own name onto the
+    entry and the currency rules read that as the owner having been shown
+    both together.
+
+    Codex condition B of `docs/reviews/2026-09-19-codex-setup-shape-verdict.md`
+    is why that is gone: the approved profile can target small fleets and the
+    sentence given at the closing can say the company stopped selling to small
+    fleets, and a matching run would have settled the one against the other
+    although nobody ever read them side by side. Requirement P5 takes the run
+    off the entry, so the only thing that settles a document against a change
+    is somebody saying it does.
+
+    The same-run exemption itself is untouched, and `tests/test_stale.py`
+    still proves it settles a file whose confirmation carries a matching run.
+    Nothing setup writes carries one any more.
+    """
+
+    def _report(self, setup):
+        from gtmbase import base_reader
+
+        inputs = base_reader.read_base(setup.root, _base_id(setup.root), today=TODAY)
+        return stale.compute(
+            today=TODAY,
+            settings=inputs.settings,
+            files=inputs.files,
+            ledger=inputs.ledger,
+            confirmations=inputs.confirmations,
+            corrections=inputs.corrections,
+            seat=inputs.seat,
+            owner_email=EMAIL,
+        )
+
+    def test_the_entry_carries_no_run_so_the_profile_is_flagged_against_it(self):
         with support.Sandbox() as sandbox:
-            from gtmbase import base_reader
+            from gtmbase import formats
 
             setup = SetupRun(sandbox).whole_run()
-            inputs = base_reader.read_base(setup.root, _base_id(setup.root), today=TODAY)
-            report = stale.compute(
-                today=TODAY,
-                settings=inputs.settings,
-                files=inputs.files,
-                ledger=inputs.ledger,
-                confirmations=inputs.confirmations,
-                corrections=inputs.corrections,
-                seat=inputs.seat,
-                owner_email=EMAIL,
+
+            entry = formats.ChangeEntry.parse(support.read(decision_file(setup.root)))
+            self.assertIsNone(entry.run_id)
+            reasons = {flag.path: flag.reason for flag in self._report(setup).file_flags}
+            self.assertIn(ICP, reasons)
+            self.assertNotIn(POSITIONING, reasons)
+
+    def test_the_owner_saying_so_is_what_settles_it(self):
+        """The reconciliation yes, which is the answer requirement P6 asks for."""
+        with support.Sandbox() as sandbox:
+            from gtmbase import formats
+
+            setup = SetupRun(sandbox).whole_run()
+            entry = formats.ChangeEntry.parse(support.read(decision_file(setup.root)))
+
+            answered = join_flow.reconcile_yes(
+                setup.root, _base_id(setup.root), ICP, entry.id, now=NOW
             )
 
-            reasons = {flag.path: flag.reason for flag in report.file_flags}
+            self.assertTrue(answered.answered_yes)
+            reasons = {flag.path: flag.reason for flag in self._report(setup).file_flags}
             self.assertNotIn(ICP, reasons)
-            self.assertNotIn(POSITIONING, reasons)
 
 
 def _base_id(root):
@@ -342,13 +383,15 @@ class TestASetupThatRecordsNoContextChange(unittest.TestCase):
 
             closed = setup.close()
 
+            # Rewritten by Unit 1.5 on 2026-09-20. The baseline is three short
+            # lines now, one thought each, and a day both documents share is
+            # named once. What it claims is exactly what it claimed before.
             self.assertEqual(
-                "You confirmed your customer profile on 2026-09-06 and your "
-                "positioning on 2026-09-06. No context change is recorded yet, "
-                "so GTM Base cannot yet check whether a change has made either "
-                "document out of date. GTM Base will ask about your customer "
-                "profile again on 2026-10-07, and about your positioning on "
-                "2026-10-07.",
+                "You confirmed your customer profile and your positioning on "
+                "2026-09-06.\n"
+                "No context change is recorded yet, so there is nothing to "
+                "check either document against.\n"
+                "GTM Base will ask about both of them again on 2026-10-07.",
                 closed.finding,
             )
             self.assertNotIn("Nothing is out of date", closed.finding)
@@ -378,6 +421,423 @@ class TestASetupThatRecordsNoContextChange(unittest.TestCase):
                 [], [question.path for question in report.candidate_questions(EMAIL)]
             )
             self.assertEqual([], report.review_items)
+
+
+# --- Unit 1.5: the question the closing asks about the business --------------
+
+
+SEGMENTS = tuple(
+    "context/strategy/segments/segment-%d.md" % number for number in range(1, 11)
+)
+
+
+def change_draft(
+    affects=(ICP,),
+    happened_on=DECIDED_IN_AUGUST,
+    review_by="2026-11-04",
+    body=None,
+):
+    """One context change, written the way the model hands one over.
+
+    It is built here rather than captured so that a scenario can move the day,
+    the documents, or the words, which is exactly what the person correcting
+    the preview does.
+    """
+    lines = [
+        "```markdown",
+        "---",
+        "id: pending",
+        "kind: change",
+        "happened_on: %s" % happened_on,
+        "written_on: 2026-09-06",
+        "noted_by: %s" % EMAIL,
+        "source: what the owner said at the closing",
+        "affects: [%s]" % ", ".join(affects),
+        "review_by: %s" % review_by,
+        "origin: join",
+        "status: open",
+        "---",
+        "",
+        body
+        or (
+            "We stopped selling to companies under twenty people.\n\n"
+            "The last four of them took the longest to close and left the "
+            "soonest, so the money was not worth the work."
+        ),
+        "```",
+    ]
+    return "\n".join(lines) + "\n"
+
+
+class TestTheChangeIsShownWholeBeforeItIsWritten(unittest.TestCase):
+    """Requirement P5, and Codex condition B's preview half."""
+
+    def test_the_preview_is_four_lines_four_facts_and_the_whole_entry(self):
+        with support.Sandbox() as sandbox:
+            setup = SetupRun(sandbox).two_documents()
+            path = setup.write_draft("change-entry", change_draft())
+            reviewed = join_flow.review_step(
+                "change-entry", path, base_root=setup.root
+            )
+
+            proposed = join_flow.preview_change(reviewed.draft)
+
+            self.assertEqual(
+                [], plain_language.find_malformed_changes(proposed.four_lines)
+            )
+            self.assertIn(
+                "What changed: We stopped selling to companies under twenty "
+                "people.",
+                proposed.four_lines,
+            )
+            self.assertIn("What it affects: your customer profile", proposed.four_lines)
+            self.assertIn("When to look again: 2026-11-04", proposed.four_lines)
+            self.assertNotIn(ICP, proposed.four_lines)
+            self.assertEqual(
+                [
+                    ("The day it happened", DECIDED_IN_AUGUST),
+                    ("Who noted it", EMAIL),
+                    ("What it affects", "your customer profile"),
+                    ("When to look at it again", "2026-11-04"),
+                ],
+                proposed.details,
+            )
+            self.assertIn(join_flow.ARTIFACT_OPEN, proposed.artifact)
+            self.assertIn("happened_on: %s" % DECIDED_IN_AUGUST, proposed.artifact)
+
+    def test_correcting_the_day_it_happened_changes_the_entry_that_is_shown(self):
+        with support.Sandbox() as sandbox:
+            setup = SetupRun(sandbox).two_documents()
+            first = join_flow.preview_change(
+                join_flow.review_step(
+                    "change-entry",
+                    setup.write_draft("change-entry", change_draft()),
+                    base_root=setup.root,
+                ).draft
+            )
+
+            corrected = join_flow.preview_change(
+                join_flow.review_step(
+                    "change-entry",
+                    setup.write_draft(
+                        "change-entry",
+                        change_draft(happened_on=DECIDED_IN_SEPTEMBER),
+                    ),
+                    base_root=setup.root,
+                ).draft
+            )
+
+            self.assertEqual(DECIDED_IN_AUGUST, first.details[0][1])
+            self.assertEqual(DECIDED_IN_SEPTEMBER, corrected.details[0][1])
+            self.assertIn(
+                "happened_on: %s" % DECIDED_IN_SEPTEMBER, corrected.artifact
+            )
+
+    def test_approving_writes_it_with_no_run_of_setting_up_on_it(self):
+        with support.Sandbox() as sandbox:
+            from gtmbase import formats
+
+            setup = SetupRun(sandbox).two_documents()
+
+            result = setup.approve("change-entry", change_draft())
+
+            self.assertTrue(result.path.startswith(constants.CHANGES_DIR + "/"))
+            entry = formats.ChangeEntry.parse(
+                support.read(os.path.join(setup.root, result.path))
+            )
+            self.assertIsNone(entry.run_id)
+            self.assertNotIn("run_id", support.read(
+                os.path.join(setup.root, result.path)
+            ))
+            self.assertEqual("", support.status_of(setup.root))
+
+
+class TestOneQuestionPerDocumentAtTheClosing(unittest.TestCase):
+    """Requirement P6, and ruling 4 of the acceptance matrix."""
+
+    def _approved(self, sandbox, affects=(ICP, POSITIONING), body=None):
+        from gtmbase import formats
+
+        setup = SetupRun(sandbox).two_documents()
+        result = setup.approve("change-entry", change_draft(affects=affects, body=body))
+        entry = formats.ChangeEntry.parse(
+            support.read(os.path.join(setup.root, result.path))
+        )
+        return setup, entry
+
+    def test_a_change_affecting_both_documents_asks_twice_and_never_at_once(self):
+        with support.Sandbox() as sandbox:
+            setup, entry = self._approved(sandbox)
+
+            plan = join_flow.reconcile_plan(
+                setup.root, _base_id(setup.root), entry.affects, today=TODAY
+            )
+
+            self.assertEqual([ICP, POSITIONING], plan.ask_about)
+            self.assertEqual(
+                [
+                    "Does your customer profile already say what that change says?",
+                    "Does your positioning already say what that change says?",
+                ],
+                plan.questions(),
+            )
+            self.assertIsNone(plan.sentence)
+
+    def test_a_yes_writes_a_confirmation_naming_that_one_change(self):
+        with support.Sandbox() as sandbox:
+            setup, entry = self._approved(sandbox)
+
+            answered = join_flow.reconcile_yes(
+                setup.root, _base_id(setup.root), ICP, entry.id, now=NOW
+            )
+
+            self.assertTrue(answered.answered_yes)
+            self.assertEqual(
+                "your customer profile is written down as already saying what "
+                "that change says.",
+                answered.sentence,
+            )
+            lines = confirmation_lines(setup.root, ICP)
+            naming = [line for line in lines if line.entry == entry.id]
+            self.assertEqual(1, len(naming), [line.render() for line in lines])
+            self.assertEqual("ledger", naming[0].trigger)
+            self.assertIsNone(naming[0].run)
+            self.assertEqual("", support.status_of(setup.root))
+
+    def test_a_no_leaves_it_flagged_and_prepares_exactly_one_change(self):
+        with support.Sandbox() as sandbox:
+            setup, entry = self._approved(sandbox)
+            base_id = _base_id(setup.root)
+            join_flow.reconcile_yes(setup.root, base_id, ICP, entry.id, now=NOW)
+
+            answered = join_flow.reconcile_no(
+                setup.root, base_id, POSITIONING, entry.id, now=TODAY
+            )
+
+            self.assertFalse(answered.answered_yes)
+            self.assertTrue(os.path.isfile(answered.staging_path))
+            self.assertEqual(
+                [], [line for line in confirmation_lines(setup.root, POSITIONING)
+                     if line.entry == entry.id]
+            )
+            folder = os.path.join(setup.root, constants.PROPOSALS_PENDING_DIR)
+            self.assertEqual(
+                1, len([name for name in os.listdir(folder) if name.endswith(".md")])
+            )
+
+    def test_the_case_codex_named_is_asked_about_and_a_no_flags_the_file(self):
+        """Codex condition B, in the words it used.
+
+        The approved profile targets small fleets and the sentence given at
+        the closing says the company stopped selling to small fleets. The
+        confirmation written when the profile was drafted, in this very run,
+        must not settle that, the question must be asked, and a no must leave
+        the file flagged.
+        """
+        with support.Sandbox() as sandbox:
+            setup, entry = self._approved(
+                sandbox,
+                affects=(ICP,),
+                body=(
+                    "We stopped selling to small fleets.\n\n"
+                    "They churned inside two quarters and the profile still "
+                    "says they are who we sell to."
+                ),
+            )
+            base_id = _base_id(setup.root)
+
+            drafted = [
+                line
+                for line in confirmation_lines(setup.root, ICP)
+                if line.trigger == "drafted"
+            ]
+            plan = join_flow.reconcile_plan(
+                setup.root, base_id, entry.affects, today=TODAY
+            )
+            answered = join_flow.reconcile_no(
+                setup.root, base_id, ICP, entry.id, now=TODAY
+            )
+            report = _report_for(setup.root, base_id)
+
+            self.assertEqual(1, len(drafted))
+            self.assertEqual(setup.run, drafted[0].run)
+            self.assertEqual([ICP], plan.ask_about)
+            self.assertFalse(answered.answered_yes)
+            self.assertIn(
+                ICP, {flag.path: flag.reason for flag in report.file_flags}
+            )
+
+    def test_ten_segment_files_are_left_flagged_and_said_in_one_line(self):
+        """Fable H4: a dozen questions at the closing is not a closing."""
+        with support.Sandbox() as sandbox:
+            setup, entry = self._approved(
+                sandbox, affects=(ICP, POSITIONING) + SEGMENTS
+            )
+
+            plan = join_flow.reconcile_plan(
+                setup.root, _base_id(setup.root), entry.affects, today=TODAY
+            )
+
+            self.assertEqual([ICP, POSITIONING], plan.ask_about)
+            self.assertEqual(list(SEGMENTS), plan.left_flagged)
+            self.assertEqual(
+                "10 other documents this change affects are left flagged for "
+                "your next review.",
+                plan.sentence,
+            )
+            self.assertEqual(2, len(plan.questions()))
+
+
+class TestSkipIsAWholeAnswer(unittest.TestCase):
+    """Requirement P7, and condition C of the Codex verdict."""
+
+    def test_it_writes_nothing_and_rests_the_reminder_for_the_threshold(self):
+        with support.Sandbox() as sandbox:
+            from gtmbase import state
+
+            setup = SetupRun(sandbox).two_documents()
+            base_id = _base_id(setup.root)
+            before = sorted(os.listdir(os.path.join(setup.root, constants.CHANGES_DIR)))
+
+            said = join_flow.skip_the_closing_question(setup.root, base_id, today=TODAY)
+
+            self.assertEqual(
+                "Nothing was written down, and GTM Base will not mention the "
+                "quiet record of context changes again until 2026-10-06.",
+                said,
+            )
+            self.assertEqual(
+                before,
+                sorted(os.listdir(os.path.join(setup.root, constants.CHANGES_DIR))),
+            )
+            self.assertEqual("", support.status_of(setup.root))
+            dismissals, _problems = state.load_dismissals(base_id)
+            self.assertEqual(
+                "2026-10-06", dismissals["ledger_behind_dismissed_until"]
+            )
+
+    def test_it_asks_nothing_so_the_log_of_questions_is_untouched(self):
+        with support.Sandbox() as sandbox:
+            from gtmbase import state
+
+            setup = SetupRun(sandbox).two_documents()
+            base_id = _base_id(setup.root)
+            before, _problems = state.load_asked(base_id)
+
+            join_flow.skip_the_closing_question(setup.root, base_id, today=TODAY)
+
+            after, _problems = state.load_asked(base_id)
+            self.assertEqual(before, after)
+
+
+class TestTheWholeClosingOnARealBase(unittest.TestCase):
+    """The integration scenario Unit 1.5 ends on.
+
+    Nothing here is a fixture standing in for a base. The base is built the
+    way `create_base` really builds one, by approving the first document, and
+    it has no shared copy and nothing pretending to be one, so every step is
+    the step a person on one computer would live through.
+    """
+
+    def test_a_no_at_the_closing_ends_with_the_document_changed_and_confirmed(self):
+        with support.Sandbox() as sandbox:
+            from gtmbase import approve_local, formats
+
+            runner = support.NoRemoteRunner()
+            setup = SetupRun(sandbox).two_documents()
+            root = setup.root
+            base_id = _base_id(root)
+            from gtmbase import paths as paths_module
+
+            self.assertIsNone(paths_module.remote_url(root))
+
+            # The sentence they gave becomes a change, approved whole.
+            approved = setup.approve(
+                "change-entry", change_draft(affects=(ICP, POSITIONING))
+            )
+            entry = formats.ChangeEntry.parse(
+                support.read(os.path.join(root, approved.path))
+            )
+            self.assertIsNone(entry.run_id)
+
+            # One question per document, in the order the plan gives them.
+            plan = join_flow.reconcile_plan(root, base_id, entry.affects, today=TODAY)
+            self.assertEqual([ICP, POSITIONING], plan.ask_about)
+
+            said_yes = join_flow.reconcile_yes(root, base_id, ICP, entry.id, now=NOW)
+            said_no = join_flow.reconcile_no(
+                root, base_id, POSITIONING, entry.id, now=TODAY
+            )
+            self.assertTrue(said_yes.answered_yes)
+            self.assertTrue(os.path.isfile(said_no.staging_path))
+
+            # Before the prepared change is approved, the positioning is
+            # behind and the profile is not.
+            flagged = {
+                flag.path: flag.reason
+                for flag in _report_for(root, base_id).file_flags
+            }
+            self.assertIn(POSITIONING, flagged)
+            self.assertNotIn(ICP, flagged)
+
+            shown = approve_local.show(
+                said_no.staging_path, root, base_id, runner=runner, now=TODAY
+            )
+            applied = approve_local.approve(
+                said_no.staging_path,
+                root,
+                base_id,
+                shown.shown_hash,
+                runner=runner,
+                now=NOW,
+            )
+
+            self.assertEqual(approve_local.STATUS_SHOWN, shown.status, shown.reasons)
+            self.assertEqual(
+                approve_local.STATUS_APPLIED, applied.status, applied.reasons
+            )
+            # The document says what the change said.
+            self.assertIn(
+                "Update needed",
+                support.read(os.path.join(root, POSITIONING)),
+            )
+            # It is confirmed against that one change, and its flag is gone.
+            naming = [
+                line
+                for line in confirmation_lines(root, POSITIONING)
+                if line.entry == entry.id
+            ]
+            self.assertEqual(1, len(naming))
+            after = {
+                flag.path: flag.reason
+                for flag in _report_for(root, base_id).file_flags
+            }
+            self.assertEqual({}, after)
+            self.assertEqual("", support.status_of(root))
+
+            # The closing itself still works, and it is no longer the baseline
+            # because the base now holds a context change.
+            closed = setup.close()
+            self.assertIn("Nothing is out of date yet", closed.finding)
+            self.assertNotIn(
+                "No context change is recorded yet", closed.finding
+            )
+
+
+def _report_for(root, base_id, today=TODAY):
+    from gtmbase import base_reader
+
+    inputs = base_reader.read_base(root, base_id, today=today)
+    return stale.compute(
+        today=today,
+        settings=inputs.settings,
+        files=inputs.files,
+        ledger=inputs.ledger,
+        confirmations=inputs.confirmations,
+        corrections=inputs.corrections,
+        seat=inputs.seat,
+        owner_email=EMAIL,
+    )
 
 
 # --- The finding, in its fixed order ----------------------------------------

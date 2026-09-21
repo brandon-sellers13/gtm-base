@@ -349,6 +349,10 @@ SEAT_DEFAULTS = {
     # again, when somebody said not now to it. Without this the offer came
     # back at every single review, for ever, which is not an offer.
     "changes_move_put_off_until": None,
+    # The session the review last mentioned the quiet record of context
+    # changes in. Asking for the review twice in one sitting mentions it once,
+    # which is what requirement P17 means by at most once a session.
+    "quiet_record_said_in_session": None,
 }
 
 # How long a week is, for the one line a week.

@@ -1112,21 +1112,85 @@ def _sections_with_levels(text: str) -> "Dict[str, str]":
     return found
 
 
+# The one thing this path asks on top of where the material came from. It is
+# short on purpose: requirement P16 asks one question here, not two.
+LOCAL_EDIT_ASK = "What changed, and why?"
+# What the change says it came from, when a hand edit becomes one. It is the
+# person's own editing, so there is no label from a document to name.
+LOCAL_EDIT_SOURCE = "what the owner said when they raised their own edit"
+CODE_NO_CHANGE_WORDS = "no-words-for-the-change"
+
+
+def local_edit_entry(
+    base_root: str,
+    staging_id: str,
+    what_changed: str,
+    affects: List[str],
+    today: datetime.date,
+    git: GitRunner,
+) -> "formats.ChangeEntry":
+    """The context change that travels with one hand edit, from their words.
+
+    Requirement P16. Somebody who edits a context file by hand because the
+    business moved has just told the base something it had no other way to
+    learn, so what they said travels with the prepared change and is written
+    down when that change is approved. The change is named after the proposal
+    carrying it, which is the rule every carried change already follows.
+    """
+    settings = base_reader.settings_of(base_reader.map_text(base_root))
+    _name, address, _codes = _author(base_root, git)
+    entry = formats.ChangeEntry(
+        id=staging_id,
+        happened_on=today.isoformat(),
+        written_on=today.isoformat(),
+        noted_by=address,
+        source=LOCAL_EDIT_SOURCE,
+        affects=list(affects),
+        review_by=(
+            today
+            + datetime.timedelta(days=int(settings.confirmation_threshold_days))
+        ).isoformat(),
+        origin=LOCAL_EDIT_ORIGIN,
+        status="open",
+        run_id=None,
+        body=str(what_changed).strip(),
+    )
+    return entry.validate(today)
+
+
 def stage_local_edit(
     base_root: str,
     base_id: str,
     source_text: str,
     runner: Optional[GitRunner] = None,
     now: Optional[datetime.date] = None,
+    what_changed: Optional[str] = None,
+    records_a_change: bool = False,
 ) -> str:
     """Turn a change the person made by hand into a staged proposal.
 
     Their own copy of the file is left exactly as they left it. What they read
     before making the change is the evidence, and it is read for things that
     must never leave before anything else happens.
+
+    The person is asked one more thing on this path, what changed and why, and
+    their answer decides one thing only: whether a context change travels with
+    the proposal. An answer about the business becomes that change, and the
+    caller says so by passing `records_a_change`. An answer about a spelling
+    mistake records nothing at all, which is the other half of requirement
+    P16: nobody fixing a typo is made to invent a change to get it fixed, and
+    what they get is exactly the proposal this path has always produced.
     """
     git = runner_or_default(runner)
-    del now  # the staged file carries no date of its own.
+    today = now or state.today()
+    if isinstance(today, datetime.datetime):
+        today = today.date()
+
+    if records_a_change and not str(what_changed or "").strip():
+        raise ValidationError(
+            "A context change needs the words you would use for what changed.",
+            code=CODE_NO_CHANGE_WORDS,
+        )
 
     if not isinstance(source_text, str) or not source_text.strip():
         raise ValidationError(
@@ -1197,14 +1261,34 @@ def stage_local_edit(
 
     first = edits[0].path
     staging_id = ids.staging_id(LOCAL_EDIT_ORIGIN, first, LOCAL_EDIT_ORIGIN, 0)
-    marker = marker_line(staging_id, None, None)
+    ordered_targets: List[str] = []
+    for edit in edits:
+        if edit.path not in ordered_targets:
+            ordered_targets.append(edit.path)
+    entry = None
+    if records_a_change:
+        entry = local_edit_entry(
+            base_root, staging_id, what_changed, ordered_targets, today, git
+        )
+    # A proposal that carries a change names that change in its own marker, and
+    # one that carries none names none. `marker_problems` refuses either half
+    # of that written without the other.
+    marker = marker_line(staging_id, staging_id if entry is not None else None, None)
     body = formats.render_pr_body(
         {
             "before": _WHITESPACE_RE.sub(" ", " ".join(before_parts)).strip(),
             "after": _WHITESPACE_RE.sub(" ", " ".join(after_parts)).strip(),
             "why": (
-                "The owner read the source quoted below and brought the file in "
-                "line with it by hand."
+                (
+                    "The owner read the source quoted below and brought the file "
+                    "in line with it by hand, and said what changed: %s"
+                    % _WHITESPACE_RE.sub(" ", str(what_changed or "")).strip()
+                )
+                if entry is not None
+                else (
+                    "The owner read the source quoted below and brought the file "
+                    "in line with it by hand."
+                )
             ),
             "evidence": source_text.strip(),
             "confidence": "high",
@@ -1223,7 +1307,7 @@ def stage_local_edit(
         third_party=True,
         pr_body=body,
         source_id=None,
-        decision_block=None,
+        decision_block=entry.render() if entry is not None else None,
         edits=edits,
         excerpt=source_text.strip(),
     )

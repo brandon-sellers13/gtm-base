@@ -275,18 +275,30 @@ def entry_id(sequence: int = 0) -> str:
     return ids.staging_id("join", drafting.ICP_PATH, "join", sequence)
 
 
-def stamp_entry(draft, run_id: str, owner_email: str, sequence: int = 0):
+def stamp_entry(draft, run_id: Optional[str], owner_email: str, sequence: int = 0):
     """Put this plugin's own identifiers on a context change.
 
-    The identifier, where it came from, and the run are all set here, over
-    whatever the draft said, so the entry a person approves is the entry the
-    rest of the plugin can find again.
+    The identifier and where it came from are set here, over whatever the
+    draft said, so the entry a person approves is the entry the rest of the
+    plugin can find again.
+
+    A context change given at the closing carries no run, and the caller says
+    so by handing in nothing for it. The run is what the currency rules read
+    when they decide that a file drafted in one sitting was put in front of
+    the owner beside the change written in that same sitting. A sentence the
+    person gave at the closing was not, so the entry that comes out of it must
+    not claim it was, and the setting is taken off rather than left as the
+    draft wrote it (requirement P5, and Codex condition B of
+    `docs/reviews/2026-09-19-codex-setup-shape-verdict.md`).
     """
     block, body = formats.split_document(draft.text)
     fields = formats.parse_frontmatter(block)
     fields["id"] = entry_id(sequence)
     fields["origin"] = "join"
-    fields["run_id"] = run_id
+    if run_id:
+        fields["run_id"] = run_id
+    else:
+        fields.pop("run_id", None)
     if owner_email:
         # The older spelling is taken off rather than left beside the new one,
         # because a file holding both would be a file with two answers to the
@@ -417,7 +429,8 @@ def approve(
         raise ReviewError(CODE_SCREENED, codes=codes)
 
     if draft.step == drafting.STEP_CHANGE:
-        draft = stamp_entry(draft, run_id, address)
+        # No run is written onto it. See `stamp_entry` for why.
+        draft = stamp_entry(draft, None, address)
         try:
             canonical_affects(draft, base_root)
         except PathError as refusal:

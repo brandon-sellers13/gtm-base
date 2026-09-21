@@ -370,7 +370,7 @@
   <div class="text"><p>What the base does for you at the start of a session once it is active, and the one thing it raises on its own afterwards. The whole point of the product, in one figure.</p></div>
   <figure>
     <div class="frame">
-    <svg viewBox="0 0 900 300" role="img" aria-label="The steps of the session block, from bringing the base up to date to the one moment the base speaks up">
+    <svg viewBox="0 0 900 385" role="img" aria-label="The steps of the session block, the one moment the base speaks up, and the one thing a review you asked for raises">
       <defs>
         <marker id="a5" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="currentColor"/></marker>
       </defs>
@@ -412,10 +412,15 @@
       <text x="496" y="242" class="lbl">use it as it stands: nothing written, the document stays flagged</text>
       <text x="496" y="260" class="lbl">fix it first: the change is prepared and waits for the owner to approve it</text>
       <text x="496" y="278" class="lbl">it already reflects this: one confirmation line, naming that one change only</text>
+
+      <rect x="20" y="300" width="860" height="72" rx="6" class="seat"/>
+      <text x="36" y="322" class="title">The one other thing that speaks, and only inside a review you asked for</text>
+      <text x="36" y="340" class="lbl">a record of context changes with nothing in it is behind at once; one with something in it is behind after the threshold</text>
+      <text x="36" y="358" class="lbl">said at most once a session, never at the start of one; a dismissal lasts the threshold and then it returns, once</text>
     </svg>
     </div>
-    <figcaption>Slices, never dumps: the map is the one file read every session; everything else is read on demand by path. Anything that could run code on your machine is refused rather than pulled. The base now says nothing until a document is about to be used, which is the one case where being interrupted is worth it. Inside a skill that check runs before the document is read. Outside one it rests on the injected rule, which is an instruction and not a guarantee, with the read hook behind it as the deterministic backstop. Silence from the check means one thing only, that nothing overtook the document: a path it will not answer about, and records it could not read, both say so and end badly rather than quietly. One answer settles one change, so a document behind two changes is still behind the second one afterwards.
-      <span class="meta"><span class="stamp">decided 2026-09-04, amended 2026-09-19 and 2026-09-20</span> first plan Unit 3 and Unit 10, origin R23 to R26 · the map left out of the question by its kind, 2026-09-19 plan Unit 1.2 · a no ending in a local approval, Unit 1.2b · quiet by default and the moment of use, Amendment r2.5 and Unit 1.3, built in 0.2.7</span></figcaption>
+    <figcaption>The base says nothing at the start of a session. Slices, never dumps: the map is the one file read every session; everything else is read on demand by path. Anything that could run code on your machine is refused rather than pulled. The base now says nothing until a document is about to be used, which is the one case where being interrupted is worth it. Inside a skill that check runs before the document is read. Outside one it rests on the injected rule, which is an instruction and not a guarantee, with the read hook behind it as the deterministic backstop. Silence from the check means one thing only, that nothing overtook the document: a path it will not answer about, and records it could not read, both say so and end badly rather than quietly. One answer settles one change, so a document behind two changes is still behind the second one afterwards.
+      <span class="meta"><span class="stamp">decided 2026-09-04, amended 2026-09-19 and 2026-09-20</span> first plan Unit 3 and Unit 10, origin R23 to R26 · the map left out of the question by its kind, 2026-09-19 plan Unit 1.2 · a no ending in a local approval, Unit 1.2b · quiet by default and the moment of use, Amendment r2.5 and Unit 1.3, built in 0.2.7 · the quiet record asked about inside the review only, at most once a session, Unit 1.5 and requirement P17</span></figcaption>
   </figure>
 
   <h2 id="gate">6. What the safety check reads</h2>
@@ -466,7 +471,7 @@
   <div class="text"><p>What "set up my company base" does, in the order it happens. You name a folder as broad as you like, GTM Base proposes the places inside it that look like marketing material, and you say yes, add one, or drop one. Every step says what will happen before it happens, and nothing is written until you say yes to a whole document.</p></div>
   <figure>
     <div class="frame">
-    <svg viewBox="0 0 900 400" role="img" aria-label="The setup flow from the opening question through the places GTM Base proposes to the closing finding, with the point at which the base is created marked">
+    <svg viewBox="0 0 900 410" role="img" aria-label="The setup flow from the opening question through the places GTM Base proposes to the one question about the business and the closing finding, with the point at which the base is created marked">
       <defs>
         <marker id="a7" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="currentColor"/></marker>
       </defs>
@@ -519,20 +524,24 @@
       <path d="M366,225 L396,225" class="edge" marker-end="url(#a7)" style="color: var(--ink-mid)"/>
       <path d="M596,225 L626,225" class="edge" marker-end="url(#a7)" style="color: var(--ink-mid)"/>
 
-      <rect x="20" y="310" width="420" height="70" rx="6" class="resolved"/>
-      <text x="36" y="334" class="title">The first finding</text>
-      <text x="36" y="352" class="lbl">a skipped document; a document older than the context change that affects it;</text>
-      <text x="36" y="368" class="lbl">the honest baseline when nothing is recorded; or "nothing out of date yet" with the date it watches.</text>
-      <rect x="480" y="310" width="400" height="70" rx="6" class="box"/>
-      <text x="496" y="334" class="title">The closing</text>
-      <text x="496" y="352" class="lbl">where the base lives and how to come back; backup and teammates arrive</text>
-      <text x="496" y="368" class="lbl">with the next release; your "what got in the way" line, kept in the base</text>
+      <rect x="20" y="300" width="420" height="92" rx="6" class="box"/>
+      <text x="36" y="320" class="title">One question about the business, asked once</text>
+      <text x="36" y="338" class="lbl">three sentences and one example, then the request; skip writes nothing at all</text>
+      <text x="36" y="354" class="lbl">and rests the quiet-record reminder for the base's own threshold</text>
+      <text x="36" y="370" class="lbl">a sentence becomes an entry shown whole, every part correctable, carrying no run</text>
+      <text x="36" y="386" class="lbl">then one question per required document; the rest left flagged, counted in one line</text>
+      <rect x="480" y="300" width="400" height="92" rx="6" class="resolved"/>
+      <text x="496" y="320" class="title">The first finding, then the closing</text>
+      <text x="496" y="338" class="lbl">a skipped document; a document older than the context change that affects it;</text>
+      <text x="496" y="354" class="lbl">the baseline as three short lines; or "nothing out of date yet" with its date</text>
+      <text x="496" y="370" class="lbl">where the base lives and how to come back; backup and teammates arrive next</text>
+      <text x="496" y="386" class="lbl">release; your "what got in the way" line, kept in the base</text>
       <path d="M440,345 L480,345" class="edge" marker-end="url(#a7)" style="color: var(--ink-mid)"/>
-      <path d="M746,280 L746,310" class="edge dashed" marker-end="url(#a7)" style="color: var(--ink-mid)"/>
+      <path d="M746,280 L746,300" class="edge dashed" marker-end="url(#a7)" style="color: var(--ink-mid)"/>
     </svg>
     </div>
-    <figcaption>The one question asks where the material is roughly, and GTM Base finds the likely places itself and proposes them before any list is shown. The base comes into existence at the first approval, not before. Everything read stays in memory or in a run folder under the plugin's records that the closing deletes.
-      <span class="meta"><span class="stamp">decided 2026-09-05, amended 2026-09-12</span> join plan Units 2 to 5, Amendment r2.2, plugin 0.2.0 to 0.2.3 · contact lists left out of every list, and a large folder narrowed to the folders the person picks before the yes, built in 0.2.5 · the broad folder named and the places proposed back from file names and first headings, built in 0.2.6 · setup completes on two documents, 2026-09-19 plan Unit 1.2</span></figcaption>
+    <figcaption>The one question asks where the material is roughly, and GTM Base finds the likely places itself and proposes them before any list is shown. The base comes into existence at the first approval, not before. Everything read stays in memory or in a run folder under the plugin's records that the closing deletes. The question about the business is asked once, after both documents exist, and the entry it produces carries no run id, so nothing drafted earlier in the same sitting counts as having caught up with it.
+      <span class="meta"><span class="stamp">decided 2026-09-05, amended 2026-09-12 and 2026-09-20</span> join plan Units 2 to 5, Amendment r2.2, plugin 0.2.0 to 0.2.3 · contact lists left out of every list, and a large folder narrowed to the folders the person picks before the yes, built in 0.2.5 · the broad folder named and the places proposed back from file names and first headings, built in 0.2.6 · setup completes on two documents, 2026-09-19 plan Unit 1.2 · the one question about the business, the entry shown whole, and one reconciliation question per required document, Unit 1.5 and Amendment r2.4 section B</span></figcaption>
   </figure>
 
   <h2 id="confirm">8. Confirmations and the stale rules</h2>
@@ -552,14 +561,15 @@
       <path d="M140,90 L140,120" class="edge" marker-end="url(#a8)" style="color: var(--ink-mid)"/>
       <text x="150" y="110" class="lbl">affects</text>
 
-      <rect x="300" y="20" width="580" height="180" rx="6" class="box"/>
+      <rect x="300" y="20" width="580" height="196" rx="6" class="box"/>
       <text x="316" y="44" class="title">Counts as confirmed against that context change when any one of these holds</text>
       <text x="316" y="70" class="lbl">1. the owner's line names the change's id</text>
       <text x="316" y="90" class="lbl">2. the owner's line is dated after both the day it happened and the day it was written down</text>
       <text x="316" y="110" class="lbl">3. the owner accepted the prepared change that carried it (same files touched, same content)</text>
       <text x="316" y="130" class="lbl">4. the file was drafted in the same setup run as the change (same run id, any dates)</text>
       <text x="316" y="150" class="lbl">5. the owner approved that prepared change here, on a base with no shared copy</text>
-      <text x="316" y="178" class="lbl" style="fill: var(--ink-quiet)">a line by anyone who is not the owner counts for nothing; rule 5 is refused unless the file names them as its owner</text>
+      <text x="316" y="178" class="lbl" style="fill: var(--ink-quiet)">a line by anyone who is not the owner counts for nothing; rule 5 is refused unless the file names them as its owner;</text>
+      <text x="316" y="194" class="lbl" style="fill: var(--ink-quiet)">nothing setup writes carries a run id any more, so rule 4 never settles a change given at the closing</text>
       <path d="M260,150 L300,150" class="edge" marker-end="url(#a8)" style="color: var(--ink-mid)"/>
 
       <rect x="20" y="210" width="420" height="60" rx="6" class="warnbox"/>
@@ -571,12 +581,12 @@
 
       <rect x="20" y="290" width="860" height="80" rx="6" class="box"/>
       <text x="36" y="314" class="title">The baseline, when nothing has been recorded against either document</text>
-      <text x="36" y="334" class="lbl">the closing names each document and the day its owner confirmed it, says plainly that no context change is recorded</text>
-      <text x="36" y="354" class="lbl">so neither can be checked against one yet, and names the day each comes back. The map is left out of all of this by its kind.</text>
+      <text x="36" y="334" class="lbl">three short lines: what was confirmed and when, naming one day when both share it; that nothing is recorded to check them</text>
+      <text x="36" y="354" class="lbl">against; and when each comes back. The map is left out of all of this by its kind.</text>
     </svg>
     </div>
     <figcaption>The example the whole product was built around: a context change recorded Thursday about something that happened on Tuesday flags the file the owner confirmed on Wednesday, because Wednesday is before Thursday. Identifiers are untouched by the rename, which is why every line already written still settles what it always settled.
-      <span class="meta"><span class="stamp">decided 2026-09-04, amended 2026-09-19</span> first plan Unit 9a, origin R15 to R25; rule 3 decided 2026-09-06, rule 4 on 2026-09-06 (night) · the baseline state, 2026-09-19 plan Unit 1.2 · rule 5, the owner approving one in Claude, Unit 1.2b · the words and the settings, Unit 1.4</span></figcaption>
+      <span class="meta"><span class="stamp">decided 2026-09-04, amended 2026-09-19 and 2026-09-20</span> first plan Unit 9a, origin R15 to R25; rule 3 decided 2026-09-06, rule 4 on 2026-09-06 (night) · the baseline state, 2026-09-19 plan Unit 1.2 · rule 5, the owner approving one in Claude, Unit 1.2b · the words and the settings, Unit 1.4 · setup stops writing a run id, so a change given at the closing is settled only by the owner answering, Unit 1.5 and Codex condition B</span></figcaption>
   </figure>
 
   <hr class="rule">

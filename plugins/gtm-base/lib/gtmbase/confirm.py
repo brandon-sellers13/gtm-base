@@ -5,7 +5,7 @@ record. Nothing else in the plugin, and nothing an assistant does on its own,
 may add a line there, because the line is a person's answer and the identity
 behind it is read back from the saved work that added it.
 
-Four ways in.
+Five ways in.
 
 `answer` takes the answer to the one question a session asked. It requires the
 single-use question the hook issued for this session, so a question id quoted
@@ -17,6 +17,10 @@ shape the stale check prepares, carrying the reason the owner gave.
 `drafted` is the setup path: while a base is being built the file and its first
 line are written together, so this appends the line and stages it and leaves the
 saving to the caller.
+
+`against_change` is the closing path: the person says that a document they have
+just approved already reflects the context change they have just recorded, and
+the line that is written names that one change.
 
 `retry_pending` sends a yes that could not be sent last time.
 
@@ -981,6 +985,83 @@ def drafted(
     git.check(["add", "--", relative], cwd=base_root)
     return ConfirmResult(
         STATUS_RECORDED, reasons=[RECORDED % relative_context], line=line
+    )
+
+
+def against_change(
+    base_root: str,
+    base_id: str,
+    path: str,
+    entry_id: str,
+    now: Optional[datetime.datetime] = None,
+    runner: Optional[GitRunner] = None,
+) -> ConfirmResult:
+    """Record that one document already says what one context change said.
+
+    This is the yes half of the reconciliation the closing asks for, one
+    document at a time. The line names the change, so it settles that one
+    change for that one document and says nothing at all about any other.
+    Requirement P6 is where it comes from, and Codex condition B is why the
+    answer has to be given by the person rather than worked out from the run a
+    file happened to be drafted in.
+
+    No question is issued here, so nothing this writes ever moves the rate at
+    which the base's own questions are answered yes.
+    """
+    git = runner_or_default(runner)
+    moment = now or state.now_utc()
+    if isinstance(moment, datetime.date) and not isinstance(moment, datetime.datetime):
+        moment = datetime.datetime(moment.year, moment.month, moment.day)
+    today = state.today(moment)
+    try:
+        relative_context = paths.canonical_context_path(base_root, path)
+    except (PathError, ValidationError):
+        return _refused(CODE_DROPPED_PATH, DROPPED_PATH)
+
+    disagreeing = refusal_while_written_twice(
+        base_root, base_id, relative_context, today, git=git
+    )
+    if disagreeing is not None:
+        return _refused(CODE_WRITTEN_TWICE, disagreeing)
+
+    line = formats.ConfirmationLine(
+        date=today.isoformat(),
+        time=moment.strftime("%H:%M:%SZ"),
+        file=relative_context,
+        trigger="ledger",
+        entry=entry_id,
+        question=None,
+        run=None,
+    )
+    relative = confirmations_path_for(relative_context)
+    try:
+        line.validate()
+    except (ValidationError, PathError) as failure:
+        return _refused(failure.code or CODE_MALFORMED, DROPPED_PATH)
+    if _line_already_there(base_root, relative, line.render()):
+        return ConfirmResult(
+            STATUS_RECORDED, reasons=[RECORDED_LOCALLY % relative_context], line=line
+        )
+    try:
+        _append_line(base_root, relative, line)
+        git.check(["add", "--", relative], cwd=base_root)
+        git.check(
+            [
+                "commit",
+                "-q",
+                "-m",
+                SAVE_SUBJECT % (relative_context, line.trigger),
+                "--",
+                relative,
+            ],
+            cwd=base_root,
+        )
+    except (ValidationError, PathError) as failure:
+        return _refused(failure.code or CODE_MALFORMED, DROPPED_PATH)
+    except GtmBaseError:
+        return _refused(CODE_UNSAVED_EDITS, UNSAVED_EDITS)
+    return ConfirmResult(
+        STATUS_RECORDED, reasons=[RECORDED_LOCALLY % relative_context], line=line
     )
 
 

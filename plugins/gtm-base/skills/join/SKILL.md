@@ -369,27 +369,124 @@ there are four, with skip among them.
 If a draft cannot be read back at all, go back to the same step and write it
 again. Do not move on to the next document and do not ask the person to fix it.
 
-### Step 7. The closing
+### Step 7. The one question about what changed
+<!-- step -->
 
-Say that GTM Base will now look at the base as a whole and tell them one true
-thing about it. Ask whether anything got in the way while they were setting it
-up, and say that what they say will be saved into the base itself so the next
-session can see it. Then run:
+The base now holds two documents and nothing about what has moved since they
+were written, so this step is where anything that has already made one of them
+out of date will be recorded. Run:
+
+```
+python3 scripts/join.py closing-question
+```
+
+It prints three sentences, one example, and the request. Say all of it, in the
+words it printed, and add nothing:
+
+<!-- ask -->
+Tell me if anything about the context of the business changed that we should account for. One sentence is enough, or say skip.
+<!-- end ask -->
+
+Skip is a whole answer and it is not a failure. When they say skip, run
+`python3 scripts/join.py skip-change --base <base folder>`, say the one
+sentence it prints, and go to step 10. Nothing is written into the base and
+nothing else is asked.
+
+### Step 8. The change, as it would be written down
+<!-- step -->
+
+What they just said is not a context change until they have read the whole of
+what GTM Base would write down from it, because the day it happened, the
+documents it affects, and the day it will come back are all worked out rather
+than given. Write the change from `references/prompts/draft-change-entry.md`, check
+it with `review --step change-entry`, then run:
+
+```
+python3 scripts/join.py preview-change --draft <draft file>
+```
+
+It prints the four lines first, which is what you show:
+
+<!-- change -->
+What changed: We stopped selling to companies under twenty people.
+Why: The last four of them took the longest to close and left the soonest.
+What it affects: your customer profile, your positioning
+When to look again: 2026-12-19
+<!-- end change -->
+
+Then it prints the four things that are theirs to correct, one per line: the
+day it happened, who noted it, which documents it affects, and when to look at
+it again. Then it prints the whole change exactly as it would be written down,
+between these two markers, and that is there to be read in full before they
+answer anything:
+
+<!-- artifact -->
+The whole change, settings and all, as `preview-change` printed it.
+<!-- end artifact -->
+
+<!-- ask -->
+Approve this, correct anything in it, skip it, or say what is wrong with it.
+<!-- end ask -->
+
+The four answers work exactly as they do in step 6. A correction goes back
+through `review` and `preview-change` before it is shown again. Approving is
+`python3 scripts/join.py approve --step change-entry --draft <draft file> --run <run identifier> --base <base folder>`.
+
+### Step 9. Whether each document already says it
+<!-- step -->
+
+Approving the change says what happened, and it does not say whether either
+document has caught up with it, so that will be asked here rather than assumed.
+Run:
+
+```
+python3 scripts/join.py reconcile --base <base folder> --entry <the id the approve printed>
+```
+
+It prints one line per document to ask about, and one line saying how many
+other documents are left flagged for the review. Ask about one document at a
+time, never two in one breath, in the order it printed them:
+
+<!-- ask -->
+Does your customer profile already say what that change says?
+<!-- end ask -->
+
+Record each answer on its own with
+`python3 scripts/join.py reconcile-answer --base <base folder> --entry <id> --file <the path it printed> --answer yes`,
+or `--answer no`, and say the one sentence it prints.
+
+- **Yes** writes down that the document already says it, naming that one change.
+- **No** leaves the document flagged and prepares a change for it. Setting a
+  base up never edits a file it has already written, so the prepared change
+  waits for them to approve it.
+
+### Step 10. The closing
+<!-- step -->
+
+This is where GTM Base will look at the base as a whole and tell them one true
+thing about it, and say where the base is and how to come back to it. Before
+running it, say that what they say about setting up is saved into the base
+itself so the next session can see it.
+
+<!-- ask -->
+Did anything get in the way while you were setting this up?
+<!-- end ask -->
 
 ```
 python3 scripts/join.py close --base <base folder> --run <run identifier>
 ```
 
-Add `--got-in-the-way "<their words>"` when they said something. The command
-prints the finding first and then the closing message. Say both, in that order,
-in the words it printed, and add nothing to them.
-`references/closing-rules.md` holds the order the finding is worked out in, the
-rule that it never claims more than the dates show, and both closing messages.
-When the base was linked to a folder, the closing message names both folders. It
-says to open the folder they named and that the base will be there, and it gives
-the base's own folder as well. Say it exactly as printed, because which of the
-two messages is right depends on whether a folder was linked and the command has
-already worked that out.
+Add `--got-in-the-way "<their words>"` when they said something.
+
+- The command prints the finding first and then the closing message. Say both,
+  in that order, in the words it printed, and add nothing to them.
+- `references/closing-rules.md` holds the order the finding is worked out in,
+  the rule that it never claims more than the dates show, and both messages.
+- When the base was linked to a folder, the closing message names both
+  folders. It says to open the folder they named and that the base will be
+  there, and it gives the base's own folder as well.
+- Say it exactly as printed. Which of the two messages is right depends on
+  whether a folder was linked, and the command has already worked that out.
 
 ## Linking a folder
 

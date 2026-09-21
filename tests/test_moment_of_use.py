@@ -635,7 +635,16 @@ class TestTheReview(unittest.TestCase):
 
             result = base.review()
 
-            self.assertEqual([stale_check.REVIEW_NOTHING], result.lines())
+            # The second line arrived with Unit 1.5 on 2026-09-20. This base
+            # holds no context change at all, and a record with nothing in it
+            # is behind immediately, which is shipped behavior. What changed
+            # is where that is said: requirement P17 moved it out of the run
+            # that prepares changes and into the review, so a review listing
+            # nothing still mentions it once.
+            self.assertEqual(
+                [stale_check.REVIEW_NOTHING, stale_check.LEDGER_BEHIND_EMPTY % 30],
+                result.lines(),
+            )
             self.assertEqual([], result.review)
 
     def test_a_no_inside_the_review_becomes_a_change_that_can_be_applied(self):

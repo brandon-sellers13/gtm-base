@@ -198,6 +198,47 @@ class TestTheFourNumbers(unittest.TestCase):
             self.assertEqual(1, yes["unanswered"])
             self.assertAlmostEqual(0.25, yes["rate"])
 
+    def test_skipping_the_closing_question_leaves_the_denominator_alone(self):
+        """Requirement P7, proved on the number itself.
+
+        Skip at the closing rests the reminder that the record of context
+        changes looks quiet, and resting that reminder is not an answer to any
+        question the base asked, so nothing about it may reach the rate at
+        which its questions are answered yes.
+        """
+        with support.Sandbox() as sandbox:
+            from gtmbase import join_flow
+
+            root, base_id = build_history(sandbox)
+            before = report.yes_rate(base_id, TODAY)
+
+            said = join_flow.skip_the_closing_question(root, base_id, today=TODAY)
+
+            after = report.yes_rate(base_id, TODAY)
+            self.assertEqual(before, after)
+            self.assertEqual(4, after["asked"])
+            self.assertAlmostEqual(0.25, after["rate"])
+            self.assertTrue(said)
+
+    def test_a_reconciliation_yes_leaves_the_denominator_alone_too(self):
+        """P6 writes a confirmation and issues no question, so nothing counts."""
+        with support.Sandbox() as sandbox:
+            from gtmbase import confirm
+
+            root, base_id = build_history(sandbox)
+            before = report.yes_rate(base_id, TODAY)
+
+            answered = confirm.against_change(
+                root,
+                base_id,
+                ICP,
+                CAUGHT_ENTRY,
+                now=datetime.datetime(2026, 6, 5, 9, 15, 0),
+            )
+
+            self.assertEqual(confirm.STATUS_RECORDED, answered.status, answered.reasons)
+            self.assertEqual(before, report.yes_rate(base_id, TODAY))
+
     def test_the_turned_down_rate_counts_only_this_base_and_only_this_window(self):
         with support.Sandbox() as sandbox:
             turned = self.summary(sandbox)["rejection_rate"]
