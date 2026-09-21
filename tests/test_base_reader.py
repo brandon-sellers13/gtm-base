@@ -164,7 +164,15 @@ class TestReadingABase(unittest.TestCase):
             self.assertEqual(OWNER, inputs.confirmations[0].author_email)
 
 
-class TestTheOneHashOverEveryFileAProposalTouched(unittest.TestCase):
+# Changed 2026-09-20 for findings A1 and H1 of the release review. This
+# release answers "never reviewed" to every base and reads no record at
+# all to decide it, because nothing shipped sets that record honestly and
+# both reviewers turned a refused send into an allowed one by writing over
+# it. Every class below carrying `support.PastTheFirstBackupReview` is
+# about something further down the path than that rule, so it runs with
+# the answer the review will give once it ships. What each scenario
+# asserts is unchanged.
+class TestTheOneHashOverEveryFileAProposalTouched(support.PastTheFirstBackupReview, unittest.TestCase):
     """Fix A, the whole way round: two files, accepted, read back, both settled."""
 
     def test_a_two_file_proposal_settles_both_files_once_it_is_accepted(self):
@@ -276,7 +284,7 @@ class TestTheOneHashOverEveryFileAProposalTouched(unittest.TestCase):
             )
 
 
-class TestWhoAcceptedTheChange(unittest.TestCase):
+class TestWhoAcceptedTheChange(support.PastTheFirstBackupReview, unittest.TestCase):
     """The address and the day on the change that put a record in the base."""
 
     def _accepted(self, sandbox, how, author=None):
@@ -349,7 +357,7 @@ class TestWhoAcceptedTheChange(unittest.TestCase):
             self.assertEqual(OWNER, record.merged_by_email)
 
 
-class TestTheOwnerAcceptingTheChangeIsAYes(unittest.TestCase):
+class TestTheOwnerAcceptingTheChangeIsAYes(support.PastTheFirstBackupReview, unittest.TestCase):
     """SC1 the whole way round, with Brandon's rule of 2026-09-05 applied."""
 
     def test_the_file_is_confirmed_and_nothing_at_all_is_flagged(self):

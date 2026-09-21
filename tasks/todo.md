@@ -788,3 +788,94 @@ The lesson I carried in held. `FINDING_BASELINE` was one sentence naming four
 dates, and on a base set up in one sitting it named the same day twice and the
 same review date twice, which reads as though they were different days. The
 rewrite has one form per state and a test in each state.
+
+## Release A review, part two: the records folder, the gate, local approval, the moment of use (2026-09-20)
+
+Findings A1/H1, H4, A6, M2, M3/A8 from `docs/reviews/2026-09-20-release-a-review-astra.md`
+and the second reviewer's reproductions. Failing test first for every one.
+
+- [x] A1/H1 step 0. Move every file the assistant writes with the file-writing
+      tool out of GTM Base's own records folder, into a per-run folder the
+      scripts make and name under the system temp location.
+- [x] A1/H1 step 1. A check before the file-writing tools that refuses a write
+      under the records folder, under a joined base's own repository folder,
+      and under a joined base's assistant folder. Cheap miss path, no
+      subprocess, always exits zero.
+- [x] A1/H1 step 2. The gate fails closed: scope from the folder's own shape,
+      the first backup always unreviewed, an unreadable sources-read marker
+      blocks, silence and the dismissal date capped on load.
+- [x] A1/H1 step 3. No integrity check on seat files this release; recorded.
+- [x] A1/H1. Tighten the seat folder name rule where it is cheap.
+- [x] H4. The note behind a local approval is checked the way the migration
+      note is: a saved point written the one way a saved point is written,
+      never an empty list of paths, and work counted as saved only when the
+      saved work found also touches the paths the note names.
+- [x] A6. A placeholder is never approvable, and the skills say to write the
+      real replacement, show before and after, and only then ask.
+- [x] M2. A document whose only problem is being written down twice gets the
+      answer from the read check.
+- [x] M3/A8. Preparing a fix records its own outcome, left out of the rate;
+      answering an expired question issues nothing.
+- [x] The hooks assertion, atlas figures 2 and 6, the changelog, the full run.
+
+### Review, part two
+
+What I would flag to whoever picks this up.
+
+The check before a file write is a new module built the way the check before a
+file read is built, with the same four rules and a miss path that runs nothing.
+It is declared on one matcher naming four tools, and the documentation names
+the path field of only one of them, so it reads the documented field and, as a
+precaution rather than on the documentation's word, any other field whose name
+ends the same way. It never reads anything holding what would be written, so a
+file whose words happen to spell a path is not mistaken for a write to it.
+
+The drafts a setup run asks the assistant for moved out of the records folder
+rather than an allowance being cut into the check for them. That was the
+choice offered and it is the right one: the consent records of that very run
+sit beside those drafts, and an allowance beside them is an allowance that has
+to be exactly right for ever. The scripts make a per-run folder under the
+folder this computer keeps temporary work in, readable by that person alone,
+and refuse a name already standing there that is a link, that belongs to
+somebody else, or that anybody else can write to.
+
+The one thing worth arguing with is the size of what the fail-closed rule
+costs. The first backup is unreviewed always, so no send from a base completes
+in this release at all, which means the part of the check that reads what a
+send would carry cannot be reached from a base through the ordinary path. The
+scenarios that cover that reading are run with the answer the first backup
+review will give once it ships, through one helper in `tests/support.py` whose
+docstring says exactly that and why. Nothing stands in for the rule itself.
+The alternative was deleting that coverage, which would have left the reading
+untested on the day the review ships.
+
+Two spellings of the records folder on a command line still get past the text
+rule and cannot be caught by any pattern: a name built out of a variable, and a
+name joined together inside another program. That is said plainly in the
+changelog and in the check's own docstring, and it is survivable only because
+nothing the check decides is read out of that folder any more.
+
+One thing in this change costs something real, and it is here as well as in the
+changelog so that whoever reads this sees it. The record of having read
+somebody's own documents now stops a send while it is young enough to still be
+about now, whichever session wrote it, which is what the finding asked for. It
+lasts twelve hours, nothing in this release clears it, and while it stands it
+stops a send from every repository on the machine rather than only from a base.
+Somebody who sets a base up in the morning and pushes an unrelated repository
+in the afternoon is refused. Clearing the record when a setup run closes is the
+obvious fix and it is not here, because it changes what the rule means, which
+is the owner's call.
+
+Decided the same day, after the note above was written. The record of having
+read somebody's own documents does not block every repository on the machine.
+An unreadable record blocks a send from anywhere, and a record this session
+wrote blocks a send from anywhere, which is the rule as it has always been. A
+record another session wrote, young enough to still be about now, blocks only a
+send the check reads at all, which is one from a base or from a working folder
+GTM Base made for itself. The reasoning is the owner's: a twelve hour block on
+every repository is not something somebody working across many client
+repositories in a day can live with, and the age rule buys little anyway,
+because whoever can write that file can delete it just as easily as they can
+put another session's name in it. The safeguard the base itself runs is
+unchanged and keeps the age rule whole, since it has no session to compare
+against and only ever runs inside a base.

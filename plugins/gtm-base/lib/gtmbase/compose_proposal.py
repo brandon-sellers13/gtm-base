@@ -78,6 +78,9 @@ CODE_REVIEW_REUSED = "review-reused"
 CODE_ROW_MISSING_SOURCE = "no-source-row"
 CODE_GIT_FAILED = "git-failed"
 CODE_CANNOT_TELL = "cannot-tell-about-the-shared-copy"
+# The words the prepared change would put in the file are still the first
+# draft GTM Base wrote, which is a note asking for the real wording.
+CODE_STILL_A_PLACEHOLDER = "still-the-first-draft"
 
 # What the base's own settings say about a shared copy. Not knowing is its own
 # answer, because a settings file that could not be read for a moment is not a
@@ -103,6 +106,26 @@ CANNOT_TELL = (
     "GTM Base could not tell whether this base has a shared copy, so it did "
     "nothing at all. Ask again in a moment."
 )
+# What a person is told when the words are still the note asking for words.
+STILL_A_PLACEHOLDER = (
+    "The words this change would put in your document are still the note GTM "
+    "Base wrote asking for the real wording, so nothing was raised. Write "
+    "what the document should say now, show it beside what it says today, and "
+    "ask again."
+)
+
+
+def _still_the_first_draft(text) -> bool:
+    """Whether an edit still carries the words GTM Base put there to be replaced.
+
+    The one module that writes those words is the one asked, so there is a
+    single description of what the first draft is and this never drifts from
+    it. It is imported here rather than at the top because that module reads
+    this one.
+    """
+    from . import stale_check
+
+    return stale_check.is_the_placeholder(text)
 
 _HEADING_RE = re.compile(r"^(#{1,6})\s+\S")
 _PULL_NUMBER_RE = re.compile(r"/pull/(\d+)")
@@ -659,6 +682,19 @@ def propose(
             codes=[code for code, _ in edit_problems],
             reasons=[sentence for _, sentence in edit_problems],
         )
+
+    # The same rule the local path holds to, for the same reason: the first
+    # draft GTM Base writes into a prepared change is a note asking for the
+    # real wording, and nobody should be asked to accept one as a correction
+    # to their document (finding A6 of the 2026-09-20 review).
+    for edit in staging.edits:
+        if _still_the_first_draft(getattr(edit, "text", None)):
+            return ProposalResult(
+                STATUS_REFUSED,
+                staging_id=staging.staging_id,
+                codes=[CODE_STILL_A_PLACEHOLDER],
+                reasons=[STILL_A_PLACEHOLDER],
+            )
 
     marker = marker_of(staging)
     parsed_marker = find_marker(marker)

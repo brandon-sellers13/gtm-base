@@ -205,7 +205,7 @@
   <div class="text"><p>The session-start hook runs before your first message, every time. It asks one question at a time about the folder you opened, in this order, and stops at the first yes. It asks <em>you</em> nothing at all: since plugin 0.2.7 a session opens quietly.</p></div>
   <figure>
     <div class="frame">
-    <svg viewBox="0 0 900 580" role="img" aria-label="Decision tree the session-start hook follows for the folder that was opened">
+    <svg viewBox="0 0 900 600" role="img" aria-label="Decision tree the session-start hook follows for the folder that was opened">
       <defs>
         <marker id="a2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="currentColor"/></marker>
       </defs>
@@ -268,15 +268,16 @@
       <text x="780" y="419" text-anchor="middle">unless the folder is empty</text>
       <path d="M640,406 L680,406" class="edge" marker-end="url(#a2)" style="color: var(--ink-mid)"/>
 
-      <rect x="20" y="480" width="860" height="72" rx="6" class="seat"/>
+      <rect x="20" y="480" width="860" height="90" rx="6" class="seat"/>
       <text x="36" y="498" class="title">Always, whatever the answer</text>
       <text x="36" y="514" class="lbl">The session id is recorded so scripts can find it. The hook exits within 15 seconds, prints nothing on failure, and never shows a token, an address with a login, or an option value.</text>
       <text x="36" y="530" class="lbl">No question is asked and no question id is issued here. What used to be asked here is asked in the review (figure 8) and at the moment of use (figure 5).</text>
-      <text x="36" y="546" class="lbl">A second check runs before each file read and exits at once unless the file is under a joined base's context folder; it never refuses a read and issues no question of its own. A miss runs no command at all (measured 0.3 ms in the check, 58 ms through the wrapper, 2026-09-20).</text>
+      <text x="36" y="546" class="lbl">A second check runs before each file read and exits at once unless the file is under a joined base's context folder; it never refuses a read and issues no question of its own. A miss runs no command at all (measured 0.3 ms in the check, 53 ms through the wrapper, 2026-09-20).</text>
+      <text x="36" y="562" class="lbl">A third runs before each file write and refuses one aimed at the records folder, at a joined base's own repository folder, or at its assistant folder. It never touches a base's context files. Its miss runs no command either (measured 43 ms through the wrapper, 2026-09-20).</text>
     </svg>
     </div>
-    <figcaption>The order matters. A base you are standing in wins over everything, a folder that looks like a base is recognised as itself before any link is considered, and the offer is last. Two bases claiming one folder is a stop, not a guess. What a session start does not do is speak: the question it used to lead with was taken out, because the first real return session opened by asking whether the base's own map was still right. One other check is declared beside the one that reads every command, on the file-reading tool, and it is the deterministic half of the moment of use: it leaves at once for any file outside a joined base's context folder, it never refuses a read and never decides a permission, and for a flagged file it hands back the same four lines figure 5 describes.
-      <span class="meta"><span class="stamp">decided 2026-09-05, amended 2026-09-07 and 2026-09-20</span> first plan Unit 3, join plan Unit 1, Amendments r2.1 and r2.3 · quiet by default, Amendment r2.5 and 2026-09-19 plan Unit 1.3, built in 0.2.7</span></figcaption>
+    <figcaption>The order matters. A base you are standing in wins over everything, a folder that looks like a base is recognised as itself before any link is considered, and the offer is last. Two bases claiming one folder is a stop, not a guess. What a session start does not do is speak: the question it used to lead with was taken out, because the first real return session opened by asking whether the base's own map was still right. Two other checks are declared beside the one that reads every command. The one on the file-reading tool is the deterministic half of the moment of use: it leaves at once for any file outside a joined base's context folder, it never refuses a read and never decides a permission, and for a flagged file it hands back the same four lines figure 5 describes. The one on the file-writing tools closes the hole both reviewers of release A found: the check on commands reads commands, and a file-writing tool writes a file without a command, so one plain write over one record in the plugin's own folder used to turn a refused send into an allowed one. It refuses a write to the records folder, to a joined base's own repository folder and to its assistant folder, and it leaves a base's context files alone, because a person hand edits those and so may the assistant.
+      <span class="meta"><span class="stamp">decided 2026-09-05, amended 2026-09-07 and twice on 2026-09-20</span> first plan Unit 3, join plan Unit 1, Amendments r2.1 and r2.3 · quiet by default, Amendment r2.5 and 2026-09-19 plan Unit 1.3, built in 0.2.7 · the check before a file write, release A review findings A1 and H1</span></figcaption>
   </figure>
 
   <h2 id="link">3. The link between your folder and the base</h2>
@@ -424,7 +425,7 @@
   </figure>
 
   <h2 id="gate">6. What the safety check reads</h2>
-  <div class="text"><p>Every command that names git or the GitHub tool passes through the check before it runs. A handful of things are refused everywhere. Content is read only where company context could leave.</p></div>
+  <div class="text"><p>Every command that names git or the GitHub tool passes through the check before it runs, and every file write passes through a check of its own. A handful of things are refused everywhere. Content is read only where company context could leave.</p></div>
   <figure>
     <div class="frame">
     <svg viewBox="0 0 900 280" role="img" aria-label="The gate's two-stage decision: refusals that apply everywhere, then a content read only for sends from a base or a seat working folder">
@@ -441,8 +442,8 @@
       <path d="M220,55 L260,55" class="edge" marker-end="url(#a6)" style="color: var(--ink-mid)"/>
 
       <rect x="260" y="120" width="300" height="52" rx="6" class="decision"/>
-      <text x="410" y="142" text-anchor="middle">Is the send from a joined base, or from</text>
-      <text x="410" y="159" text-anchor="middle">a working folder the plugin made for itself?</text>
+      <text x="410" y="142" text-anchor="middle">Is the folder shaped like a base, or a working</text>
+      <text x="410" y="159" text-anchor="middle">folder the plugin made for itself? (never asked of a record)</text>
       <path d="M410,90 L410,120" class="edge" marker-end="url(#a6)" style="color: var(--ink-mid)"/>
       <text x="420" y="108" class="lbl">otherwise</text>
 
@@ -458,13 +459,21 @@
       <path d="M410,172 L410,200" class="edge" marker-end="url(#a6)" style="color: var(--ink-mid)"/>
       <text x="420" y="190" class="lbl">no</text>
 
-      <rect x="600" y="200" width="280" height="50" rx="6" class="seat"/>
-      <text x="616" y="222" class="title">Two session-wide conditions</text>
-      <text x="616" y="240" class="lbl">read your documents this session, or a base never yet reviewed: no send</text>
+      <rect x="600" y="192" width="280" height="80" rx="6" class="seat"/>
+      <text x="616" y="212" class="title">Two conditions, decided without a record</text>
+      <text x="616" y="229" class="lbl">this session read your own documents, from anywhere: no send</text>
+      <text x="616" y="245" class="lbl">another session read them lately, from a base only: no send</text>
+      <text x="616" y="261" class="lbl">the first backup is never reviewed in this release: no send</text>
+
+      <rect x="20" y="110" width="200" height="72" rx="6" class="warnbox"/>
+      <text x="36" y="130" class="title">A file write, any tool</text>
+      <text x="36" y="147" class="lbl">refused into the records folder,</text>
+      <text x="36" y="163" class="lbl">a base's own repository folder,</text>
+      <text x="36" y="179" class="lbl">and its assistant folder</text>
     </svg>
     </div>
-    <figcaption>The threat is company context leaving a base, so that is where content is read. A check that refused ordinary work everywhere was one people would switch off, which protects nothing.
-      <span class="meta"><span class="stamp">decided 2026-09-06</span> first plan Amendment r2.4, plugin 0.1.4</span></figcaption>
+    <figcaption>The threat is company context leaving a base, so that is where content is read. A check that refused ordinary work everywhere was one people would switch off, which protects nothing, and a repository with no map where a base keeps one is still left entirely alone. What changed after the release A review is what decides: scope, and whether the first backup was reviewed, are worked out from the folder itself rather than read out of a record, because a record is a file and both reviewers rewrote one. A command can still name that folder in spellings no pattern reads, which is why nothing the check decides is read out of it any more. The record of having read your own documents is the one rule that reaches past a base: this session's own record stops a send from every repository on the machine, and another session's, while it is still young, stops one only from a base, because a record lasts twelve hours and refusing every repository for half a day after a setup run is not something anybody working across many of them can live with.
+      <span class="meta"><span class="stamp">decided 2026-09-06, amended 2026-09-20</span> first plan Amendment r2.4, plugin 0.1.4 · fail closed and the check before a file write, release A review findings A1 and H1</span></figcaption>
   </figure>
 
   <h2 id="setup">7. Setting up a base, step by step</h2>

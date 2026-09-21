@@ -92,6 +92,56 @@ def marker_is_recent(
     return age <= window_seconds
 
 
+def marker_is_there_but_unreadable() -> bool:
+    """Whether a marker is standing there that we cannot make sense of.
+
+    A name that is not there at all is not this. A name that is there and is a
+    link, or that holds anything other than the session it belongs to, is: it
+    is the shape a marker takes after somebody has written over it, and the
+    reviewers of the 2026-09-20 release wrote over it with an empty object to
+    take away the rule that a session which read somebody's own documents may
+    send nothing. So it stops a send rather than letting one through.
+    """
+    path = marker_path()
+    if not os.path.lexists(path):
+        return False
+    return read_sources_read_marker() is None
+
+
+def marker_blocks(
+    session_id: Optional[str] = None, include_recent: bool = True
+) -> bool:
+    """Whether the marker stops anything leaving this computer right now.
+
+    Three things stop it, and any one of them is enough.
+
+    A marker standing there that cannot be read at all. That is the shape a
+    marker takes after somebody has written over it, and it stops a send
+    wherever the send comes from.
+
+    A marker this very session wrote. That is the rule as it has always been,
+    and it stops a send wherever the send comes from, because the text this
+    session is holding could be pasted into anything.
+
+    A marker young enough to still be about now that some other session wrote.
+    This one is asked for rather than assumed, through `include_recent`, and
+    the caller only asks for it where the send is one GTM Base reads at all: a
+    base, or a working folder this seat made. A session identifier is one more
+    thing a file somebody wrote over could hold, so age is worth having, but
+    somebody who can write that file can delete it just as easily, so age buys
+    little and costs a great deal: the marker lasts twelve hours and nothing
+    clears it, and asking for it everywhere refused every push from every
+    repository on the machine for half a day after any setup run. The
+    safeguard the base itself runs has no session to compare against and only
+    ever runs inside a base, so it asks for age and is right to.
+    """
+    if marker_is_there_but_unreadable():
+        return True
+    if marker_matches_session(session_id):
+        return True
+    return bool(include_recent) and marker_is_recent()
+
+
 def _now() -> float:
     import time
 

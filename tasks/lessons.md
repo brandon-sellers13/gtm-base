@@ -22,3 +22,17 @@
   base made the way `create_base` really makes one.
 - A long script passed to the shell inline is read by the plugin's gate, and prose that mentions the version-control
   tool by name gets the whole command refused. Write the script to a file with the file tool and run the file.
+
+## 2026-09-20, the release A review, part two
+- A hook matcher is a list of tool names, so a check declared on one tool is a check
+  with a hole the width of every other tool. Both reviewers found the same one.
+- Making a check fail closed moves work into the tests, not out of them: about thirty
+  scenarios were about what happens further down a path than the rule that now stops
+  everything. One shared helper standing where the unshipped step will stand, with the
+  reason in its docstring, beat thirty edited assertions.
+- A first draft the product writes and a correction a person approves have to be told
+  apart by the exact text the product writes, registered as a constant. Guessing at
+  what an unfinished edit looks like would refuse somebody's own wording eventually.
+- `find . -not -path "./.git/*"` is read by the plugin's own check as a command about
+  the shared copy and refused. Name no folder that reads as the version-control tool
+  on a command line, in this repository.

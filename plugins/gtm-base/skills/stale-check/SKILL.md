@@ -126,9 +126,12 @@ happens.
 ## Improving a prepared change before it goes anywhere
 
 Each prepared change is written to `work/proposals/pending/` and holds a first
-draft, not a finished one. The draft names the context change and says the section
-should reflect it, which is true but not useful on its own. Your job is to make
-it useful:
+draft, not a finished one. The draft opens with "Update needed", names the
+context change, and says the section should reflect it, which is true but not
+useful on its own. It is a note asking you for the real wording, and nobody may
+approve it while it still says that: a prepared change still carrying it is
+refused wherever it is handed in, with one sentence saying so. Your job is to
+make it useful:
 
 1. Read the prepared file. Read the change it names, and read the document it
    changes with
@@ -145,8 +148,11 @@ it useful:
    file understands what changes. Keep them to one line each.
 4. Leave the identifiers, the evidence, and the marker line exactly as they are.
    They are what stops the same change being raised twice.
-5. Hand the file to the `propose-change` skill, which runs every check and
-   raises it for review.
+5. Show the person what that part of the document says today and what it would
+   say instead, in that order, both in full, before you ask them anything.
+6. Hand the file to the `propose-change` skill, which runs every check and
+   raises it for review. On a base with no shared copy the owner approves it
+   here instead.
 
 ## What it refuses to do
 

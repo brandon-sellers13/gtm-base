@@ -28,6 +28,8 @@ from __future__ import annotations
 import datetime
 import os
 import shutil
+import stat
+import tempfile
 from typing import List, Optional, Sequence
 
 from . import (
@@ -57,6 +59,7 @@ from .errors import (
     PathError,
     ReviewError,
     SourceRejected,
+    StateError,
     ValidationError,
 )
 from .fsutil import atomic_write_json, atomic_write_text, ensure_dir, read_json, read_text
@@ -67,6 +70,11 @@ CONSENT_FILE = "consent.json"
 LISTING_FILE = "listing.json"
 SURVEY_FILE = "survey.json"
 PASTES_DIR = "pastes"
+
+# What the folder holding one run's drafts is called, under the folder this
+# computer keeps temporary work in. The person's own identifier is added to it
+# so nobody else on the machine can stand a folder of that name up first.
+DRAFTS_PARENT = "gtm-base-drafts"
 
 # Why a yes could not be taken.
 CODE_NO_LISTING = "no-listing"
@@ -374,6 +382,7 @@ def sweep_old_runs(today: Optional[datetime.date] = None) -> List[str]:
         if when is None or when >= day:
             continue
         shutil.rmtree(folder, ignore_errors=True)
+        clear_drafts(name)
         if not os.path.isdir(folder):
             removed.append(name)
     return removed
@@ -394,8 +403,9 @@ def clear_scratch(run_id: str) -> bool:
     """Delete everything one run was working with. Returns whether there was any."""
     ids.check_run_id(run_id)
     folder = os.path.join(join_home(), run_id)
+    drafts_gone = clear_drafts(run_id)
     if not os.path.isdir(folder):
-        return False
+        return drafts_gone
     shutil.rmtree(folder, ignore_errors=True)
     return not os.path.isdir(folder)
 
@@ -1087,9 +1097,66 @@ def assemble_step(
     )
 
 
+def drafts_dir(run_id: str) -> str:
+    """The folder one run's drafts are written into, made by us and not them.
+
+    It sits under the folder this computer keeps temporary work in, and not
+    under GTM Base's own records, because the check that runs before the
+    file-writing tools refuses every write under the records folder and the
+    consent records of this very run sit there. The assistant never chooses
+    this path: it is worked out here from the run and printed for it to use.
+
+    The folder is this person's alone. It is made readable by nobody else, and
+    a name already standing there that is a link, that belongs to somebody
+    else, or that anybody else can write to is refused rather than used, since
+    what goes in here is the company's own writing.
+    """
+    ids.check_run_id(run_id)
+    parent = os.path.join(
+        tempfile.gettempdir(), "%s-%d" % (DRAFTS_PARENT, os.getuid())
+    )
+    return _private_dir(os.path.join(_private_dir(parent), run_id))
+
+
+def _private_dir(path: str) -> str:
+    """One folder only this person can read, made or checked but never trusted."""
+    if not os.path.lexists(path):
+        try:
+            os.makedirs(path, 0o700)
+        except OSError:
+            raise StateError(
+                "a folder for the drafts could not be made", code="write-failed"
+            )
+        return path
+    info = os.lstat(path)
+    if (
+        not stat.S_ISDIR(info.st_mode)
+        or info.st_uid != os.getuid()
+        or (info.st_mode & 0o077)
+    ):
+        raise StateError(
+            "the folder for the drafts is not one only you can read",
+            code="not-a-file",
+        )
+    return path
+
+
 def draft_path(run_id: str, step: str) -> str:
     """Where the assistant writes the draft for one step."""
-    return os.path.join(scratch_dir(run_id), "%s-draft.md" % step)
+    return os.path.join(drafts_dir(run_id), "%s-draft.md" % step)
+
+
+def clear_drafts(run_id: str) -> bool:
+    """Delete one run's drafts. Returns whether there were any to delete."""
+    ids.check_run_id(run_id)
+    try:
+        folder = drafts_dir(run_id)
+    except StateError:
+        return False
+    if not os.path.isdir(folder):
+        return False
+    shutil.rmtree(folder, ignore_errors=True)
+    return not os.path.isdir(folder)
 
 
 # --- Looking at a draft ------------------------------------------------------

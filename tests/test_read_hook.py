@@ -199,6 +199,61 @@ class TestWhatItLeavesAlone(unittest.TestCase):
 
             self.assertIsNone(answer(base, base.path_to()))
 
+
+class TestAChangeWrittenDownTwice(unittest.TestCase):
+    """Finding M2 of the 2026-09-20 review.
+
+    The check that reads the base says nothing quiets a change written down
+    twice that does not agree with itself, and says so whether the document is
+    otherwise flagged or not. This hook answered on the flag alone, so the one
+    case the check refuses to be quiet about was the one case it said nothing
+    about.
+    """
+
+    def twice(self, sandbox):
+        base = Base(sandbox)
+        support.write(
+            os.path.join(base.root, constants.LEGACY_CHANGES_DIR, ENTRY + ".md"),
+            entry_text(),
+        )
+        support.write(
+            os.path.join(base.root, constants.CHANGES_DIR, ENTRY + ".md"),
+            entry_text().replace("under twenty", "under fifty"),
+        )
+        base.save("the same change, written twice")
+        return base
+
+    def test_it_is_said_although_nothing_at_all_is_flagged(self):
+        with support.Sandbox() as sandbox:
+            base = self.twice(sandbox)
+
+            found = moment.check(
+                base.root,
+                base.base_id,
+                ICP,
+                runner=support.NoRemoteRunner(),
+                now=TODAY,
+            )
+            self.assertFalse(found.flagged)
+            self.assertTrue(found.written_twice)
+
+            said = answer(base, base.path_to())
+            self.assertIsNotNone(said)
+            self.assertIn(
+                "written down twice",
+                said["hookSpecificOutput"]["additionalContext"],
+            )
+            self.assertNotIn(
+                "permissionDecision", said["hookSpecificOutput"]
+            )
+
+    def test_it_is_still_said_once_a_session(self):
+        with support.Sandbox() as sandbox:
+            base = self.twice(sandbox)
+
+            self.assertIsNotNone(answer(base, base.path_to()))
+            self.assertIsNone(answer(base, base.path_to()))
+
     def test_malformed_input_says_nothing_and_still_ends_well(self):
         for payload in (
             None,

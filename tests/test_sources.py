@@ -971,7 +971,15 @@ class TestTheFence(unittest.TestCase):
 # --- What the gate does once the person has said yes ------------------------
 
 
-class TestNothingLeavesAfterTheYes(unittest.TestCase):
+# Changed 2026-09-20 for findings A1 and H1 of the release review. This
+# release answers "never reviewed" to every base and reads no record at
+# all to decide it, because nothing shipped sets that record honestly and
+# both reviewers turned a refused send into an allowed one by writing over
+# it. Every class below carrying `support.PastTheFirstBackupReview` is
+# about something further down the path than that rule, so it runs with
+# the answer the review will give once it ships. What each scenario
+# asserts is unchanged.
+class TestNothingLeavesAfterTheYes(support.PastTheFirstBackupReview, unittest.TestCase):
     def test_accepting_the_list_stops_the_github_tool_for_this_session(self):
         with Sandbox() as box:
             root, _base_id = box.base()
@@ -992,7 +1000,23 @@ class TestNothingLeavesAfterTheYes(unittest.TestCase):
                 self.assertIsNotNone(reason)
                 self.assertIn("read your own documents", reason)
 
-    def test_another_session_is_not_affected_by_this_ones_reading(self):
+    def test_another_session_is_not_affected_in_a_repository_of_their_own(self):
+        """Says what it always said, and says why it still does.
+
+        It was briefly made to say the opposite on 2026-09-20, while findings
+        A1 and H1 were being fixed, because the session a record names is one
+        more thing a file somebody wrote over can hold. Asking for the age of
+        the record here as well turned out to refuse every push from every
+        repository on the machine for the twelve hours a record lasts after
+        any setup run, and nothing in this release clears one. The owner works
+        across many client repositories in a day, and the rule bought little
+        besides: somebody who can write that file can delete it just as easily
+        as they can put another session's name in it. So the age half of the
+        rule holds only where a send is read at all, which is a base or a
+        working folder this seat made, and this session's own record still
+        stops a send from anywhere, which is the scenario above (Brandon,
+        2026-09-20).
+        """
         with Sandbox() as box:
             other = plain_repository(box)
             with TempFolder(copy_fixtures=True) as temp:

@@ -3451,6 +3451,13 @@ class TestTheWholeWayThroughOnAMigratedBase(MigrationCase):
         prepared = [item for item in run.staged if item.entry_id == ENTRY_ONE]
         self.assertEqual(1, len(prepared), run.lines())
 
+        # The real wording goes in before anybody is asked, because the note
+        # GTM Base wrote asking for it is not approvable (finding A6 of the
+        # 2026-09-20 review).
+        support.write_the_replacement(
+            prepared[0].path, "We sell to companies of twenty to two hundred people.\n"
+        )
+
         shown = approve_local.show(
             prepared[0].path, self.root, self.base_id, now=TODAY
         )

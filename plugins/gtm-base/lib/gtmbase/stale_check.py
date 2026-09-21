@@ -87,6 +87,14 @@ SUMMARY_CHARS = 300
 # The heading an edit is added under when the context change names no other.
 FALLBACK_HEADING = "## Context changes to reflect"
 
+# The first draft this module writes into a prepared change, and the part of
+# it that never varies. Nothing may be approved while it still carries these
+# words: they are a note asking the assistant to write the real replacement,
+# and finding A6 of the 2026-09-20 review was that approving them cleared the
+# flag on a document whose obsolete claim was still sitting in it.
+PLACEHOLDER_SHAPE = "Update needed: %s. This section should reflect that change."
+PLACEHOLDER_TAIL = "This section should reflect that change."
+
 # What a prepared change says while it is still a first draft.
 DRAFT_CONFIDENCE = "medium"
 
@@ -526,7 +534,22 @@ def draft_text_for(entry) -> str:
     one that says what it is.
     """
     quoted = _collapse(entry.body, DRAFT_QUOTE_CHARS).rstrip(".")
-    return "Update needed: %s. This section should reflect that change." % quoted
+    return PLACEHOLDER_SHAPE % quoted
+
+
+def is_the_placeholder(text) -> bool:
+    """Whether some words are still the first draft nobody has replaced.
+
+    It is decided by the exact words this module writes and by nothing else.
+    Guessing at what an unfinished edit looks like would refuse a person's own
+    wording sooner or later, and the point is not to grade the writing: it is
+    that the words this module puts there are a note to the assistant, not a
+    correction to the document, and nobody should be asked to approve one as
+    though it were.
+    """
+    if not isinstance(text, str):
+        return False
+    return PLACEHOLDER_TAIL in text
 
 
 def build_file_proposal(

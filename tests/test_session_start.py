@@ -186,7 +186,15 @@ class SessionStartHelpers(unittest.TestCase):
         return snapshot
 
 
-class SessionStartTest(SessionStartHelpers):
+# Changed 2026-09-20 for findings A1 and H1 of the release review. This
+# release answers "never reviewed" to every base and reads no record at
+# all to decide it, because nothing shipped sets that record honestly and
+# both reviewers turned a refused send into an allowed one by writing over
+# it. Every class below carrying `support.PastTheFirstBackupReview` is
+# about something further down the path than that rule, so it runs with
+# the answer the review will give once it ships. What each scenario
+# asserts is unchanged.
+class SessionStartTest(support.PastTheFirstBackupReview, SessionStartHelpers):
     """Every test runs inside its own temporary home and seat folder."""
 
     # --- the two parts ------------------------------------------------------
@@ -305,7 +313,17 @@ class SessionStartTest(SessionStartHelpers):
 
         # Once the shared copy no longer carries it, the note is cleared and
         # the sentence is not said again.
-        support.git(["push", "-q", "-f", "origin", "HEAD:main"], cwd=root)
+        #
+        # Changed 2026-09-20 for findings A1 and H1: this release refuses
+        # every send from a base until the first backup review ships, and the
+        # safeguard inside the base holds that rule in a process of its own,
+        # where nothing this file stands in for can reach. This line is
+        # putting the shared copy into a state, not testing a send, so it
+        # steps around the safeguard the way anybody laying out a fixture by
+        # hand would.
+        support.git(
+            ["push", "-q", "-f", "--no-verify", "origin", "HEAD:main"], cwd=root
+        )
         self.run_hook(root, part="context", session="s-2")
         seat, _problems = state.load_seat(base_id)
         self.assertIsNone(seat["pending_visible_note"])

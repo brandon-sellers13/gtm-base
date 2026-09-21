@@ -135,6 +135,12 @@ second review.
 - A change to a part of a file that is no longer there, because the shared copy
   has moved on since the change was prepared. The proposal is kept and can be
   raised again once the file is put back in order.
+- A change whose words are still the first draft GTM Base wrote. That draft
+  opens with "Update needed" and then repeats the context change back, and it
+  is a note asking you for the real wording rather than a correction anybody
+  can approve. Write what the document should say now, in the document's own
+  voice, put it into the prepared file, show the person what that part of the
+  document says today and what it would say instead, and only then raise it.
 
 ## Running it
 

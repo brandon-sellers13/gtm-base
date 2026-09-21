@@ -205,10 +205,16 @@ def run(
         runner=git,
         now=now,
     )
-    if not found.flagged:
+    if not found.flagged and not found.written_twice:
         # A check that could not read the records says nothing, and says
         # nothing for that reason rather than because the document is fine.
         # Saying anything else here would be guessing.
+        #
+        # A change about this document written down twice, with the two copies
+        # disagreeing, is the one thing said out loud whatever else is found,
+        # because nothing can be said about whether the document is behind one
+        # of them. The check itself has always worked that way and this hook
+        # did not, which was finding M2 of the 2026-09-20 review.
         return None
 
     # Told once per session, per document, and per change, so a change written

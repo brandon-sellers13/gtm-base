@@ -143,7 +143,15 @@ class TestManifests(unittest.TestCase):
         plugin_key = "%s@%s" % (plugin["name"], marketplace["name"])
         self.assertEqual(constants.PLUGIN_KEY, plugin_key)
 
-    def test_no_mcp_servers_and_both_hooks_point_at_scripts_that_are_there(self):
+    def test_no_mcp_servers_and_every_hook_points_at_a_script_that_is_there(self):
+        """Changed 2026-09-20 for findings A1 and H1: a third entry before a
+        tool runs, on the file-writing tools.
+
+        It used to assert that exactly two tools were matched, which is what
+        made the hole both reviewers found a hole: a file-writing tool call
+        went past the check entirely and wrote GTM Base's own records. The
+        entries that were there are asserted below exactly as they were.
+        """
         plugin = read_json(PLUGIN_MANIFEST_PATH)
         self.assertNotIn("mcpServers", plugin)
         # Claude Code loads hooks/hooks.json on its own; naming it in the
@@ -153,14 +161,16 @@ class TestManifests(unittest.TestCase):
         hooks = read_json(HOOKS_PATH)
         self.assertEqual({"PreToolUse", "SessionStart"}, set(hooks["hooks"].keys()))
 
-        # Two entries before a tool runs, one per tool. Unit 1.3 added the one
-        # on the file-reading tool; matching hooks for one event run in
-        # parallel, so the one that reads every command is unaffected and is
-        # asserted below exactly as it was.
+        # Three entries before a tool runs. Unit 1.3 added the one on the
+        # file-reading tool and the 2026-09-20 review added the one on the
+        # file-writing tools; matching hooks for one event run in parallel, so
+        # the one that reads every command is unaffected and is asserted below
+        # exactly as it was.
         before_a_tool = hooks["hooks"]["PreToolUse"]
         by_tool = {entry["matcher"]: entry for entry in before_a_tool}
-        self.assertEqual({"Bash", "Read"}, set(by_tool))
-        self.assertEqual(2, len(before_a_tool))
+        writing = "Write|Edit|MultiEdit|NotebookEdit"
+        self.assertEqual({"Bash", "Read", writing}, set(by_tool))
+        self.assertEqual(3, len(before_a_tool))
         self.assertEqual(1, len(by_tool["Bash"]["hooks"]))
 
         declared = by_tool["Bash"]["hooks"][0]
@@ -175,6 +185,13 @@ class TestManifests(unittest.TestCase):
         self.assertLessEqual(reading["timeout"], 15)
         self.assertIn("${CLAUDE_PLUGIN_ROOT}", reading["command"])
         self.assertTrue(reading["command"].endswith("/hooks/read-check.sh claude"))
+
+        self.assertEqual(1, len(by_tool[writing]["hooks"]))
+        written = by_tool[writing]["hooks"][0]
+        self.assertEqual("command", written["type"])
+        self.assertLessEqual(written["timeout"], 15)
+        self.assertIn("${CLAUDE_PLUGIN_ROOT}", written["command"])
+        self.assertTrue(written["command"].endswith("/hooks/write-check.sh claude"))
 
         # Two entries: the first prints only what the person sees, the second
         # only what the assistant reads, because a client reads a hook's output

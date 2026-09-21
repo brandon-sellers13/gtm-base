@@ -1,5 +1,6 @@
 """Unit 4: the check that reads what a command would send before it runs."""
 
+import contextlib
 import json
 import os
 import shutil
@@ -7,11 +8,12 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from unittest import mock
 
 import support
 from support import FakeGitRunner, Sandbox, commit, git, head_of, write
 
-from gtmbase import constants, gate, marker, state
+from gtmbase import constants, gate, marker, push_conditions, state
 
 PLUGIN_DIR = support.PLUGIN_DIR
 WRAPPER = os.path.join(PLUGIN_DIR, "hooks", "pre-push-gate.sh")
@@ -19,7 +21,35 @@ WRAPPER = os.path.join(PLUGIN_DIR, "hooks", "pre-push-gate.sh")
 CLEAN_LINE = "[prospect, mid-market fintech] said pricing was the blocker."
 
 
+@contextlib.contextmanager
+def once_the_first_backup_review_ships():
+    """Stand where the first backup review will stand once it is built.
+
+    This release answers "never reviewed" to every base on purpose, and reads
+    no record at all to decide it. Findings A1 and H1 of the 2026-09-20 review
+    both turned on the same thing: nothing shipped sets that record honestly,
+    so every value of it saying the review happened was put there by something
+    that is not this plugin, and a plain write over one small file turned a
+    refused send into an allowed one.
+
+    Everything below this line is about what the check reads once a send gets
+    past that rule, so each of those scenarios is run with the answer the
+    review will give when it ships. The rule itself is not stood in for
+    anywhere: it has its own scenarios, which call the check directly.
+    """
+    with mock.patch.object(
+        push_conditions, "first_push_unreviewed", lambda base_id: False
+    ):
+        yield
+
+
 def check(command, cwd, session_id="session-1", git_runner=None):
+    with once_the_first_backup_review_ships():
+        return gate.check_command(command, cwd, session_id, git=git_runner)
+
+
+def check_now(command, cwd, session_id="session-1", git_runner=None):
+    """The check exactly as this release runs it, with nothing stood in for."""
     return gate.check_command(command, cwd, session_id, git=git_runner)
 
 
@@ -463,6 +493,47 @@ class TestReadingASend(unittest.TestCase):
                     command,
                 )
 
+    def test_more_spellings_of_the_folder_name_are_refused_now(self):
+        """Added 2026-09-20 for findings A1 and H1: five spellings got past.
+
+        Three of them are cheap to catch, and these are those three: another
+        letter case, and two names finished off with the characters a shell
+        expands. The two that are left, a name built up out of a variable and
+        a name joined together inside another program, cannot be caught by any
+        pattern at all. They are covered by the fact that the check now fails
+        closed: writing over a record in that folder gains nothing, because
+        nothing the check decides is read out of it any more.
+        """
+        with Sandbox() as box:
+            root, _base_id = box.base()
+            for command in (
+                "echo x > ~/.GTM-BASE/machine.json",
+                "echo x > ~/.gtm-bas?/machine.json",
+                "echo x > ~/.gtm*/machine.json",
+                "cd ~ && cd .gtm-b* && echo '{}' > machine.json",
+            ):
+                self.assertIn(
+                    "GTM Base keeps its own records",
+                    check(command, root) or "",
+                    command,
+                )
+
+    def test_the_two_spellings_no_pattern_can_catch_are_named_honestly(self):
+        """A1 and H1: these are still allowed through the text rule, and the
+        scenarios above them are what says why that is survivable."""
+        with Sandbox() as box:
+            root, _base_id = box.base()
+            for command in (
+                "d=.gtm; echo x > ~/$d-base/machine.json",
+                "python3 -c \"import os;open(os.path.expanduser('~/.gtm'+"
+                "'-base/machine.json'),'w').write('{}')\"",
+            ):
+                self.assertNotIn(
+                    "GTM Base keeps its own records",
+                    check(command, root) or "",
+                    command,
+                )
+
     def test_the_folder_name_exemption_never_reaches_what_is_being_sent(self):
         with Sandbox() as box:
             root, _base_id = box.base()
@@ -705,13 +776,101 @@ class TestTheSessionConditions(unittest.TestCase):
                 self.assertIsNotNone(reason, command)
                 self.assertIn("read your own documents", reason)
 
-    def test_another_session_is_not_affected(self):
+    def test_another_recent_session_stops_a_send_from_a_base(self):
+        """Changed 2026-09-20 for findings A1 and H1, and narrowed the same
+        day after the first attempt at it went too wide.
+
+        It used to be that only the record this very session wrote stopped a
+        send. The session a record names is one more thing a file somebody
+        wrote over can hold, so a record young enough to still be about now
+        stops a send whichever session wrote it. Where that holds is the part
+        that was narrowed: only where the check reads a send at all, which is
+        a base or a working folder this seat made. The scenario below this one
+        is the other half of that decision and says why.
+        """
         with Sandbox() as box:
             root, _base_id = box.base()
             marker.write_sources_read_marker("session-other")
             commit(root, "context/metrics/notes.md", [CLEAN_LINE])
-            self.assertIsNone(check("git push", root, session_id="session-1"))
-            self.assertIsNone(check("gh auth login", root, session_id="session-1"))
+            reason = check("git push", root, session_id="session-1")
+            self.assertIn("read your own documents", reason or "")
+
+    def test_another_recent_session_leaves_an_ordinary_repository_alone(self):
+        """Narrowed 2026-09-20, after the wider rule was tried and rejected.
+
+        A record lasts twelve hours and nothing in this release clears it, so
+        asking for its age everywhere refused every push from every repository
+        on the machine for half a day after any setup run. The owner works
+        across many client repositories in a day, and the rule bought little:
+        somebody who can write that file can delete it just as easily as they
+        can put another session's name in it. So the age half holds only where
+        a send is read, and this session's own record still holds everywhere
+        (Brandon, 2026-09-20).
+        """
+        with Sandbox() as box:
+            ordinary = plain_repository(box, name="not-a-base")
+            marker.write_sources_read_marker("session-other")
+
+            self.assertIsNone(check_now("git push", ordinary, session_id="session-1"))
+            self.assertIsNone(
+                check_now("gh auth login", ordinary, session_id="session-1")
+            )
+
+    def test_another_recent_session_leaves_this_plugins_own_shape_alone(self):
+        """The same, on a repository shaped the way this plugin's own is."""
+        with Sandbox() as box:
+            ordinary = plain_repository(box, name="gtm-base-like")
+            os.makedirs(os.path.join(ordinary, "plugins"))
+            write(os.path.join(ordinary, "plugins", "notes.md"), "a plugin\n")
+            git(["add", "-A"], cwd=ordinary)
+            git(["commit", "-q", "-m", "a plugin"], cwd=ordinary)
+            marker.write_sources_read_marker("session-other")
+
+            self.assertIsNone(check_now("git push", ordinary, session_id="session-1"))
+
+    def test_this_sessions_own_record_stops_a_send_from_anywhere(self):
+        """The half that did not narrow: it holds in every repository, because
+        the text this session is holding could be pasted into any of them."""
+        with Sandbox() as box:
+            ordinary = plain_repository(box, name="not-a-base")
+            marker.write_sources_read_marker("session-1")
+
+            for command in ("git push", "gh auth login"):
+                reason = check_now(command, ordinary, session_id="session-1")
+                self.assertIn("read your own documents", reason or "", command)
+
+    def test_a_record_that_cannot_be_read_stops_a_send_from_anywhere(self):
+        """A1 and H1: writing an empty object over it used to clear the rule.
+
+        This half did not narrow either. A record nobody can read is the shape
+        a record takes after it has been written over, and there is nothing in
+        it to say which session it belongs to, so it stops a send wherever the
+        send comes from.
+        """
+        with Sandbox() as box:
+            root, _base_id = box.base()
+            ordinary = plain_repository(box, name="not-a-base")
+            marker.write_sources_read_marker("session-1")
+            commit(root, "context/metrics/notes.md", [CLEAN_LINE])
+            with open(marker.marker_path(), "w", encoding="utf-8") as handle:
+                handle.write("{}")
+
+            for where in (root, ordinary):
+                reason = check_now("git push", where, session_id="session-2")
+                self.assertIn("read your own documents", reason or "", where)
+
+    def test_the_safeguard_inside_a_base_still_asks_for_the_age(self):
+        """It runs inside git with no session to compare against, and it is
+        only ever installed in a base, so age is all it has and costs nothing
+        outside one."""
+        with Sandbox() as box:
+            root, _base_id = box.base()
+            marker.write_sources_read_marker("session-other")
+            lines = "refs/heads/main %s refs/heads/main %s\n" % ("a" * 40, "b" * 40)
+
+            self.assertIn(
+                "read your own documents", gate.check_git_hook(lines, root) or ""
+            )
 
     def test_clearing_the_marker_lets_a_send_through_again(self):
         with Sandbox() as box:
@@ -721,26 +880,102 @@ class TestTheSessionConditions(unittest.TestCase):
             marker.clear_sources_read_marker()
             self.assertIsNone(check("git push", root))
 
-    def test_the_first_backup_is_refused_until_it_is_reviewed(self):
+    def test_the_first_backup_is_refused_and_no_record_can_say_otherwise(self):
+        """Changed 2026-09-20 for findings A1 and H1, and it used to say the
+        opposite about its second half.
+
+        It used to say that writing yes into this seat's own record let the
+        send through, which is exactly what both reviewers reproduced with one
+        plain file write. The first backup review is not shipped, so nothing
+        in this release sets that record honestly, and the check no longer
+        reads it: the answer is always that the first backup is not reviewed.
+        """
         with Sandbox() as box:
             root, base_id = box.base(reviewed=False)
             commit(root, "context/metrics/notes.md", [CLEAN_LINE])
-            reason = check("git push", root)
+            reason = check_now("git push", root)
             self.assertEqual(
                 "This base has never been backed up before; run the first backup "
                 "review in the join skill before anything leaves this computer.",
                 reason,
             )
-            self.assertIsNotNone(check("gh pr create --title x", root))
+            self.assertIsNotNone(check_now("gh pr create --title x", root))
 
             state.update_seat(base_id, first_push_reviewed=True)
-            self.assertIsNone(check("git push", root))
+            self.assertEqual(reason, check_now("git push", root))
 
-    def test_a_base_this_account_never_joined_is_not_held_back(self):
+    def test_a_base_this_account_never_joined_is_held_back_too(self):
+        """Changed 2026-09-20 for findings A1 and H1, and it used to say the
+        opposite.
+
+        A base counted as a base only when this account's own record named it,
+        and that record is a file. Writing an empty object over it made a
+        joined base read as no base at all, which took away the first backup
+        rule and everything else the check reads before a send. A folder
+        shaped like a base is now a base to the check whether the record names
+        it or not.
+        """
         with Sandbox() as box:
             root, _base_id = box.base(joined=False)
             commit(root, "context/metrics/notes.md", [CLEAN_LINE])
-            self.assertIsNone(check("git push", root))
+            self.assertIsNotNone(check_now("git push", root))
+
+    def test_a_base_whose_record_was_written_over_is_still_a_base(self):
+        """A1 and H1, reproduced: the record emptied, the send read all the same."""
+        with Sandbox() as box:
+            from gtmbase import paths
+
+            root, _base_id = box.base()
+            commit(root, "context/metrics/notes.md", ["mail jane@acme.com"])
+            with open(paths.machine_state_path(), "w", encoding="utf-8") as handle:
+                handle.write("{}")
+
+            self.assertTrue(gate.folder_is_in_scope(root))
+            self.assertTrue(gate.first_push_is_unreviewed(root))
+            self.assertIn("an email address", check("git push", root) or "")
+
+    def test_another_recent_session_still_reaches_a_base_whose_record_was_emptied(self):
+        """The narrowing turns on whether the folder is one the check reads,
+        and that is decided by the folder's own shape, so emptying the record
+        of joined bases does not take the rule away with it."""
+        with Sandbox() as box:
+            from gtmbase import paths
+
+            root, _base_id = box.base()
+            commit(root, "context/metrics/notes.md", [CLEAN_LINE])
+            with open(paths.machine_state_path(), "w", encoding="utf-8") as handle:
+                handle.write("{}")
+            marker.write_sources_read_marker("session-other")
+
+            reason = check("git push", root, session_id="session-1")
+            self.assertIn("read your own documents", reason or "")
+
+    def test_an_ordinary_repository_is_still_left_alone_entirely(self):
+        """The rule 0.1.4 settled on, checked again after the scope widened."""
+        with Sandbox() as box:
+            root = plain_repository(box, name="not-a-base")
+
+            self.assertFalse(gate.folder_is_in_scope(root))
+            self.assertFalse(gate.first_push_is_unreviewed(root))
+            self.assertIsNone(check_now("git push", root))
+
+    def test_this_plugins_own_repository_is_left_alone_entirely(self):
+        """It is a repository with no map where a base keeps one, so it is not
+        a base, and nothing about this release changes how it behaves."""
+        self.assertFalse(gate.folder_is_in_scope(support.REPO_ROOT))
+        self.assertFalse(gate.first_push_is_unreviewed(support.REPO_ROOT))
+
+    def test_a_question_that_cannot_be_answered_is_answered_yes(self):
+        """It used to be answered no, so anything that broke the question let
+        the send through (gate.py 1073 to 1076, finding A1)."""
+        with Sandbox() as box:
+            root, _base_id = box.base()
+            broken = FakeGitRunner()
+
+            with mock.patch.object(
+                gate.paths, "resolve_base", side_effect=RuntimeError("no")
+            ):
+                self.assertTrue(gate.first_push_is_unreviewed(root, git=broken))
 
 
 # --- The caps ----------------------------------------------------------------
@@ -820,7 +1055,17 @@ class TestTheWrapper(unittest.TestCase):
             self.assertEqual(0, finished.returncode)
             self.assertEqual(b"", finished.stdout)
 
-    def test_a_send_of_a_file_that_is_yours_alone_is_refused_in_the_clients_shape(self):
+    def test_a_send_from_a_base_is_refused_in_the_clients_shape(self):
+        """Changed 2026-09-20 for findings A1 and H1, and the sentence it
+        reads back changed with it.
+
+        It used to send from a base carrying a file that is one person's
+        alone, and read back the sentence naming that file. This release
+        refuses every send from a base before anything is read, because the
+        first backup review is not shipped, so the sentence a real run reads
+        back is that one. What the wrapper does with a refusal, which is what
+        this scenario is for, is unchanged.
+        """
         with Sandbox() as box:
             root, _base_id = box.base()
             commit(root, "work/inbox/call.md", ["nothing unusual here"])
@@ -837,7 +1082,9 @@ class TestTheWrapper(unittest.TestCase):
             output = verdict["hookSpecificOutput"]
             self.assertEqual("PreToolUse", output["hookEventName"])
             self.assertEqual("deny", output["permissionDecision"])
-            self.assertIn("work/inbox/call.md", output["permissionDecisionReason"])
+            self.assertIn(
+                "never been backed up", output["permissionDecisionReason"]
+            )
             self.assertNotIn("@", output["permissionDecisionReason"])
 
     def test_without_python_the_wrapper_refuses_by_itself(self):
@@ -907,7 +1154,7 @@ def shutil_which(name):
 
 class TestTheSafeguardGitRuns(unittest.TestCase):
     def test_a_range_holding_a_transient_file_is_refused(self):
-        with Sandbox() as box:
+        with Sandbox() as box, once_the_first_backup_review_ships():
             root, _base_id = box.base()
             before = head_of(root)
             commit(root, "work/inbox/call.md", ["nothing unusual here"])
@@ -917,13 +1164,28 @@ class TestTheSafeguardGitRuns(unittest.TestCase):
             self.assertIn("work/inbox/call.md", reason)
 
     def test_a_clean_range_is_allowed(self):
-        with Sandbox() as box:
+        with Sandbox() as box, once_the_first_backup_review_ships():
             root, _base_id = box.base()
             before = head_of(root)
             commit(root, "context/metrics/notes.md", [CLEAN_LINE])
             after = head_of(root)
             lines = "refs/heads/main %s refs/heads/main %s\n" % (after, before)
             self.assertIsNone(gate.check_git_hook(lines, root))
+
+    def test_the_first_backup_rule_holds_inside_the_base_too(self):
+        """Added 2026-09-20 for findings A1 and H1: the safeguard git runs is
+        the layer that still holds when a command is written in a way no
+        pattern can read, so the rule has to hold there as well."""
+        with Sandbox() as box:
+            root, _base_id = box.base()
+            before = head_of(root)
+            commit(root, "context/metrics/notes.md", [CLEAN_LINE])
+            after = head_of(root)
+            lines = "refs/heads/main %s refs/heads/main %s\n" % (after, before)
+
+            self.assertIn(
+                "never been backed up", gate.check_git_hook(lines, root) or ""
+            )
 
     def test_a_recent_reading_of_the_persons_files_refuses_every_send(self):
         with Sandbox() as box:

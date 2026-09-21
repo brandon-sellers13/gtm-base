@@ -721,7 +721,15 @@ class TestNoAboutTheCalendar(unittest.TestCase):
 # --- The safety floor --------------------------------------------------------
 
 
-class TestWhatIsSentIsRead(unittest.TestCase):
+# Changed 2026-09-20 for findings A1 and H1 of the release review. This
+# release answers "never reviewed" to every base and reads no record at
+# all to decide it, because nothing shipped sets that record honestly and
+# both reviewers turned a refused send into an allowed one by writing over
+# it. Every class below carrying `support.PastTheFirstBackupReview` is
+# about something further down the path than that rule, so it runs with
+# the answer the review will give once it ships. What each scenario
+# asserts is unchanged.
+class TestWhatIsSentIsRead(support.PastTheFirstBackupReview, unittest.TestCase):
     """The saved answer passes the same check every send passes."""
 
     def test_the_saved_answer_holds_nothing_the_scan_refuses(self):
@@ -748,7 +756,20 @@ class TestWhatIsSentIsRead(unittest.TestCase):
 
             self.assertEqual([], scan.scan_diff_added_lines(diff))
 
-    def test_the_safeguard_in_the_persons_own_folder_lets_the_answer_through(self):
+    def test_the_safeguard_in_the_persons_own_folder_holds_the_answer_here(self):
+        """Changed 2026-09-20 for findings A1 and H1, and the ending changed
+        with them.
+
+        This used to prove that a clean answer got past the safeguard git runs
+        and reached the shared copy. No send from a base completes in this
+        release, because the first backup review is not shipped and nothing
+        else may honestly say it happened, and the safeguard holds that rule
+        in a process of its own where the stand-in this class carries cannot
+        reach. What matters about this path is unchanged and is what is
+        asserted now: the answer is safe on this computer, the person is told
+        so in one sentence, and it is kept to be sent the next time a send is
+        possible. Nothing is lost and nothing is claimed.
+        """
         with support.Sandbox() as sandbox:
             base = builders.BaseFixture(sandbox)
             base.add_entry()
@@ -759,7 +780,8 @@ class TestWhatIsSentIsRead(unittest.TestCase):
 
             result = answer(base, question, "yes")
 
-            self.assertEqual(confirm.STATUS_RECORDED, result.status, result.reasons)
+            self.assertEqual(confirm.STATUS_PENDING, result.status, result.reasons)
+            self.assertIn("safe here", result.reasons[0])
 
     def test_the_safeguard_refuses_a_line_somebody_added_an_address_to(self):
         with support.Sandbox() as sandbox:

@@ -345,6 +345,12 @@ SEAT_DEFAULTS = {
     "weekly_line_said_on": None,
     # The day the base may speak up again, when somebody asked for quiet.
     "silent_until": None,
+    # The day the quiet was asked for. Quiet asked for until somebody asks
+    # again names no day of its own, so without this there was nothing to
+    # measure the longest quiet anybody may ask for against, and the
+    # 2026-09-20 review wrote that value straight into the file to silence a
+    # base for ever. Quiet with no day behind it is not honoured at all.
+    "silent_until_set_on": None,
     # The day the offer to store context changes the new way may be made
     # again, when somebody said not now to it. Without this the offer came
     # back at every single review, for ever, which is not an offer.
@@ -436,7 +442,7 @@ def load_seat(base_id: str) -> Tuple[dict, List[str]]:
         if not isinstance(seat[name], bool):
             seat[name] = False
             problems.append("bad-value")
-    for name in ("weekly_line_said_on", "silent_until"):
+    for name in ("weekly_line_said_on", "silent_until", "silent_until_set_on"):
         value = seat[name]
         allowed = isinstance(value, str) and (
             _DAY_RE.match(value)
@@ -445,6 +451,10 @@ def load_seat(base_id: str) -> Tuple[dict, List[str]]:
         if value is not None and not allowed:
             seat[name] = None
             problems.append("bad-value")
+    if _quiet_is_past_the_longest(seat):
+        seat["silent_until"] = None
+        seat["silent_until_set_on"] = None
+        problems.append("bad-value")
     for name in (
         "pending_confirmation",
         "git_hook_code",
@@ -474,6 +484,24 @@ def load_seat(base_id: str) -> Tuple[dict, List[str]]:
             {"line": legacy, "file": None, "held_at": None}
         ]
     return seat, problems
+
+
+def _quiet_is_past_the_longest(seat: dict) -> bool:
+    """Whether the quiet written down reaches further than anybody may ask for.
+
+    Quiet named as a day was already held to the longest quiet when it was
+    read. Quiet asked for until somebody asks again names no day, so the day it
+    was asked for is what it is held to, and quiet of that kind with no day
+    behind it, or with a day more than the longest quiet ago, is not honoured.
+    A file somebody wrote that value straight into has neither.
+    """
+    if seat.get("silent_until") != SILENT_UNTIL_ASKED:
+        return False
+    asked_on = seat.get("silent_until_set_on")
+    if not isinstance(asked_on, str) or not _DAY_RE.match(asked_on):
+        return True
+    longest = _day_of(datetime.date.today() - datetime.timedelta(days=SILENCE_DAYS))
+    return asked_on < longest
 
 
 def save_seat(base_id: str, seat: dict) -> dict:
@@ -530,13 +558,20 @@ def set_silent_until(base_id: str, until) -> dict:
     than what somebody chose.
     """
     if until == SILENT_UNTIL_ASKED:
-        return update_seat(base_id, silent_until=SILENT_UNTIL_ASKED)
+        # The day it was asked for goes down beside it, because quiet of this
+        # kind names no day of its own and something has to hold it to the
+        # longest quiet anybody may ask for.
+        return update_seat(
+            base_id,
+            silent_until=SILENT_UNTIL_ASKED,
+            silent_until_set_on=_day_of(datetime.date.today()),
+        )
     day = _day_of(until)
     if day:
         longest = _day_of(datetime.date.today() + datetime.timedelta(days=SILENCE_DAYS))
         if day > longest:
             day = longest
-    return update_seat(base_id, silent_until=day)
+    return update_seat(base_id, silent_until=day, silent_until_set_on=None)
 
 
 def is_silent(seat: dict, today: datetime.date) -> bool:
@@ -924,6 +959,14 @@ def load_dismissals(base_id: str) -> Tuple[dict, List[str]]:
     if until is not None and not (
         isinstance(until, str) and re.match(r"^\d{4}-\d{2}-\d{2}$", until)
     ):
+        result["ledger_behind_dismissed_until"] = None
+        problems.append("bad-value")
+    elif until is not None and until > _day_of(
+        datetime.date.today() + datetime.timedelta(days=SILENCE_DAYS)
+    ):
+        # A day further out than the longest quiet anybody may ask for is not
+        # honoured, the same way quiet is not. The 2026-09-20 review wrote a
+        # day in the year nine thousand here and the reminder never came back.
         result["ledger_behind_dismissed_until"] = None
         problems.append("bad-value")
     return result, problems

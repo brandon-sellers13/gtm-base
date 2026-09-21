@@ -14,21 +14,40 @@ from __future__ import annotations
 
 from typing import List, Optional, Tuple
 
-from . import gate, marker, state
+from . import gate, marker
 
 CODE_SOURCES_READ = gate.REASON_SOURCES_READ
 CODE_FIRST_PUSH = gate.REASON_FIRST_PUSH
 
 
 def sources_read_blocks(session_id: Optional[str]) -> bool:
-    """Whether this session read the person's own documents already."""
-    return marker.marker_matches_session(session_id)
+    """Whether the record of reading somebody's own documents stops a send.
+
+    It is not only this session's own record any more. A record young enough
+    to still be about now stops one too, whatever session wrote it, and so
+    does a record standing there that cannot be read at all, because both of
+    those are what a record somebody wrote over looks like from here.
+    """
+    return marker.marker_blocks(session_id)
 
 
 def first_push_unreviewed(base_id: str) -> bool:
-    """Whether this base has never had its first backup reviewed."""
-    seat, _problems = state.load_seat(base_id)
-    return not bool(seat.get("first_push_reviewed"))
+    """Whether this base has never had its first backup reviewed.
+
+    In this release the answer is always yes, and it is not read off the
+    seat's own record at all. The first backup review is not shipped, so no
+    code in this release ever sets that record honestly, and any value of it
+    saying the review happened was put there by something that is not this
+    plugin. When the review does ship it will record the address it reviewed
+    and the saved work it reviewed, and this will read those rather than a
+    bare yes.
+
+    The record itself is still kept and still read everywhere else, so nothing
+    is lost by leaving it where it is until there is something honest to put
+    in it.
+    """
+    del base_id
+    return True
 
 
 def check(base_id: str, session_id: Optional[str]) -> List[Tuple[str, str]]:

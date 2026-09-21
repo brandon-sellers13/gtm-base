@@ -472,6 +472,17 @@ or `--answer no`, and say the one sentence it prints.
   base up never edits a file it has already written, so the prepared change
   waits for them to approve it.
 
+What a "no" prepares is a note asking you for the real wording rather than the
+wording. It opens with "Update needed", and it is not approvable.
+
+1. Read the document and the change, and write what that part of the document
+   should say now, in the document's own voice.
+2. Put your wording into the prepared change in place of the note, with the
+   file-writing tool.
+3. Show them what that part says today and what it would say instead, in that
+   order, both in full.
+4. Ask whether to approve it. Asking before the note is replaced is refused.
+
 ### Step 10. The closing
 <!-- step -->
 

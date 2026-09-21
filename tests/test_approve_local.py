@@ -730,22 +730,43 @@ class TestNothingAboutLeavingTheComputerChanges(unittest.TestCase):
             with self.assertRaises(AssertionError, msg=arguments):
                 runner.run(arguments, cwd=".")
 
-    def test_neither_of_the_two_files_that_hold_the_line_was_touched(self):
-        """The check on commands and the two conditions are byte for byte as they were."""
-        finished = subprocess.run(
-            [
-                "git",
-                "diff",
-                "--name-only",
-                "HEAD",
-                "--",
-                "plugins/gtm-base/lib/gtmbase/gate.py",
-                "plugins/gtm-base/lib/gtmbase/push_conditions.py",
-            ],
-            cwd=support.REPO_ROOT,
-            stdout=subprocess.PIPE,
-        )
-        self.assertEqual("", finished.stdout.decode("utf-8").strip())
+    def test_both_conditions_still_stop_everything_leaving(self):
+        """Changed 2026-09-20 for findings A1 and H1, and it used to compare
+        bytes.
+
+        Unit 1.2b asserted that approving a change locally had touched neither
+        of the two files holding the line about what leaves this computer, and
+        byte for byte was the right bar while nothing else was meant to touch
+        them. Both were changed on purpose for those two findings, and only
+        for them, so the bar moved from the bytes to what the two files
+        answer: both conditions still stop a send, and local approval still
+        asks neither of them anything.
+        """
+        from gtmbase import push_conditions
+
+        with support.Sandbox() as sandbox:
+            root, base_id = local_base(sandbox)
+            reasons = push_conditions.check(base_id, "some-session")
+            codes = [code for code, _sentence in reasons]
+
+            self.assertIn(push_conditions.CODE_FIRST_PUSH, codes)
+
+            from gtmbase import marker
+
+            marker.write_sources_read_marker("some-session")
+            codes = [
+                code
+                for code, _sentence in push_conditions.check(base_id, "some-session")
+            ]
+            self.assertIn(push_conditions.CODE_SOURCES_READ, codes)
+
+            # And approving a change locally asks neither of them anything: it
+            # runs to the end on a base where both conditions say no.
+            staged = stage(root)
+            shown = approve_local.show(
+                staged, root, base_id, runner=NoRemoteRunner(), now=TODAY
+            )
+            self.assertEqual(approve_local.STATUS_SHOWN, shown.status)
 
 
 # --- A base that does have a shared copy -------------------------------------
@@ -1013,6 +1034,13 @@ class TestTheWholeWayThroughOnARealBase(unittest.TestCase):
             )
             self.assertEqual(
                 [ICP], [flag.path for flag in flagged.report.file_flags]
+            )
+
+            # The assistant writes the real wording into the prepared change
+            # first, because the note GTM Base wrote asking for it is not
+            # something anybody may approve (finding A6, 2026-09-20).
+            support.write_the_replacement(
+                staged, "We sell to companies of twenty to two hundred people.\n"
             )
 
             # The owner reads the whole change and says yes.
@@ -1363,6 +1391,241 @@ class TestTheNoteIsNotTrusted(unittest.TestCase):
 
             self.assertEqual(approve_local.STATUS_REFUSED, applied.status)
             self.assertEqual([approve_local.CODE_NOTE_UNREADABLE], applied.codes)
+
+
+class TestAPlaceholderIsNeverApprovable(unittest.TestCase):
+    """Finding A6 of the 2026-09-20 review, on a change that names a heading.
+
+    The first draft GTM Base writes into a prepared change says "Update
+    needed" and repeats the change back. Approving it used to put that note
+    into the document and clear the flag, leaving the claim that had gone out
+    of date exactly where it was. This is the scenario where the change names
+    a heading the document holds, so the words really do go over something,
+    and what has to be true afterwards is that the obsolete claim is gone and
+    the approved wording is there in its place.
+    """
+
+    OBSOLETE = "Companies of any size."
+
+    def a_change_about_the_firmographics(self, root):
+        entry = "\n".join(
+            [
+                "---",
+                "id: %s" % OTHER_STAGING,
+                "kind: decision",
+                "decided_on: 2026-06-02",
+                "written_on: 2026-06-03",
+                "decided_by: Jane Doe",
+                "source: the weekly go to market meeting",
+                "affects: [%s]" % ICP,
+                "review_by: 2026-09-01",
+                "origin: manual",
+                "status: open",
+                "---",
+                "",
+                "The Firmographics section is wrong now. We stopped selling to",
+                "companies under twenty people.",
+                "",
+            ]
+        )
+        support.write(
+            os.path.join(root, constants.CHANGES_DIR, OTHER_STAGING + ".md"), entry
+        )
+        support.git(["add", "-A"], cwd=root)
+        support.git(["commit", "-q", "-m", "a context change"], cwd=root)
+
+    def test_the_note_is_refused_and_the_replacement_takes_the_claim_away(self):
+        with support.Sandbox() as sandbox:
+            runner = NoRemoteRunner()
+            root, base_id = local_base(sandbox)
+            self.assertIn(self.OBSOLETE, support.read(os.path.join(root, ICP)))
+            self.a_change_about_the_firmographics(root)
+
+            run = stale_check.run(
+                root,
+                base_id,
+                runner=runner,
+                gh=support.RecordingGh(),
+                now=TODAY,
+                session_id="sess-1",
+            )
+            prepared = [item for item in run.staged if item.entry_id == OTHER_STAGING]
+            self.assertEqual(1, len(prepared), run.lines())
+            staged = prepared[0].path
+
+            # It really does go over the section holding the obsolete claim.
+            staging = compose_proposal.load_staging(staged)
+            self.assertEqual("replace", staging.edits[0].op)
+            self.assertIn(
+                self.OBSOLETE,
+                support.the_section_now(root, ICP, staging.edits[0].heading),
+            )
+
+            refused = approve_local.show(
+                staged, root, base_id, runner=runner, now=TODAY
+            )
+            self.assertEqual(approve_local.STATUS_REFUSED, refused.status)
+            self.assertEqual(
+                [approve_local.CODE_STILL_A_PLACEHOLDER], refused.codes
+            )
+
+            replacement = "Companies of twenty to two hundred people.\n"
+            support.write_the_replacement(staged, replacement)
+
+            shown = approve_local.show(
+                staged, root, base_id, runner=runner, now=TODAY
+            )
+            self.assertEqual(approve_local.STATUS_SHOWN, shown.status, shown.reasons)
+            applied = approve_local.approve(
+                staged, root, base_id, shown.shown_hash, runner=runner, now=NOW
+            )
+            self.assertEqual(
+                approve_local.STATUS_APPLIED, applied.status, applied.reasons
+            )
+
+            now_says = support.read(os.path.join(root, ICP))
+            self.assertNotIn(self.OBSOLETE, now_says)
+            self.assertNotIn("Update needed", now_says)
+            self.assertIn(replacement.strip(), now_says)
+
+
+class TestTheForgedNoteTheReviewersWrote(unittest.TestCase):
+    """Finding H4, reproduced three ways and fixed three ways.
+
+    A note is a file in this seat's own folder like any other, and before the
+    2026-09-20 review nothing ran before a file write, so anybody who could get
+    the assistant to write one file could write this one. What the reviewers
+    got out of it was a prepared change dropped and reported as approved
+    without anybody reading it, and a saved point handed to git that made git
+    write a file of the attacker's choosing.
+    """
+
+    def note(self, base_id, **fields):
+        from gtmbase.fsutil import atomic_write_json
+
+        payload = {
+            "schema": approve_local.JOURNAL_SCHEMA,
+            "staging_id": STAGING,
+            "subject": "a context change",
+            "head": "0" * 40,
+            "paths": [],
+        }
+        payload.update(fields)
+        atomic_write_json(approve_local._journal_path(base_id), payload)
+
+    def saved_point_before_a_change_elsewhere(self, root):
+        head = support.git(
+            ["rev-parse", "HEAD"], cwd=root
+        ).stdout.decode("utf-8").strip()
+        support.write(os.path.join(root, "context", "notes.md"), "# Notes\n")
+        support.git(["add", "-A"], cwd=root)
+        support.git(["commit", "-q", "-m", "a context change"], cwd=root)
+        return head
+
+    def test_a_note_listing_no_paths_at_all_is_refused(self):
+        """It said the run wrote nothing, so undoing it undid nothing, and the
+        prepared change was dropped and reported applied all the same."""
+        with support.Sandbox() as sandbox:
+            root, base_id = local_base(sandbox)
+            head = self.saved_point_before_a_change_elsewhere(root)
+            staged = stage(root)
+            self.note(base_id, base_root=os.path.realpath(root), head=head, paths=[])
+
+            shown = approve_local.show(
+                staged, root, base_id, runner=NoRemoteRunner(), now=TODAY
+            )
+
+            self.assertEqual(approve_local.STATUS_REFUSED, shown.status)
+            self.assertEqual([approve_local.CODE_NOTE_UNREADABLE], shown.codes)
+            self.assertTrue(os.path.isfile(staged))
+
+    def test_a_saved_point_that_is_not_one_is_refused_before_git_sees_it(self):
+        """The reviewers wrote an option there, and git made a file of it."""
+        with support.Sandbox() as sandbox:
+            root, base_id = local_base(sandbox)
+            staged = stage(root)
+            written_by_git = os.path.join(sandbox.path, "written-by-git")
+            self.note(
+                base_id,
+                base_root=os.path.realpath(root),
+                head="--output=" + written_by_git,
+                paths=[{"path": ICP, "hash": "0" * 64, "in_head": True}],
+            )
+
+            shown = approve_local.show(
+                staged, root, base_id, runner=NoRemoteRunner(), now=TODAY
+            )
+
+            self.assertEqual(approve_local.STATUS_REFUSED, shown.status)
+            self.assertEqual([approve_local.CODE_NOTE_UNREADABLE], shown.codes)
+            self.assertEqual(
+                [],
+                [
+                    name
+                    for name in os.listdir(sandbox.path)
+                    if name.startswith("written-by-git")
+                ],
+            )
+
+    def test_work_counts_as_saved_only_when_it_touched_the_noted_paths(self):
+        """A subject matching any saved work since the noted point was enough,
+        so a note naming a change nobody had read reported it applied."""
+        with support.Sandbox() as sandbox:
+            root, base_id = local_base(sandbox)
+            head = self.saved_point_before_a_change_elsewhere(root)
+            staged = stage(root)
+            self.note(
+                base_id,
+                base_root=os.path.realpath(root),
+                head=head,
+                paths=[{"path": ICP, "hash": "0" * 64, "in_head": True}],
+            )
+
+            shown = approve_local.show(
+                staged, root, base_id, runner=NoRemoteRunner(), now=TODAY
+            )
+
+            # The saved work carrying the noted subject touched another file,
+            # so this run's own work was never saved, and the prepared change
+            # is still waiting for somebody to read it.
+            self.assertNotEqual(approve_local.STATUS_APPLIED, shown.status)
+            self.assertTrue(os.path.isfile(staged))
+
+    def test_work_that_really_was_saved_is_still_finished_off(self):
+        """The other half: a run that stopped after saving still resumes."""
+        with support.Sandbox() as sandbox:
+            root, base_id = local_base(sandbox)
+            head = support.git(
+                ["rev-parse", "HEAD"], cwd=root
+            ).stdout.decode("utf-8").strip()
+            support.write(
+                os.path.join(root, ICP.replace("/", os.sep)),
+                support.read(os.path.join(root, ICP)) + "\nSomething new.\n",
+            )
+            support.git(["add", "-A"], cwd=root)
+            support.git(["commit", "-q", "-m", "a context change"], cwd=root)
+            staged = stage(root)
+            self.note(
+                base_id,
+                base_root=os.path.realpath(root),
+                head=head,
+                paths=[
+                    {
+                        "path": ICP,
+                        "hash": ids.content_hash(
+                            support.read(os.path.join(root, ICP))
+                        ),
+                        "in_head": True,
+                    }
+                ],
+            )
+
+            shown = approve_local.show(
+                staged, root, base_id, runner=NoRemoteRunner(), now=TODAY
+            )
+
+            self.assertEqual(approve_local.STATUS_APPLIED, shown.status)
+            self.assertIn(approve_local.CODE_RESUMED, shown.codes)
 
 
 # --- S-M2: not knowing is not the same as not having -------------------------

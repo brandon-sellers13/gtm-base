@@ -54,7 +54,7 @@ import shlex
 import sys
 from typing import List, Optional, Sequence, Tuple
 
-from . import constants, machine, marker, paths, scan, state
+from . import constants, machine, marker, paths, scan, state, trust_surface
 from .gitcmd import GitRunner, runner_or_default
 
 # --- What the gate can decide ------------------------------------------------
@@ -222,6 +222,29 @@ _REDIRECTION_HEAD = re.compile(r"^(?:\d+|&)?(?:>>|>\||>&|<&|<>|>|<)")
 # The shape of a git working folder the plugin makes for itself, which sits
 # inside the seat folder and is the one part of it a send may name.
 _WORKING_FOLDER = re.compile(r"\S*/bases/[^/\s]+/worktrees/\S*")
+
+# The name of the folder this seat keeps its own records in, as it is written
+# in a command line. Two spellings beyond the plain one are read: a name with
+# some of its letters written as the character a shell expands into any single
+# character, and a name cut short and finished with the character a shell
+# expands into the rest. Letter case is already folded away before this is
+# tried. The spellings a pattern cannot reach are named in the docstring of
+# the check that uses this.
+_SEAT_FOLDER_BASENAME = constants.SEAT_HOME_DEFAULT.rstrip("/").rsplit("/", 1)[-1]
+
+
+def _any_of(text: str) -> str:
+    """One name as a pattern where any letter may be written as a question."""
+    return "".join(r"(?:%s|\?)" % re.escape(character) for character in text)
+
+
+_SEAT_FOLDER_NAME = re.compile(
+    "(?:%s)|(?:%s[A-Za-z0-9?_-]*\\*)"
+    % (
+        _any_of(_SEAT_FOLDER_BASENAME),
+        _any_of(_SEAT_FOLDER_BASENAME[:4]),
+    )
+)
 
 
 # --- Verdicts ----------------------------------------------------------------
@@ -1064,17 +1087,49 @@ def first_push_is_unreviewed(cwd: str, git: Optional[GitRunner] = None) -> bool:
 
     The answer itself comes from `push_conditions`, so the check on the command
     tool and the skills that ask before they prepare anything can never
-    disagree. All this adds is working out which base the folder belongs to.
+    disagree. All this adds is working out whether the folder is a base at all.
+
+    Two things changed after the 2026-09-20 review. A folder shaped like a base
+    counts whether or not this account's own record names it, because that
+    record is a file, and a file somebody wrote over used to turn a base into
+    no base and take this whole question away with it. And a question that
+    cannot be answered is answered yes: it used to be answered no, which meant
+    anything that made the question fail let the send through.
     """
     from . import push_conditions
 
     try:
-        resolution = paths.resolve_base(cwd, machine.load_machine_state(runner=git), runner=git)
+        if not _looks_like_a_base(cwd, git):
+            return False
+        resolution = paths.resolve_base(
+            cwd, machine.load_machine_state(runner=git), runner=git
+        )
+    except Exception:
+        return True
+    return push_conditions.first_push_unreviewed(resolution.base_id or "")
+
+
+def _looks_like_a_base(folder: str, git: Optional[GitRunner] = None) -> bool:
+    """Whether this folder is a base by its own shape, joined or not.
+
+    A base is a repository holding the map, and the top of the repository is
+    what is asked about, so a folder some way down inside one answers the same
+    as the base itself. Nothing about this reads a record of ours, which is the
+    point: the shape is on the disk, in the folder itself, and the whole reason
+    it is read here is that a record can be written over and a shape cannot be
+    without changing the base.
+
+    A repository that is not shaped like a base answers no, and that is what
+    keeps every other repository on this machine working exactly as before.
+    """
+    try:
+        real = os.path.realpath(folder or "")
+        if paths.is_base_shaped(real):
+            return True
+        root = paths.git_root(real, runner=git)
+        return bool(root and root != real and paths.is_base_shaped(root))
     except Exception:
         return False
-    if not resolution.joined or not resolution.base_id:
-        return False
-    return push_conditions.first_push_unreviewed(resolution.base_id)
 
 
 def named_folder_path(raw: str, cwd: str) -> str:
@@ -1169,15 +1224,27 @@ def _is_a_working_folder(real: str) -> bool:
 def folder_is_in_scope(folder: str, runner: Optional[GitRunner] = None) -> bool:
     """Whether what a send from this folder would carry is read at all.
 
-    Two answers are yes. A base this account has joined, including any folder
-    inside it, because that is where the company's own writing lives. And a
-    working folder under this seat's own folder, because that is where the
-    plugin prepares a change before it is sent. Every other folder on the
-    machine belongs to work that is not a base, and none of it is read.
+    Three answers are yes. A folder shaped like a base, including any folder
+    inside it, because that is where the company's own writing lives. A base
+    this account has joined, which is the same folders said the other way
+    round. And a working folder under this seat's own folder, because that is
+    where the plugin prepares a change before it is sent.
+
+    The shape came first after the 2026-09-20 review, and the joined record
+    came second, deliberately. The record is a file, and a file somebody wrote
+    over used to take a base out of scope entirely and with it everything that
+    is read before a send. The shape is the folder itself.
+
+    Every other folder on the machine belongs to work that is not a base, and
+    none of it is read. That is the rule 0.1.4 settled on, and nothing here
+    widens it: a repository with no map at the place a base keeps one answers
+    no, whatever else it holds.
     """
     try:
         real = os.path.realpath(folder or "")
         if _is_a_working_folder(real):
+            return True
+        if _looks_like_a_base(real, runner):
             return True
         account = machine.load_machine_state(runner=runner)
         if paths.resolve_base(real, account, runner=runner).joined:
@@ -1215,6 +1282,17 @@ def names_the_seat_folder(command: str, accepted: Sequence[str] = ()) -> bool:
     The git working folders the plugin makes for itself are taken out as well:
     they sit inside this folder, a send may name one, and the check that a send
     naming one is really pointed at a working folder has already run by then.
+
+    This is a rule about text, and a rule about text cannot see every way a
+    path can be written. The 2026-09-20 review wrote the folder's name out in
+    five more spellings that this still does not catch, and two of them, a name
+    built up from a variable and a name concatenated inside another program,
+    cannot be caught by any pattern at all. The real defence is that the gate
+    fails closed: a record written over inside that folder no longer gains
+    anything, because scope and the first backup are decided without reading
+    it. What is done here is the part that is cheap: the letter case is folded,
+    and a name spelled with the characters a shell would expand into the
+    folder's own name is read as the folder's name.
     """
     text = strip_quoting(command or "")
     for value in accepted:
@@ -1223,13 +1301,16 @@ def names_the_seat_folder(command: str, accepted: Sequence[str] = ()) -> bool:
     text = _WORKING_FOLDER.sub(" ", text)
     if constants.SEAT_HOME_ENV in text:
         return True
-    if ".gtm-base" in text:
+    folded = trust_surface.normalize_component(text)
+    if _SEAT_FOLDER_NAME.search(folded):
         return True
     try:
         home = paths.seat_home_path()
     except Exception:
         home = None
-    return bool(home and home in text)
+    if not home:
+        return False
+    return trust_surface.normalize_component(home) in folded
 
 
 def base_root_for(cwd: str, git: Optional[GitRunner] = None) -> Optional[str]:
@@ -1272,7 +1353,15 @@ def check_command(
     if result.deny_reason:
         return sentence_for(result.deny_reason)
 
-    if (result.has_gh or result.pushes) and marker.marker_matches_session(session_id):
+    # The record of having read somebody's own documents, in the half of it
+    # that holds wherever a send comes from: a record standing there that
+    # cannot be read, and a record this very session wrote. That second one is
+    # the rule as it has always been, and it has to reach every repository on
+    # the machine, because the text this session is holding could be pasted
+    # into any of them.
+    if (result.has_gh or result.pushes) and marker.marker_blocks(
+        session_id, include_recent=False
+    ):
         return sentence_for(REASON_SOURCES_READ)
 
     if not result.needs_scan:
@@ -1285,6 +1374,17 @@ def check_command(
 
     allowlist = None
     if reads_something:
+        # And the other half: a record some other session wrote, young enough
+        # to still be about now. It is asked for only here, where the send is
+        # one this check reads at all, because a marker lasts twelve hours,
+        # nothing clears it, and asking for it everywhere refused every push
+        # from every repository on this machine for half a day after any
+        # setup run. It buys little besides: somebody who can write that file
+        # can delete it just as easily as they can put another session's name
+        # in it (Brandon, 2026-09-20).
+        if marker.marker_blocks(session_id, include_recent=True):
+            return sentence_for(REASON_SOURCES_READ)
+
         if first_push_is_unreviewed(cwd, git=runner):
             return sentence_for(REASON_FIRST_PUSH)
 
@@ -1376,9 +1476,15 @@ def scan_range(
 def check_git_hook(
     stdin_text: str, cwd: str, git: Optional[GitRunner] = None
 ) -> Optional[str]:
-    """Read every range git is about to send. Return a sentence, or None."""
+    """Read every range git is about to send. Return a sentence, or None.
+
+    This asks for the age of the record as well, unlike the check on commands.
+    It runs inside git, where there is no session to compare a record against,
+    and it is only ever installed inside a base, so asking for age here costs
+    nothing outside a base and is the only thing it has to go by.
+    """
     runner = runner_or_default(git)
-    if marker.marker_is_recent():
+    if marker.marker_blocks(include_recent=True):
         return sentence_for(REASON_SOURCES_READ)
     if first_push_is_unreviewed(cwd, git=runner):
         return sentence_for(REASON_FIRST_PUSH)

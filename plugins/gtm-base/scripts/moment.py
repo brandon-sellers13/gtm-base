@@ -72,6 +72,11 @@ NO_SESSION = (
 NOTHING_FLAGGED_NOW = (
     "Nothing has overtaken that document now, so there was nothing to answer."
 )
+NOT_THAT_QUESTION = (
+    "That is not a question GTM Base asked about that document, so nothing "
+    "was recorded. Run the check on the document again and answer the "
+    "question it gives you."
+)
 WENT_WRONG = (
     "GTM Base could not check that document, so it said nothing about it."
 )
@@ -124,12 +129,20 @@ def _say(found):
 
 
 def _answer(options, resolution, session):
-    """Record one of the three answers to the flag on one document."""
+    """Record one of the three answers to the flag on one document.
+
+    Nothing here issues a question. The check is run with no session, which is
+    the way it looks without asking anything, and the question is the one the
+    person is answering, checked against what was really asked. Running the
+    ordinary check here used to issue and write down a second question that
+    nobody had seen, so an answer to a question that had run out left a fresh
+    unanswered one behind it (finding A8 of the 2026-09-20 review).
+    """
     found = moment.check(
         resolution.root,
         resolution.base_id,
         options.file,
-        session_id=session,
+        session_id=None,
     )
     if found.code == moment.CODE_NOT_A_CONTEXT_FILE:
         sys.stderr.write(moment.NOT_A_CONTEXT_FILE + "\n")
@@ -140,6 +153,15 @@ def _answer(options, resolution, session):
     if not found.flagged:
         sys.stderr.write(NOTHING_FLAGGED_NOW + "\n")
         return EXIT_REFUSED
+    if not options.question:
+        sys.stderr.write(NEEDS_A_QUESTION + "\n")
+        return EXIT_ERROR
+    if not moment.question_is_about(
+        resolution.base_id, options.question, found.path
+    ):
+        sys.stderr.write(NOT_THAT_QUESTION + "\n")
+        return EXIT_REFUSED
+    found.question_id = options.question
 
     if options.answer == ANSWER_AS_IS:
         result = moment.use_as_is(
@@ -147,13 +169,12 @@ def _answer(options, resolution, session):
         )
     elif options.answer == ANSWER_FIX:
         result = moment.fix_it_first(
-            resolution.root, resolution.base_id, found
+            resolution.root,
+            resolution.base_id,
+            found,
+            question_id=options.question,
         )
     else:
-        if not options.question:
-            sys.stderr.write(NEEDS_A_QUESTION + "\n")
-            return EXIT_ERROR
-        found.question_id = options.question
         recorded = moment.already_reflects(
             resolution.root, resolution.base_id, found, session
         )

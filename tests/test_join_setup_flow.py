@@ -1416,6 +1416,28 @@ class TestTheWholeClosingOnARealBase(unittest.TestCase):
             self.assertIn(POSITIONING, flagged)
             self.assertNotIn(ICP, flagged)
 
+            # Finding A6 of the release review of 2026-09-20, which this
+            # scenario used to bless. The prepared change as it stands carries
+            # the note GTM Base wrote asking for the real wording, and that is
+            # not something anybody may approve: approving it used to clear
+            # the flag with the obsolete claim still sitting in the document.
+            refused = approve_local.show(
+                said_no.staging_path, root, base_id, runner=runner, now=TODAY
+            )
+            self.assertEqual(approve_local.STATUS_REFUSED, refused.status)
+            self.assertEqual(
+                [approve_local.CODE_STILL_A_PLACEHOLDER], refused.codes
+            )
+            self.assertIn("still the note", refused.reasons[0])
+
+            # So the assistant writes the real replacement into the prepared
+            # change, which is what the skills now tell it to do.
+            replacement = (
+                "We sell to companies of twenty to two hundred people, and we "
+                "no longer sell to anybody smaller than that.\n"
+            )
+            support.write_the_replacement(said_no.staging_path, replacement)
+
             shown = approve_local.show(
                 said_no.staging_path, root, base_id, runner=runner, now=TODAY
             )
@@ -1432,18 +1454,15 @@ class TestTheWholeClosingOnARealBase(unittest.TestCase):
             self.assertEqual(
                 approve_local.STATUS_APPLIED, applied.status, applied.reasons
             )
-            # TODO, finding A6 of the release review of 2026-09-20, owned by
-            # the second agent. The two assertions below prove only that the
-            # placeholder text a "no" prepares was inserted, which is not the
-            # same as the document having been corrected: the obsolete claim
-            # is still in the file and the flag is cleared all the same. When
-            # a placeholder stops being approvable, rewrite this to assert
-            # that the obsolete claim is gone and the real replacement is
-            # there.
-            self.assertIn(
-                "Update needed",
-                support.read(os.path.join(root, POSITIONING)),
-            )
+            # What landed is the approved wording, and the note asking for it
+            # is nowhere in the document. The change here names no heading the
+            # positioning holds, so the words go in under a heading of their
+            # own rather than over anything; the scenario that proves an
+            # obsolete claim is really replaced is in
+            # `tests/test_approve_local.py`, where the change names one.
+            now_says = support.read(os.path.join(root, POSITIONING))
+            self.assertNotIn("Update needed", now_says)
+            self.assertIn(replacement.strip(), now_says)
             # It is confirmed against that one change, and its flag is gone.
             naming = [
                 line

@@ -4,6 +4,7 @@ The stand-in belongs here rather than in the library, because the library must
 never carry a way to pretend that git said something.
 """
 
+import contextlib
 import json
 import os
 import shutil
@@ -270,6 +271,106 @@ def read(path):
         return handle.read()
 
 
+def write_the_replacement(staging_path, text):
+    """Put the real wording into a prepared change, the way the assistant does.
+
+    A prepared change made from a context change carries the note GTM Base
+    wrote asking for the real wording, and nobody may approve one of those
+    (finding A6 of the 2026-09-20 review). The skills tell the assistant to
+    write what the document should say, show it beside what the document says
+    today, and only then ask. This is that step, so every scenario that goes
+    on to approve one does what a real run would have done first.
+
+    What the section said before comes back, so a scenario can prove the
+    obsolete claim is gone afterwards.
+    """
+    from gtmbase import compose_proposal
+    from gtmbase.fsutil import atomic_write_text
+
+    staging = compose_proposal.load_staging(staging_path)
+    was = [edit.text for edit in staging.edits]
+    for edit in staging.edits:
+        edit.text = text
+    atomic_write_text(staging_path, staging.validate().render(), mode=0o600)
+    return was[0] if was else ""
+
+
+def the_section_now(root, relative, heading):
+    """What one section of one context file says on the disk right now."""
+    from gtmbase import compose_proposal
+
+    text = read(os.path.join(root, relative.replace("/", os.sep)))
+    lines = text.split("\n")
+    index = compose_proposal.find_heading(
+        lines, heading, compose_proposal.frontmatter_end(lines)
+    )
+    if index < 0:
+        return ""
+    return "\n".join(lines[index + 1 : compose_proposal.section_end(lines, index)])
+
+
+@contextlib.contextmanager
+def once_the_first_backup_review_ships():
+    """Stand where the first backup review will stand once it is built.
+
+    This release answers "never reviewed" to every base, on purpose, and reads
+    no record at all to decide it. Findings A1 and H1 of the 2026-09-20 review
+    both turned on the same thing: nothing shipped sets that record honestly,
+    so any value of it saying the review happened was put there by something
+    that is not this plugin, and both reviewers turned a refused send into an
+    allowed one with a single plain write over that record.
+
+    Every scenario that is about something further down a path than that rule,
+    and that therefore has to get past it, runs inside this. The rule itself is
+    not stood in for anywhere: it has scenarios of its own, in
+    `tests/test_gate.py`, which call the check with nothing stood in for.
+    """
+    from unittest import mock
+
+    from gtmbase import push_conditions
+
+    with mock.patch.object(
+        push_conditions, "first_push_unreviewed", lambda base_id: False
+    ):
+        yield
+
+
+@contextlib.contextmanager
+def the_rule_itself():
+    """Take the stand-in away again, for a scenario about the rule itself.
+
+    A class of scenarios that all have to get past the first backup rule
+    carries the stand-in for the whole class, and one scenario inside such a
+    class is sometimes about the rule rather than about what is past it. This
+    puts the real answer back for that one.
+    """
+    from unittest import mock
+
+    from gtmbase import push_conditions
+
+    real = getattr(push_conditions.first_push_unreviewed, "__wrapped__", None)
+    with mock.patch.object(
+        push_conditions, "first_push_unreviewed", real or _always_unreviewed
+    ):
+        yield
+
+
+def _always_unreviewed(base_id):
+    """What the shipped answer is in this release, kept here for the above."""
+    del base_id
+    return True
+
+
+class PastTheFirstBackupReview(object):
+    """The same thing for a whole class of scenarios, started in setUp."""
+
+    def setUp(self):
+        super(PastTheFirstBackupReview, self).setUp()
+        self._past_the_review = once_the_first_backup_review_ships()
+        self._past_the_review.__enter__()
+        self.addCleanup(self._past_the_review.__exit__, None, None, None)
+
+
 class Sandbox(object):
     """A temporary home, a temporary seat folder, and real repositories.
 
@@ -280,13 +381,24 @@ class Sandbox(object):
 
     def __enter__(self):
         self.path = os.path.realpath(tempfile.mkdtemp(prefix="gtm-base-sandbox-"))
-        self.saved = {name: os.environ.get(name) for name in ("HOME", "GTM_BASE_HOME")}
+        self.saved = {
+            name: os.environ.get(name)
+            for name in ("HOME", "GTM_BASE_HOME", "TMPDIR")
+        }
         os.environ["HOME"] = os.path.join(self.path, "home")
         os.makedirs(os.environ["HOME"])
         os.environ["GTM_BASE_HOME"] = os.path.join(self.path, "seat")
+        # A setup run writes its drafts under the folder this computer keeps
+        # temporary work in, so that folder moves inside the sandbox too and a
+        # test can never leave one of them behind on the real machine.
+        self.saved_tempdir = tempfile.tempdir
+        os.environ["TMPDIR"] = os.path.join(self.path, "tmp")
+        os.makedirs(os.environ["TMPDIR"])
+        tempfile.tempdir = os.environ["TMPDIR"]
         return self
 
     def __exit__(self, kind, value, trace):
+        tempfile.tempdir = self.saved_tempdir
         for name, previous in self.saved.items():
             if previous is None:
                 os.environ.pop(name, None)

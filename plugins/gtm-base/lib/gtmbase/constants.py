@@ -647,7 +647,14 @@ PROPOSALS_DROPPED_DIR = "work/proposals/dropped"
 # older four are unchanged, and `ASKED_OUTCOMES` keeps its meaning of every
 # outcome a row may carry.
 OUTCOME_USED_AS_IS = "used-as-is"
-ASKED_OUTCOMES_ALL = ASKED_OUTCOMES + (OUTCOME_USED_AS_IS,)
+
+# One more, added after the 2026-09-20 review. Asking for the document to be
+# fixed first is not an answer about whether the document is right either: it
+# is a request for something to read later. It used to be no outcome at all,
+# so the row stayed unanswered for ever and counted against a seat whose
+# question had in fact been answered (finding M3).
+OUTCOME_PREPARING_A_FIX = "preparing-a-fix"
+ASKED_OUTCOMES_ALL = ASKED_OUTCOMES + (OUTCOME_USED_AS_IS, OUTCOME_PREPARING_A_FIX)
 
 # The outcomes the yes rate is worked out over. An answer that says nothing
 # about whether a document is right does not belong in that denominator.

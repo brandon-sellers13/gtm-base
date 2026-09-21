@@ -667,6 +667,24 @@ class TestTheReview(unittest.TestCase):
             self.assertEqual(
                 confirm.STATUS_PROPOSAL_STAGED, answered.status, answered.reasons
             )
+            # Changed 2026-09-20 for finding A6: a prepared change still
+            # carrying the note GTM Base wrote asking for the real wording is
+            # refused, so the real wording goes in first, which is what the
+            # skills now tell the assistant to do.
+            self.assertEqual(
+                approve_local.CODE_STILL_A_PLACEHOLDER,
+                approve_local.show(
+                    answered.staging_path,
+                    base.root,
+                    base.base_id,
+                    runner=support.NoRemoteRunner(),
+                    now=TODAY,
+                ).codes[0],
+            )
+            support.write_the_replacement(
+                answered.staging_path,
+                "We sell to companies of twenty to two hundred people.\n",
+            )
             shown = approve_local.show(
                 answered.staging_path,
                 base.root,
@@ -920,6 +938,22 @@ class TestOneWholeSitting(unittest.TestCase):
             )
             self.assertEqual(moment.STATUS_PREPARED, prepared.status)
 
+            # Changed 2026-09-20 for finding A6: the prepared change carries
+            # the note GTM Base wrote asking for the real wording, and that is
+            # refused, so the assistant writes the replacement first.
+            self.assertEqual(
+                approve_local.CODE_STILL_A_PLACEHOLDER,
+                approve_local.show(
+                    prepared.staging_path,
+                    base.root,
+                    base.base_id,
+                    runner=runner,
+                    now=TODAY,
+                ).codes[0],
+            )
+            replacement = "We sell to companies of twenty to two hundred people.\n"
+            support.write_the_replacement(prepared.staging_path, replacement)
+
             shown = approve_local.show(
                 prepared.staging_path,
                 base.root,
@@ -943,6 +977,11 @@ class TestOneWholeSitting(unittest.TestCase):
             )
             self.assertIn(ICP, applied.written_paths)
             self.assertFalse(base.check(runner=runner).flagged)
+            # And what landed in the document is the approved wording, not the
+            # note asking for it (finding A6).
+            now_says = support.read(os.path.join(base.root, ICP))
+            self.assertIn(replacement.strip(), now_says)
+            self.assertNotIn("Update needed", now_says)
 
 
 # --- The words themselves ----------------------------------------------------
@@ -1270,7 +1309,14 @@ class TestTheUnitReview(unittest.TestCase):
             self.assertEqual("used-as-is", outcomes[question])
             self.assertIsNone(base.read(confirm.confirmations_path_for(ICP)))
 
-            prepared = run_moment(["--file", ICP, "--answer", "fix"], base.root)
+            # Changed 2026-09-20 for finding A8: every answer names the
+            # question it answers now, this one included, because the answer
+            # path no longer runs the ordinary check and so no longer has a
+            # question of its own to fall back on.
+            prepared = run_moment(
+                ["--file", ICP, "--answer", "fix", "--question", question],
+                base.root,
+            )
             self.assertEqual(0, prepared.code, prepared.err)
             self.assertIn("Prepared file:", prepared.out)
 
@@ -1280,6 +1326,120 @@ class TestTheUnitReview(unittest.TestCase):
             )
             self.assertEqual(0, recorded.code, recorded.err)
             self.assertIsNotNone(base.read(confirm.confirmations_path_for(ICP)))
+
+    def test_m3_asking_for_a_fix_answers_the_question_and_moves_no_rate(self):
+        """Finding M3 of the 2026-09-20 review.
+
+        Asking for the document to be fixed first used to leave the question
+        with no answer at all, for ever, so a seat whose person had in fact
+        replied read as a seat nobody replies to. It has an answer of its own
+        now, and that answer says nothing about whether the document is right,
+        so the count of how often somebody said a document was right leaves it
+        out.
+        """
+        with support.Sandbox() as sandbox:
+            base = Base(sandbox)
+            base.add_change()
+
+            asked = run_moment(["--file", ICP], base.root)
+            question = asked.out.rsplit(": ", 1)[-1].strip()
+
+            # The script writes its rows against the day this computer is
+            # really on, so the count is asked about the same day.
+            day = state.today()
+            before = report.yes_rate(base.base_id, day)
+            self.assertEqual(1, before["asked"])
+            self.assertEqual(1, before["unanswered"])
+
+            prepared = run_moment(
+                ["--file", ICP, "--answer", "fix", "--question", question],
+                base.root,
+            )
+            self.assertEqual(0, prepared.code, prepared.err)
+
+            rows, _problems = state.load_asked(base.base_id)
+            outcomes = {row["question_id"]: row["outcome"] for row in rows}
+            self.assertEqual(
+                constants.OUTCOME_PREPARING_A_FIX, outcomes[question]
+            )
+            after = report.yes_rate(base.base_id, day)
+            self.assertEqual(0, after["asked"])
+            self.assertEqual(0, after["unanswered"])
+            self.assertIsNone(after["rate"])
+
+    def test_a8_answering_issues_no_question_of_its_own(self):
+        """Finding A8 of the 2026-09-20 review.
+
+        The answer path ran the ordinary check first, which issues a question
+        and writes it into the log, so answering one question quietly left a
+        second one behind that nobody had ever been shown, unanswered, in the
+        count. Nothing on the answer path issues anything now.
+        """
+        with support.Sandbox() as sandbox:
+            base = Base(sandbox)
+            base.add_change()
+
+            asked = run_moment(["--file", ICP], base.root)
+            question = asked.out.rsplit(": ", 1)[-1].strip()
+            self.assertEqual(1, len(state.load_asked(base.base_id)[0]))
+
+            for answer in ("as-is", "fix"):
+                run_moment(
+                    ["--file", ICP, "--answer", answer, "--question", question],
+                    base.root,
+                )
+                rows, _problems = state.load_asked(base.base_id)
+                self.assertEqual(
+                    [question], [row["question_id"] for row in rows], answer
+                )
+
+    def test_a8_answering_a_question_that_ran_out_leaves_nothing_behind(self):
+        """The scenario the reviewer ran: the question expires, the person
+        answers it, and the count used to gain an unanswered question."""
+        with support.Sandbox() as sandbox:
+            base = Base(sandbox)
+            base.add_change()
+
+            asked = run_moment(["--file", ICP], base.root)
+            question = asked.out.rsplit(": ", 1)[-1].strip()
+
+            # The question runs out where questions run out: in this seat's
+            # own record of the ones it issued.
+            issued, _problems = state.load_question_ids(base.base_id)
+            for record in issued:
+                record["issued_at"] = "2020-01-01T00:00:00Z"
+            state._save_question_ids(base.base_id, issued)
+
+            said = run_moment(
+                ["--file", ICP, "--answer", "reflects", "--question", question],
+                base.root,
+            )
+
+            self.assertNotEqual(0, said.code)
+            rows, _problems = state.load_asked(base.base_id)
+            self.assertEqual([question], [row["question_id"] for row in rows])
+
+    def test_a8_a_question_about_another_document_is_refused(self):
+        with support.Sandbox() as sandbox:
+            base = Base(sandbox)
+            base.add_change()
+
+            asked = run_moment(["--file", ICP], base.root)
+            question = asked.out.rsplit(": ", 1)[-1].strip()
+
+            said = run_moment(
+                [
+                    "--file",
+                    POSITIONING,
+                    "--answer",
+                    "as-is",
+                    "--question",
+                    question,
+                ],
+                base.root,
+            )
+
+            self.assertNotEqual(0, said.code)
 
     def test_c4_the_weekly_line_and_quiet_are_reachable_from_the_script(self):
         with support.Sandbox() as sandbox:

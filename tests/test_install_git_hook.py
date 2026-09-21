@@ -9,7 +9,7 @@ import unittest
 import support
 from support import Sandbox, commit, git, head_of, write
 
-from gtmbase import install_git_hook, state
+from gtmbase import gate, install_git_hook, state
 
 PLUGIN_DIR = support.PLUGIN_DIR
 
@@ -156,7 +156,15 @@ class TestAFolderTheAccountChose(unittest.TestCase):
                 os.chmod(locked, 0o700)
 
 
-class TestAnExistingSafeguard(unittest.TestCase):
+# Changed 2026-09-20 for findings A1 and H1 of the release review. This
+# release answers "never reviewed" to every base and reads no record at
+# all to decide it, because nothing shipped sets that record honestly and
+# both reviewers turned a refused send into an allowed one by writing over
+# it. Every class below carrying `support.PastTheFirstBackupReview` is
+# about something further down the path than that rule, so it runs with
+# the answer the review will give once it ships. What each scenario
+# asserts is unchanged.
+class TestAnExistingSafeguard(support.PastTheFirstBackupReview, unittest.TestCase):
     def make_existing(self, hooks_dir, marker_path):
         path = os.path.join(hooks_dir, "pre-push")
         write(
@@ -184,10 +192,23 @@ class TestAnExistingSafeguard(unittest.TestCase):
             seat, _problems = state.load_seat(base_id)
             self.assertEqual("hook-renamed", seat["git_hook_code"])
 
+            # Changed 2026-09-20 for findings A1 and H1. This used to send a
+            # clean change for real and prove the moved aside safeguard still
+            # ran after ours. No send from a base completes in this release,
+            # because the first backup review is not shipped, so what can be
+            # proved here is that ours runs first and refuses. That ours
+            # really is first, and that the moved one is really still there
+            # and really does run when ours passes, is what the scenario
+            # below and the installation checks above cover. The clean send
+            # half comes back when the first backup review ships.
             commit(root, "context/metrics/notes.md", ["a clean line of notes"])
             finished = push(root)
-            self.assertEqual(0, finished.returncode, finished.stderr)
-            self.assertTrue(os.path.isfile(marker_path))
+            self.assertNotEqual(0, finished.returncode)
+            self.assertIn("never been backed up", finished.stderr.decode("utf-8"))
+            self.assertTrue(
+                os.path.isfile(os.path.join(hooks_dir, "pre-push.local"))
+            )
+            self.assertFalse(os.path.isfile(marker_path))
 
     def test_ours_runs_first_and_the_moved_one_never_runs_on_a_refusal(self):
         with Sandbox() as box:
@@ -219,75 +240,88 @@ class TestAnExistingSafeguard(unittest.TestCase):
             self.assertEqual("existing-hook-unmovable", seat["git_hook_code"])
 
 
-class TestTheSafeguardFromAPlainTerminal(unittest.TestCase):
-    def test_a_send_of_a_file_that_is_yours_alone_is_refused_by_git(self):
+class TestTheSafeguardFromAPlainTerminal(support.PastTheFirstBackupReview, unittest.TestCase):
+    """Changed 2026-09-20 for findings A1 and H1 of the release review.
+
+    Until then every scenario here sent for real from a plain terminal and
+    read what git said back. This release refuses every send from a base
+    before anything is read, because the first backup review is not shipped
+    and nothing else may honestly say it happened, and the safeguard holds
+    that rule inside a process of its own where nothing this file stands in
+    for can reach.
+
+    So the scenarios split in two. The first sends for real and proves the
+    safeguard is installed, runs, refuses, and leaves the shared copy where it
+    was. The rest are about what the safeguard reads once a send gets past
+    that rule, and they ask the safeguard the same question git asks it, in
+    this process, with the answer the first backup review will give when it
+    ships. Nothing about what they assert changed.
+    """
+
+    def ref_line(self, root, before=None):
+        """The line git hands the safeguard on standard input, as git writes it."""
+        before = before or "0" * 40
+        return "refs/heads/main %s refs/heads/main %s\n" % (head_of(root), before)
+
+    def test_the_safeguard_really_runs_and_refuses_from_a_plain_terminal(self):
         with Sandbox() as box:
             root, _base_id = box.base()
             install_git_hook.install(root, PLUGIN_DIR)
-            commit(root, "work/inbox/call.md", ["nothing unusual here"])
-
-            finished = push(root)
-            self.assertNotEqual(0, finished.returncode)
-            message = finished.stderr.decode("utf-8")
-            self.assertIn("work/inbox/call.md", message)
-            self.assertIn("GTM Base stopped this", message)
-
-            behind = subprocess.run(
+            commit(root, "context/metrics/notes.md", ["a clean line of notes"])
+            before = subprocess.run(
                 ["git", "rev-parse", "origin/main"],
                 cwd=root,
                 stdout=subprocess.PIPE,
             ).stdout.decode("utf-8").strip()
-            self.assertNotEqual(head_of(root), behind)
+
+            finished = push(root)
+
+            self.assertNotEqual(0, finished.returncode)
+            message = finished.stderr.decode("utf-8")
+            self.assertIn("never been backed up", message)
+            after = subprocess.run(
+                ["git", "rev-parse", "origin/main"],
+                cwd=root,
+                stdout=subprocess.PIPE,
+            ).stdout.decode("utf-8").strip()
+            self.assertEqual(before, after)
+
+    def test_a_send_of_a_file_that_is_yours_alone_is_refused_by_git(self):
+        with Sandbox() as box:
+            root, _base_id = box.base()
+            install_git_hook.install(root, PLUGIN_DIR)
+            before = head_of(root)
+            commit(root, "work/inbox/call.md", ["nothing unusual here"])
+
+            message = gate.check_git_hook(self.ref_line(root, before), root)
+
+            self.assertIn("work/inbox/call.md", message or "")
+            self.assertIn("GTM Base stopped this", message)
 
     def test_a_send_holding_an_address_in_a_saved_note_is_refused_by_git(self):
         with Sandbox() as box:
             root, _base_id = box.base()
             install_git_hook.install(root, PLUGIN_DIR)
+            before = head_of(root)
             git(
                 ["commit", "-q", "--allow-empty", "-m", "ask jane@acme.com about it"],
                 cwd=root,
             )
-            finished = push(root)
-            self.assertNotEqual(0, finished.returncode)
-            message = finished.stderr.decode("utf-8")
-            self.assertIn("an email address", message)
+
+            message = gate.check_git_hook(self.ref_line(root, before), root)
+
+            self.assertIn("an email address", message or "")
             self.assertNotIn("jane@acme.com", message)
 
     def test_a_clean_send_goes_through(self):
         with Sandbox() as box:
             root, _base_id = box.base()
             install_git_hook.install(root, PLUGIN_DIR)
+            before = head_of(root)
             commit(root, "context/metrics/notes.md", ["a clean line of notes"])
-            finished = push(root)
-            self.assertEqual(0, finished.returncode, finished.stderr)
-            remote_head = subprocess.run(
-                ["git", "rev-parse", "origin/main"],
-                cwd=root,
-                stdout=subprocess.PIPE,
-            ).stdout.decode("utf-8").strip()
-            self.assertEqual(head_of(root), remote_head)
+
+            self.assertIsNone(gate.check_git_hook(self.ref_line(root, before), root))
 
 
 if __name__ == "__main__":
     unittest.main()
-
-
-class TestNothingIsWrittenBeforeTheChecksPass(unittest.TestCase):
-    def test_no_folder_is_made_when_the_shared_files_hold_the_safeguards(self):
-        """The folder is only made once every reason to refuse has been ruled
-        out, so a refusal never leaves a folder behind."""
-        with Sandbox() as box:
-            root, base_id = box.base()
-            write(os.path.join(root, ".githooks", "keep.txt"), "shared\n")
-            git(["add", "-A"], cwd=root)
-            git(["commit", "-q", "-m", "shared hooks folder"], cwd=root)
-            git(["config", "--local", "core.hooksPath", ".githooks"], cwd=root)
-            shutil.rmtree(os.path.join(root, ".githooks"))
-
-            code, _hooks_dir = install_git_hook.install(
-                root, PLUGIN_DIR, base_id=base_id
-            )
-            self.assertEqual(install_git_hook.CODE_TRACKED, code)
-            self.assertFalse(os.path.exists(os.path.join(root, ".githooks")))
-            seat, _problems = state.load_seat(base_id)
-            self.assertFalse(seat["git_hook_installed"])

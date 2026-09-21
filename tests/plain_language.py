@@ -616,6 +616,7 @@ def _change_body_findings(start, body):
 # NOT_PERSON_FACING, so the registry can never quietly fall behind the code.
 PYTHON_SENTENCES = (
     ("approve_local", "HAS_SHARED_COPY"),
+    ("write_hook", "REFUSED"),
     ("approve_local", "NOT_WAITING_HERE"),
     ("approve_local", "MARKER_DISAGREES"),
     ("approve_local", "ALREADY_RECORDED"),
@@ -631,6 +632,7 @@ PYTHON_SENTENCES = (
     ("approve_local", "NOT_ON_MAIN"),
     ("approve_local", "COULD_NOT_SAVE"),
     ("approve_local", "UNREADABLE"),
+    ("approve_local", "STILL_A_PLACEHOLDER"),
     ("approve_local", "APPLIED"),
     ("approve_local", "KEPT"),
     ("approve_local", "DROPPED"),
@@ -663,6 +665,8 @@ PYTHON_SENTENCES = (
     ("confirm", "UNSAVED_EDITS_HERE"),
     ("confirm", "NOT_ON_THE_MAIN_LINE"),
     ("stale_check", "MALFORMED_ONE"),
+    ("stale_check", "PLACEHOLDER_SHAPE"),
+    ("stale_check", "PLACEHOLDER_TAIL"),
     ("changes", "GAVE_UP_LEFT_ALONE"),
     ("changes", "WOULD_MOVE"),
     ("changes", "WOULD_NOT"),
@@ -678,6 +682,7 @@ PYTHON_SENTENCES = (
     ("changes", "PUT_BACK"),
     ("compose_proposal", "APPROVE_HERE"),
     ("compose_proposal", "CANNOT_TELL"),
+    ("compose_proposal", "STILL_A_PLACEHOLDER"),
     ("confirm", "UNKNOWN_ID"),
     ("confirm", "ALREADY_ANSWERED"),
     ("confirm", "WRONG_SESSION"),

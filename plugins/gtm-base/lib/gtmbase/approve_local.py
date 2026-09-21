@@ -52,6 +52,7 @@ from . import (
     paths,
     report,
     review,
+    stale_check,
     state,
 )
 from .errors import GitError, GtmBaseError, PathError, ReviewError, ValidationError
@@ -91,6 +92,9 @@ CODE_RESUMED = "unfinished-work-finished"
 # written down twice, and the two copies do not agree.
 CODE_WRITTEN_TWICE = "one-change-written-twice"
 CODE_UNDONE = "unfinished-work-undone"
+# The words the prepared change would put in the file are still the first
+# draft GTM Base wrote, which is a note asking for the real replacement.
+CODE_STILL_A_PLACEHOLDER = "still-the-first-draft"
 
 # The folder the assistant keeps its own settings in, which a prepared change
 # may never touch whatever else it names.
@@ -123,6 +127,12 @@ JOURNAL_SCHEMA = 2
 
 # A whole hidden comment, which never appears in a line a person is shown.
 _COMMENT_RE = re.compile(r"<!--.*?-->")
+
+# The one way a saved point in a base is ever written. The note carries one,
+# and the note goes onto a git command line, so nothing that is not this shape
+# is allowed anywhere near one. The older move's note has always held its own
+# saved point to exactly this.
+_SAVED_POINT_RE = re.compile(r"^[0-9a-f]{40}$")
 
 # --- The sentences a person reads -------------------------------------------
 
@@ -183,6 +193,12 @@ COULD_NOT_SAVE = (
 )
 UNREADABLE = (
     "GTM Base could not read that prepared change, so nothing was applied."
+)
+STILL_A_PLACEHOLDER = (
+    "The words this change would put in your document are still the note GTM "
+    "Base wrote asking for the real wording, so nothing was applied. Write "
+    "what the document should say now, show it beside what it says today, and "
+    "ask again."
 )
 NOTE_UNREADABLE = (
     "GTM Base left a note about an unfinished change that it cannot make "
@@ -715,6 +731,18 @@ def _read_and_check(base_root, base_id, staging_path, git, today):
             None,
         )
 
+    for _relative, _heading, _before, after in walk.steps:
+        if stale_check.is_the_placeholder(after):
+            return (
+                _refused(
+                    STATUS_REFUSED,
+                    CODE_STILL_A_PLACEHOLDER,
+                    STILL_A_PLACEHOLDER,
+                    staging.staging_id,
+                ),
+                None,
+            )
+
     owner_problems = _owner_problems(
         base_root, walk.ordered, _who_is_approving(base_root, git)
     )
@@ -931,6 +959,15 @@ def _checked_journal(base_id: str, base_root: str):
     on sight. A path it names has to be one of the folders this module writes
     to, it has to stay inside this base once every link is followed, and the
     note has to say it is about this base at all.
+
+    Two more things are checked since the 2026-09-20 review, and the note
+    behind the older move had been checked for both all along. The saved point
+    has to be written the one way a saved point is written, because it goes
+    onto a git command line and a reviewer wrote an option there instead and
+    got git to write a file of their choosing. And the list of paths has to
+    hold something: a run that wrote nothing leaves no note at all, so a note
+    saying a run wrote nothing is not one this module left, and taking that at
+    its word dropped a prepared change and called it approved.
     """
     payload = _load_journal(base_id)
     if payload is None:
@@ -942,8 +979,10 @@ def _checked_journal(base_id: str, base_root: str):
     recorded = str(payload.get("base_root") or "")
     if not recorded or os.path.realpath(recorded) != os.path.realpath(base_root):
         return None, "the note is about another base"
+    if not _SAVED_POINT_RE.match(str(payload.get("head") or "")):
+        return None, "the note does not say where the base stood"
     items = payload.get("paths")
-    if not isinstance(items, list):
+    if not isinstance(items, list) or not items:
         return None, "the note lists no paths"
     real_base = os.path.realpath(base_root)
     for item in items:
@@ -994,15 +1033,31 @@ def _already_saved(base_root: str, journal: dict, git: GitRunner) -> bool:
     is over what was saved since then rather than at the newest note alone. A
     run that stopped after saving, and was followed by somebody saving
     something else, is still a run whose work landed.
+
+    Since the 2026-09-20 review the saved work has to have touched the paths
+    the note names as well as carrying the words the note names. A subject on
+    its own was enough before, and a subject is text anybody can save with any
+    work at all, so a note naming a prepared change nobody had read reported
+    it applied and dropped it.
     """
     head = str(journal.get("head") or "")
     subject = str(journal.get("subject") or "")
-    if not head or not subject:
+    wanted = [
+        str(item.get("path"))
+        for item in journal.get("paths") or []
+        if isinstance(item, dict) and item.get("path")
+    ]
+    if not head or not subject or not wanted:
         return False
-    found = git.run(["log", "--format=%s", "%s..HEAD" % head], cwd=base_root)
+    found = git.run(
+        ["log", "--format=%H %s", "%s..HEAD" % head, "--"] + wanted, cwd=base_root
+    )
     if not found.ok:
         return False
-    return subject in [line.strip() for line in found.stdout.split("\n")]
+    for line in found.stdout.split("\n"):
+        if line.strip().split(" ", 1)[-1].strip() == subject:
+            return True
+    return False
 
 
 def _undo_own_work(base_root: str, items: List[dict], git: GitRunner):

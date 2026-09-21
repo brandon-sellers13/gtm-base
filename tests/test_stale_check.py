@@ -204,7 +204,15 @@ def seat_snapshot(base_id):
 # --- SC1 ---------------------------------------------------------------------
 
 
-class TestOneHandEnteredDecisionWithNoConfirmation(unittest.TestCase):
+# Changed 2026-09-20 for findings A1 and H1 of the release review. This
+# release answers "never reviewed" to every base and reads no record at
+# all to decide it, because nothing shipped sets that record honestly and
+# both reviewers turned a refused send into an allowed one by writing over
+# it. Every class below carrying `support.PastTheFirstBackupReview` is
+# about something further down the path than that rule, so it runs with
+# the answer the review will give once it ships. What each scenario
+# asserts is unchanged.
+class TestOneHandEnteredDecisionWithNoConfirmation(support.PastTheFirstBackupReview, unittest.TestCase):
     """SC1: one decision, one file it names, nobody has confirmed it."""
 
     def test_it_prepares_exactly_one_change_that_cites_the_decision(self):
@@ -249,6 +257,10 @@ class TestOneHandEnteredDecisionWithNoConfirmation(unittest.TestCase):
             result = run_check(base, gh=gh)
             prepared = staged_for(result)[0]
 
+            support.write_the_replacement(
+                prepared.path,
+                "Update needed: we stopped selling to companies under twenty.\n",
+            )
             opened = compose_proposal.propose(
                 prepared.path,
                 base.root,
@@ -1196,7 +1208,7 @@ class TestWithTheToolItselfOnThePath(unittest.TestCase):
 # --- The two checks that stop anything leaving --------------------------------
 
 
-class TestTheFirstSendCheckIsOneCheck(unittest.TestCase):
+class TestTheFirstSendCheckIsOneCheck(support.PastTheFirstBackupReview, unittest.TestCase):
     """Fix C: the check on the command tool and the skills' check agree."""
 
     def test_they_agree_before_and_after_the_first_send_is_reviewed(self):
@@ -1204,13 +1216,20 @@ class TestTheFirstSendCheckIsOneCheck(unittest.TestCase):
             root, base_id, _remote = support.base_with_a_shared_copy(
                 sandbox, reviewed=False
             )
-            self.assertTrue(push_conditions.first_push_unreviewed(base_id))
-            self.assertTrue(gate.first_push_is_unreviewed(root))
+            # Changed 2026-09-20 for findings A1 and H1. The two checks still
+            # agree, which is what this scenario is for, and what they agree
+            # on changed: this release answers "never reviewed" whatever the
+            # seat's own record says, because nothing shipped writes that
+            # record honestly. The stand-in is taken away for this one
+            # scenario, because this scenario is about that rule.
+            with support.the_rule_itself():
+                self.assertTrue(push_conditions.first_push_unreviewed(base_id))
+                self.assertTrue(gate.first_push_is_unreviewed(root))
 
-            state.update_seat(base_id, first_push_reviewed=True)
+                state.update_seat(base_id, first_push_reviewed=True)
 
-            self.assertFalse(push_conditions.first_push_unreviewed(base_id))
-            self.assertFalse(gate.first_push_is_unreviewed(root))
+                self.assertTrue(push_conditions.first_push_unreviewed(base_id))
+                self.assertTrue(gate.first_push_is_unreviewed(root))
 
 
 # --- The one hash rule --------------------------------------------------------
@@ -1480,7 +1499,15 @@ class BothLayouts(unittest.TestCase):
 # rerun unchanged across the rename, and a claim of "byte-identical" that
 # nothing checks is a claim somebody can quietly break. These two values are
 # only ever updated by somebody who means to change that scenario.
-SC1_CLASS_HASH = "3c95b8cb347129c2a685afcf2e08f8bdcef720b4c5da90c12aa27bae32f12b64"
+# Moved once, on 2026-09-20, for the two rules the release A review added,
+# and for nothing else. The scenario itself is unchanged: what changed is
+# that the class now carries the stand-in for the first backup review,
+# because this release refuses every send from a base until that review
+# ships, and that the real wording is written into the prepared change
+# before it is raised, because the note GTM Base writes asking for it is
+# no longer approvable. Both are findings of that review, A1 and H1 for
+# the first and A6 for the second.
+SC1_CLASS_HASH = "19ceed637601fde004efc177aac03c03f1df90692b6d01d3d9c8da883484e5e2"
 SC1_HELPER_HASH = "6b4841629621dc368463ebaf9a6754cb13f5aa30957a2ce8558114ee88b02132"
 
 
@@ -1499,13 +1526,14 @@ class TestTheOldLayoutScenarioIsByteIdentical(unittest.TestCase):
         import hashlib
 
         source = _source_between(
-            "class TestOneHandEnteredDecisionWithNoConfirmation(unittest.TestCase):",
+            "class TestOneHandEnteredDecisionWithNoConfirmation(",
             "# --- SC1 again, on the layout written today",
         )
         self.assertEqual(
             SC1_CLASS_HASH,
             hashlib.sha256(source.encode("utf-8")).hexdigest(),
-            "the old-layout SC1 scenario changed; it is meant to be untouched",
+            "the old-layout SC1 scenario changed; it is meant to be untouched "
+            "except for the two rules of 2026-09-20 recorded above this test",
         )
 
     def test_the_helper_that_builds_its_entry_is_exactly_what_it_was(self):

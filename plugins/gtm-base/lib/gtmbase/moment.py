@@ -807,18 +807,26 @@ def fix_it_first(
     base_id: str,
     moment: "Moment",
     runner: Optional[GitRunner] = None,
+    question_id: Optional[str] = None,
 ) -> MomentAnswer:
     """Prepare the change for this document and wait for the owner's yes.
 
     A change already waiting is left exactly as it is, because preparing a
     second one for the same document would give somebody two things to approve
     where they only ever decided one thing.
+
+    The question this answers gets an outcome of its own, and that outcome is
+    left out of the count of how often somebody said a document was still
+    right. Asking for the document to be fixed first says nothing about
+    whether it is right, and leaving the question unanswered for ever said the
+    person never replied when they had (finding M3 of the 2026-09-20 review).
     """
     git = runner_or_default(runner)
     if not moment.flagged:
         return MomentAnswer(
             STATUS_REFUSED, codes=[CODE_NOTHING_FLAGGED], reasons=[NOTHING_TO_FIX]
         )
+    _record_asking_for_a_fix(base_id, question_id or moment.question_id)
     if moment.staging_path:
         return MomentAnswer(
             STATUS_PREPARED,
@@ -873,6 +881,33 @@ def fix_it_first(
         reasons=[FIX_FIRST % moment.document_name()],
         staging_path=written,
     )
+
+
+def _record_asking_for_a_fix(base_id: Optional[str], question_id: Optional[str]) -> None:
+    """Write down that this is how the question ended, and never fail on it."""
+    if not base_id or not question_id:
+        return
+    try:
+        state.set_outcome(base_id, question_id, constants.OUTCOME_PREPARING_A_FIX)
+    except Exception:
+        pass
+
+
+def question_is_about(base_id: str, question_id: str, path: str) -> bool:
+    """Whether a question this seat issued was the one about this document.
+
+    The answer path takes the question from whoever is answering, so it is
+    checked against what was actually asked rather than believed. A question
+    nobody issued, and a question about another document, are both refused
+    (finding A8 of the 2026-09-20 review).
+    """
+    if not question_id:
+        return False
+    rows, _problems = state.load_asked(base_id)
+    for row in rows:
+        if row.get("question_id") == question_id:
+            return row.get("file") == path
+    return False
 
 
 def already_reflects(

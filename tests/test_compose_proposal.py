@@ -71,7 +71,15 @@ ref_of = support.ref_of
 # --- The happy path ----------------------------------------------------------
 
 
-class TestAProposalThatOpens(unittest.TestCase):
+# Changed 2026-09-20 for findings A1 and H1 of the release review. This
+# release answers "never reviewed" to every base and reads no record at
+# all to decide it, because nothing shipped sets that record honestly and
+# both reviewers turned a refused send into an allowed one by writing over
+# it. Every class below carrying `support.PastTheFirstBackupReview` is
+# about something further down the path than that rule, so it runs with
+# the answer the review will give once it ships. What each scenario
+# asserts is unchanged.
+class TestAProposalThatOpens(support.PastTheFirstBackupReview, unittest.TestCase):
     def test_it_carries_the_change_the_decision_and_the_record_of_what_changed(self):
         with support.Sandbox() as sandbox:
             root, base_id, remote = base_with_a_shared_copy(sandbox)
@@ -160,7 +168,7 @@ class TestAProposalThatOpens(unittest.TestCase):
 # --- What the floor refuses ---------------------------------------------------
 
 
-class TestTheFloorRefuses(unittest.TestCase):
+class TestTheFloorRefuses(support.PastTheFirstBackupReview, unittest.TestCase):
     def _run(self, sandbox, text):
         root, base_id, _remote = base_with_a_shared_copy(sandbox)
         staged = stage(root, text)
@@ -303,7 +311,7 @@ class TestAFolderThatIsALinkInTheSharedCopy(unittest.TestCase):
 # --- Somebody already raised this --------------------------------------------
 
 
-class TestSomebodyAlreadyRaisedThis(unittest.TestCase):
+class TestSomebodyAlreadyRaisedThis(support.PastTheFirstBackupReview, unittest.TestCase):
     def _review(self, number, state_name):
         return {
             "number": number,
@@ -372,7 +380,7 @@ class TestSomebodyAlreadyRaisedThis(unittest.TestCase):
 # --- A run that stopped halfway ----------------------------------------------
 
 
-class TestARunThatStoppedHalfway(unittest.TestCase):
+class TestARunThatStoppedHalfway(support.PastTheFirstBackupReview, unittest.TestCase):
     def test_stopping_before_the_review_leaves_work_that_is_used_again(self):
         with support.Sandbox() as sandbox:
             root, base_id, _remote = base_with_a_shared_copy(sandbox)
@@ -560,7 +568,7 @@ class RefusingGit(GitRunner):
 # --- The file moved on --------------------------------------------------------
 
 
-class TestTheFileMovedOn(unittest.TestCase):
+class TestTheFileMovedOn(support.PastTheFirstBackupReview, unittest.TestCase):
     def test_a_heading_that_is_gone_is_reported_and_nothing_is_sent(self):
         with support.Sandbox() as sandbox:
             root, base_id, _remote = base_with_a_shared_copy(sandbox)
@@ -745,9 +753,12 @@ class TestABaseWithNoSharedCopy(unittest.TestCase):
 # --- The two conditions on anything leaving the computer ----------------------
 
 
-class TestNothingLeavesUntilBothConditionsHold(unittest.TestCase):
+class TestNothingLeavesUntilBothConditionsHold(support.PastTheFirstBackupReview, unittest.TestCase):
     def test_a_base_whose_first_backup_was_never_reviewed_refuses(self):
-        with support.Sandbox() as sandbox:
+        # The one scenario in this class that is about the first backup rule
+        # itself, so the stand-in the class carries is taken away for it
+        # (findings A1 and H1, 2026-09-20).
+        with support.Sandbox() as sandbox, support.the_rule_itself():
             root, base_id, _remote = base_with_a_shared_copy(sandbox, reviewed=False)
             staged = stage(root)
             gh = RecordingGh()
@@ -814,7 +825,7 @@ def hand_edit(root):
     support.write(os.path.join(root, ICP), text)
 
 
-class TestAChangeSomebodyMadeByHand(unittest.TestCase):
+class TestAChangeSomebodyMadeByHand(support.PastTheFirstBackupReview, unittest.TestCase):
     def test_it_becomes_a_proposal_and_the_change_stays_where_they_left_it(self):
         with support.Sandbox() as sandbox:
             root, base_id, remote = base_with_a_shared_copy(sandbox)
@@ -918,7 +929,7 @@ class TestAChangeSomebodyMadeByHand(unittest.TestCase):
             )
 
 
-class TestWhatChangedAndWhy(unittest.TestCase):
+class TestWhatChangedAndWhy(support.PastTheFirstBackupReview, unittest.TestCase):
     """Unit 1.5, requirement P16: one more question, and what each answer does."""
 
     STRATEGIC = (
@@ -1276,7 +1287,7 @@ class TestTheHandEditHabitThroughTheScript(unittest.TestCase):
 # --- The whole way round ------------------------------------------------------
 
 
-class TestTheWholeWayRound(unittest.TestCase):
+class TestTheWholeWayRound(support.PastTheFirstBackupReview, unittest.TestCase):
     def test_the_tool_on_the_path_is_the_one_that_runs_when_none_is_handed_in(self):
         with support.Sandbox() as sandbox:
             root, base_id, _remote = base_with_a_shared_copy(sandbox)
