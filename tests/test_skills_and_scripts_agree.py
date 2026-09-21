@@ -203,6 +203,16 @@ SAYS_THE_KEY = ("--run", "--session")
 
 # The flags that read a words file and take it away, so the next step has to
 # ask for one of its own.
+# The ways a documented command line asks for a file in words rather than
+# naming one a command before it printed.
+NAMES_A_FILE_IN_WORDS = (
+    "<a fresh company file>",
+    "<a fresh folder file>",
+    "<the path from step 4>",
+    "<path to their words>",
+    "<path to what they said>",
+)
+
 CONSUMES_WORDS = (
     "--folder-file",
     "--company-file",
@@ -477,6 +487,14 @@ class TestTheSkillsAsTheyAreWritten(unittest.TestCase):
                     state["step"] = named
         if mode == "words-file":
             return
+        # A file is supplied here only when the documented line asks for one in
+        # words. A line that says the path it printed is a line the skill has
+        # to have printed a hand-out for, and finding W1 of the confirmation
+        # round is what covering for that cost: a skill that stopped printing
+        # one still passed the walk that exists to catch exactly that.
+        asks_in_words = any(
+            placeholder in command for placeholder in NAMES_A_FILE_IN_WORDS
+        )
         for flag, kind in (
             ("--words", "answer"),
             ("--folder-file", "folder"),
@@ -488,6 +506,8 @@ class TestTheSkillsAsTheyAreWritten(unittest.TestCase):
             ("--source-file", "source"),
             ("--what-changed-file", "what-changed"),
         ):
+            if not asks_in_words:
+                continue
             if flag in words and state.get("words_kind") != kind:
                 # Only when the skill did not print the hand-out itself. A
                 # step that prints one is walked through that one, which is
@@ -700,7 +720,13 @@ class TestTheSkillsAsTheyAreWritten(unittest.TestCase):
             for line_number, command in lines:
                 words = shlex.split(command)
                 if os.path.basename(words[0]) not in SCRIPTS:
-                    continue
+                    # Finding W2: this used to be passed over without a word,
+                    # so a skill naming a script nobody knows was never run
+                    # and nothing said so.
+                    raise AssertionError(
+                        "line %d names a script nobody knows: %s"
+                        % (line_number, words[0])
+                    )
                 mode = words[1] if len(words) > 1 and not words[1].startswith("-") else ""
                 if not self._taken_this_pass(words, command, index):
                     continue
@@ -782,6 +808,78 @@ class TestNoCommandCarriesAFolderNameEither(unittest.TestCase):
                         % (os.path.basename(path), line_number, word)
                     )
         self.assertEqual([], problems)
+
+
+
+
+class TestTheWalkCannotCoverForASkill(unittest.TestCase):
+    """W1 and W2 of the confirmation round.
+
+    The walk supplied a missing hand-out by itself, so a skill that stopped
+    printing the command that hands out a file still passed, which is the one
+    thing this whole test exists to catch. And a documented command for a
+    script it does not know was skipped without a word.
+    """
+
+    def a_copy_without(self, relative, line):
+        """One skill document, with a line taken out, in the scratch folder."""
+        import tempfile
+
+        source = os.path.join(SKILLS_DIR, relative.replace("/", os.sep))
+        with open(source, encoding="utf-8") as handle:
+            text = handle.read()
+        self.assertIn(line, text)
+        folder = tempfile.mkdtemp(prefix="gtm-base-skill-")
+        path = os.path.join(folder, "SKILL.md")
+        with open(path, "w", encoding="utf-8") as handle:
+            handle.write(text.replace(line, ""))
+        self.addCleanup(__import__("shutil").rmtree, folder, True)
+        return path
+
+    def walk_of(self, path, relative):
+        walk = TestTheSkillsAsTheyAreWritten(
+            "test_every_documented_command_runs_as_it_is_written"
+        )
+        lines = commands_in(path)
+        walk.document_walked = relative
+        walk.alternatives = walk._alternatives(lines)
+        return walk, lines
+
+    def test_a_skill_that_stops_handing_out_a_file_fails(self):
+        relative = "confirm/SKILL.md"
+        path = self.a_copy_without(
+            relative, "python3 scripts/confirm.py --new-words-file reason"
+        )
+        walk, lines = self.walk_of(path, relative)
+
+        # Every pass, because the answer that needs their words is one of
+        # three the skill offers and each pass takes one of them.
+        raised = []
+        for index in range(3):
+            try:
+                walk.walk(lines, index)
+            except AssertionError as failure:
+                raised.append(str(failure))
+
+        self.assertTrue(raised, "the walk covered for the missing hand-out")
+        self.assertTrue(
+            any("path it printed" in message for message in raised), raised
+        )
+
+    def test_a_command_for_a_script_nobody_knows_fails(self):
+        import tempfile
+
+        folder = tempfile.mkdtemp(prefix="gtm-base-skill-")
+        self.addCleanup(__import__("shutil").rmtree, folder, True)
+        path = os.path.join(folder, "SKILL.md")
+        with open(path, "w", encoding="utf-8") as handle:
+            handle.write("Run `python3 scripts/invented.py --do-something`.\n")
+        walk, lines = self.walk_of(path, "confirm/SKILL.md")
+
+        with self.assertRaises(AssertionError) as caught:
+            walk.walk(lines, 0)
+
+        self.assertIn("invented.py", str(caught.exception))
 
 
 

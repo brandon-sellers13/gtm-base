@@ -539,5 +539,317 @@ class TestNoAllClearWhileAChangeIsWaiting(unittest.TestCase):
 
 
 
+
+# --- The last six ------------------------------------------------------------
+
+
+class TestWhatCountsAsAChangeWaiting(unittest.TestCase):
+    """P1. Anything in the folder that parsed at all was counted.
+
+    A file with a name GTM Base never issues, and a well-formed change about a
+    document that is not in the base, both made every closing and every review
+    say a change was waiting for ever while the review itself listed nothing
+    to read. It happens honestly too, the moment somebody renames or deletes a
+    document a change is waiting on.
+    """
+
+    def a_base_with_a_change_waiting(self, sandbox):
+        import test_first_draft_marker as first_draft
+
+        root, base_id = first_draft.local_base(sandbox)
+        staged = first_draft.a_first_draft(
+            root, body=first_draft.NAMES_THE_PART
+        )
+        return root, base_id, staged
+
+    def pending(self, root):
+        return os.path.join(root, constants.PROPOSALS_PENDING_DIR)
+
+    OTHER = "context/strategy/positioning.md"
+
+    def a_stray(self, root, staged, name):
+        """A well-formed prepared change about a second document, misfiled."""
+        support.write(
+            os.path.join(root, self.OTHER),
+            support.ICP_TEXT.replace("kind: icp", "kind: positioning"),
+        )
+        support.git(["add", "-A"], cwd=root)
+        support.git(["commit", "-q", "-m", "positioning"], cwd=root)
+        support.write(
+            os.path.join(self.pending(root), name),
+            support.read(staged).replace(ICP, self.OTHER),
+        )
+
+    def test_a_file_with_a_name_we_never_issued_is_not_a_change(self):
+        with support.Sandbox() as sandbox:
+            root, _base_id, staged = self.a_base_with_a_change_waiting(sandbox)
+            self.a_stray(root, staged, "notes.md")
+
+            found, _orphaned = stale_check._documents_with_a_change_waiting(root)
+
+            self.assertEqual([ICP], found)
+
+    def test_a_file_whose_name_is_not_the_one_inside_it_is_not_a_change(self):
+        with support.Sandbox() as sandbox:
+            root, _base_id, staged = self.a_base_with_a_change_waiting(sandbox)
+            self.a_stray(root, staged, "stg-" + "c" * 16 + ".md")
+
+            found, _orphaned = stale_check._documents_with_a_change_waiting(root)
+
+            self.assertEqual([ICP], found)
+
+    def test_junk_in_the_folder_is_not_a_change(self):
+        with support.Sandbox() as sandbox:
+            root, _base_id, staged = self.a_base_with_a_change_waiting(sandbox)
+            folder = self.pending(root)
+            support.write(os.path.join(folder, "empty.md"), "")
+            support.write(os.path.join(folder, "notmatter.md"), "just words\n")
+            support.write(
+                os.path.join(folder, "halfmatter.md"), "---\nschema: 1\n"
+            )
+            os.makedirs(os.path.join(folder, "folder.md"), exist_ok=True)
+            with open(os.path.join(folder, "binary.md"), "wb") as handle:
+                handle.write(os.urandom(2048))
+
+            found, _orphaned = stale_check._documents_with_a_change_waiting(root)
+
+            self.assertEqual([ICP], found)
+
+    def test_a_change_about_a_document_that_is_gone_is_not_counted(self):
+        with support.Sandbox() as sandbox:
+            root, _base_id, staged = self.a_base_with_a_change_waiting(sandbox)
+            os.remove(os.path.join(root, ICP))
+
+            found, _orphaned = stale_check._documents_with_a_change_waiting(root)
+
+            self.assertEqual([], found)
+
+    def test_the_run_says_so_and_says_how_to_drop_it(self):
+        from gtmbase import stale
+
+        with support.Sandbox() as sandbox:
+            root, base_id, _staged = self.a_base_with_a_change_waiting(sandbox)
+            support.write(
+                os.path.join(root, "context", "strategy", "positioning.md"),
+                support.ICP_TEXT.replace("kind: icp", "kind: positioning"),
+            )
+            support.git(["add", "-A"], cwd=root)
+            support.git(["commit", "-q", "-m", "positioning"], cwd=root)
+            support.git(["rm", "-q", ICP], cwd=root)
+            support.git(["commit", "-q", "-m", "the document is gone"], cwd=root)
+
+            result = stale_check.run(
+                root,
+                base_id,
+                runner=support.NoRemoteRunner(),
+                gh=support.RecordingGh(),
+                now=NOW,
+                session_id="sess-1",
+                mode="first-run",
+            )
+
+            self.assertIn(
+                stale_check.CHANGE_ABOUT_A_MISSING_DOCUMENT, result.sentences
+            )
+            self.assertNotEqual(
+                stale.FINDING_CHANGE_WAITING, result.finding.code
+            )
+
+
+class TestADocumentWithNoPartsAtAll(unittest.TestCase):
+    """P3. It could never be corrected, and nothing said why."""
+
+    def a_document_with_no_parts(self, sandbox):
+        import test_first_draft_marker as first_draft
+
+        root, base_id = first_draft.local_base(sandbox)
+        full = os.path.join(root, ICP)
+        support.write(
+            full, support.read(full).replace("## Firmographics\n\n", "")
+        )
+        support.git(["add", "-A"], cwd=root)
+        support.git(["commit", "-q", "-m", "no parts"], cwd=root)
+        return root, base_id, full
+
+    def test_the_wording_command_says_to_give_it_a_heading(self):
+        import test_first_draft_marker as first_draft
+
+        with support.Sandbox() as sandbox:
+            root, base_id, _full = self.a_document_with_no_parts(sandbox)
+            staged = first_draft.a_first_draft(root)
+
+            with self.assertRaises(Exception) as caught:
+                compose_proposal.write_the_wording(
+                    root,
+                    staged,
+                    "We sell to companies of fifty people and up.",
+                    base_id=base_id,
+                )
+
+            self.assertEqual(
+                compose_proposal.CODE_NO_PARTS_AT_ALL,
+                getattr(caught.exception, "code", None),
+            )
+            self.assertEqual(
+                compose_proposal.NO_PARTS_AT_ALL, str(caught.exception)
+            )
+
+    def test_the_hand_edit_says_the_same_thing(self):
+        with support.Sandbox() as sandbox:
+            root, base_id, full = self.a_document_with_no_parts(sandbox)
+            support.write(
+                full,
+                support.read(full).replace(
+                    "Companies of any size.", "Companies of fifty and up."
+                ),
+            )
+
+            with self.assertRaises(Exception) as caught:
+                compose_proposal.stage_local_edit(
+                    root,
+                    base_id,
+                    HAND_EDIT_SOURCE,
+                    runner=support.NoRemoteRunner(),
+                    now=TODAY,
+                )
+
+            self.assertEqual(
+                compose_proposal.NO_PARTS_AT_ALL, str(caught.exception)
+            )
+
+
+class TestADenyAlwaysWinsOverAQuestion(unittest.TestCase):
+    """P2. A link under the plugins folder into a base's own folders."""
+
+    def decision(self, path):
+        answer = write_hook.run(
+            {
+                "session_id": "sess-1",
+                "transcript_path": os.path.join(
+                    os.path.expanduser("~"), "." + "claude", "x.jsonl"
+                ),
+                "hook_event_name": "PreToolUse",
+                "tool_name": "Write",
+                "cwd": os.path.dirname(path),
+                "tool_input": {"file_path": path, "content": "x"},
+            }
+        )
+        return (
+            answer["hookSpecificOutput"]["permissionDecision"]
+            if answer
+            else "nothing"
+        )
+
+    def test_a_link_from_the_plugins_folder_into_a_base_is_refused(self):
+        with support.Sandbox() as sandbox:
+            root, _base_id = local_base(sandbox)
+            folder = write_hook.client_plugins_dir()
+            os.makedirs(folder, exist_ok=True)
+            os.symlink(
+                os.path.join(root, "." + "g" + "it"),
+                os.path.join(folder, "to-history"),
+            )
+            os.symlink(
+                paths.seat_home_path(), os.path.join(folder, "to-records")
+            )
+
+            self.assertEqual(
+                "deny",
+                self.decision(
+                    os.path.join(folder, "to-history", "hooks", "pre-push")
+                ),
+            )
+            self.assertEqual(
+                "deny",
+                self.decision(os.path.join(folder, "to-records", "machine.json")),
+            )
+
+    def test_an_ordinary_file_under_the_plugins_folder_is_still_asked_about(self):
+        with support.Sandbox() as sandbox:
+            local_base(sandbox)
+            folder = write_hook.client_plugins_dir()
+
+            self.assertEqual(
+                "ask", self.decision(os.path.join(folder, "config.json"))
+            )
+
+
+class TestTheFallbackAsksAboutTheSameThings(unittest.TestCase):
+    """P4. While it is broken they were waved through instead."""
+
+    def a_broken_copy(self, sandbox):
+        import shutil
+
+        root = os.path.join(sandbox.path, "installed", "gtm-base")
+        os.makedirs(os.path.dirname(root), exist_ok=True)
+        shutil.copytree(support.PLUGIN_DIR, root)
+        support.write(
+            os.path.join(root, "scripts", "write_check.py"),
+            "raise SystemExit(70)\n",
+        )
+        return root
+
+    def answer(self, path, root):
+        import json
+        import subprocess
+
+        environment = dict(os.environ)
+        environment["CLAUDE_PLUGIN_ROOT"] = root
+        payload = {
+            "session_id": "sess-1",
+            "transcript_path": os.path.join(
+                os.path.expanduser("~"), "." + "claude", "x.jsonl"
+            ),
+            "hook_event_name": "PreToolUse",
+            "tool_name": "Write",
+            "cwd": os.path.dirname(path),
+            "tool_input": {"file_path": path, "content": "x"},
+        }
+        finished = subprocess.run(
+            ["sh", os.path.join(root, "hooks", "write-check.sh"), "claude"],
+            input=json.dumps(payload).encode("utf-8"),
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            env=environment,
+        )
+        self.assertEqual(0, finished.returncode)
+        printed = finished.stdout
+        if b'"deny"' in printed:
+            return "deny"
+        if b'"ask"' in printed:
+            return "ask"
+        return "nothing"
+
+    def test_the_settings_and_the_plugins_folder_are_asked_about(self):
+        with support.Sandbox() as sandbox:
+            root = self.a_broken_copy(sandbox)
+            home = os.path.expanduser("~")
+            assistant = "." + "claude"
+            for named in (
+                os.path.join(home, assistant, "settings.json"),
+                os.path.join(home, assistant, "settings.local.json"),
+                os.path.join(home, assistant, "plugins", "config.json"),
+            ):
+                with self.subTest(file=named):
+                    self.assertEqual("ask", self.answer(named, root))
+
+    def test_what_it_refuses_and_what_it_leaves_alone_are_unchanged(self):
+        with support.Sandbox() as sandbox:
+            root = self.a_broken_copy(sandbox)
+            base_root, _base_id = local_base(sandbox)
+
+            self.assertEqual(
+                "deny",
+                self.answer(
+                    os.path.join(base_root, "." + "g" + "it", "config"), root
+                ),
+            )
+            self.assertEqual(
+                "nothing",
+                self.answer(os.path.join(sandbox.path, "notes.md"), root),
+            )
+
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -344,14 +344,19 @@ def problem_with(named: str, real_file: str) -> Optional[str]:
     for root in plugin_roots():
         if _reaches(named, real_file, root):
             return CODE_PLUGIN_CODE
+    # A question is remembered rather than answered with, because one path can
+    # be both: a link under the folder the client keeps its plugins in,
+    # pointing into a base's own history folder, is a refusal wearing a
+    # question's hat. Finding P2 of the confirmation round.
+    asking = None
     for settings in client_settings_files():
         if _reaches(named, real_file, settings):
-            return CODE_CLIENT_SETTINGS
-    if _reaches(named, real_file, client_plugins_dir()):
-        return CODE_CLIENT_SETTINGS
+            asking = CODE_CLIENT_SETTINGS
+    if asking is None and _reaches(named, real_file, client_plugins_dir()):
+        asking = CODE_CLIENT_SETTINGS
 
     if not _names_a_guarded_folder(named, real_file):
-        return None
+        return asking
 
     inside = _base_above(named)
     if inside is None and real_file != named:
@@ -375,7 +380,7 @@ def problem_with(named: str, real_file: str) -> Optional[str]:
                         if folder.endswith(REPOSITORY_DIR_NAME)
                         else CODE_BASE_ASSISTANT_FOLDER
                     )
-    return None
+    return asking
 
 
 def run(payload: Dict[str, Any]) -> Optional[Dict[str, Any]]:

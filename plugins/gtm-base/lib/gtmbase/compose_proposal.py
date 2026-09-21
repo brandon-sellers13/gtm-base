@@ -1153,6 +1153,7 @@ def reopen_from_opened(
 CODE_NOT_A_FIRST_DRAFT = "not-a-first-draft"
 CODE_STILL_THE_NOTE = "still-the-note"
 CODE_NEEDS_A_PART = "needs-the-part-of-the-document"
+CODE_NO_PARTS_AT_ALL = "the-document-has-no-parts"
 
 NOT_A_FIRST_DRAFT = (
     "That prepared change is not a first draft waiting for wording, so "
@@ -1167,6 +1168,14 @@ NEEDS_A_PART = (
     "That change does not say which part of the document it is about, so the "
     "wording has nowhere to go and would leave what it corrects standing. "
     "List the parts, ask which one this is about, and name it."
+)
+# Said when the document has no parts at all, which is the one state the
+# sentence above cannot be acted on in (finding P3 of the confirmation round:
+# every way of correcting such a document refused, and none of them said why).
+NO_PARTS_AT_ALL = (
+    "That document is one run of words with no headings in it, so there is no "
+    "part of it to correct. Give it a heading for each thing it covers, and "
+    "GTM Base can work with it after that."
 )
 
 
@@ -1212,6 +1221,8 @@ def write_the_wording(
     text = str(words).strip() + "\n"
     needs_a_part = any(edit.op == "add" for edit in staging.edits)
     if needs_a_part and part is None:
+        if not parts_of(base_root, staging):
+            raise ValidationError(NO_PARTS_AT_ALL, code=CODE_NO_PARTS_AT_ALL)
         raise ValidationError(NEEDS_A_PART, code=CODE_NEEDS_A_PART)
     for edit in staging.edits:
         if part is not None:
@@ -1483,11 +1494,10 @@ def stage_local_edit(
             )
             after_parts.append(body)
     if not edits:
-        raise ValidationError(
-            "The change you made is not inside any part of the file that has a "
-            "heading, so GTM Base cannot describe it.",
-            code=CODE_LOCAL_NO_SECTION,
-        )
+        # The same sentence the wording command says, because it is the same
+        # thing wrong with the document and the same thing to do about it
+        # (finding P3).
+        raise ValidationError(NO_PARTS_AT_ALL, code=CODE_LOCAL_NO_SECTION)
 
     first = edits[0].path
     staging_id = free_local_edit_id(base_root, first)

@@ -169,15 +169,26 @@ second review.
 From inside the base:
 
 - `python3 scripts/propose.py --staging <path to the staged file>`
-- `python3 scripts/propose.py --local-edit --source-file <the path it printed>`,
-  adding `--what-changed-file <the path it printed> --records-a-change` when
-  what they said was about the business rather than about a typo
 
-  Their words never go in the command. Ask this skill for somewhere to put them
-  first, once for each answer, with
-  `python3 scripts/propose.py --new-words-file source` and
-  `python3 scripts/propose.py --new-words-file what-changed`. Each prints
-  `words=<path>`. Write what they said into that path with your file-writing
+- A change somebody made by hand needs their own words, so ask for somewhere
+  to put them first, once for each answer:
+
+  ```
+  python3 scripts/propose.py --new-words-file source
+  python3 scripts/propose.py --new-words-file what-changed
+  ```
+
+  Then raise it:
+
+  ```
+  python3 scripts/propose.py --local-edit --source-file <the path it printed>
+  ```
+
+  Add `--what-changed-file <the path it printed> --records-a-change` when what
+  they said was about the business rather than about a typo.
+
+  Each hand-out prints `words=<path>`. Write what they said into that path
+  with your file-writing
   tool and pass that path back. Each file is read once and then taken away, and
   a path this skill did not print is refused, so no other file on the computer
   can be read into the base this way.

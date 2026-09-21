@@ -52,8 +52,31 @@ request=$(cat)
 # repaired, and writing over them is the one thing this will not allow.
 could_not_check='GTM Base could not run its own safety check just now, and this file is in a folder it keeps for itself, so nothing was written. Installing the plugin again is what repairs its own files, and it is worth doing if this keeps happening.'
 
+# The one sentence said about a file that decides which checks run. It is
+# the same sentence `write_hook.ASK_ABOUT_SETTINGS` holds, and a test holds
+# the two together.
+ask_about_settings='This file is where your assistant is told which safety checks to run, so a change here can switch GTM Base'\''s own checks off. Read what it would write before you say yes.'
+
 refuse_without_checking() {
   printf '{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"%s"}}\n' "$could_not_check"
+}
+
+ask_without_checking() {
+  printf '{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"ask","permissionDecisionReason":"%s"}}\n' "$ask_about_settings"
+}
+
+# Whether one path is one of the person's own files that say which checks run
+# at all. The real check asks about these rather than refusing them, and this
+# asks about the same ones, because being broken is no reason to wave through
+# the one change that could switch it off for good (finding P4).
+is_asked_about() {
+  candidate=$(printf '%s' "$1" | tr '[:upper:]' '[:lower:]')
+  settings=$(printf '%s' "$HOME/.claude" | tr '[:upper:]' '[:lower:]')
+  case "$candidate" in
+    "$settings"/settings.json | "$settings"/settings.local.json) return 0 ;;
+    "$settings"/plugins | "$settings"/plugins/*) return 0 ;;
+  esac
+  return 1
 }
 
 # Every file the request says the tool is about to write, and nothing else. The
@@ -135,6 +158,10 @@ fall_back() {
     esac
     if is_protected "$named"; then
       refuse_without_checking
+      break
+    fi
+    if is_asked_about "$named"; then
+      ask_without_checking
       break
     fi
   done

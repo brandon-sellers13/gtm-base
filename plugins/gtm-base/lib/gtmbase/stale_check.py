@@ -239,6 +239,14 @@ FINDING_NOTHING_YET = (
 # Said when GTM Base has prepared a change and nobody has answered it yet. It
 # is said instead of any all-clear, because a base with one waiting has
 # something to do (finding G5).
+# Said when a prepared change is waiting on a document that is not in the base
+# any more. Nothing can ever be done with one of those, so the one thing to say
+# is what it is and how to be rid of it (finding P1).
+CHANGE_ABOUT_A_MISSING_DOCUMENT = (
+    "A change is waiting about a document that is not in your base any more, "
+    "so there is nothing left for it to change. Say: drop that change, and "
+    "GTM Base will put it aside."
+)
 FINDING_CHANGE_WAITING = (
     "%s has a change waiting for you to approve it, so there is something to "
     "do before anything here is settled. Ask for a review of your base to read "
@@ -492,31 +500,68 @@ def awaiting_local_approval(
     return approve_local.waiting(base_root, runner=runner)
 
 
-def _documents_with_a_change_waiting(base_root: str) -> List[str]:
-    """Every document a prepared change is waiting on, first draft or not.
+def _documents_with_a_change_waiting(base_root: str):
+    """Every document a prepared change is really waiting on, and the strays.
 
-    It reads the folder prepared changes wait in and nothing else, so a change
-    nobody can approve yet counts exactly as much as one they can: either way
-    there is something to do and nothing is settled (finding G5).
+    A change nobody can approve yet counts exactly as much as one they can:
+    either way there is something to do and nothing is settled (finding G5).
+    What does not count is anything else that happens to be in the folder,
+    which is finding P1 of the confirmation round: a file with a name GTM Base
+    never issues, and a well-formed change about a document that is not in the
+    base, both made every closing say a change was waiting for ever while the
+    review listed nothing to read. The second one happens honestly the moment
+    somebody renames or deletes a document a change is waiting on.
+
+    So the same reading the review itself does is done here, without the
+    question of who owns what: the file has to be named after an identifier
+    GTM Base issued, that name has to be the one written inside it, and every
+    document it would change has to be in the base. What comes back is the
+    documents that are really waiting, and separately the changes waiting on a
+    document that is gone, which somebody has to be told about because nothing
+    can ever be done with one.
     """
     found: List[str] = []
+    orphaned: List[str] = []
     folder = os.path.join(base_root, constants.PROPOSALS_PENDING_DIR)
     if not os.path.isdir(folder):
-        return found
+        return found, orphaned
     for name in sorted(os.listdir(folder)):
         if not name.endswith(".md"):
             continue
-        text = read_text(os.path.join(folder, name))
+        whole = os.path.join(folder, name)
+        if os.path.islink(whole) or not os.path.isfile(whole):
+            continue
+        staging_id = name[: -len(".md")]
+        try:
+            ids.check_staging_id(staging_id)
+        except (ValueError, TypeError):
+            continue
+        text = read_text(whole)
         if text is None:
             continue
         try:
             staging = formats.ProposalStaging.parse(text).validate()
         except (ValidationError, PathError):
             continue
-        for path in compose_proposal.edited_paths(staging):
+        if staging.staging_id != staging_id:
+            continue
+        targets = compose_proposal.edited_paths(staging)
+        if not targets:
+            continue
+        missing = [
+            path
+            for path in targets
+            if not os.path.isfile(
+                os.path.join(base_root, path.replace("/", os.sep))
+            )
+        ]
+        if missing:
+            orphaned.append(staging_id)
+            continue
+        for path in targets:
             if path not in found:
                 found.append(path)
-    return found
+    return found, orphaned
 
 
 def _list_awaiting_local_approval(result, base_root: str, git) -> None:
@@ -1039,7 +1084,11 @@ def run(
     # before any all-clear (finding G5). It is read here, where the folder is,
     # rather than worked out from the record, because a prepared change is a
     # file and the record does not know about it.
-    report.changes_waiting = _documents_with_a_change_waiting(base_root)
+    report.changes_waiting, orphaned = _documents_with_a_change_waiting(
+        base_root
+    )
+    if orphaned:
+        result.sentences.append(CHANGE_ABOUT_A_MISSING_DOCUMENT)
     entry_files = inputs.entry_files()
 
     if result.mode == "first-run":

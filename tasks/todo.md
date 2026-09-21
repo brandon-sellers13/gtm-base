@@ -1069,3 +1069,26 @@ alternative answers to one thing, because that is the flow rather than a copy
 of a command, and it takes one of each per pass. The smaller check that runs
 when the real one cannot has to refuse what the real one refuses and no more,
 because a Mac without the developer tools stays in that state.
+
+## Release A, confirmation round (2026-09-21)
+
+Both reviewers confirmed the round before: every earlier finding closed, every
+path working as the skills are written, and nothing blocking. Six small things
+were left, and each one has a failing test of its own built from the
+reviewers' scripts.
+
+- [x] P1. Only a file named after an identifier GTM Base issued, carrying that
+      same name inside it, and about documents that are all still in the base
+      counts as a change waiting. One waiting on a document that is gone is
+      said out loud, with the words to say to be rid of it.
+- [x] P2. A refusal wins over a question, so a link under the folder the
+      client keeps its plugins in, pointing into a base's own folders, is
+      refused.
+- [x] P3. A document with no headings in it says so, in the wording command
+      and on the hand-edit path alike.
+- [x] P4. The smaller check asks about the files that say which checks run.
+- [x] W1. The walk supplies a file only where a skill asks for one in words,
+      and a line naming the path a command printed fails unless that command
+      came before it. Two skills printed the hand-out after the use, and both
+      now print it first.
+- [x] W2. A documented command for a script the walk does not know stops it.
