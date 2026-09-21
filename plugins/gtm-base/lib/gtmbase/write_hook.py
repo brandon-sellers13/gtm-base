@@ -87,8 +87,17 @@ CODE_PLUGIN_CODE = "in-the-plugins-own-folder"
 PLUGIN_ROOT_ENV = "CLAUDE_PLUGIN_ROOT"
 CODE_CLIENT_SETTINGS = "in-the-settings-that-load-this-plugin"
 
-# The files the client reads to decide whether this plugin runs at all.
-CLIENT_SETTINGS_FILES = ("settings.json", "settings.local.json")
+# The files the client reads to decide whether this plugin runs at all. They
+# are the person's own settings and hold everything else they have set up, so
+# a write to one is asked about rather than refused (finding F2 of the third
+# look). The two registry files are on the list for the same reason: taking
+# this plugin out of either of them stops its checks running (finding M4).
+CLIENT_SETTINGS_FILES = (
+    "settings.json",
+    "settings.local.json",
+    os.path.join("plugins", "installed_plugins.json"),
+    os.path.join("plugins", "known_marketplaces.json"),
+)
 
 # How far up from a file this walks looking for a base. A base sits at the top
 # of its own folders, so a file more levels down than this is not in one.
@@ -98,6 +107,18 @@ MAX_FOLDERS_WALKED = 40
 # it never names the file, the folder, or which of the three rules caught it,
 # because a refusal that reads back the path is a refusal that can be used to
 # find out where things are.
+# What is said when a write is one to ask about rather than one to refuse.
+# The documentation for this hook, read on 2026-09-20 at
+# https://code.claude.com/docs/en/hooks, lists the three values it may take:
+# `permissionDecision`, "\"allow\", \"deny\", or \"ask\". Overrides the
+# permission system's own answer for this tool call", with
+# `permissionDecisionReason`, "Text shown to the user when denying or asking".
+ASK_ABOUT_SETTINGS = (
+    "This file is where your assistant is told which safety checks to run, so "
+    "a change here can switch GTM Base's own checks off. Read what it would "
+    "write before you say yes."
+)
+
 REFUSED = (
     "Some folders are GTM Base's own to keep, and this file is inside one of "
     "them, so nothing was written. Write what you meant somewhere else, or "
@@ -108,8 +129,9 @@ REFUSED = (
 # shell script holds the same words, and a test holds the two to each other.
 COULD_NOT_CHECK = (
     "GTM Base could not run its own safety check just now, and this file is "
-    "in a folder it keeps for itself, so nothing was written. Try again, and "
-    "if it keeps happening the plugin needs installing again."
+    "in a folder it keeps for itself, so nothing was written. Installing the "
+    "plugin again is what repairs its own files, and it is worth doing if "
+    "this keeps happening."
 )
 
 
@@ -351,23 +373,37 @@ def run(payload: Dict[str, Any]) -> Optional[Dict[str, Any]]:
     tool = payload.get("tool_name")
     if isinstance(tool, str) and tool not in TOOL_NAMES:
         return None
+    asking = False
     for named in named_files(payload):
         try:
             real_file = os.path.realpath(named)
         except Exception:
             real_file = named
-        if problem_with(named, real_file) is not None:
+        found = problem_with(named, real_file)
+        if found == CODE_CLIENT_SETTINGS:
+            asking = True
+            continue
+        if found is not None:
             return refusal()
-    return None
+    return question() if asking else None
 
 
 def refusal() -> Dict[str, Any]:
-    """The whole of what this hook prints, and nothing else is ever printed."""
+    """The whole of what this hook prints when a write is one to refuse."""
+    return _answer("deny", REFUSED)
+
+
+def question() -> Dict[str, Any]:
+    """The whole of what it prints when a write is one to ask about."""
+    return _answer("ask", ASK_ABOUT_SETTINGS)
+
+
+def _answer(say: str, sentence: str) -> Dict[str, Any]:
     return {
         "hookSpecificOutput": {
             "hookEventName": EVENT_NAME,
-            "permissionDecision": "deny",
-            "permissionDecisionReason": REFUSED[: constants.MAX_INJECTION_CHARS],
+            "permissionDecision": say,
+            "permissionDecisionReason": sentence[: constants.MAX_INJECTION_CHARS],
         }
     }
 

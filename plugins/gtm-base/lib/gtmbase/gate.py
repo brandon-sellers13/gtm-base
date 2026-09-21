@@ -55,6 +55,7 @@ import sys
 from typing import List, Optional, Sequence, Tuple
 
 from . import constants, machine, marker, paths, scan, state, trust_surface
+from .errors import GitError
 from .gitcmd import GitRunner, runner_or_default
 
 # --- What the gate can decide ------------------------------------------------
@@ -83,6 +84,7 @@ REASON_INTERNAL = "check-failed"
 REASON_BAD_PAYLOAD = "unreadable-request"
 REASON_MISSING_FILE = "body-file-unreadable"
 REASON_SEAT_FOLDER = "seat-folder"
+REASON_BASE_NAME = "changes-the-name-a-base-is-known-by"
 
 SENTENCES = {
     REASON_UNTOKENIZABLE: (
@@ -96,6 +98,10 @@ SENTENCES = {
     REASON_SEAT_FOLDER: (
         "GTM Base keeps its own records in a folder that commands are not "
         "allowed to touch."
+    ),
+    REASON_BASE_NAME: (
+        "That command changes the name GTM Base knows a base by, which is one "
+        "of the things it works out what to check from, so it was not run."
     ),
     REASON_DENIED_COMMAND: (
         "GTM Base stopped this because it changes the shared copy or your "
@@ -683,6 +689,16 @@ def _classify_git(
         return
     subcommand = tokens[index]
     rest = tokens[index + 1 :]
+    if subcommand == "config":
+        # The name GTM Base knows a base by is one of the three things it works
+        # out what to check from, so no command may set it, unset it, or take
+        # it away. Finding F3 of the third look, from both sides: taking it off
+        # a base was unremarked, and putting it on an ordinary repository made
+        # that repository answer for a base.
+        for token in rest:
+            if paths.BASE_ID_CONFIG_KEY in str(token).lower():
+                result.deny(REASON_BASE_NAME)
+        return
     if subcommand not in ("push", "send-pack"):
         return
     push = _parse_push(rest, result)
@@ -1120,12 +1136,30 @@ BASE_TREE_MARKERS = (
 )
 
 
+# What git answers with when it was stopped rather than finished, which is
+# not an answer to the question that was asked.
+_RAN_OUT_OF_TIME = 124
+_COULD_NOT_RUN = 127
+
+
+def _answered_nothing(found) -> bool:
+    """Whether a command was stopped or never ran rather than answering.
+
+    Finding L4 of the third look. The runner never raises, so "a question that
+    goes wrong answers yes" could not happen: every one of these was quietly
+    an answer of no, which is the answer that takes a base out of reach.
+    """
+    return getattr(found, "code", 0) in (_RAN_OUT_OF_TIME, _COULD_NOT_RUN)
+
+
 def _base_id_key(root: str, git: Optional[GitRunner]) -> bool:
     """Whether this folder carries the name GTM Base knows it by, in its own settings."""
     runner = runner_or_default(git)
     found = runner.run(
         ["config", "--local", "--get", paths.BASE_ID_CONFIG_KEY], cwd=root
     )
+    if _answered_nothing(found):
+        raise GitError("the question was not answered", code="no-answer")
     return bool(found.ok and found.out())
 
 
@@ -1151,16 +1185,35 @@ def _committed_like_a_base(root: str, git: Optional[GitRunner]) -> bool:
     The working folder is not read at all, which is the point of finding V3: a
     base stopped being a base when one file in the working folder was renamed,
     and nobody had to save that rename for it to work.
+
+    Every line of work is asked, not the one commit standing in front of the
+    person. Finding F3 of the third look: a copy of a base standing on a line
+    of its own, and a copy with one saved removal of the map, both answered no
+    while holding every earlier commit of the base and being about to send
+    them. What is asked for each of a base's fixed entries is whether any
+    commit anywhere in this folder's history ever held it, which no ordinary
+    repository can answer yes to for all three.
     """
     runner = runner_or_default(git)
-    found = runner.run(
-        ["ls-tree", "--name-only", "-z", "HEAD"] + list(BASE_TREE_MARKERS),
-        cwd=root,
-    )
-    if not found.ok:
-        return False
-    held = set(part for part in found.stdout.split("\0") if part)
-    return all(marker in held for marker in BASE_TREE_MARKERS)
+    for marker in BASE_TREE_MARKERS:
+        found = runner.run(
+            [
+                "log",
+                "--all",
+                "--max-count=1",
+                "--format=%H",
+                "--",
+                marker,
+            ],
+            cwd=root,
+        )
+        if _answered_nothing(found):
+            raise GitError("the question was not answered", code="no-answer")
+        if not found.ok:
+            return False
+        if not found.out():
+            return False
+    return True
 
 
 def _looks_like_a_base(folder: str, git: Optional[GitRunner] = None) -> bool:

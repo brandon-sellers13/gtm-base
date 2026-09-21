@@ -286,6 +286,9 @@ def build_parser():
     parser.add_argument("--company", help="the company the base is for")
     parser.add_argument("--content-folder", help="the folder holding their material")
     parser.add_argument("--folder", help="the folder to list or to fix the list of")
+    parser.add_argument(
+        "--folder-file", help="a file holding the folder to list or to fix"
+    )
     parser.add_argument("--session", help="the identifier of this session")
     parser.add_argument("--label", help="a short name for one piece of text")
     parser.add_argument(
@@ -334,7 +337,7 @@ def build_parser():
         "--only-folder",
         action="append",
         default=[],
-        help="only the files in this folder of the list, once per folder",
+        help="only the files in this numbered folder of the list, once each",
     )
     parser.add_argument("--answer", help="what the person said, in their own words")
     parser.add_argument(
@@ -378,15 +381,70 @@ ONLY_BY_NUMBER = (
     "Name the files by the number beside each one on the list, separated by "
     "commas, because a file name is not something to put in a command."
 )
+FOLDERS_BY_NUMBER = (
+    "Name the folders by the number beside each one on the list, because a "
+    "folder name is not something to put in a command."
+)
+NO_SUCH_FOLDER_NUMBER = (
+    "That is not one of the numbers beside the folders on the list, so "
+    "nothing was shown. Read the list out again and ask which of those."
+)
+
+
+def chosen_folders(options, out):
+    """Which folders of the list the person picked, by their numbers.
+
+    A folder name is whatever somebody called their folder, and quotation
+    marks are not a fix: a folder called "Brandon's Docs" breaks the command
+    that carries it. So the listing prints a number beside each folder and the
+    number is what comes back (finding F6 of the third look).
+    """
+    asked = [str(item).strip() for item in (options.only_folder or []) if str(item).strip()]
+    if not asked:
+        return [], True
+    if not all(item.isdigit() for item in asked):
+        out.write(FOLDERS_BY_NUMBER + "\n")
+        return None, False
+    shown = join_flow.folders_shown(options.run) if options.run else []
+    found = []
+    for item in asked:
+        number = int(item)
+        if number < 1 or number > len(shown):
+            out.write(NO_SUCH_FOLDER_NUMBER + "\n")
+            return None, False
+        found.append(shown[number - 1])
+    return found, True
+
+
+def the_folder(options, out):
+    """The folder this step works on, read out of a file when one is named."""
+    if options.folder_file:
+        return words_from(options.folder_file, options, out)
+    return need(options, "folder", out)
 
 
 def words_key(options, out):
-    """Which run or session a words file belongs to, or nothing at all."""
+    """Which run or base a words file belongs to, or nothing at all.
+
+    A setup run has a run identifier and nothing else, because there is no
+    base yet. Every step after that is run inside a base, and the base is what
+    a words file belongs to there: a session moves the moment a second window
+    opens, and an answer somebody had just typed stopped being readable
+    (finding L3 of the third look).
+    """
     key = options.run or options.session
-    if not key:
-        out.write(NEEDS_A_RUN_OR_SESSION + "\n")
-        return None
-    return key
+    if key:
+        return key
+    try:
+        resolution = paths.resolve_base(
+            options.base or os.getcwd(), machine.load_machine_state()
+        )
+        if resolution.base_id:
+            return resolution.base_id
+    except Exception:
+        pass
+    out.write(NEEDS_A_RUN_OR_SESSION + "\n")
+    return None
 
 
 def words_from(path, options, out):
@@ -503,7 +561,7 @@ def run_propose_location(options, out):
 
 
 def run_survey(options, out):
-    folder = need(options, "folder", out)
+    folder = the_folder(options, out)
     run_id = need(options, "run", out)
     if not folder or not run_id:
         return EXIT_ERROR
@@ -532,15 +590,18 @@ LIST_REFUSALS = {
 
 
 def run_list_sources(options, out):
-    folder = need(options, "folder", out)
+    folder = the_folder(options, out)
     run_id = need(options, "run", out)
     if not folder or not run_id:
         return EXIT_ERROR
+    only_folders, read = chosen_folders(options, out)
+    if not read:
+        return EXIT_REFUSED
     try:
         listing = join_flow.list_sources(
             folder,
             run_id,
-            only_folders=options.only_folder,
+            only_folders=only_folders,
             from_survey=options.from_survey,
             added=options.added,
             dropped=options.dropped,
@@ -561,10 +622,10 @@ def run_list_sources(options, out):
             }
             + "\n"
         )
-        for name in sorted(listing.by_folder):
+        for number, name in enumerate(sorted(listing.by_folder), start=1):
             out.write(
-                "folder=%s count=%d\n"
-                % (safe_value(name), listing.by_folder[name])
+                "folder=%s number=%d count=%d\n"
+                % (safe_value(name), number, listing.by_folder[name])
             )
     out.write("These are the files GTM Base would read.\n")
     # The number is what the skill names a file by later, because a file name
@@ -597,7 +658,7 @@ def run_list_sources(options, out):
 
 
 def run_freeze_sources(options, out):
-    folder = need(options, "folder", out)
+    folder = the_folder(options, out)
     session = need(options, "session", out)
     run_id = need(options, "run", out)
     if not folder or not session or not run_id:
@@ -696,7 +757,10 @@ def narrowing(options, out):
             out.write(ONLY_BY_NUMBER + "\n")
             return None, None, False
         numbers = [int(piece) for piece in pieces]
-    return numbers, list(options.only_folder or []) or None, True
+    folders, read = chosen_folders(options, out)
+    if not read:
+        return None, None, False
+    return numbers, folders or None, True
 
 
 def run_preview(options, out):
@@ -1061,7 +1125,7 @@ def named_base(options, out):
 
 
 def run_link(options, out):
-    folder = need(options, "folder", out)
+    folder = the_folder(options, out)
     if not folder:
         return EXIT_ERROR
     root, base_id = named_base(options, out)
@@ -1174,8 +1238,15 @@ def main(argv=None):
     # written into a folder name in one step and into a request in another, and
     # both of those need it to be a name and nothing else.
     if options.company_file:
+        # The run has to be on the command, because it is what says which
+        # setup the file belongs to. Finding H3 of the third look: without it
+        # this said the file was not one GTM Base handed out, which is not
+        # what was wrong and left nobody anywhere to go.
+        if not (options.run or options.session):
+            sys.stdout.write(NEEDS_A_RUN_OR_SESSION + "\n")
+            return EXIT_ERROR
         company = wordsfile.read_words(
-            options.company_file, options.run or options.session or ""
+            options.company_file, options.run or options.session
         )
         if company is None:
             sys.stdout.write(wordsfile.NOT_OURS + "\n")

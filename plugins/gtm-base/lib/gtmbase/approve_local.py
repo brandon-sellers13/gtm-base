@@ -57,7 +57,17 @@ from . import (
     state,
 )
 from .errors import GitError, GtmBaseError, PathError, ReviewError, ValidationError
-from .fsutil import atomic_write_json, atomic_write_text, ensure_dir, read_json, read_text, remove
+from .fsutil import (
+    atomic_write_bytes,
+    atomic_write_json,
+    atomic_write_text,
+    ensure_dir,
+    read_bytes,
+    read_json,
+    read_text,
+    read_text_exactly,
+    remove,
+)
 from .gitcmd import GitRunner, runner_or_default
 from .validate import find_marker, validate_owner
 
@@ -96,6 +106,11 @@ CODE_UNDONE = "unfinished-work-undone"
 # The words the prepared change would put in the file are still the first
 # draft GTM Base wrote, which is a note asking for the real replacement.
 CODE_STILL_A_PLACEHOLDER = "still-the-first-draft"
+# The prepared hand edit says one thing and the document says another, because
+# the person went on working on it after the change was prepared.
+CODE_PREPARED_FROM_OLDER = "prepared-from-an-older-version"
+# A copy of the document could not be taken, so nothing may be written.
+CODE_COULD_NOT_KEEP = "could-not-keep-a-copy"
 
 # The folder the assistant keeps its own settings in, which a prepared change
 # may never touch whatever else it names.
@@ -186,6 +201,15 @@ CONFLICT = (
 MOVED = (
     "This prepared change moved after it was shown to you, so nothing was "
     "applied. Read it again and answer again."
+)
+PREPARED_FROM_OLDER = (
+    "You have kept working on %s since this change was prepared from it, so "
+    "what the change holds is not what your document says now and nothing was "
+    "applied. Ask for it to be prepared again from what it says today."
+)
+COULD_NOT_KEEP = (
+    "GTM Base could not take a copy of %s to put back if anything went wrong, "
+    "so it did nothing at all rather than risk your own writing."
 )
 UNSAVED_EDITS = (
     "You have edits in your base you have not saved, so nothing was applied. "
@@ -359,9 +383,20 @@ def _who_is_approving(base_root: str, git: GitRunner) -> Optional[str]:
     return base_reader.repo_email(base_root, git)
 
 
-def owners_of(base_root: str, relative: str) -> List[str]:
-    """The addresses written on one context file as owning it."""
-    text = read_text(os.path.join(base_root, relative.replace("/", os.sep)))
+def owners_of(base_root: str, relative: str, git=None) -> List[str]:
+    """The addresses written on one context file as owning it.
+
+    The saved version answers, not the one in front of the person. Finding M5
+    of the third look: on the hand-edit path the working file is by definition
+    edited, and somebody who is not an owner made themselves one by rewriting
+    that line in the same edit they were asking to have approved. A file the
+    base has never saved has no saved version, and there the working one is
+    all there is.
+    """
+    runner = runner_or_default(git)
+    text = _head_text(base_root, relative, runner)
+    if text is None:
+        text = read_text(os.path.join(base_root, relative.replace("/", os.sep)))
     if text is None:
         return []
     try:
@@ -375,13 +410,15 @@ def owners_of(base_root: str, relative: str) -> List[str]:
         return []
 
 
-def _owner_problems(base_root: str, ordered: List[str], address: Optional[str]):
+def _owner_problems(
+    base_root: str, ordered: List[str], address: Optional[str], git=None
+):
     """Why the person answering may not approve this change, if they may not."""
     if not address:
         return [(CODE_NO_ADDRESS, NO_ADDRESS)]
     found = []
     for relative in ordered:
-        owners = owners_of(base_root, relative)
+        owners = owners_of(base_root, relative, git)
         if not owners:
             found.append(
                 (
@@ -560,7 +597,12 @@ def whole_difference(base_root: str, ordered: List[str], git: GitRunner) -> Dict
     found: Dict[str, str] = {}
     for relative in ordered:
         was = _head_text(base_root, relative, git) or ""
-        now = read_text(os.path.join(base_root, relative.replace("/", os.sep))) or ""
+        now = (
+            read_text_exactly(
+                os.path.join(base_root, relative.replace("/", os.sep))
+            )
+            or ""
+        )
         lines = list(
             difflib.unified_diff(
                 was.split("\n"), now.split("\n"), n=3, lineterm=""
@@ -800,7 +842,7 @@ def _read_and_check(base_root, base_id, staging_path, git, today):
             None,
         )
 
-    if getattr(staging, "first_draft", False) or any(
+    if compose_proposal.still_a_first_draft(staging, base_id) or any(
         stale_check.still_the_note(after)
         for _relative, _heading, _before, after in walk.steps
     ):
@@ -826,12 +868,35 @@ def _read_and_check(base_root, base_id, staging_path, git, today):
             )
 
     owner_problems = _owner_problems(
-        base_root, walk.ordered, _who_is_approving(base_root, git)
+        base_root, walk.ordered, _who_is_approving(base_root, git), git
     )
     if owner_problems:
         return _many(STATUS_REFUSED, staging.staging_id, owner_problems), None
 
     by_hand = _made_by_hand(staging)
+    if by_hand:
+        # Finding H2 of the third look. A change made by hand is the unsaved
+        # file, so the moment the file says something the change does not, the
+        # change is a record of an older afternoon. Applying it wrote that
+        # older wording over the newer one while showing the newer one as what
+        # would be written.
+        for relative in walk.ordered:
+            now = read_text(os.path.join(base_root, relative.replace("/", os.sep)))
+            # What is compared is what the two say, not how their lines end,
+            # because a document saved with the other line endings is the same
+            # document and the person has said nothing new in it.
+            if now is None or ids.content_hash(now) != ids.content_hash(
+                walk.texts[relative]
+            ):
+                return (
+                    _refused(
+                        STATUS_MOVED,
+                        CODE_PREPARED_FROM_OLDER,
+                        PREPARED_FROM_OLDER % names.document_name(relative),
+                        staging.staging_id,
+                    ),
+                    None,
+                )
     differences = (
         whole_difference(base_root, walk.ordered, git) if by_hand else None
     )
@@ -1080,15 +1145,22 @@ def _save_originals(base_id: str, base_root: str, ordered: List[str], git: GitRu
     staged_now = _staged_paths(base_root, git)
     saved: List[dict] = []
     for index, relative in enumerate(ordered):
-        text = read_text(os.path.join(base_root, relative.replace("/", os.sep)))
-        if text is None:
-            continue
-        name = "%d.txt" % index
-        atomic_write_text(os.path.join(folder, name), text, mode=0o600)
+        # Bytes, not text. Finding L1 of the third look: reading this as text
+        # translated line endings on the way in and answered nothing at all for
+        # a file that is not text, so a failed run put back a file that was not
+        # the one the person had, or did not put it back at all.
+        data = read_bytes(os.path.join(base_root, relative.replace("/", os.sep)))
+        if data is None:
+            raise ValidationError(
+                COULD_NOT_KEEP % names.document_name(relative),
+                code=CODE_COULD_NOT_KEEP,
+            )
+        name = "%d.bytes" % index
+        atomic_write_bytes(os.path.join(folder, name), data, mode=0o600)
         saved.append(
             {
                 "path": relative,
-                "hash": ids.content_hash(text),
+                "hash": ids.bytes_hash(data),
                 "copy": name,
                 "staged": relative in staged_now,
             }
@@ -1115,16 +1187,18 @@ def _put_their_own_back(base_root: str, base_id: str, kept: dict, git: GitRunner
     """
     relative = str(kept.get("path"))
     wanted = str(kept.get("hash") or "")
-    text = read_text(os.path.join(_originals_dir(base_id), str(kept.get("copy") or "")))
-    if text is None or ids.content_hash(text) != wanted:
+    data = read_bytes(
+        os.path.join(_originals_dir(base_id), str(kept.get("copy") or ""))
+    )
+    if data is None or ids.bytes_hash(data) != wanted:
         return False
     full = os.path.join(base_root, relative.replace("/", os.sep))
     try:
-        atomic_write_text(full, text, mode=0o644, inside=base_root)
+        atomic_write_bytes(full, data, mode=0o644, inside=base_root)
     except (OSError, GtmBaseError):
         return False
-    back = read_text(full)
-    if back is None or ids.content_hash(back) != wanted:
+    back = read_bytes(full)
+    if back is None or ids.bytes_hash(back) != wanted:
         return False
     if kept.get("staged"):
         git.run(["add", "--", relative], cwd=base_root)
@@ -1201,6 +1275,8 @@ def _checked_journal(base_id: str, base_root: str):
             ids.check_content_hash(str(item.get("hash") or ""))
         except (PathError, ValueError, TypeError):
             return None, "the note names a path or a value we never write"
+        if not name.endswith(".bytes") and not name.endswith(".txt"):
+            return None, "the note names a kept file we never wrote"
         if not name or name != os.path.basename(name) or name in (".", ".."):
             return None, "the note names a kept file we never wrote"
     return payload, None
@@ -1301,7 +1377,12 @@ def _undo_own_work(
         if current is None:
             continue
         mine = kept.get(relative)
-        if mine is not None and ids.content_hash(current) == str(mine.get("hash")):
+        exactly = read_bytes(full)
+        if (
+            mine is not None
+            and exactly is not None
+            and ids.bytes_hash(exactly) == str(mine.get("hash"))
+        ):
             # Already exactly what they had, so there is nothing to put back.
             continue
         ours = ids.content_hash(current) == str(item.get("hash"))
@@ -1710,7 +1791,7 @@ def waiting(
             for path in targets
         ):
             continue
-        if _owner_problems(base_root, targets, address):
+        if _owner_problems(base_root, targets, address, git):
             continue
         found.append((staging.staging_id, targets))
     return found

@@ -122,6 +122,49 @@ def read_text_exactly(path: str) -> Optional[str]:
         return None
 
 
+def read_bytes(path: str) -> Optional[bytes]:
+    """A file exactly as it sits on the disk, whatever it holds.
+
+    Neither reader above can answer for a file that is not text, and finding
+    L1 of the third look is about what that silence cost: the copy kept before
+    a local approval went through text, so a file with an unusual byte in it
+    was quietly not kept at all and a failed run lost the person's own edit.
+    """
+    if os.path.islink(path) or not os.path.isfile(path):
+        return None
+    try:
+        with open(path, "rb") as stream:
+            return stream.read()
+    except OSError:
+        return None
+
+
+def atomic_write_bytes(
+    path: str, data: bytes, mode: int = FILE_MODE, inside: Optional[str] = None
+) -> str:
+    """Put bytes down whole, the same way text is put down whole."""
+    folder = os.path.dirname(os.path.abspath(path))
+    if inside is not None:
+        _check_inside(folder, inside)
+    ensure_dir(folder)
+    handle, temporary = tempfile.mkstemp(dir=folder, prefix=".tmp-")
+    try:
+        with os.fdopen(handle, "wb") as stream:
+            stream.write(data)
+            stream.flush()
+            os.fsync(stream.fileno())
+        os.chmod(temporary, mode)
+        os.replace(temporary, path)
+        _sync_folder(folder)
+    except BaseException:
+        try:
+            os.unlink(temporary)
+        except OSError:
+            pass
+        raise
+    return path
+
+
 def read_json(path: str) -> Any:
     """Return the parsed JSON at path, or None when it is missing or malformed."""
     text = read_text(path)

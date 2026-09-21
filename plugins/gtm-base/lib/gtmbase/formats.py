@@ -1513,8 +1513,10 @@ class ProposalStaging(object):
         # asking for the real wording. Findings V8 and N4 of the 2026-09-20
         # verification round: this used to be worked out by reading the words,
         # and every small retyping of them got past that, so it is written
-        # down by whoever put the note there instead.
-        self.first_draft = bool(first_draft)
+        # down by whoever put the note there instead. Nothing at all is kept
+        # as nothing at all, because a file written before this setting
+        # existed says nothing rather than saying no (finding M1).
+        self.first_draft = first_draft if first_draft is None else bool(first_draft)
 
     def frontmatter(self) -> Dict[str, Any]:
         return {
@@ -1605,8 +1607,10 @@ class ProposalStaging(object):
             third_party=_as_bool(
                 fields.get("third_party", False), "third_party", "proposal"
             ),
-            first_draft=_as_bool(
-                fields.get("first_draft", False), "first_draft", "proposal"
+            first_draft=(
+                _as_bool(fields["first_draft"], "first_draft", "proposal")
+                if "first_draft" in fields
+                else None
             ),
             decision_block=decision_block,
             edits=edits,

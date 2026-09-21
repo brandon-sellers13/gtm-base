@@ -257,9 +257,12 @@ class TestOneHandEnteredDecisionWithNoConfirmation(support.PastTheFirstBackupRev
             result = run_check(base, gh=gh)
             prepared = staged_for(result)[0]
 
+            # Real wording, not the note over again. What this used to hand in
+            # opened with the same two words the note opens with, and since
+            # finding V8 that is refused wherever it is handed in.
             support.write_the_replacement(
                 prepared.path,
-                "Update needed: we stopped selling to companies under twenty.\n",
+                "We sell to companies of twenty people and up.\n",
             )
             opened = compose_proposal.propose(
                 prepared.path,
@@ -284,7 +287,7 @@ class TestOneHandEnteredDecisionWithNoConfirmation(support.PastTheFirstBackupRev
                 constants.PROPOSAL_BRANCH_PREFIX + prepared.staging_id,
                 ICP,
             )
-            self.assertIn("Update needed:", changed)
+            self.assertIn("companies of twenty people and up", changed)
             self.assertEqual("main", support.branch_of(base.root))
 
 
@@ -1499,15 +1502,16 @@ class BothLayouts(unittest.TestCase):
 # rerun unchanged across the rename, and a claim of "byte-identical" that
 # nothing checks is a claim somebody can quietly break. These two values are
 # only ever updated by somebody who means to change that scenario.
-# Moved once, on 2026-09-20, for the two rules the release A review added,
-# and for nothing else. The scenario itself is unchanged: what changed is
-# that the class now carries the stand-in for the first backup review,
-# because this release refuses every send from a base until that review
-# ships, and that the real wording is written into the prepared change
-# before it is raised, because the note GTM Base writes asking for it is
-# no longer approvable. Both are findings of that review, A1 and H1 for
-# the first and A6 for the second.
-SC1_CLASS_HASH = "19ceed637601fde004efc177aac03c03f1df90692b6d01d3d9c8da883484e5e2"
+# Moved twice, on 2026-09-20, for three rules the reviews of release A added
+# and for nothing else. The scenario itself is unchanged. What changed is
+# that the class carries the stand-in for the first backup review, because
+# this release refuses every send from a base until that review ships; that
+# the real wording is written into the prepared change before it is raised,
+# because the note GTM Base writes asking for it is no longer approvable;
+# and that the wording handed in no longer opens with the two words the
+# note opens with, because the third look made a retyped note refusable
+# wherever it is handed in. The findings are A1 and H1, A6, and V8 with F5.
+SC1_CLASS_HASH = "f9d15c416805e967973e78c0fc989ee7ee7e3a2e72cfbc7b32f411474b1dccdb"
 SC1_HELPER_HASH = "6b4841629621dc368463ebaf9a6754cb13f5aa30957a2ce8558114ee88b02132"
 
 

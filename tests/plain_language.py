@@ -617,6 +617,7 @@ def _change_body_findings(start, body):
 PYTHON_SENTENCES = (
     ("approve_local", "HAS_SHARED_COPY"),
     ("write_hook", "REFUSED"),
+    ("write_hook", "ASK_ABOUT_SETTINGS"),
     ("write_hook", "COULD_NOT_CHECK"),
     ("compose_proposal", "NOT_A_FIRST_DRAFT"),
     ("compose_proposal", "STILL_THE_NOTE"),
@@ -635,6 +636,8 @@ PYTHON_SENTENCES = (
     ("approve_local", "ASSISTANT_FOLDER"),
     ("approve_local", "CONFLICT"),
     ("approve_local", "MOVED"),
+    ("approve_local", "PREPARED_FROM_OLDER"),
+    ("approve_local", "COULD_NOT_KEEP"),
     ("approve_local", "UNSAVED_EDITS"),
     ("approve_local", "NOT_ON_MAIN"),
     ("approve_local", "COULD_NOT_SAVE"),

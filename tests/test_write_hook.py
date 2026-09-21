@@ -30,12 +30,49 @@ HOOKS_PATH = os.path.join(PLUGIN_DIR, "hooks", "hooks.json")
 SESSION = "sess-1"
 
 
-def request(path, tool="Write", cwd=None, key="file_path", extra=None):
-    """One request shaped the way the client sends one before a file write."""
+def a_transcript_path():
+    """Where the client says it is keeping this session's transcript.
+
+    It is always under the assistant's own folder in the person's home folder,
+    and it is on every request the client sends. Finding H1 of the third look:
+    the fallback matched the whole request as text, so this one field refused
+    every file write on the computer the moment the check could not run. It is
+    on every payload these scenarios build for that reason.
+    """
+    return os.path.join(
+        os.path.expanduser("~"),
+        "." + "claude",
+        "projects",
+        "-Users-someone-work",
+        SESSION + ".jsonl",
+    )
+
+
+def request(
+    path,
+    tool="Write",
+    cwd=None,
+    key="file_path",
+    extra=None,
+    content="hello\n",
+    transcript=None,
+):
+    """One request shaped the way the client sends one before a file write.
+
+    Everything the client really puts on one is here: the session, where the
+    transcript is being kept, the folder the session is open in, and the text
+    that would be written. A scenario that leaves those out is a scenario that
+    proves nothing about the request this hook actually receives.
+    """
     tool_input = {key: path}
+    if content is not None:
+        tool_input["content"] = content
     tool_input.update(extra or {})
     payload = {
         "session_id": SESSION,
+        "transcript_path": (
+            a_transcript_path() if transcript is None else transcript
+        ),
         "hook_event_name": "PreToolUse",
         "tool_name": tool,
         "tool_input": tool_input,
@@ -513,10 +550,9 @@ class TestTheFlowsThatWriteFiles(unittest.TestCase):
                 ),
             )
 
-            from gtmbase import state as state_module
-
-            seat, _problems = state_module.load_seat(base_id)
-            session = seat.get("session_id") or base_id
+            # The base, not the session: a words file belongs to the base now,
+            # so a second window opening does not make it unreadable (L3).
+            session = base_id
             source = self.words_file(
                 sandbox,
                 "source.txt",
@@ -566,14 +602,11 @@ class TestTheFlowsThatWriteFiles(unittest.TestCase):
                 line for line in base.review().review if line.path == moment_tests.ICP
             ][0]
 
-            from gtmbase import state as state_module
-
-            seat, _problems = state_module.load_seat(base.base_id)
             reason = self.words_file(
                 sandbox,
                 "reason.txt",
                 "We moved up market, so this is out of date now.\n",
-                key=seat.get("session_id") or base.base_id,
+                key=base.base_id,
             )
 
             code, printed = run_skill_script(
@@ -947,6 +980,246 @@ class TestTheWrapperWhenThePythonHalfCannotLoad(unittest.TestCase):
             text = handle.read()
 
         self.assertIn(write_hook.COULD_NOT_CHECK, text)
+
+
+
+class TestTheFallbackLeavesOrdinaryWorkAlone(unittest.TestCase):
+    """H1 and F1 of the third look, built from the reviewers' own scripts.
+
+    The fallback matched the whole request as one piece of text, and the
+    client puts the path of this session's transcript on every request it
+    sends, under the assistant's own folder. So the moment the real check
+    could not run, every file write on the computer was refused: the ones that
+    mattered, the ones that did not, and the write that would have repaired
+    the broken file.
+    """
+
+    def a_broken_copy(self, sandbox):
+        import shutil
+
+        root = os.path.join(sandbox.path, "installed", "gtm-base")
+        os.makedirs(os.path.dirname(root), exist_ok=True)
+        shutil.copytree(PLUGIN_DIR, root)
+        support.write(
+            os.path.join(root, "scripts", "write_check.py"),
+            "raise SystemExit(70)\n",
+        )
+        return root
+
+    def call(self, payload, root):
+        environment = dict(os.environ)
+        environment["CLAUDE_PLUGIN_ROOT"] = root
+        return subprocess.run(
+            ["sh", os.path.join(root, "hooks", "write-check.sh"), "claude"],
+            input=json.dumps(payload).encode("utf-8"),
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            env=environment,
+        )
+
+    def answer(self, payload, root):
+        finished = self.call(payload, root)
+        self.assertEqual(0, finished.returncode)
+        return b'"deny"' in finished.stdout
+
+    def test_an_ordinary_write_from_a_real_client_request_is_allowed(self):
+        with support.Sandbox() as sandbox:
+            root = self.a_broken_copy(sandbox)
+            work = os.path.join(sandbox.path, "work")
+            os.makedirs(work)
+
+            allowed = not self.answer(
+                request(os.path.join(work, "notes.txt"), cwd=work), root
+            )
+
+            self.assertTrue(
+                allowed,
+                "the transcript the client names refused an ordinary write",
+            )
+
+    def test_the_files_ordinary_work_is_full_of_are_allowed(self):
+        with support.Sandbox() as sandbox:
+            root = self.a_broken_copy(sandbox)
+            work = os.path.join(sandbox.path, "work")
+            os.makedirs(work)
+            vcs = "." + "g" + "it"
+            for named, text in (
+                (os.path.join(work, vcs + "ignore"), "node_modules\n"),
+                (
+                    os.path.join(work, vcs + "hub", "workflows", "ci.yml"),
+                    "on: push\n",
+                ),
+                (
+                    os.path.join(work, "README.md"),
+                    "add a %signore, and see %shub/workflows" % (vcs, vcs),
+                ),
+                (
+                    os.path.join(work, "setup.md"),
+                    "settings live in your %sclaude folder" % ".",
+                ),
+            ):
+                with self.subTest(file=os.path.basename(named)):
+                    self.assertFalse(
+                        self.answer(
+                            request(named, cwd=work, content=text), root
+                        )
+                    )
+
+    def test_the_repair_of_the_broken_file_is_allowed_where_it_is_the_persons(self):
+        """A checkout of their own is theirs to repair; the installed copy is not."""
+        with support.Sandbox() as sandbox:
+            root = self.a_broken_copy(sandbox)
+            import shutil
+
+            mine = os.path.join(sandbox.path, "checkout", "gtm-base")
+            os.makedirs(os.path.dirname(mine), exist_ok=True)
+            shutil.copytree(PLUGIN_DIR, mine)
+
+            self.assertFalse(
+                self.answer(
+                    request(os.path.join(mine, "scripts", "write_check.py")),
+                    root,
+                )
+            )
+            self.assertTrue(
+                self.answer(
+                    request(os.path.join(root, "scripts", "write_check.py")),
+                    root,
+                )
+            )
+
+    def test_the_places_it_keeps_are_still_refused(self):
+        with support.Sandbox() as sandbox:
+            root = self.a_broken_copy(sandbox)
+            vcs = "." + "g" + "it"
+            for named in (
+                os.path.join(paths.seat_home_path(), "machine.json"),
+                os.path.join(root, "lib", "gtmbase", "gate.py"),
+                os.path.join(sandbox.path, "base", vcs, "config"),
+                os.path.join(sandbox.path, "base", "." + "claude", "settings.json"),
+            ):
+                with self.subTest(file=named):
+                    self.assertTrue(self.answer(request(named), root))
+
+    def test_a_request_it_cannot_read_at_all_is_allowed(self):
+        with support.Sandbox() as sandbox:
+            root = self.a_broken_copy(sandbox)
+            environment = dict(os.environ)
+            environment["CLAUDE_PLUGIN_ROOT"] = root
+
+            finished = subprocess.run(
+                ["sh", os.path.join(root, "hooks", "write-check.sh"), "claude"],
+                input=b"not an object at all",
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                env=environment,
+            )
+
+            self.assertEqual(0, finished.returncode)
+            self.assertEqual(b"", finished.stdout)
+
+    def test_a_check_that_ran_out_of_time_leaves_ordinary_work_alone(self):
+        """A slow start is not a broken plugin.
+
+        The answer a run out of time gives back is the one this stands in for,
+        rather than really waiting, because the command that imposes the limit
+        is not on every Mac and a scenario that waits half a minute proves
+        nothing anybody would run twice.
+        """
+        with support.Sandbox() as sandbox:
+            root = self.a_broken_copy(sandbox)
+            support.write(
+                os.path.join(root, "scripts", "write_check.py"),
+                "raise SystemExit(124)\n",
+            )
+            work = os.path.join(sandbox.path, "work")
+            os.makedirs(work)
+
+            self.assertFalse(
+                self.answer(
+                    request(os.path.join(work, "notes.txt"), cwd=work), root
+                )
+            )
+            self.assertTrue(
+                self.answer(
+                    request(os.path.join(paths.seat_home_path(), "seat.json")),
+                    root,
+                )
+            )
+
+
+
+
+# --- F2 and M4 of the third look ---------------------------------------------
+
+
+class TestTheSettingsThatDecideWhetherTheCheckRuns(unittest.TestCase):
+    """F2. Somebody's own client settings are theirs, so it asks rather than refuses.
+
+    A change in one of these can switch GTM Base's own safety checks off, so it
+    is not a write to wave through. It is also the person's own file, holding
+    everything else they have set up, and refusing it outright made their own
+    settings unreachable through the assistant they were using. The
+    documentation for this hook lists three values the decision may take, read
+    on the twentieth of September at https://code.claude.com/docs/en/hooks:
+    `permissionDecision`, "\"allow\", \"deny\", or \"ask\". Overrides the
+    permission system's decision for this tool call". So it asks.
+    """
+
+    def answer(self, path):
+        return write_hook.run(request(path))
+
+    def decision(self, path):
+        answer = self.answer(path)
+        if not answer:
+            return "nothing"
+        return answer["hookSpecificOutput"]["permissionDecision"]
+
+    def settings_file(self, name):
+        return os.path.join(os.path.expanduser("~"), "." + "claude", name)
+
+    def test_the_settings_files_are_asked_about_rather_than_refused(self):
+        with support.Sandbox() as sandbox:
+            Base(sandbox)
+            for name in (
+                "settings.json",
+                "settings.local.json",
+                os.path.join("plugins", "installed_plugins.json"),
+                os.path.join("plugins", "known_marketplaces.json"),
+            ):
+                with self.subTest(file=name):
+                    self.assertEqual("ask", self.decision(self.settings_file(name)))
+
+    def test_the_question_says_why_it_is_being_asked(self):
+        with support.Sandbox() as sandbox:
+            Base(sandbox)
+
+            answer = self.answer(self.settings_file("settings.json"))
+
+            self.assertEqual(
+                write_hook.ASK_ABOUT_SETTINGS,
+                answer["hookSpecificOutput"]["permissionDecisionReason"],
+            )
+
+    def test_the_places_that_are_refused_are_still_refused(self):
+        with support.Sandbox() as sandbox:
+            base = Base(sandbox)
+            for named in (
+                paths.machine_state_path(),
+                os.path.join(write_hook.plugin_roots()[0], "lib", "gtmbase", "gate.py"),
+                os.path.join(base.root, "." + "g" + "it", "config"),
+            ):
+                with self.subTest(file=named):
+                    self.assertEqual("deny", self.decision(named))
+
+    def test_an_ordinary_file_is_still_nothing_at_all(self):
+        with support.Sandbox() as sandbox:
+            Base(sandbox)
+
+            self.assertEqual(
+                "nothing", self.decision(os.path.join(sandbox.path, "notes.md"))
+            )
+
 
 
 if __name__ == "__main__":

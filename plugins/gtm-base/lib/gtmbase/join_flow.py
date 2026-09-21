@@ -359,6 +359,7 @@ def new_run(today: Optional[datetime.date] = None) -> str:
     """
     day = today or datetime.date.today()
     sweep_old_runs(day)
+    sweep_drafts_without_a_run()
     run_id = ids.run_id(day)
     scratch_dir(run_id)
     return run_id
@@ -736,6 +737,10 @@ def list_sources(
                 "from_survey": bool(from_survey),
                 "added": list(adjustments["added"]),
                 "dropped": list(adjustments["dropped"]),
+                # The folders the counts named, in the order they were printed,
+                # so the skill can name one by its number afterwards rather
+                # than by a name a folder's author chose (finding F6).
+                "folder_names": sorted(whole.by_folder),
                 "paths": sorted(
                     os.path.realpath(entry.path) for entry in listing.readable
                 ),
@@ -743,6 +748,17 @@ def list_sources(
             inside=paths.seat_home(),
         )
     return listing
+
+
+def folders_shown(run_id: str) -> List[str]:
+    """The folders the last listing counted, in the order it printed them."""
+    payload = read_json(os.path.join(scratch_dir(run_id), LISTING_FILE))
+    if not isinstance(payload, dict):
+        return []
+    held = payload.get("folder_names")
+    if not isinstance(held, list):
+        return []
+    return [str(item) for item in held if isinstance(item, str) and item]
 
 
 def load_listing(run_id: str):
@@ -1933,6 +1949,9 @@ def close_run(
         recorded = False
 
     clear_scratch(run_id)
+    # And anything an earlier run left behind that nothing else will ever take
+    # away, because a run that stopped part way is never closed (finding L2).
+    sweep_drafts_without_a_run()
     return CloseResult(
         finding,
         closing_message(

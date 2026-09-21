@@ -2248,7 +2248,7 @@ class TestNarrowingOneDraftToWhatMatters(unittest.TestCase):
                     "--run",
                     setup.run,
                     "--only-folder",
-                    "segments",
+                    "2",
                 ],
                 env=dict(os.environ),
                 stdout=subprocess.PIPE,
@@ -2365,7 +2365,10 @@ class TestALargeFolderIsNarrowedBeforeTheYes(unittest.TestCase):
                 constants.CONSENT_NARROW_SENTENCE % {"files": 45, "folders": 5},
                 printed,
             )
-            self.assertIn("folder=part-0 count=9", printed)
+            # The number beside each folder is what the skill names it by
+            # since finding F6, because a folder name is whatever somebody
+            # called their folder.
+            self.assertIn("folder=part-0 number=1 count=9", printed)
             self.assertIn("note=narrow-first", printed)
 
     def test_the_script_refuses_a_yes_over_a_list_nobody_could_read(self):
@@ -2396,10 +2399,26 @@ class TestALargeFolderIsNarrowedBeforeTheYes(unittest.TestCase):
             content = self.sprawl(sandbox)
             run = join_flow.new_run(TODAY)
 
+            # The list is shown first, which is what the skill says to do and
+            # what puts a number beside each folder. Naming one by its number
+            # is finding F6: a folder name is whatever somebody called their
+            # folder, so it is not something to put in a command.
+            shown = subprocess.run(
+                [sys.executable, SHIM, "list-sources", "--folder", content,
+                 "--run", run],
+                env=dict(os.environ),
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+            )
+            self.assertEqual(0, shown.returncode, shown.stderr)
+            self.assertIn(
+                "folder=part-1 number=2", shown.stdout.decode("utf-8")
+            )
+
             listed = subprocess.run(
                 [sys.executable, SHIM, "list-sources", "--folder", content,
-                 "--run", run, "--only-folder", "part-1",
-                 "--only-folder", "part-3"],
+                 "--run", run, "--only-folder", "2",
+                 "--only-folder", "4"],
                 env=dict(os.environ),
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,

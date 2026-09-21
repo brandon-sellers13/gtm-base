@@ -287,15 +287,38 @@ def write_the_replacement(staging_path, text):
     from gtmbase import compose_proposal
     from gtmbase.fsutil import atomic_write_text
 
+    from gtmbase import machine, paths, stale_check, state
+
+    # A prepared change waits at <base>/work/proposals/pending/<name>.md, so
+    # the base is four folders up from it.
+    root = staging_path
+    for _step in range(4):
+        root = os.path.dirname(root)
+
     staging = compose_proposal.load_staging(staging_path)
     was = [edit.text for edit in staging.edits]
     for edit in staging.edits:
         edit.text = text
-    # The marker saying these words are still GTM Base's own first draft comes
-    # off here too, because in a real run the command that writes the wording
-    # is what takes it off (findings V8 and N4, 2026-09-20).
+        # A change the check on a base wrote adds a part of its own when the
+        # change named no part, and the claim it corrects would still be
+        # standing afterwards, so the real command makes the caller name the
+        # part and this does the same (finding N4, and M1 of the third look).
+        if edit.op == "add" and edit.heading == stale_check.FALLBACK_HEADING:
+            parts = [
+                heading
+                for _path, heading in compose_proposal.parts_of(root, staging)
+            ]
+            if parts:
+                edit.heading = parts[0]
+                edit.op = "replace"
     staging.first_draft = False
     atomic_write_text(staging_path, staging.validate().render(), mode=0o600)
+    # And this seat's own record of which prepared changes are still notes,
+    # which is what the real command clears and what one edit of the file
+    # cannot (finding M1 of the third look).
+    resolution = paths.resolve_base(root, machine.load_machine_state())
+    if resolution.base_id:
+        state.clear_first_draft(resolution.base_id, staging.staging_id)
     return was[0] if was else ""
 
 

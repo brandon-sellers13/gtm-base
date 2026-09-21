@@ -141,7 +141,16 @@ class TestSkippingWorksOnALongerWindow(unittest.TestCase):
                 kept["ledger_behind_dismissed_until"], furthest.isoformat()
             )
 
-    def test_a_day_written_straight_in_is_brought_back_to_the_cap(self):
+    def test_a_day_written_straight_in_is_thrown_away(self):
+        """Changed for finding M3 of the third look.
+
+        This used to say such a day was brought back to the cap. Bringing it
+        back on every read is bringing it back to today plus the cap on every
+        read, so a day nobody may ask for rolled forward for ever and the
+        reminder never returned. A day GTM Base wrote is still brought back
+        when it is written, which is what keeps a longer confirmation window
+        working, and that is covered above.
+        """
         with support.Sandbox() as sandbox:
             _root, base_id = a_base(sandbox)
             from gtmbase.fsutil import atomic_write_json
@@ -154,12 +163,7 @@ class TestSkippingWorksOnALongerWindow(unittest.TestCase):
 
             kept, problems = state.load_dismissals(base_id)
 
-            furthest = datetime.date.today() + datetime.timedelta(
-                days=state.SILENCE_DAYS
-            )
-            self.assertEqual(
-                furthest.isoformat(), kept["ledger_behind_dismissed_until"]
-            )
+            self.assertIsNone(kept["ledger_behind_dismissed_until"])
             self.assertIn("bad-value", problems)
 
 

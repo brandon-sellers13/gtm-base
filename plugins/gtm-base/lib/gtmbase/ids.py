@@ -227,6 +227,13 @@ def exact_hash(text: str) -> str:
     return _sha256_hex(text)
 
 
+def bytes_hash(data: bytes) -> str:
+    """The hash of a file exactly as it sits on the disk, byte for byte."""
+    if data is None:
+        raise ValueError("data is required")
+    return hashlib.sha256(data).hexdigest()
+
+
 def path_hash(path: str) -> str:
     """The hash of a path, recorded when the path itself must not be stored."""
     return _sha256_hex(str(path))

@@ -951,6 +951,53 @@ def is_suppressed(base_id: str, path: str, today: datetime.date) -> bool:
 # --- Dismissals --------------------------------------------------------------
 
 
+FIRST_DRAFTS_FILE = "first-drafts.json"
+
+
+def _first_drafts_payload(base_id: str) -> dict:
+    payload = read_json(_path(base_id, FIRST_DRAFTS_FILE))
+    return payload if isinstance(payload, dict) else {}
+
+
+def first_drafts(base_id: str) -> List[str]:
+    """Every prepared change GTM Base wrote a first draft into, by name.
+
+    It is kept here rather than only in the prepared change itself, because
+    the prepared change is an ordinary file that any file tool may write and
+    this folder is one no file tool may write. Finding M1 of the third look:
+    one edit taking the marker line out of the file cleared it completely.
+    """
+    held = _first_drafts_payload(base_id).get("staging_ids")
+    if not isinstance(held, list):
+        return []
+    return [item for item in held if isinstance(item, str) and item]
+
+
+def note_first_draft(base_id: str, staging_id: str) -> List[str]:
+    """Write down that this prepared change is still GTM Base's own note."""
+    held = first_drafts(base_id)
+    if staging_id not in held:
+        held.append(staging_id)
+        atomic_write_json(
+            _path(base_id, FIRST_DRAFTS_FILE),
+            {"schema": 1, "staging_ids": held},
+        )
+    return held
+
+
+def clear_first_draft(base_id: str, staging_id: str) -> List[str]:
+    """Take one prepared change off that list, once its wording is written."""
+    held = [item for item in first_drafts(base_id) if item != staging_id]
+    atomic_write_json(
+        _path(base_id, FIRST_DRAFTS_FILE), {"schema": 1, "staging_ids": held}
+    )
+    return held
+
+
+def is_a_first_draft(base_id: str, staging_id: str) -> bool:
+    return bool(staging_id) and staging_id in first_drafts(base_id)
+
+
 def load_dismissals(base_id: str) -> Tuple[dict, List[str]]:
     payload = read_json(_path(base_id, DISMISSALS_FILE))
     empty = {"inbox_ids": [], "ledger_behind_dismissed_until": None}
@@ -980,14 +1027,14 @@ def load_dismissals(base_id: str) -> Tuple[dict, List[str]]:
         result["ledger_behind_dismissed_until"] = None
         problems.append("bad-value")
     elif until is not None and until > _day_of(furthest_quiet()):
-        # A day further out than the longest quiet anybody may ask for is
-        # brought back to that day. The 2026-09-20 review wrote a day in the
-        # year nine thousand here and the reminder never came back, and
-        # throwing the day away instead broke skipping outright on a base
-        # whose confirmation window is longer than the cap, because the person
-        # was told a day and the record went straight in the bin (findings A1
-        # and N5). Clamping keeps both promises.
-        result["ledger_behind_dismissed_until"] = _day_of(furthest_quiet())
+        # A day further out than the longest quiet anybody may ask for is not
+        # honoured at all. Finding M3 of the third look: bringing it back to
+        # the cap here instead meant bringing it back to today plus the cap on
+        # every single read, so a day in the year nine thousand rolled forward
+        # for ever and the reminder never came back. The clamp belongs where
+        # the day is written, which is where it still is, and that is what
+        # keeps a base with a longer confirmation window working.
+        result["ledger_behind_dismissed_until"] = None
         problems.append("bad-value")
     return result, problems
 

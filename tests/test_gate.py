@@ -1300,5 +1300,125 @@ class TestFirstBackupConsentIsCheckedWhereTheSendIs(unittest.TestCase):
             self.assertIsNone(check_now("git push origin main", other))
 
 
+
+# --- F3, M2 and L4 of the third look -----------------------------------------
+
+
+class TestIdentityAcrossTheWholeSavedHistory(unittest.TestCase):
+    """F3 and M2. Only the one commit standing in front of you was asked.
+
+    A copy of a base standing on a line of work of its own, or one with a
+    single saved removal of the map, answered no to every question about what
+    it was, and a send of the main line went unread with every earlier commit
+    of the base in it.
+    """
+
+    def a_copy_of_a_base(self, box):
+        """A copy of a base, with something in it that must not be sent.
+
+        The line being added is put in the copy rather than in the base, so
+        the shared copy has never seen it and a send from here really would
+        carry it off the computer.
+        """
+        root, _base_id = box.base()
+        other = os.path.join(box.path, "copy")
+        git(["clone", "-q", os.path.join(box.path, "base-origin.git"), other],
+            cwd=box.path)
+        git(["config", "--local", "user.email", "owner@example.com"], cwd=other)
+        git(["config", "--local", "user.name", "Test Owner"], cwd=other)
+        commit(other, "context/metrics/notes.md", ["mail jane@acme.com"])
+        return root, other
+
+    def test_a_copy_standing_on_a_line_of_its_own_is_still_a_base(self):
+        with Sandbox() as box:
+            _root, other = self.a_copy_of_a_base(box)
+            git(["checkout", "-q", "--orphan", "side"], cwd=other)
+            git(["rm", "-rqf", "."], cwd=other)
+            write(os.path.join(other, "x.txt"), "x\n")
+            git(["add", "-A"], cwd=other)
+            git(["commit", "-q", "-m", "side"], cwd=other)
+
+            self.assertTrue(gate._looks_like_a_base(other))
+            self.assertIn(
+                "an email address",
+                check("git push origin main", other) or "",
+            )
+
+    def test_a_copy_standing_at_an_earlier_point_is_still_a_base(self):
+        with Sandbox() as box:
+            _root, other = self.a_copy_of_a_base(box)
+            git(["checkout", "-q", "--detach", "HEAD~1"], cwd=other)
+
+            self.assertTrue(gate._looks_like_a_base(other))
+
+    def test_a_copy_with_the_map_taken_out_and_saved_is_still_a_base(self):
+        with Sandbox() as box:
+            _root, other = self.a_copy_of_a_base(box)
+            git(["rm", "-r", "-q", "context/map.md"], cwd=other)
+            git(["commit", "-q", "-m", "tidy"], cwd=other)
+
+            self.assertTrue(gate._looks_like_a_base(other))
+            self.assertIn(
+                "an email address",
+                check("git push origin main", other) or "",
+            )
+
+    def test_an_ordinary_repository_is_still_not_a_base(self):
+        with Sandbox() as box:
+            other = plain_repository(box)
+
+            self.assertFalse(gate._looks_like_a_base(other))
+            self.assertIsNone(check_now("git push origin main", other))
+
+    def test_a_question_that_times_out_answers_yes(self):
+        """L4. Nothing raised, so nothing was ever answered yes by accident."""
+        with Sandbox() as box:
+            root, _base_id = box.base()
+            slow = support.SlowRunner(seconds=0.0)
+
+            with mock.patch.object(
+                gate.paths, "git_root", side_effect=lambda *a, **k: root
+            ):
+                with mock.patch.object(
+                    gate, "_base_id_key", side_effect=OSError("no binary")
+                ):
+                    self.assertTrue(gate._looks_like_a_base(root, slow))
+
+    def test_a_runner_that_only_ever_fails_leaves_a_joined_base_in_reach(self):
+        with Sandbox() as box:
+            root, _base_id = box.base()
+
+            self.assertTrue(gate._looks_like_a_base(root, FakeGitRunner()))
+
+
+class TestTheNameABaseIsKnownByCannotBeChanged(unittest.TestCase):
+    """F3. Taking the name out of the folder's own settings went unremarked."""
+
+    def test_unsetting_it_is_refused(self):
+        with Sandbox() as box:
+            root, _base_id = box.base()
+
+            reason = check_now("git config --local --unset gtmbase.id", root)
+
+            self.assertTrue(reason)
+
+    def test_setting_it_is_refused_anywhere(self):
+        with Sandbox() as box:
+            other = plain_repository(box)
+
+            reason = check_now("git config --local gtmbase.id anything", other)
+
+            self.assertTrue(reason)
+
+    def test_an_ordinary_setting_is_left_alone(self):
+        with Sandbox() as box:
+            other = plain_repository(box)
+
+            self.assertIsNone(
+                check_now("git config --local user.name Dana", other)
+            )
+
+
+
 if __name__ == "__main__":
     unittest.main()

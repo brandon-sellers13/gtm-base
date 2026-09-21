@@ -103,12 +103,15 @@ command. Ask this run for one, put the name in it, and use it:
 
 ```
 python3 scripts/join.py words-file --run <run identifier> --for company
-python3 scripts/join.py propose-location --company-file <the path it printed>
+python3 scripts/join.py propose-location --run <run identifier> --company-file <the path it printed>
 ```
 
 The first command prints `words=<path>`. Write the company name into that file
-with your file-writing tool, exactly as they said it, and pass that path. The
-file is read once and taken away. Never put their name in the command itself.
+with your file-writing tool, exactly as they said it, and pass that path back
+along with the same run. Both commands need the run: that is what says which
+setup this file belongs to, and without it the file is not one GTM Base can
+read. The file is read once and then taken away, so ask for a fresh one for
+each step that needs the name. Never put their name in the command itself.
 
 Add `--content-folder <path>` when they named a folder that holds their
 material. That folder is not where the base goes. It is the folder the base will
@@ -150,7 +153,7 @@ marketing material sits in, and that it will look at nothing but file names and
 first headings while it does. Then run:
 
 ```
-python3 scripts/join.py survey --folder <path> --run <run identifier>
+python3 scripts/join.py survey --folder-file <the path it printed> --run <run identifier>
 ```
 
 It prints one sentence and then one `place=<folder> score=<number>` line for
@@ -168,7 +171,7 @@ Wait for their answer. On a plain yes, and on any answer that adds or drops
 folders, run the list for the places they settled on:
 
 ```
-python3 scripts/join.py list-sources --folder <path> --run <run identifier> --from-survey
+python3 scripts/join.py list-sources --folder-file <a fresh folder file> --run <run identifier> --from-survey
 ```
 
 Add one `--add <folder>` for each folder they named to add and one
@@ -206,12 +209,13 @@ When they name the folders, run the same command again with one
 `--only-folder <name>` for each folder they named:
 
 ```
-python3 scripts/join.py list-sources --folder '<path>' --run <run identifier> --only-folder '<name>' --only-folder '<name>'
+python3 scripts/join.py list-sources --folder-file <a fresh folder file> --run <run identifier> --only-folder <number> --only-folder <number>
 ```
 
-Put single quotation marks round each folder name, as above. A folder name is
-whatever somebody called their folder, and single quotation marks are what
-stops a name being read as part of the command.
+Name the folders by the number the listing printed beside each one, as above.
+A folder name is whatever somebody called their folder, and quotation marks
+are not enough: a folder called Brandon's Docs breaks the command that carries
+its name. A number that is not on the list is refused and nothing is shown.
 
 Show them that shorter list, and only then ask for the yes. A name that is not
 one of the folders the counts named comes back as `codes=no-such-folder` and
@@ -245,7 +249,7 @@ told about it before it happens, because nothing is lost by it.
 On a plain yes, run:
 
 ```
-python3 scripts/join.py freeze-sources --folder <path> --session <session id> --run <run identifier>
+python3 scripts/join.py freeze-sources --folder-file <a fresh folder file> --session <session id> --run <run identifier>
 ```
 
 This takes their yes against the list they were actually shown. It looks at the
@@ -567,7 +571,7 @@ one command. None of them needs a base to be open in the session, which matters,
 because the folder somebody wants to link is their own folder and is not a base.
 
 Say "link this folder to my base" and run
-`python3 scripts/join.py link --base <base folder or company name> --folder <path>`,
+`python3 scripts/join.py link --base <base folder or company name> --folder-file <the path it printed>`,
 using the folder they are working in when they did not name one. The base can be
 named by its folder or by the company it is for, so "link this folder to my Acme
 base" is enough, and `--base` can be left off altogether when there is only one

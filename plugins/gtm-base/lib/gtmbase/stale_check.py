@@ -1454,6 +1454,10 @@ def _write_one(
     path = staging_path_for(base_root, staging.staging_id)
     if not dry_run:
         save_staging(base_root, staging)
+        if getattr(staging, "first_draft", False):
+            # Written where no file tool may write it, so taking the marker
+            # line out of the prepared change changes nothing (finding M1).
+            state.note_first_draft(base_id, staging.staging_id)
     result.staged.append(
         Staged(staging.staging_id, path, target_paths, entry_id, kind)
     )

@@ -80,9 +80,15 @@ NOT_ONE_OF_THE_PARTS = (
 
 
 def a_session(base_id):
-    """Which session this seat is in, which is what its words files belong to."""
-    seat, _problems = state.load_seat(base_id)
-    return seat.get("session_id") or base_id
+    """Which base a words file belongs to.
+
+    It used to be the session this seat was last in, and finding L3 of the
+    third look is what that cost: a second window opening between the file
+    being handed out and the file being read moved the session on, and the
+    answer somebody had just typed became a file nothing would read. The base
+    does not move.
+    """
+    return base_id
 
 
 def build_parser():
@@ -218,7 +224,11 @@ def main(argv=None):
                 return EXIT_REFUSED
         try:
             compose_proposal.write_the_wording(
-                resolution.root, staged, words, part=part
+                resolution.root,
+                staged,
+                words,
+                part=part,
+                base_id=resolution.base_id,
             )
         except GtmBaseError as failure:
             sys.stdout.write(str(failure) + "\n")

@@ -961,3 +961,62 @@ which changed one existing scenario. For a change somebody made by hand, the
 whole difference from the saved version is what they approve, because that is
 what saying yes writes down. The scripts choose where a person's words live and
 the assistant never does.
+
+
+## Release A, third look (2026-09-20)
+
+Two reviewers checked the round above. Three findings stopped the release and
+nine more had to be fixed before it. The list is
+`scratchpad/release-a-findings-round3.md`. A failing test came first for every
+one, built from the reviewers' own reproduction scripts, and three lessons of
+that round are now built into the tests rather than only remembered: a test
+payload is shaped the way the real client sends one, a documented command is
+run rather than only parsed, and byte for byte compares bytes.
+
+- [x] H1 and F1. The smaller check that runs when the real one cannot refused
+      every file write on the computer, because the client puts the session
+      transcript's path on every request and that path is always under the
+      assistant's own folder. It reads the one file the tool was about to
+      write now, matches the folder names as whole pieces of a path, allows
+      anything it cannot read a path out of, and treats running out of time
+      the same way.
+- [x] H2. Approving a change made by hand saved the older prepared wording
+      over newer unsaved work while showing the newer wording. A change made
+      by hand is the unsaved document, so a document that has moved on since
+      the change was prepared stops the run and the change is prepared again.
+- [x] H3. The documented company step was refused every time for want of the
+      run. The command carries it, the script says which argument is missing,
+      and a test walks the whole setup skill as it is written and runs every
+      command in it.
+- [x] M1. One ordinary edit of the prepared change cleared the first-draft
+      marker. This seat's own records carry it too, an absent marker on a
+      change the check wrote reads as yes, and a change that would still add a
+      part of its own is refused whatever the file says.
+- [x] M3. A put-off day beyond the cap is thrown away on the way in rather
+      than brought back, which is what made a forged day roll forward for ever.
+- [x] M5. Who owns a document is read from the saved version, so rewriting the
+      owner line by hand no longer makes its author the owner.
+- [x] F3, M2 and L4. Identity asks every line of work the folder has saved, no
+      command may set or take away the name a base is known by, and a question
+      git was stopped from answering leaves a base in reach.
+- [x] F2 and M4. A write to your own client settings is asked about rather
+      than refused, with the two registry files on the same footing.
+- [x] L1 and F4. The kept copy is bytes, measured and read back as bytes, and
+      a document that cannot be copied stops the run.
+- [x] L2. The drafts of a run that is gone are swept when a run begins and
+      when one closes.
+- [x] L3. A words file belongs to the base rather than to the window.
+- [x] F5. The path that raises a change on a shared copy asks the same
+      question about a first draft that approval asks.
+- [x] F6. A folder is never named on a command line: the one somebody names
+      travels in a file, and one chosen off a list is chosen by its number.
+
+### What was decided along the way
+
+Running out of time is not a broken plugin, so it is allowed unless the file
+named is one of GTM Base's own. The installed copy's files are repaired by
+installing the plugin again, and the sentence says so, because writing over
+them is the one thing the smaller check will not allow. Your own client
+settings are yours, so they are asked about rather than refused. A number is
+not somebody else's text, so every choice off a list GTM Base printed is made
+by number.

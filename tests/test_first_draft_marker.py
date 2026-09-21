@@ -91,6 +91,13 @@ def a_first_draft(root, body="We stopped selling to small companies."):
         root, constants.PROPOSALS_PENDING_DIR, staging.staging_id + ".md"
     )
     support.write(path, staging.render())
+    # And this seat's own record of it, which is what the check on a base
+    # writes beside the prepared change itself (finding M1 of the third look).
+    from gtmbase import machine, paths
+
+    resolution = paths.resolve_base(root, machine.load_machine_state())
+    if resolution.base_id:
+        state.note_first_draft(resolution.base_id, staging.staging_id)
     return path
 
 
@@ -289,6 +296,104 @@ class TestTheObsoleteClaimIsGone(unittest.TestCase):
 
             self.assertNotEqual(0, done.returncode)
             self.assertTrue(compose_proposal.load_staging(staged).first_draft)
+
+
+
+# --- M1 of the third look ----------------------------------------------------
+
+
+class TestOneOrdinaryEditOfThePreparedChange(unittest.TestCase):
+    """M1. The marker sat in a file any file tool may write.
+
+    The prepared change is not in a folder GTM Base keeps, and it must not be:
+    the assistant writes the real wording into it. So taking the marker line
+    out of it with one ordinary edit cleared it, and a paraphrase of the note
+    was then approved with the claim it should have corrected still standing.
+    """
+
+    def test_the_prepared_change_is_a_file_any_tool_may_write(self):
+        from gtmbase import write_hook
+
+        with support.Sandbox() as sandbox:
+            root, _base_id = local_base(sandbox)
+            staged = a_first_draft(root)
+
+            answer = write_hook.run(
+                {
+                    "session_id": "sess-1",
+                    "transcript_path": os.path.join(
+                        os.path.expanduser("~"), "." + "claude", "x.jsonl"
+                    ),
+                    "hook_event_name": "PreToolUse",
+                    "tool_name": "Edit",
+                    "cwd": root,
+                    "tool_input": {
+                        "file_path": staged,
+                        "old_string": "first_draft: true",
+                        "new_string": "first_draft: false",
+                    },
+                }
+            )
+
+            self.assertIsNone(
+                answer, "this is the reason the record is kept elsewhere too"
+            )
+
+    def test_taking_the_line_out_and_rewording_the_note_changes_nothing(self):
+        with support.Sandbox() as sandbox:
+            root, base_id = local_base(sandbox)
+            staged = a_first_draft(root)
+            whole = support.read(staged)
+            note = compose_proposal.load_staging(staged).edits[0].text.strip()
+            support.write(
+                staged,
+                whole.replace("first_draft: true\n", "").replace(
+                    note, "TODO rewrite this part to match the new direction"
+                ),
+            )
+
+            shown = approve_local.show(
+                staged, root, base_id, runner=support.NoRemoteRunner(), now=TODAY
+            )
+
+            self.assertEqual(approve_local.STATUS_REFUSED, shown.status)
+            self.assertIn(approve_local.CODE_STILL_A_PLACEHOLDER, shown.codes)
+            self.assertIn(
+                "Companies of any size.", support.read(os.path.join(root, ICP))
+            )
+
+    def test_a_change_the_check_wrote_with_no_marker_at_all_is_a_first_draft(self):
+        """A prepared change written by an older build says nothing here."""
+        with support.Sandbox() as sandbox:
+            root, base_id = local_base(sandbox)
+            staged = a_first_draft(root)
+            support.write(
+                staged, support.read(staged).replace("first_draft: true\n", "")
+            )
+            state.clear_first_draft(base_id, os.path.basename(staged)[: -len(".md")])
+
+            staging = compose_proposal.load_staging(staged)
+
+            self.assertIsNone(staging.first_draft)
+            self.assertTrue(compose_proposal.still_a_first_draft(staging))
+
+    def test_the_wording_command_clears_the_record_as_well_as_the_line(self):
+        with support.Sandbox() as sandbox:
+            root, base_id = local_base(sandbox)
+            staged = a_first_draft(root, body=NAMES_THE_PART)
+            staging_id = os.path.basename(staged)[: -len(".md")]
+            self.assertTrue(state.is_a_first_draft(base_id, staging_id))
+            handed = run_script(root, ["--new-words-file", "answer"])
+            words = value_of(handed.stdout.decode("utf-8"), "words")
+            support.write(words, "We sell to companies of twenty and up.")
+
+            done = run_script(
+                root, ["--staging", staged, "--wording", "--words", words]
+            )
+
+            self.assertEqual(0, done.returncode, done.stdout + done.stderr)
+            self.assertFalse(state.is_a_first_draft(base_id, staging_id))
+
 
 
 if __name__ == "__main__":

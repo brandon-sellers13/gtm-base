@@ -115,17 +115,55 @@ STILL_A_PLACEHOLDER = (
 )
 
 
-def _still_the_first_draft(text) -> bool:
-    """Whether an edit still carries the words GTM Base put there to be replaced.
+# What a prepared change written by the check on a base says it came from.
+LEDGER_ORIGIN = "ledger"
 
-    The one module that writes those words is the one asked, so there is a
-    single description of what the first draft is and this never drifts from
-    it. It is imported here rather than at the top because that module reads
-    this one.
+
+def still_a_first_draft(staging, base_id=None) -> bool:
+    """Whether this prepared change still holds GTM Base's own note.
+
+    There is one description of that, here, and every path that could apply a
+    prepared change asks it. Four things say yes and any one of them is enough,
+    because each of the first three was got round on its own.
+
+    This seat's own record says so. That record lives in the folder no file
+    tool may write, which is finding M1 of the third look: one ordinary edit
+    took the marker line out of the prepared change and cleared it.
+
+    The prepared change carries the marker. A change the check on a base wrote
+    carries no marker at all, which is the shape of a file written by an older
+    build, and for that origin an absent marker is read as yes rather than no.
+
+    A change the check wrote still adds a part of its own rather than replacing
+    the part that went out of date, which means the claim it corrects would
+    still be standing afterwards whatever the words now say.
+
+    Or the words are the note over again, however they have been respaced.
     """
+    from . import stale_check, state
+
+    if base_id and state.is_a_first_draft(base_id, staging.staging_id):
+        return True
+    marked = getattr(staging, "first_draft", None)
+    if marked:
+        return True
+    if str(getattr(staging, "origin", "")) == LEDGER_ORIGIN:
+        if marked is None:
+            return True
+        for edit in staging.edits:
+            if edit.op == "add" and edit.heading == stale_check.FALLBACK_HEADING:
+                return True
+    for edit in staging.edits:
+        if stale_check.still_the_note(getattr(edit, "text", None)):
+            return True
+    return False
+
+
+def _still_the_first_draft(text) -> bool:
+    """Whether some words are the note GTM Base wrote, read as words alone."""
     from . import stale_check
 
-    return stale_check.is_the_placeholder(text)
+    return stale_check.still_the_note(text)
 
 _HEADING_RE = re.compile(r"^(#{1,6})\s+\S")
 _PULL_NUMBER_RE = re.compile(r"/pull/(\d+)")
@@ -687,14 +725,13 @@ def propose(
     # draft GTM Base writes into a prepared change is a note asking for the
     # real wording, and nobody should be asked to accept one as a correction
     # to their document (finding A6 of the 2026-09-20 review).
-    for edit in staging.edits:
-        if _still_the_first_draft(getattr(edit, "text", None)):
-            return ProposalResult(
-                STATUS_REFUSED,
-                staging_id=staging.staging_id,
-                codes=[CODE_STILL_A_PLACEHOLDER],
-                reasons=[STILL_A_PLACEHOLDER],
-            )
+    if still_a_first_draft(staging, base_id):
+        return ProposalResult(
+            STATUS_REFUSED,
+            staging_id=staging.staging_id,
+            codes=[CODE_STILL_A_PLACEHOLDER],
+            reasons=[STILL_A_PLACEHOLDER],
+        )
 
     marker = marker_of(staging)
     parsed_marker = find_marker(marker)
@@ -1121,7 +1158,9 @@ def parts_of(base_root: str, staging) -> List[Tuple[str, str]]:
     return found
 
 
-def write_the_wording(base_root: str, staging_path: str, words: str, part=None):
+def write_the_wording(
+    base_root: str, staging_path: str, words: str, part=None, base_id=None
+):
     """Put the real wording into a first draft, and take the marker off it.
 
     This is the only way the marker comes off. Findings V8 and N4 of the
@@ -1147,6 +1186,8 @@ def write_the_wording(base_root: str, staging_path: str, words: str, part=None):
         edit.text = text
     staging.first_draft = False
     atomic_write_text(staging_path, staging.validate().render(), mode=0o600)
+    if base_id:
+        state.clear_first_draft(base_id, staging.staging_id)
     return staging
 
 

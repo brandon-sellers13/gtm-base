@@ -2479,5 +2479,232 @@ class TestOnlyAHandEditMayBeUnsaved(unittest.TestCase):
             self.assertEqual([], corrections_in(root))
 
 
+
+# --- H2 and L1 of the third look ---------------------------------------------
+
+
+def bytes_of(path):
+    """A file as it really is on the disk, with nothing translated."""
+    with open(path, "rb") as handle:
+        return handle.read()
+
+
+def saved_bytes(root, relative):
+    """One file as the base has saved it, with nothing translated."""
+    finished = subprocess.run(
+        ["git", "show", "HEAD:" + relative],
+        cwd=root,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+    )
+    if finished.returncode != 0:
+        raise AssertionError(finished.stderr.decode("utf-8", "replace"))
+    return finished.stdout
+
+
+class TestAHandEditThatMovedOnAgain(unittest.TestCase):
+    """H2. The older prepared wording used to be saved over the newer work.
+
+    Somebody edits a part of a document, the change is prepared from it, and
+    then they keep working on the same part. What they were shown afterwards
+    said two things at once: the prepared wording as what the change would
+    leave, and their newer wording as what saying yes would write down. What
+    it wrote was the older one, over the newer one, and the kept copy was
+    thrown away because the run had succeeded.
+    """
+
+    def test_refining_the_same_part_again_stops_the_run(self):
+        with support.Sandbox() as sandbox:
+            root, base_id = local_base(sandbox)
+            runner = NoRemoteRunner()
+            staged = a_hand_edit(root, base_id, runner)
+            whole = os.path.join(root, ICP)
+            support.write(
+                whole,
+                support.read(whole).replace(
+                    BIGGER_COMPANIES,
+                    "Companies of fifty to five hundred people, in logistics.",
+                ),
+            )
+            theirs = bytes_of(whole)
+
+            shown = approve_local.show(
+                staged, root, base_id, runner=runner, now=TODAY
+            )
+
+            self.assertEqual(approve_local.STATUS_MOVED, shown.status)
+            self.assertEqual(
+                [approve_local.PREPARED_FROM_OLDER % names.document_name(ICP)],
+                shown.reasons,
+            )
+            self.assertEqual(theirs, bytes_of(whole))
+            self.assertEqual([], corrections_in(root))
+
+    def test_approving_it_writes_nothing_either(self):
+        with support.Sandbox() as sandbox:
+            root, base_id = local_base(sandbox)
+            runner = NoRemoteRunner()
+            staged = a_hand_edit(root, base_id, runner)
+            shown = approve_local.show(
+                staged, root, base_id, runner=runner, now=TODAY
+            )
+            whole = os.path.join(root, ICP)
+            support.write(
+                whole,
+                support.read(whole).replace(
+                    BIGGER_COMPANIES,
+                    "Companies of fifty to five hundred people, in logistics.",
+                ),
+            )
+            theirs = bytes_of(whole)
+
+            applied = approve_local.approve(
+                staged, root, base_id, shown.shown_hash, runner=runner, now=NOW
+            )
+
+            self.assertEqual(approve_local.STATUS_MOVED, applied.status)
+            self.assertEqual(theirs, bytes_of(whole))
+            self.assertEqual([], corrections_in(root))
+            self.assertTrue(os.path.isfile(staged))
+
+
+class TestWhatIsSavedIsWhatTheDifferenceShowed(unittest.TestCase):
+    """H2. The whole difference is the promise, so it is held to the byte."""
+
+    def test_one_document_is_saved_exactly_as_it_was_shown(self):
+        with support.Sandbox() as sandbox:
+            root, base_id = local_base(sandbox)
+            a_second_section(root)
+            runner = NoRemoteRunner()
+            staged = a_hand_edit(root, base_id, runner)
+            whole = os.path.join(root, ICP)
+            theirs = bytes_of(whole)
+
+            shown = approve_local.show(
+                staged, root, base_id, runner=runner, now=TODAY
+            )
+            self.assertEqual(approve_local.STATUS_SHOWN, shown.status, shown.reasons)
+            applied = approve_local.approve(
+                staged, root, base_id, shown.shown_hash, runner=runner, now=NOW
+            )
+
+            self.assertEqual(
+                approve_local.STATUS_APPLIED, applied.status, applied.reasons
+            )
+            self.assertEqual(theirs, saved_bytes(root, ICP))
+            self.assertEqual(theirs, bytes_of(whole))
+
+    def test_two_documents_are_saved_exactly_as_they_were_shown(self):
+        with support.Sandbox() as sandbox:
+            root, base_id = local_base(sandbox)
+            second = "context/strategy/positioning.md"
+            support.write(
+                os.path.join(root, second),
+                support.ICP_TEXT.replace("kind: icp", "kind: positioning")
+                .replace("# Ideal customer profile", "# Positioning")
+                .replace("## Firmographics", "## Where we win"),
+            )
+            support.git(["add", "-A"], cwd=root)
+            support.git(["commit", "-q", "-m", "positioning"], cwd=root)
+            runner = NoRemoteRunner()
+
+            for relative, words in (
+                (ICP, "Companies of twenty to two hundred people."),
+                (second, "Against the big suites, on setup time."),
+            ):
+                full = os.path.join(root, relative)
+                support.write(
+                    full,
+                    support.read(full).replace("Companies of any size.", words),
+                )
+            staged = compose_proposal.stage_local_edit(
+                root, base_id, HAND_EDIT_SOURCE, runner=runner, now=TODAY
+            )
+            theirs = {
+                relative: bytes_of(os.path.join(root, relative))
+                for relative in (ICP, second)
+            }
+
+            shown = approve_local.show(
+                staged, root, base_id, runner=runner, now=TODAY
+            )
+            self.assertEqual(approve_local.STATUS_SHOWN, shown.status, shown.reasons)
+            applied = approve_local.approve(
+                staged, root, base_id, shown.shown_hash, runner=runner, now=NOW
+            )
+
+            self.assertEqual(
+                approve_local.STATUS_APPLIED, applied.status, applied.reasons
+            )
+            for relative in (ICP, second):
+                self.assertEqual(theirs[relative], saved_bytes(root, relative))
+
+
+class TestTheKeptCopyIsTheExactBytes(unittest.TestCase):
+    """L1 and F4. It went through text, which translates line endings."""
+
+    def a_document_whose_lines_end_the_other_way(self, root):
+        full = os.path.join(root, ICP)
+        with open(full, "r", encoding="utf-8") as handle:
+            text = handle.read()
+        with open(full, "w", encoding="utf-8", newline="") as handle:
+            handle.write(text.replace("\n", "\r\n"))
+        support.git(["-c", "core.autocrlf=false", "add", "-A"], cwd=root)
+        support.git(["commit", "-q", "-m", "the other line endings"], cwd=root)
+        return full
+
+    def test_a_failed_approval_gives_back_the_exact_bytes(self):
+        from gtmbase.errors import GitError
+
+        with support.Sandbox() as sandbox:
+            root, base_id = local_base(sandbox)
+            full = self.a_document_whose_lines_end_the_other_way(root)
+            with open(full, "r", encoding="utf-8", newline="") as handle:
+                text = handle.read()
+            with open(full, "w", encoding="utf-8", newline="") as handle:
+                handle.write(
+                    text.replace("Companies of any size.", BIGGER_COMPANIES)
+                )
+            theirs = bytes_of(full)
+            runner = NoRemoteRunner()
+            staged = compose_proposal.stage_local_edit(
+                root, base_id, HAND_EDIT_SOURCE, runner=runner, now=TODAY
+            )
+            shown = approve_local.show(
+                staged, root, base_id, runner=runner, now=TODAY
+            )
+            self.assertEqual(approve_local.STATUS_SHOWN, shown.status, shown.reasons)
+
+            with mock.patch.object(
+                approve_local,
+                "_save_the_work",
+                side_effect=GitError("stopped", code=approve_local.CODE_GIT_FAILED),
+            ):
+                approve_local.approve(
+                    staged, root, base_id, shown.shown_hash, runner=runner, now=NOW
+                )
+
+            self.assertEqual(theirs, bytes_of(full))
+            self.assertEqual(theirs.count(b"\r"), bytes_of(full).count(b"\r"))
+
+    def test_a_document_that_is_not_text_stops_the_run_rather_than_being_lost(self):
+        with support.Sandbox() as sandbox:
+            root, base_id = local_base(sandbox)
+            runner = NoRemoteRunner()
+            staged = a_hand_edit(root, base_id, runner)
+            full = os.path.join(root, ICP)
+            with open(full, "wb") as handle:
+                handle.write(b"\xff\xfe not text at all\n")
+            theirs = bytes_of(full)
+
+            shown = approve_local.show(
+                staged, root, base_id, runner=runner, now=TODAY
+            )
+
+            self.assertTrue(shown.refused, shown.status)
+            self.assertEqual(theirs, bytes_of(full))
+
+
+
 if __name__ == "__main__":
     unittest.main()
