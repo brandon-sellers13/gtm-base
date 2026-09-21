@@ -42,6 +42,7 @@ from . import (
     location,
     machine,
     marker,
+    moment,
     names,
     paths,
     review,
@@ -132,13 +133,21 @@ CHANGE_LABELS = (
     "When to look again:",
 )
 
-# The four facts about a change that are the person's to correct before it is
-# written down, each one named the way they would say it. Requirement P5.
+# The three facts about a change that are the person's to correct before it is
+# written down, each named the way they would say it. "Who noted it" was on
+# this list until finding A10 of the release review: the address is written by
+# GTM Base a moment after the preview, so offering it as correctable was
+# taking a correction and throwing it away.
 DETAIL_LABELS = (
     "The day it happened",
-    "Who noted it",
     "What it affects",
     "When to look at it again",
+)
+# Said under the three, so nobody is left wondering why the address on the
+# change is not theirs to set.
+NOTED_BY_IS_THE_BASES_RECORD = (
+    "Who noted this is the address your base records your work under, so it is "
+    "not one of the things to correct here."
 )
 
 # Said as the "why" line when the sentence somebody gave at the closing is one
@@ -1228,9 +1237,24 @@ def skip_step(
 
     As with an approved file, what gets written into is the folder the resolver
     settled on rather than the one the caller named.
+
+    A context change has no file to leave behind, so skipping one is the whole
+    answer requirement P7 describes rather than a document written down as
+    skipped. It used to be refused outright, which took skip away at exactly
+    the moment the person had been shown what they would be skipping (finding
+    A11 of the release review).
     """
     git = runner_or_default(runner)
     resolution = paths.resolve_base(base_root, machine.load_machine_state(), git)
+    if drafting.step_named(step) == drafting.STEP_CHANGE:
+        root = resolution.root or base_root
+        if not resolution.base_id:
+            raise ReviewError(review.CODE_NO_BASE, code=review.CODE_NO_BASE)
+        return SkippedTheChange(
+            skip_the_closing_question(
+                root, resolution.base_id, today=state.today(now) if now else None
+            )
+        )
     return review.skip(
         step,
         resolution.root or base_root,
@@ -1239,6 +1263,25 @@ def skip_step(
         runner=git,
         now=now,
     )
+
+
+class SkippedTheChange(object):
+    """What skipping the closing question leaves behind, which is one sentence.
+
+    It looks enough like the result of skipping a document for one caller to
+    print both the same way, and it carries no path, because nothing at all
+    was written.
+    """
+
+    __slots__ = ("path", "codes", "sentence")
+
+    def __init__(self, sentence):
+        self.path = None
+        self.codes = []
+        self.sentence = sentence
+
+    def __repr__(self) -> str:
+        return "SkippedTheChange()"
 
 
 # --- The closing -------------------------------------------------------------
@@ -1339,13 +1382,22 @@ def _why_of(entry) -> str:
 
 
 def four_lines_for(entry) -> str:
-    """One context change as the four labeled lines, and nothing else."""
+    """One context change as the four labeled lines, and nothing else.
+
+    Every value comes out of a file somebody typed into and is read out inside
+    an instruction the assistant follows, so each one is put on a single line
+    with anything that could end the block taken apart first. `moment` owns
+    that rule and is asked for it rather than having it written out again
+    here, because two copies of a rule is how one of them ends up not doing it.
+    """
     values = (
-        _what_changed(entry),
-        _why_of(entry),
-        ", ".join(names.document_name(path) for path in entry.affects)
-        or "nothing yet",
-        str(entry.review_by),
+        moment._one_line(_what_changed(entry)),
+        moment._one_line(_why_of(entry)),
+        moment._one_line(
+            ", ".join(names.document_name(path) for path in entry.affects)
+            or "nothing yet"
+        ),
+        moment._one_line(str(entry.review_by)),
     )
     lines = [CHANGE_OPEN]
     for label, value in zip(CHANGE_LABELS, values):
@@ -1354,26 +1406,45 @@ def four_lines_for(entry) -> str:
     return "\n".join(lines)
 
 
-def preview_change(draft) -> ProposedChange:
+def preview_change(
+    draft,
+    base_root: Optional[str] = None,
+    owner_email: Optional[str] = None,
+    runner: Optional[GitRunner] = None,
+) -> ProposedChange:
     """Everything about a proposed context change, before it is written.
 
-    The four labeled lines are the wrapper, readable at a glance. The four
-    facts below them are the ones requirement P5 makes the person's to
-    correct. The whole entry, exactly as it would be written down, is the
-    artifact, and it is shown whole on purpose.
+    The change is finalized first, with the identifier and the noting address
+    this plugin writes onto it, so what is shown is what gets written rather
+    than a draft of it. The preview used to offer the noting address as the
+    person's to correct and then write the base's own address over it a moment
+    later, which is a correction taken and thrown away (finding A10).
+
+    The four labeled lines are the wrapper, readable at a glance. The three
+    facts under them really are the person's to correct. The whole entry,
+    exactly as it will be written down, is the artifact, and it is held apart
+    as data, because a drafted entry is a file somebody typed into and a
+    heading in it must never read as an instruction (finding A9).
     """
     if draft.step != drafting.STEP_CHANGE:
         raise DraftError(draft.step, "not-a-context-change")
+    git = runner_or_default(runner)
+    address = owner_email
+    if base_root and not address:
+        address = base_reader.repo_email(base_root, git) or ""
+    if address:
+        draft = review.stamp_entry(
+            draft, None, address, entry_name=review.free_entry_id(base_root)
+        )
     entry = formats.ChangeEntry.parse(draft.text)
     affected = ", ".join(names.document_name(path) for path in entry.affects)
     details = (
         (DETAIL_LABELS[0], str(entry.happened_on)),
-        (DETAIL_LABELS[1], str(entry.noted_by)),
-        (DETAIL_LABELS[2], affected or "nothing yet"),
-        (DETAIL_LABELS[3], str(entry.review_by)),
+        (DETAIL_LABELS[1], affected or "nothing yet"),
+        (DETAIL_LABELS[2], str(entry.review_by)),
     )
     artifact = "\n".join(
-        [ARTIFACT_OPEN, draft.text.rstrip("\n"), ARTIFACT_CLOSE]
+        [ARTIFACT_OPEN, moment.fenced(draft.text.rstrip("\n")), ARTIFACT_CLOSE]
     ) + "\n"
     return ProposedChange(
         entry, four_lines_for(entry), details, artifact, list(entry.affects)

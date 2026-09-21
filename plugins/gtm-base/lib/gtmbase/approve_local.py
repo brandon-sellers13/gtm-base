@@ -1165,6 +1165,68 @@ def _save_the_work(base_root: str, plan: "_Plan", git: GitRunner, codes) -> str:
     return git.run(["rev-parse", "HEAD"], cwd=base_root).out()
 
 
+def _ready_to_write_here(base_root: str, git: GitRunner, changing: List[str]):
+    """Refuse on a folder with anything half done in it that is not this change.
+
+    The ordinary rule is that nothing is written into a base while there is
+    anything unsaved in it. A change the person made by hand breaks that rule
+    by existing: their edit is the unsaved work, and it is the very thing they
+    are approving, so the ordinary rule refused every hand edit on a base with
+    no shared copy and the habit had nowhere to end (findings A4 and H2).
+
+    So the files this change is about are allowed to be unsaved, and nothing
+    else is. Nothing is weakened by that. The yes is still bound to a value
+    taken over the staged change and over the current bytes of exactly these
+    files, so an edit that moved between being shown and being approved is
+    still refused, and any other unsaved work anywhere in the base still stops
+    the run with the sentence it always did.
+    """
+    on_default, _code = paths.head_is_default_branch(base_root, runner=git)
+    if not on_default:
+        return CODE_NOT_DEFAULT_BRANCH, NOT_ON_MAIN
+    status = git.run(["status", "--porcelain"], cwd=base_root)
+    if not status.ok:
+        return CODE_GIT_FAILED, COULD_NOT_SAVE
+    allowed = set(changing)
+    # The whole output, not the trimmed form. The first two characters of a
+    # line say what state a path is in and the first of them is often a space,
+    # so trimming the output moves every path along by one character.
+    for line in status.stdout.split("\n"):
+        if not line.strip():
+            continue
+        named = _paths_on_a_status_line(line)
+        if not named or any(item not in allowed for item in named):
+            return CODE_UNSAVED_EDITS, UNSAVED_EDITS
+    return None
+
+
+def _paths_on_a_status_line(line: str) -> List[str]:
+    """Every path one line of the folder's state names, or nothing at all.
+
+    A line nobody here can read gives back nothing, which the caller treats as
+    unsaved work it may not write over. Guessing at a line would be the one
+    way this check could let something through.
+    """
+    body = line[3:] if len(line) > 3 else ""
+    if not body:
+        return []
+    if " -> " in body:
+        pieces = body.split(" -> ")
+    else:
+        pieces = [body]
+    named = []
+    for piece in pieces:
+        value = piece.strip()
+        if value.startswith('"') and value.endswith('"') and len(value) > 1:
+            # A quoted name holds characters git escapes, so it is not a plain
+            # path and this check will not read it.
+            return []
+        if not value:
+            return []
+        named.append(value)
+    return named
+
+
 def approve(
     staging_path: str,
     base_root: str,
@@ -1196,11 +1258,9 @@ def approve(
     if not shown_hash or shown_hash != reading.shown_hash:
         return _refused(STATUS_MOVED, CODE_MOVED, MOVED, reading.staging.staging_id)
 
-    try:
-        review.ready_to_write(base_root, git)
-    except ReviewError as stopped:
-        code = stopped.code or CODE_UNSAVED_EDITS
-        sentence = NOT_ON_MAIN if code == CODE_NOT_DEFAULT_BRANCH else UNSAVED_EDITS
+    stopped = _ready_to_write_here(base_root, git, reading.walk.ordered)
+    if stopped is not None:
+        code, sentence = stopped
         return _refused(
             STATUS_REFUSED, code, sentence, reading.staging.staging_id
         )

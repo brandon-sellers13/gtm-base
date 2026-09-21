@@ -33,6 +33,18 @@ Three rules hold for the whole session.
 3. Never say how long anything will take, and never reassure them about it.
    Not as a number, not as a promise of speed, not as an aside.
 
+### Words somebody typed never go on a command line
+<!-- step -->
+
+A sentence a person wrote can hold a dollar sign, a bracket, or a pair of
+backticks, and each of those is an instruction to the shell the moment their
+words are written into a command.
+
+- Write their words to a file of your own with the file-writing tool first,
+  somewhere outside the base and outside GTM Base's own records.
+- Give the command the path to that file, never the words.
+- The commands that take words this way all end in `-file`.
+
 ### Step 1. Say what setting up a base does
 
 Before running anything, say these three things and then the line about
@@ -346,7 +358,7 @@ approved there is no base to write it into. From the second document onward
 there are four, with skip among them.
 
 - **What is wrong with this?** Take their answer and run
-  `python3 scripts/join.py what-is-wrong --step <step> --answer "<their words>"`.
+  `python3 scripts/join.py what-is-wrong --step <step> --answer-file <path to their words>`.
   It prints a note. Follow the note, write the whole document again, and show
   them the new one. Their words go here and nowhere else.
 - **Edit.** Take their own wording, put it in the draft file, and check it again
@@ -476,7 +488,7 @@ Did anything get in the way while you were setting this up?
 python3 scripts/join.py close --base <base folder> --run <run identifier>
 ```
 
-Add `--got-in-the-way "<their words>"` when they said something.
+Add `--got-in-the-way-file <path to their words>` when they said something.
 
 - The command prints the finding first and then the closing message. Say both,
   in that order, in the words it printed, and add nothing to them.

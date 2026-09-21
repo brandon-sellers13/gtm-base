@@ -46,7 +46,8 @@ if _lib not in sys.path:
 import argparse  # noqa: E402
 
 from gtmbase import confirm, machine, moment, paths, state  # noqa: E402
-from gtmbase.errors import GtmBaseError  # noqa: E402
+from gtmbase.errors import GtmBaseError
+from gtmbase.fsutil import read_text  # noqa: E402
 
 EXIT_DONE = 0
 EXIT_REFUSED = 1
@@ -77,6 +78,10 @@ def build_parser():
         help="what the person said: yes, no, or not-now",
     )
     parser.add_argument("--reason", help="what the person said, in their own words")
+    parser.add_argument(
+        "--reason-file",
+        help="a file holding what the person said, in their own words",
+    )
     parser.add_argument(
         "--pending",
         action="store_true",
@@ -118,6 +123,24 @@ def _why(item):
 
 def report(result):
     return "\n".join(result.reasons) if result.reasons else ""
+
+
+COULD_NOT_READ = (
+    "GTM Base could not read the file holding their words, so nothing was "
+    "recorded. Write it again and run this with the path to it."
+)
+
+
+def words_from(path):
+    """What somebody typed, read out of a file rather than off a command line.
+
+    Their words go in a file and the path goes on the command line, because a
+    sentence with a dollar sign and a bracket in it becomes a shell
+    instruction the moment it is written into a command. What is read here is
+    text and nothing in it is ever run.
+    """
+    text = read_text(path)
+    return None if text is None else text.strip()
 
 
 def main(argv=None):
@@ -170,6 +193,13 @@ def main(argv=None):
         sys.stderr.write(NO_SESSION + "\n")
         return EXIT_REFUSED
 
+    reason = options.reason
+    if options.reason_file:
+        reason = words_from(options.reason_file)
+        if reason is None:
+            sys.stdout.write(COULD_NOT_READ + "\n")
+            return EXIT_REFUSED
+
     try:
         result = confirm.answer(
             resolution.root,
@@ -177,7 +207,7 @@ def main(argv=None):
             options.question,
             options.answer,
             session,
-            reason=options.reason,
+            reason=reason,
         )
     except GtmBaseError as failure:
         sys.stderr.write(str(failure) + "\n")

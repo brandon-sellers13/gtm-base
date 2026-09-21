@@ -1042,6 +1042,237 @@ class TestWhatChangedAndWhy(unittest.TestCase):
             self.assertIn("churned inside two quarters", staging.decision_block)
 
 
+class TestTheHandEditHabitThroughTheScript(unittest.TestCase):
+    """A3, A4 and H2 of the release review, 2026-09-20.
+
+    The habit was unreachable: the script took neither the answer nor the
+    flag, and on a base with no shared copy the local approval refused the
+    hand edit as unsaved work, which is exactly what a hand edit is. All of it
+    runs the script here, because the library was the only thing ever tested
+    and that is how the gap stayed open.
+    """
+
+    SCRIPT = os.path.join(
+        support.PLUGIN_DIR, "skills", "propose-change", "scripts", "propose.py"
+    )
+    STRATEGIC = (
+        "We moved up to companies of twenty to two hundred people, because "
+        "everyone smaller than that churned inside two quarters."
+    )
+
+    def local_base(self, sandbox):
+        from gtmbase import machine
+
+        root = os.path.join(sandbox.path, "local")
+        base_id = ids.base_id_random()
+        support.make_base(root, base_id=base_id)
+        support.write(
+            os.path.join(root, ".gitignore"), "work/inbox/\nwork/proposals/\n"
+        )
+        support.write(
+            os.path.join(root, constants.ALLOWLIST_PATH), "# ours\n%s\n" % OWNER
+        )
+        support.git(["add", "-A"], cwd=root)
+        support.git(["commit", "-q", "-m", "a local base"], cwd=root)
+        machine.append_joined(root=root, base_id=base_id, remote=None)
+        state.update_seat(base_id, first_push_reviewed=True)
+        return root, base_id
+
+    def words_file(self, sandbox, name, text):
+        """Their words, in a file of our own, outside the base."""
+        path = os.path.join(sandbox.path, name)
+        support.write(path, text)
+        return path
+
+    def script(self, root, *arguments):
+        import sys
+
+        return subprocess.run(
+            [sys.executable, self.SCRIPT] + [str(item) for item in arguments],
+            cwd=root,
+            env=dict(os.environ),
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+        )
+
+    def test_words_holding_shell_marks_arrive_unchanged(self):
+        """A3: their sentence used to be written straight into a command."""
+        with support.Sandbox() as sandbox:
+            root, base_id = self.local_base(sandbox)
+            hand_edit(root)
+            hostile = (
+                "We moved up after $(rm -rf /) and `whoami` came up, and a "
+                'quotation mark " and a newline\nboth stayed in what they '
+                "wrote."
+            )
+            source = self.words_file(sandbox, "source.txt", STATED_SOURCE)
+            what = self.words_file(sandbox, "what.txt", hostile)
+
+            finished = self.script(
+                root,
+                "--local-edit",
+                "--source-file",
+                source,
+                "--what-changed-file",
+                what,
+                "--records-a-change",
+            )
+
+            self.assertIn(
+                compose_proposal.APPROVE_HERE, finished.stdout.decode("utf-8")
+            )
+            pending = os.path.join(root, constants.PROPOSALS_PENDING_DIR)
+            waiting = sorted(
+                name for name in os.listdir(pending) if name.endswith(".md")
+            )
+            self.assertEqual(1, len(waiting))
+            staging = formats.ProposalStaging.parse(
+                support.read(os.path.join(pending, waiting[0]))
+            ).validate()
+            entry = formats.ChangeEntry.parse(staging.decision_block)
+            for piece in ("$(rm -rf /)", "`whoami`", '"', "both stayed"):
+                self.assertIn(piece, entry.body, piece)
+
+    def test_a_typo_answer_still_carries_no_change(self):
+        with support.Sandbox() as sandbox:
+            root, base_id = self.local_base(sandbox)
+            hand_edit(root)
+            source = self.words_file(sandbox, "source.txt", STATED_SOURCE)
+
+            finished = self.script(
+                root, "--local-edit", "--source-file", source
+            )
+
+            self.assertIn(
+                compose_proposal.APPROVE_HERE, finished.stdout.decode("utf-8")
+            )
+            pending = os.path.join(root, constants.PROPOSALS_PENDING_DIR)
+            waiting = sorted(
+                name for name in os.listdir(pending) if name.endswith(".md")
+            )
+            staging = formats.ProposalStaging.parse(
+                support.read(os.path.join(pending, waiting[0]))
+            ).validate()
+            self.assertIsNone(staging.decision_block)
+
+    def test_a_change_asked_for_with_no_words_is_refused_by_the_script(self):
+        with support.Sandbox() as sandbox:
+            root, _base_id = self.local_base(sandbox)
+            hand_edit(root)
+            source = self.words_file(sandbox, "source.txt", STATED_SOURCE)
+
+            finished = self.script(
+                root, "--local-edit", "--source-file", source, "--records-a-change"
+            )
+
+            self.assertEqual(1, finished.returncode, finished.stderr)
+            self.assertIn(
+                "needs what they said", finished.stdout.decode("utf-8")
+            )
+
+    def test_the_whole_habit_ends_in_an_approved_change_on_a_base_alone(self):
+        """A4 and H2, end to end, on a base with no shared copy at all."""
+        with support.Sandbox() as sandbox:
+            from gtmbase import approve_local
+
+            root, base_id = self.local_base(sandbox)
+            hand_edit(root)
+            source = self.words_file(sandbox, "source.txt", STATED_SOURCE)
+            what = self.words_file(sandbox, "what.txt", self.STRATEGIC)
+
+            raised = self.script(
+                root,
+                "--local-edit",
+                "--source-file",
+                source,
+                "--what-changed-file",
+                what,
+                "--records-a-change",
+            )
+            self.assertIn(
+                compose_proposal.APPROVE_HERE, raised.stdout.decode("utf-8")
+            )
+
+            pending = os.path.join(root, constants.PROPOSALS_PENDING_DIR)
+            staged = os.path.join(
+                pending,
+                sorted(
+                    name for name in os.listdir(pending) if name.endswith(".md")
+                )[0],
+            )
+            # The day is the real one, because the script staged the change
+            # today and a change may not be written down before it happened.
+            runner = support.NoRemoteRunner()
+            shown = approve_local.show(staged, root, base_id, runner=runner)
+            self.assertEqual(approve_local.STATUS_SHOWN, shown.status, shown.reasons)
+            applied = approve_local.approve(
+                staged, root, base_id, shown.shown_hash, runner=runner
+            )
+
+            self.assertEqual(
+                approve_local.STATUS_APPLIED, applied.status, applied.reasons
+            )
+            # Their own edit is what the document now says, and it is saved.
+            self.assertIn(
+                "one to five marketers", support.read(os.path.join(root, ICP))
+            )
+            self.assertEqual("", status_of(root))
+            # The change they described is written down, with no run on it.
+            folder = os.path.join(root, constants.CHANGES_DIR)
+            written = sorted(
+                name for name in os.listdir(folder) if name.endswith(".md")
+            )
+            self.assertEqual(1, len(written))
+            entry = formats.ChangeEntry.parse(
+                support.read(os.path.join(folder, written[0]))
+            )
+            self.assertIn("churned inside two quarters", entry.body)
+            self.assertIsNone(entry.run_id)
+            # And the document is confirmed against that one change.
+            lines, _bad = formats.parse_confirmations_file(
+                support.read(
+                    os.path.join(
+                        root, constants.CONFIRMATIONS_DIR, ICP.replace("/", "--")
+                    )
+                )
+            )
+            self.assertIn(entry.id, [line.entry for line in lines])
+
+    def test_unsaved_work_this_change_is_not_about_still_stops_it(self):
+        """The rule is narrowed to this change's own files and to nothing else."""
+        with support.Sandbox() as sandbox:
+            from gtmbase import approve_local
+
+            root, base_id = self.local_base(sandbox)
+            hand_edit(root)
+            source = self.words_file(sandbox, "source.txt", STATED_SOURCE)
+            raised = self.script(root, "--local-edit", "--source-file", source)
+            self.assertIn(
+                compose_proposal.APPROVE_HERE, raised.stdout.decode("utf-8")
+            )
+            pending = os.path.join(root, constants.PROPOSALS_PENDING_DIR)
+            staged = os.path.join(
+                pending,
+                sorted(
+                    name for name in os.listdir(pending) if name.endswith(".md")
+                )[0],
+            )
+            runner = support.NoRemoteRunner()
+            shown = approve_local.show(staged, root, base_id, runner=runner, now=TODAY)
+            # Somebody's own words on a file this change is not about.
+            support.write(
+                os.path.join(root, "context", "strategy", "notes.md"),
+                "---\nkind: note\nowner: %s\n---\n\nwords nobody saved\n" % OWNER,
+            )
+
+            applied = approve_local.approve(
+                staged, root, base_id, shown.shown_hash, runner=runner, now=TODAY
+            )
+
+            self.assertEqual(approve_local.STATUS_REFUSED, applied.status)
+            self.assertEqual([approve_local.CODE_UNSAVED_EDITS], applied.codes)
+
+
 # --- The whole way round ------------------------------------------------------
 
 

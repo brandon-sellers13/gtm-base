@@ -50,10 +50,10 @@ from . import (
     worktree,
 )
 from .errors import GtmBaseError, PathError, ValidationError
-from .fsutil import atomic_write_text, read_text
+from .fsutil import atomic_write_text, read_text, remove
 from .ghcmd import call as gh_call
 from .gitcmd import GitRunner, runner_or_default
-from .validate import marker_line
+from .validate import marker_line, validate_owner
 
 # How a run of this module can end.
 STATUS_RECORDED = "recorded"
@@ -92,6 +92,11 @@ CODE_WRITTEN_TWICE = "one-change-written-twice"
 CODE_ALREADY_DRAFTED = "already-drafted"
 CODE_NOT_A_NEW_FILE = "not-a-new-file"
 CODE_NOTHING_PENDING = "nothing-pending"
+# The closing's own answer refused. The document is not one of the two a base
+# needs, the change is not about it, or this seat does not own it.
+CODE_NOT_ONE_OF_THE_TWO = "not-one-of-the-two-documents"
+CODE_NOT_ABOUT_THIS_FILE = "change-does-not-affect-this-file"
+CODE_NOT_AN_OWNER = "not-an-owner"
 
 # The one code this module is allowed to leave in seat state.
 PENDING_CODE = "pending-push"
@@ -196,6 +201,33 @@ NOT_A_NEW_FILE = (
     "first time."
 )
 NOTHING_TO_SEND = "There is no answer waiting to be sent."
+# The refusals the closing's own answer can meet. Each names the document it
+# is about, because a sentence that does not send somebody to one file sends
+# them looking through their whole base.
+CHANGE_NOT_IN_THE_BASE = (
+    "GTM Base could not find that context change in your base, so nothing was "
+    "recorded about %s."
+)
+CHANGE_IS_NOT_ABOUT_IT = (
+    "That context change does not say it affects %s, so nothing was recorded "
+    "about it."
+)
+NOT_ONE_OF_THE_TWO = (
+    "Setting a base up records this only about the two documents a base "
+    "needs, and %s is not one of them, so nothing was recorded."
+)
+NOT_YOUR_DOCUMENT = (
+    "%s is not recorded as yours, so only whoever owns it can say it already "
+    "says what a context change says."
+)
+UNSAVED_EDITS_HERE = (
+    "There are words in your base that you have not saved, so nothing was "
+    "recorded about %s. Save them or put them aside and answer again."
+)
+NOT_ON_THE_MAIN_LINE = (
+    "Your base is not on its main line right now, so nothing was recorded "
+    "about %s. Ask GTM Base to put it back."
+)
 
 
 class ConfirmResult(object):
@@ -1007,6 +1039,18 @@ def against_change(
 
     No question is issued here, so nothing this writes ever moves the rate at
     which the base's own questions are answered yes.
+
+    Six things are checked before a character is written, because this is the
+    one path that records an owner's yes without a question behind it to carry
+    any of them. The change has to be one this base really holds, in either
+    folder. It has to say it affects this document. The document has to be one
+    of the two a base needs, because that is all the closing ever asks about.
+    This seat has to own the document. And the folder has to be in the state
+    every other write into a base demands: on the line of work the team
+    shares, with nothing else half done in it. That last one is not tidiness.
+    Adding one line to a file stages the whole file, so a line about another
+    change that somebody had written and not saved would be saved here as the
+    owner's yes about that other change as well.
     """
     git = runner_or_default(runner)
     moment = now or state.now_utc()
@@ -1017,6 +1061,26 @@ def against_change(
         relative_context = paths.canonical_context_path(base_root, path)
     except (PathError, ValidationError):
         return _refused(CODE_DROPPED_PATH, DROPPED_PATH)
+    document = names.document_name(relative_context)
+
+    if relative_context not in constants.REQUIRED_CONTEXT_FILES:
+        return _refused(CODE_NOT_ONE_OF_THE_TWO, NOT_ONE_OF_THE_TWO % document)
+
+    entry = _entry_the_base_holds(base_root, base_id, entry_id, today, git)
+    if entry is None:
+        return _refused(
+            CODE_ENTRY_MISSING, CHANGE_NOT_IN_THE_BASE % document
+        )
+    if relative_context not in list(entry.affects):
+        return _refused(
+            CODE_NOT_ABOUT_THIS_FILE, CHANGE_IS_NOT_ABOUT_IT % document
+        )
+
+    address, _name = _author(base_root, git)
+    if not address:
+        return _refused(CODE_NO_OWNER_ADDRESS, NO_OWNER_ADDRESS)
+    if address not in _owners_of(base_root, relative_context):
+        return _refused(CODE_NOT_AN_OWNER, NOT_YOUR_DOCUMENT % document)
 
     disagreeing = refusal_while_written_twice(
         base_root, base_id, relative_context, today, git=git
@@ -1042,6 +1106,17 @@ def against_change(
         return ConfirmResult(
             STATUS_RECORDED, reasons=[RECORDED_LOCALLY % relative_context], line=line
         )
+
+    from . import review as review_module
+
+    try:
+        review_module.ready_to_write(base_root, git)
+    except GtmBaseError as refusal:
+        if refusal.code == review_module.CODE_NOT_DEFAULT_BRANCH:
+            return _refused(CODE_NO_DEFAULT_BRANCH, NOT_ON_THE_MAIN_LINE % document)
+        return _refused(CODE_UNSAVED_EDITS, UNSAVED_EDITS_HERE % document)
+
+    before = read_text(checked_confirmations_path(base_root, relative))
     try:
         _append_line(base_root, relative, line)
         git.check(["add", "--", relative], cwd=base_root)
@@ -1057,12 +1132,55 @@ def against_change(
             cwd=base_root,
         )
     except (ValidationError, PathError) as failure:
+        _take_the_line_back(base_root, relative, before, git)
         return _refused(failure.code or CODE_MALFORMED, DROPPED_PATH)
     except GtmBaseError:
-        return _refused(CODE_UNSAVED_EDITS, UNSAVED_EDITS)
+        # The line is taken back rather than left on the disk and staged.
+        # Leaving it there tells the person they have unsaved edits they never
+        # made, and the next thing that refuses on a folder with something half
+        # done in it would be refusing on this plugin's own work.
+        _take_the_line_back(base_root, relative, before, git)
+        return _refused(CODE_UNSAVED_EDITS, UNSAVED_EDITS_HERE % document)
     return ConfirmResult(
         STATUS_RECORDED, reasons=[RECORDED_LOCALLY % relative_context], line=line
     )
+
+
+def _entry_the_base_holds(base_root, base_id, entry_id, today, git):
+    """One context change this base really holds, read from either folder."""
+    del git  # reading the base itself runs nothing
+    if not entry_id:
+        return None
+    for item in base_reader.ledger(base_root, base_id, today):
+        if item.entry is not None and item.entry.id == entry_id:
+            return item.entry
+    return None
+
+
+def _owners_of(base_root: str, relative: str) -> List[str]:
+    """The addresses written on one context file as owning it."""
+    text = read_text(os.path.join(base_root, relative.replace("/", os.sep)))
+    if text is None:
+        return []
+    try:
+        block, _body = formats.split_document(text)
+        fields = formats.parse_frontmatter(block)
+        return validate_owner(fields.get("owner"))
+    except (ValidationError, PathError):
+        return []
+
+
+def _take_the_line_back(base_root, relative, before, git) -> None:
+    """Put the confirmations file back the way it was, and unstage it."""
+    full = checked_confirmations_path(base_root, relative)
+    try:
+        if before is None:
+            remove(full)
+        else:
+            atomic_write_text(full, before, mode=0o644, inside=base_root)
+        git.run(["reset", "-q", "HEAD", "--", relative], cwd=base_root)
+    except (GtmBaseError, OSError, PathError):
+        return
 
 
 # --- Sending an answer that could not be sent last time ----------------------

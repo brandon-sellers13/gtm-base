@@ -77,6 +77,9 @@ CODE_NO_DRAFTED_LINE = "no-drafted-line"
 CODE_OWNER_MISSING = "owner-missing"
 # A context change named a file it may not name, and the path itself said why.
 CODE_BAD_AFFECTED_PATH = "bad-affected-path"
+# Every identifier this plugin can work out for a context change is already
+# taken on this base, so there is nowhere to write another one.
+CODE_NO_ROOM_FOR_A_CHANGE = "no-room-for-another-change"
 
 # What the saved work is called when a file is written during setup.
 SAVE_MESSAGE = "Add %s from setup"
@@ -275,7 +278,47 @@ def entry_id(sequence: int = 0) -> str:
     return ids.staging_id("join", drafting.ICP_PATH, "join", sequence)
 
 
-def stamp_entry(draft, run_id: Optional[str], owner_email: str, sequence: int = 0):
+# How many identifiers are tried before a base is said to have no room for
+# another context change. It is far more closings than any base will see, and
+# the bound is here so a folder somebody filled by hand cannot make this run
+# for ever.
+ENTRY_SEQUENCE_CAP = 1000
+
+
+def free_entry_id(base_root: Optional[str]) -> str:
+    """The first identifier for a closing change that no folder already holds.
+
+    The four things the identifier is worked out from are fixed, so the first
+    one is the same on every base and for every closing. That was fine while
+    setting a base up wrote one change and never ran twice, and it stopped
+    being fine the moment the closing became a question somebody can answer
+    more than once. Two states went wrong. On a base whose changes are still
+    in the older folder, a second entry under the same identifier landed in
+    the newer folder and the two disagreed, which is the one state nothing
+    here can resolve and which quietly unflags every document that change is
+    about. On a base already using the newer folder, a second closing was
+    refused because the file was there.
+
+    Both folders are looked in, so an identifier counts as free only when
+    neither holds it.
+    """
+    if not base_root:
+        return entry_id(0)
+    for sequence in range(ENTRY_SEQUENCE_CAP):
+        candidate = entry_id(sequence)
+        relative, _text = base_reader.entry_path_and_text(base_root, candidate)
+        if relative is None:
+            return candidate
+    raise ReviewError(CODE_NO_ROOM_FOR_A_CHANGE, code=CODE_NO_ROOM_FOR_A_CHANGE)
+
+
+def stamp_entry(
+    draft,
+    run_id: Optional[str],
+    owner_email: str,
+    sequence: int = 0,
+    entry_name: Optional[str] = None,
+):
     """Put this plugin's own identifiers on a context change.
 
     The identifier and where it came from are set here, over whatever the
@@ -293,7 +336,7 @@ def stamp_entry(draft, run_id: Optional[str], owner_email: str, sequence: int = 
     """
     block, body = formats.split_document(draft.text)
     fields = formats.parse_frontmatter(block)
-    fields["id"] = entry_id(sequence)
+    fields["id"] = entry_name or entry_id(sequence)
     fields["origin"] = "join"
     if run_id:
         fields["run_id"] = run_id
@@ -308,15 +351,24 @@ def stamp_entry(draft, run_id: Optional[str], owner_email: str, sequence: int = 
     return _reparse(draft, fields, body)
 
 
-def entry_path(draft) -> str:
-    """Where the context change is written."""
-    return constants.CHANGES_DIR + "/" + str(draft.fields["id"]) + ".md"
+def entry_path(draft, base_root: Optional[str] = None) -> str:
+    """Where the context change is written.
+
+    A base that has not been updated yet keeps its changes in the older
+    folder, and a change it already holds is written where it already is, so
+    one identifier never names two files. `base_reader` owns that rule and it
+    is asked rather than repeated here.
+    """
+    name = str(draft.fields["id"])
+    if base_root:
+        return base_reader.where_to_write_the_entry(base_root, name)
+    return constants.CHANGES_DIR + "/" + name + ".md"
 
 
-def path_for(draft) -> str:
+def path_for(draft, base_root: Optional[str] = None) -> str:
     """Where in the base a draft belongs, whichever step it came from."""
     if draft.step == drafting.STEP_CHANGE:
-        return entry_path(draft)
+        return entry_path(draft, base_root)
     return draft.path
 
 
@@ -429,8 +481,13 @@ def approve(
         raise ReviewError(CODE_SCREENED, codes=codes)
 
     if draft.step == drafting.STEP_CHANGE:
-        # No run is written onto it. See `stamp_entry` for why.
-        draft = stamp_entry(draft, None, address)
+        # No run is written onto it. See `stamp_entry` for why. The identifier
+        # is the first one no folder of this base already holds, because the
+        # closing can be answered more than once and two changes under one
+        # name is the state nothing here can resolve.
+        draft = stamp_entry(
+            draft, None, address, entry_name=free_entry_id(base_root)
+        )
         try:
             canonical_affects(draft, base_root)
         except PathError as refusal:
@@ -441,7 +498,7 @@ def approve(
             raise ReviewError(code, code=code)
     else:
         draft = stamp_owner(draft, address)
-    relative = path_for(draft)
+    relative = path_for(draft, base_root)
 
     if first_file:
         result = create_base.create(

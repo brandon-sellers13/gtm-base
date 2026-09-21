@@ -204,6 +204,23 @@ FINDING_DOCUMENT_OLDER = (
     "so that document is older than the change it is meant to reflect. It is "
     "worth a read."
 )
+# Said when a document has not caught up with a context change. It says only
+# what is true in every state that reaches it: the document is behind, and the
+# review is where it gets dealt with. It never says a fix is ready, because
+# whether one has been prepared varies, and a sentence claiming it would be
+# wrong half the time.
+FINDING_DOCUMENT_BEHIND = (
+    "%s has not caught up with a context change you recorded. Ask for a review "
+    "of your base to go through it."
+)
+# Said when one context change is written down twice and the two copies
+# disagree. Nothing else about the base can be worked out while that is true,
+# so this claims nothing about any other document.
+FINDING_WRITTEN_TWICE = (
+    "One of your context changes is written down twice and the two copies do "
+    "not say the same thing, so GTM Base cannot tell you yet whether anything "
+    "is out of date."
+)
 FINDING_NOTHING_YET = (
     "Nothing is out of date yet. The first date GTM Base will watch is %s, when "
     "context change %s comes up for review."
@@ -798,6 +815,10 @@ def finding_sentence(report, finding) -> str:
         return FINDING_REQUIRED_FILE % finding.path
     if finding.code == stale.FINDING_BASELINE_NO_CHANGES:
         return _baseline_sentence(report, finding)
+    if finding.code == stale.FINDING_CHANGE_WRITTEN_TWICE:
+        return FINDING_WRITTEN_TWICE
+    if finding.code == stale.FINDING_DOCUMENT_BEHIND:
+        return FINDING_DOCUMENT_BEHIND % names.document_name(finding.path)
     if finding.code == stale.FINDING_DOCUMENT_OLDER:
         decided = None
         for item in report.review_items:

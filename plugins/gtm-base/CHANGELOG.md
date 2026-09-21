@@ -124,6 +124,26 @@
 
 - The note that your record of context changes looks quiet has moved out of the way. It used to be said by the run that prepares changes; it is said only inside a review you asked for now, at most once a session, never at the start of one. A record with nothing in it is behind at once, which it always was. Saying there is nothing to write down rests it for the same thirty days, and then it returns, once.
 
+- Two reviewers went through the closing before it shipped and found eight things wrong with it. All eight are fixed here and every one of them now has a test, four of which run the command a skill actually tells the assistant to run rather than the library behind it. That gap is how four of the eight got in.
+
+- A yes at the closing used to save more than the one line it wrote. Adding a line stages the whole file it sits in, so a line about another change that somebody had written and not saved was saved along with it and counted as the owner's yes about that other change too. The closing's yes now refuses on a folder with anything unsaved in it, the way every other write into a base already did, and it refuses when the base is not on its main line.
+
+- That yes also checked almost nothing before it wrote. It now requires the change to be one the base really holds, in either folder; the change to say it affects that document; the document to be one of the two a base needs; and this computer's own address to be recorded as owning the document. When the save itself fails, the line is taken back off the disk rather than left there looking like words you never saved.
+
+- Words somebody typed no longer go on a command line anywhere. A sentence with a dollar sign, a bracket or a pair of backticks in it is an instruction to the shell the moment it is written into a command, and four of the skills told the assistant to do exactly that with what a person said. Their words go in a file now and the path goes on the command line. Every command that takes words this way ends in `-file`.
+
+- The hand-edit habit could not actually be used. The script the skill names took neither the answer nor the flag that carries it, so it refused every attempt, and on a base with no shared copy the local approval refused the edit as unsaved work, which is exactly what a hand edit is. Both are fixed, and the whole habit is proved end to end on a base with no shared copy: the edit, the question, an answer about the business, one approval, the document saved and confirmed, and the change written down.
+
+- Nothing about what may leave the computer changed to make that work. The only thing narrowed is which unsaved files stop a local approval: the files the change itself is about are allowed to be unsaved, because the yes is already bound to their exact bytes, and any other unsaved work anywhere in the base still stops the run with the sentence it always did.
+
+- Every context change written at a closing used to get the same name. The name was worked out from four fixed things, so it was identical on every base and for every closing. A second closing was either refused outright or, on a base still keeping its changes in the older folder, wrote a second entry under the same name in the newer one, which is the one state nothing can resolve and which quietly unflags every document that change is about. A closing now takes the first name neither folder already holds.
+
+- The closing no longer reports an all-clear over a document it has just flagged. Saying no to "does this already say what the change says" leaves the document flagged, and the finding immediately afterwards said nothing was out of date. It says which document has not caught up. A context change written down twice stops any claim either way, rather than being read as a base with nothing recorded in it.
+
+- The change shown before it is written is held apart as data, so a heading inside it cannot read as an instruction, and every one of the four lines is put on one line with anything that could end the block taken apart first. It also stops offering to let you correct who noted the change: that address is the one your base records your work under, it was written over a moment later anyway, and saying so plainly is better than taking a correction and throwing it away.
+
+- Skip works after you have been shown what you would be skipping. It used to be refused from the moment the change had been drafted, which is the one moment somebody is most likely to want it.
+
 ## 0.2.6 (2026-09-12)
 
 - You are no longer asked to work out which of your folders holds your marketing material. The one opening question now asks where your company's material is roughly, a whole company folder is a fine answer, and GTM Base looks through the folder you named and proposes the places inside it that look like marketing material, naming each one with a count of what it found there and asking whether that is it. You say yes, name a folder to add, or name one to drop, and only then are you shown the list of files and asked whether they may be read. The old rule asked for the narrowest folder you could name, which put the finding on the person least likely to know where their own material sits.

@@ -67,6 +67,16 @@ FINDING_DOCUMENT_OLDER = "document-older-than-decision"
 # place of the older "no entry was written down" finding, because setup no
 # longer requires a context change to be drafted.
 FINDING_BASELINE_NO_CHANGES = "baseline-no-context-change-recorded"
+# One context change written down twice, with the two copies disagreeing.
+# Nothing can be worked out about the documents it is about until somebody
+# chooses between them, so the first run may not report an all-clear either.
+FINDING_CHANGE_WRITTEN_TWICE = "one-change-written-twice"
+# A document an open context change has moved past, which is the state a "no"
+# at the closing leaves behind. Added 2026-09-20 after finding A7 of the
+# release review: the first run looked only at source dates, so it said
+# nothing was out of date while the report from the same run flagged a
+# document.
+FINDING_DOCUMENT_BEHIND = "document-behind-a-change"
 FINDING_NOTHING_OUT_OF_DATE = "nothing-out-of-date-yet"
 
 # The kind the base's own map carries. A file of this kind is left out of
@@ -492,8 +502,14 @@ class StaleReport(object):
         The order is fixed so every run of the same base says the same thing: a
         file the person did not write, then a file carrying a question nobody
         answered, then a document older than the context change it is supposed
-        to reflect, then the honest baseline for a base with nothing recorded
-        yet, then the plain statement that nothing is out of date.
+        to reflect, then a change written down twice, then a document an open
+        change has moved past, then the honest baseline for a base with
+        nothing recorded yet, then the plain statement that nothing is out of
+        date.
+
+        The fourth and fifth places were added on 2026-09-20 after finding A7
+        of the release review. Without them a "no" at the closing produced an
+        all-clear in the same breath as a flagged document.
 
         The second place in that order is the unanswered marker, which is built
         in Unit 1.7 of the 2026-09-19 plan. Until then the slot is here and is
@@ -509,6 +525,29 @@ class StaleReport(object):
             item = self.review_items[0]
             return Finding(
                 FINDING_DOCUMENT_OLDER, item.path, item.sources_date, item.entry_id
+            )
+        # A change written down twice comes before everything below, because
+        # neither copy of it has been read and nothing worked out from the
+        # record is safe while that is true. It also comes before the
+        # baseline: a base whose only change disagrees with itself is not a
+        # base with nothing recorded in it.
+        if self.conflicts:
+            return Finding(
+                FINDING_CHANGE_WRITTEN_TWICE, None, None, self.conflicts[0].entry_id
+            )
+        # A document an open change has moved past. This is checked before any
+        # all-clear, because the closing used to say nothing was out of date
+        # while this very report was flagging a document (finding A7).
+        behind = [
+            flag for flag in self.file_flags if flag.trigger == TRIGGER_LEDGER
+        ]
+        if behind:
+            first = behind[0]
+            return Finding(
+                FINDING_DOCUMENT_BEHIND,
+                first.path,
+                None,
+                first.entry_ids[0] if first.entry_ids else None,
             )
         if not self.entries:
             items = self.baseline_items(required_files)

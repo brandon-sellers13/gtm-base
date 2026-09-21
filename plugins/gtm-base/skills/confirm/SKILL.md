@@ -68,7 +68,7 @@ The three answers, said once:
 From inside the base:
 
 - `python3 scripts/confirm.py --question <id> --answer yes`
-- `python3 scripts/confirm.py --question <id> --answer no --reason "<what they said>"`
+- `python3 scripts/confirm.py --question <id> --answer no --reason-file <path to what they said>`
 - `python3 scripts/confirm.py --question <id> --answer not-now`
 
 The reason is what the person said in their own words. For a no about a

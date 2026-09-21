@@ -46,6 +46,7 @@ import argparse  # noqa: E402
 
 from gtmbase import compose_proposal, machine, moment, paths, state  # noqa: E402
 from gtmbase.errors import GtmBaseError  # noqa: E402
+from gtmbase.fsutil import read_text  # noqa: E402
 
 EXIT_DONE = 0
 EXIT_REFUSED = 1
@@ -66,12 +67,49 @@ def build_parser():
         help="build a proposal from the change you made by hand",
     )
     parser.add_argument("--source", help="where the change came from, in your words")
+    parser.add_argument(
+        "--source-file",
+        help="a file holding where the change came from, in their own words",
+    )
+    parser.add_argument(
+        "--what-changed-file",
+        help="a file holding what changed and why, in their own words",
+    )
+    parser.add_argument(
+        "--records-a-change",
+        action="store_true",
+        help="what they said is about the business and becomes a context change",
+    )
     parser.add_argument("--reopen", help="raise a kept proposal again by its id")
     parser.add_argument(
         "--show-document",
         help="print the document a change is about, with the check run first",
     )
     return parser
+
+
+COULD_NOT_READ = (
+    "GTM Base could not read the file holding their words, so nothing was "
+    "proposed. Write it again and run this with the path to it."
+)
+NEEDS_THE_WORDS = (
+    "A context change needs what they said about what changed. Write it to a "
+    "file and run this again with the path to it."
+)
+
+
+def words_from(path):
+    """What somebody typed, read out of a file rather than off a command line.
+
+    Their words go in a file and the path goes on the command line, because a
+    person's own sentence with a dollar sign and a bracket in it is a shell
+    instruction the moment it is written into a command. The words are read as
+    text and nothing in them is ever run.
+    """
+    text = read_text(path)
+    if text is None:
+        return None
+    return text.strip()
 
 
 def report(result):
@@ -126,14 +164,33 @@ def main(argv=None):
 
     try:
         if options.local_edit:
-            if not options.source:
+            source = options.source
+            if options.source_file:
+                source = words_from(options.source_file)
+                if source is None:
+                    sys.stdout.write(COULD_NOT_READ + "\n")
+                    return EXIT_REFUSED
+            if not source:
                 sys.stderr.write(
                     "Say where the change came from, in your own words, so the "
                     "reviewer can see the evidence.\n"
                 )
                 return EXIT_ERROR
+            what_changed = None
+            if options.what_changed_file:
+                what_changed = words_from(options.what_changed_file)
+                if what_changed is None:
+                    sys.stdout.write(COULD_NOT_READ + "\n")
+                    return EXIT_REFUSED
+            if options.records_a_change and not what_changed:
+                sys.stdout.write(NEEDS_THE_WORDS + "\n")
+                return EXIT_REFUSED
             staged = compose_proposal.stage_local_edit(
-                resolution.root, resolution.base_id, options.source
+                resolution.root,
+                resolution.base_id,
+                source,
+                what_changed=what_changed,
+                records_a_change=bool(options.records_a_change),
             )
             result = compose_proposal.propose(
                 staged, resolution.root, resolution.base_id

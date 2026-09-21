@@ -63,9 +63,9 @@ Read what they say and decide one thing only.
 
 - An answer about the business, such as "we moved up to companies of twenty to
   two hundred people, because everyone smaller churned", is a context change.
-  Pass it as `--what-changed "<their words>"` with `--records-a-change`. It
-  travels with the proposal and is written into the base when the proposal is
-  accepted.
+  Write their words to a file of your own and pass
+  `--what-changed-file <path> --records-a-change`. It travels with the
+  proposal and is written into the base when the proposal is accepted.
 - An answer about a spelling mistake, a broken link, or a heading is not a
   context change. Pass neither, and the proposal is exactly what it would have
   been before they were asked. Never turn a typo into a context change, and
@@ -80,6 +80,18 @@ Why: Everyone smaller than that churned inside two quarters.
 What it affects: your customer profile
 When to look again: 2026-12-19
 <!-- end change -->
+
+### Words somebody typed never go on a command line
+<!-- step -->
+
+A sentence a person wrote can hold a dollar sign, a bracket, or a pair of
+backticks, and each of those is an instruction to the shell the moment their
+words are written into a command.
+
+- Write their words to a file of your own with the file-writing tool first,
+  somewhere outside the base and outside GTM Base's own records.
+- Give the command the path to that file, never the words.
+- The commands that take words this way all end in `-file`.
 
 ## What happens, in this order
 
@@ -129,9 +141,9 @@ second review.
 From inside the base:
 
 - `python3 scripts/propose.py --staging <path to the staged file>`
-- `python3 scripts/propose.py --local-edit --source "<where the change came from, in your words>"`,
-  adding `--what-changed "<their words>" --records-a-change` when what they
-  said was about the business rather than about a typo
+- `python3 scripts/propose.py --local-edit --source-file <path to their words>`,
+  adding `--what-changed-file <path> --records-a-change` when what they said
+  was about the business rather than about a typo
 - `python3 scripts/propose.py --reopen <proposal id>`
 
 The last one raises a proposal again from the copy kept when it was first sent.

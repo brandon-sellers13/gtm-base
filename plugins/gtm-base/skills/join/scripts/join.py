@@ -67,6 +67,7 @@ from gtmbase import (  # noqa: E402
     paths,
     sources,
 )
+from gtmbase.fsutil import read_text  # noqa: E402
 from gtmbase.errors import (  # noqa: E402
     ConsentError,
     DraftError,
@@ -324,6 +325,13 @@ def build_parser():
         help="only the files in this folder of the list, once per folder",
     )
     parser.add_argument("--answer", help="what the person said, in their own words")
+    parser.add_argument(
+        "--answer-file", help="a file holding what the person said, in their own words"
+    )
+    parser.add_argument(
+        "--got-in-the-way-file",
+        help="a file holding what got in the way, in their own words",
+    )
     parser.add_argument("--entry", help="the context change this step is about")
     parser.add_argument("--file", dest="file", help="the one document to record an answer about")
     parser.add_argument("--base", help="the base folder to write into")
@@ -344,6 +352,27 @@ def build_parser():
         help="they asked for the base to sit inside the folder they named",
     )
     return parser
+
+
+COULD_NOT_READ = (
+    "GTM Base could not read the file holding their words, so nothing was "
+    "done. Write it again and run this with the path to it."
+)
+
+
+def words_from(path, out):
+    """What somebody typed, read out of a file rather than off a command line.
+
+    Their words go in a file and the path goes on the command line, because a
+    sentence somebody wrote with a dollar sign and a bracket in it becomes a
+    shell instruction the moment it is written into a command. What is read
+    here is text and nothing in it is ever run.
+    """
+    text = read_text(path)
+    if text is None:
+        out.write(COULD_NOT_READ + "\n")
+        return None
+    return text.strip()
 
 
 def need(options, name, out):
@@ -705,7 +734,12 @@ def run_review(options, out):
 
 def run_what_is_wrong(options, out):
     step = need(options, "step", out)
-    answer = need(options, "answer", out)
+    if options.answer_file:
+        answer = words_from(options.answer_file, out)
+        if answer is None:
+            return EXIT_REFUSED
+    else:
+        answer = need(options, "answer", out)
     if not step or not answer:
         return EXIT_ERROR
     out.write(join_flow.what_is_wrong(step, answer))
@@ -761,6 +795,11 @@ def run_skip(options, out):
         out.write(CANNOT_SKIP_FIRST + "\n")
         return EXIT_REFUSED
     result = join_flow.skip_step(step, root)
+    if getattr(result, "sentence", None):
+        # Skipping a context change writes nothing at all, so there is no file
+        # to name and nothing for a later session to finish.
+        out.write(result.sentence + "\n")
+        return EXIT_DONE
     line(out, "file", result.path)
     out.write(
         "That one is written down as skipped, and the next session will offer "
@@ -801,10 +840,14 @@ def run_preview_change(options, out):
             "it again from the same request.\n"
         )
         return EXIT_REFUSED
-    proposed = join_flow.preview_change(reviewed.draft)
+    root = base_folder(options, out) if options.base else None
+    if options.base and root is None:
+        return EXIT_ERROR
+    proposed = join_flow.preview_change(reviewed.draft, base_root=root)
     out.write(proposed.four_lines + "\n\n")
     for label, value in proposed.details:
         out.write("%s: %s\n" % (label, value))
+    out.write(join_flow.NOTED_BY_IS_THE_BASES_RECORD + "\n")
     out.write("\n" + proposed.artifact + "\n")
     out.write(join_flow.ENTRY_PREVIEW_ASK + "\n")
     return EXIT_DONE
@@ -872,8 +915,13 @@ def run_close(options, out):
     root = base_folder(options, out)
     if root is None:
         return EXIT_ERROR
+    got_in_the_way = options.got_in_the_way
+    if options.got_in_the_way_file:
+        got_in_the_way = words_from(options.got_in_the_way_file, out)
+        if got_in_the_way is None:
+            return EXIT_REFUSED
     result = join_flow.close_run(
-        root, run_id, got_in_the_way=options.got_in_the_way, email=options.email
+        root, run_id, got_in_the_way=got_in_the_way, email=options.email
     )
     out.write(result.finding + "\n")
     if result.note_path:

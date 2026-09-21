@@ -1127,9 +1127,16 @@ class TestTheFirstRunFinding(unittest.TestCase):
             self.assertIn(TUESDAY, result.finding_sentence)
 
     def test_otherwise_nothing_is_out_of_date_yet_and_it_names_the_date(self):
+        """The all-clear, on a base where the change really is settled.
+
+        The confirmation naming the change was added on 2026-09-20 with
+        finding A7. Without it this base flags its own profile, and an
+        all-clear over a flag is the thing that finding is about.
+        """
         with support.Sandbox() as sandbox:
             base = self._base(sandbox)
             base.add_entry(text=entry_text(review_by="2026-09-01"))
+            base.confirm(ICP, FRIDAY, trigger="ledger", entry=ENTRY)
 
             result = run_check(base, mode="first-run")
 
@@ -1141,6 +1148,7 @@ class TestTheFirstRunFinding(unittest.TestCase):
         with support.Sandbox() as sandbox:
             base = self._base(sandbox)
             base.add_entry(text=entry_text(review_by="2026-09-01"))
+            base.confirm(ICP, FRIDAY, trigger="ledger", entry=ENTRY)
             first = run_check(base, mode="first-run")
 
             base.add_entry(text=entry_text(review_by="2026-07-01"))
