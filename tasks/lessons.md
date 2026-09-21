@@ -36,3 +36,12 @@
 - `find . -not -path "./.git/*"` is read by the plugin's own check as a command about
   the shared copy and refused. Name no folder that reads as the version-control tool
   on a command line, in this repository.
+
+## 2026-09-20, the release A reviews
+- Test the command a skill tells the assistant to run, taken from the skill's own text, not the library behind it and not a hand copy of the command. Five defects of that kind shipped across four rounds before the walk read the text itself.
+- A test payload must be shaped like what the real client sends. A fallback that refused every write passed its tests because the payloads had no transcript path.
+- A fix to a safety rule is new code and needs its own outside look. Most findings after the first round were introduced by the round before.
+- A sentence that makes a claim about a state that varies is a bug, in the product and in the CHANGELOG. Put each sentence in every state that can produce it.
+- When a rule is relaxed for one case (unsaved edits allowed for a hand edit), scope it to exactly that case and ask what the failure and the success path each do to the person's bytes.
+- Writing a file is not finished until it has been read back and compared.
+- Never write a client's file names into a public repository; the names alone carry segments and prospects.

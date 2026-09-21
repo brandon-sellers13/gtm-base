@@ -1,0 +1,84 @@
+---
+title: "Release A: the live check"
+type: walkthrough
+status: waiting for Brandon
+date: 2026-09-20
+plan: docs/plans/2026-09-19-001-feat-base-that-produces-work-plan.md
+---
+
+# Release A: the live check
+
+This is the list Brandon works through in his own Claude Code once Release A is installed on his machine. Every unit in the release changed sentences a person reads, and three real runs have already shown that tests do not catch a sentence that is true and still wrong. Results go at the bottom of this file, from the real run only. Nothing here is filled in ahead of time.
+
+One seat exists, so installing the release on that seat is the release. The version is bumped, the plugin is updated on Brandon's machine, and this check follows. If a step fails, it is fixed and the version is bumped again.
+
+## Before starting
+
+1. Update the plugin, then quit Claude Code and open it again, because hooks load when a session starts.
+2. Release A adds two hooks that run in every session on the machine: one before a file is read and one before a file is written. If anything about ordinary work feels wrong during this check (a file write refused that should not be, a noticeable pause on every read), stop, turn the plugin off in the plugin manager, and tell Claude what happened. Turning it off is the way back.
+
+## The steps
+
+Each step says what to do, what should happen, and what to write down.
+
+### 1. A quiet start
+Open Claude Code in `~/Gridwise` and ask for something ordinary that has nothing to do with GTM Base.
+- Expected: a working session with no question in it. The base does not ask about the map or about anything else.
+- Write down: whether anything was asked.
+
+### 2. Review my base
+Say: review my base.
+- Expected: one short line per item, each naming a document in plain words (your customer profile, your positioning), never a file path or an identifier. The offer to update how your context changes are stored appears once.
+- Write down: whether every line could be read in seconds, and any line that named a path or an identifier.
+
+### 3. Look before moving anything
+Ask Claude to check what updating your context changes would do, without doing it.
+- Expected: a plain description of what would move and that it would be offered. Nothing in the base changes.
+- Write down: what it said.
+
+### 4. The update itself
+Say yes to the update.
+- Expected: one sentence saying the update is done and that your context change says what it said before. The next review reads the same as the one in step 2, minus the offer.
+- Write down: the sentence, and whether the next review matched.
+
+### 5. A hand edit
+Open `context/strategy/positioning.md` in the Gridwise base in Obsidian or any editor, change one real sentence, and save. Then tell Claude you edited your positioning and want it kept.
+- Expected: one question, "What changed, and why?". After your answer, the whole difference between the saved version and your edit is shown, then one request: approve, leave it, or drop it. On approve, the document is saved and confirmed, and a context change carrying your own sentence is recorded.
+- Write down: whether the difference shown was exactly your edit, and whether the recorded context change reads as your sentence.
+
+### 6. A typo
+Fix a typo in the same file and tell Claude to keep it, answering that it was only a typo.
+- Expected: the edit is kept and no context change is recorded.
+- Write down: whether anything was recorded.
+
+### 7. The moment of use, measured
+This is the trial the plan sets a bar for. The bar is ten real prompts with the flag firing on at least nine, unless Brandon sets another bar before starting. Write the bar here before step 7 begins: [BAR TK — Brandon].
+
+First record a context change that makes the customer profile out of date (through the review, or by telling Claude what changed). Then, across ten separate ordinary requests that would use the customer profile (draft an email to a prospect in a segment, outline a landing page, summarize who we sell to), count how many times Claude stopped first and said the profile had not caught up with that change.
+- Expected: it stops, names the document and the change in plain words, shows the four lines, and asks whether to use it as it stands, fix it first, or say it already reflects the change.
+- Write down: the count out of ten, and for each miss, what the request was.
+- Then answer one of each: "use it as it stands" (nothing is recorded and it still flags next time), "fix it first" (a real replacement is written, shown, and approved; the flag clears), and on a second change "it already reflects this" (one confirmation is recorded).
+
+### 8. A setup closing
+In a scratch folder holding two or three real marketing documents, say: set up my company base. Go through to the end.
+- Expected: two documents drafted, then three plain sentences about what a context change is with one example, then the request: "Tell me if anything about the context of the business changed that we should account for. One sentence is enough, or say skip." Give it a real sentence. The entry is shown whole with each fact correctable. For each of the two documents it affects, it asks whether that document already says what the change says. Answer no for one: a replacement is written and approved, and the closing never says nothing is out of date while that change is waiting.
+- Write down: whether the three sentences made sense on first hearing, and the closing sentence word for word.
+- Afterwards the scratch base can be deleted.
+
+### 9. Ordinary work is untouched
+In a client repository that is not a base, make an ordinary commit and push, and have Claude write and edit a few ordinary files, including a file whose name begins with a dot.
+- Expected: nothing is refused and nothing is asked.
+- Write down: anything refused.
+
+### 10. Your own settings
+Ask Claude to add a harmless permission to your Claude settings.
+- Expected: Claude Code's own permission prompt appears with GTM Base's reason attached. It is a question, not a refusal.
+- Write down: whether it asked or refused.
+
+## What would stop the release
+
+Any ordinary write or push refused in step 9. Any document other than the one edited being changed in step 5. The update in step 4 losing or rewording the context change. The flag count in step 7 falling below the bar, which the plan answers by saying plainly in the changelog and the join guide that outside a skill the flag is best effort.
+
+## Results
+
+[RESULTS TK — Brandon: fill in from the real run, step by step, with the date. No estimates.]

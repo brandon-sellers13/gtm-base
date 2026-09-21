@@ -1092,3 +1092,13 @@ reviewers' scripts.
       came before it. Two skills printed the hand-out after the use, and both
       now print it first.
 - [x] W2. A documented command for a script the walk does not know stops it.
+
+### 2026-09-20, release A is ready for the go-ahead
+- [x] Units 1.1 to 1.5 merged; five release review rounds fixed test-first; 1853 tests passing at 7476eb7.
+- [ ] Brandon: go-ahead for the version bump (release with Astra's third look outstanding, or hold for it).
+- [ ] Bump the version, update the plugin on the one seat, republish the atlas.
+- [ ] Brandon: run docs/walkthroughs/2026-09-release-a-live-check.md and fill in its results.
+- [ ] Astra's third look, when the Codex limit resets on 2026-09-26 or credits are added.
+
+#### Review
+Every review round found real defects, and the later rounds mostly found what the earlier fixes introduced: a guard that could be switched off through itself, a data-loss path in a relaxed check, words files that read any file, a fallback that refused every write, a moved check that refused ordinary edits. Three things would have caught most of them sooner and are now tests: payloads shaped like what the client really sends, documented commands run from the skill text itself, and byte comparisons that compare bytes.
