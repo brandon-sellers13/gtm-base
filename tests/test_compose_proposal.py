@@ -995,18 +995,23 @@ class TestWhatChangedAndWhy(support.PastTheFirstBackupReview, unittest.TestCase)
 
     def test_the_proposal_with_no_answer_at_all_is_the_one_it_always_was(self):
         """The path that shipped before this unit, byte for byte."""
+        # Two bases, because a second hand edit in one base now gets an
+        # identifier of its own and the two files would differ on that alone
+        # (finding N3 of the 2026-09-20 verification round).
         with support.Sandbox() as sandbox:
-            root, base_id, _remote = base_with_a_shared_copy(sandbox)
-            hand_edit(root)
+            one, one_id, _remote = base_with_a_shared_copy(sandbox, name="one")
+            two, two_id, _other = base_with_a_shared_copy(sandbox, name="two")
+            hand_edit(one)
+            hand_edit(two)
             without = support.read(
                 compose_proposal.stage_local_edit(
-                    root, base_id, STATED_SOURCE, now=TODAY
+                    one, one_id, STATED_SOURCE, now=TODAY
                 )
             )
 
             with_a_typo = support.read(
                 compose_proposal.stage_local_edit(
-                    root, base_id, STATED_SOURCE, now=TODAY, what_changed=self.TYPO
+                    two, two_id, STATED_SOURCE, now=TODAY, what_changed=self.TYPO
                 )
             )
 
@@ -1071,6 +1076,8 @@ class TestTheHandEditHabitThroughTheScript(unittest.TestCase):
         "everyone smaller than that churned inside two quarters."
     )
 
+    root_of_the_moment = None
+
     def local_base(self, sandbox):
         from gtmbase import machine
 
@@ -1087,11 +1094,27 @@ class TestTheHandEditHabitThroughTheScript(unittest.TestCase):
         support.git(["commit", "-q", "-m", "a local base"], cwd=root)
         machine.append_joined(root=root, base_id=base_id, remote=None)
         state.update_seat(base_id, first_push_reviewed=True)
+        self.root_of_the_moment = root
         return root, base_id
 
     def words_file(self, sandbox, name, text):
-        """Their words, in a file of our own, outside the base."""
-        path = os.path.join(sandbox.path, name)
+        """Their words, in the file the script itself hands out for them.
+
+        This used to be a file of the test's own, anywhere in the sandbox.
+        Finding V6 of the 2026-09-20 verification round: any path at all was
+        read that way, so a document could have somebody's private notes read
+        into their base, and the script chooses where words go now.
+        """
+        del sandbox
+        kind = "what-changed" if name.startswith("what") else "source"
+        handed = self.script(self.root_of_the_moment, "--new-words-file", kind)
+        printed = handed.stdout.decode("utf-8")
+        path = ""
+        for line in printed.split("\n"):
+            if line.startswith("words="):
+                path = line[len("words=") :].strip()
+        if not path:
+            raise AssertionError("the script handed out no file: %r" % printed)
         support.write(path, text)
         return path
 

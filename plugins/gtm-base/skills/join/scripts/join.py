@@ -66,8 +66,8 @@ from gtmbase import (  # noqa: E402
     offer_answer,
     paths,
     sources,
+    wordsfile,
 )
-from gtmbase.fsutil import read_text  # noqa: E402
 from gtmbase.errors import (  # noqa: E402
     ConsentError,
     DraftError,
@@ -288,6 +288,17 @@ def build_parser():
     parser.add_argument("--folder", help="the folder to list or to fix the list of")
     parser.add_argument("--session", help="the identifier of this session")
     parser.add_argument("--label", help="a short name for one piece of text")
+    parser.add_argument(
+        "--label-file", help="a file holding a short name for one piece of text"
+    )
+    parser.add_argument(
+        "--for",
+        dest="for_kind",
+        help="which kind of words a file is being asked for",
+    )
+    parser.add_argument(
+        "--company-file", help="a file holding the company the base is for"
+    )
     parser.add_argument("--from", dest="from_file", help="the file the text is in")
     parser.add_argument(
         "--paste-file",
@@ -297,7 +308,8 @@ def build_parser():
     )
     parser.add_argument("--draft", help="the file the draft was written to")
     parser.add_argument(
-        "--only", help="only these files from the list, separated by commas"
+        "--only",
+        help="only these files from the list, by their numbers, separated by commas",
     )
     parser.add_argument(
         "--from-survey",
@@ -358,21 +370,76 @@ COULD_NOT_READ = (
     "GTM Base could not read the file holding their words, so nothing was "
     "done. Write it again and run this with the path to it."
 )
+NEEDS_A_RUN_OR_SESSION = (
+    "This step needs to know which setup run it belongs to, so nothing was "
+    "done. Run it again and say which run it is."
+)
+ONLY_BY_NUMBER = (
+    "Name the files by the number beside each one on the list, separated by "
+    "commas, because a file name is not something to put in a command."
+)
 
 
-def words_from(path, out):
-    """What somebody typed, read out of a file rather than off a command line.
+def words_key(options, out):
+    """Which run or session a words file belongs to, or nothing at all."""
+    key = options.run or options.session
+    if not key:
+        out.write(NEEDS_A_RUN_OR_SESSION + "\n")
+        return None
+    return key
+
+
+def words_from(path, options, out):
+    """What somebody typed, read out of a file this script itself handed out.
 
     Their words go in a file and the path goes on the command line, because a
     sentence somebody wrote with a dollar sign and a bracket in it becomes a
     shell instruction the moment it is written into a command. What is read
     here is text and nothing in it is ever run.
+
+    The path has to be one this script handed out, which is finding V6 of the
+    2026-09-20 verification round: any path at all used to be read this way, so
+    a document could have somebody's private notes read into their base with
+    nobody asked. Reading somebody's own documents is a step of its own, with
+    its own question and its own record, and a flag on a command is not that
+    step.
     """
-    text = read_text(path)
-    if text is None:
-        out.write(COULD_NOT_READ + "\n")
+    key = words_key(options, out)
+    if key is None:
         return None
-    return text.strip()
+    text = wordsfile.read_words(path, key)
+    if text is None:
+        out.write(wordsfile.NOT_OURS + "\n")
+        return None
+    return text
+
+
+def a_draft_of_this_run(path, options, out):
+    """Whether one draft file is the one this run named, and nothing else."""
+    key = words_key(options, out)
+    if key is None:
+        return False
+    if not wordsfile.named_for_a_draft(path, key):
+        out.write(wordsfile.NOT_A_DRAFT + "\n")
+        return False
+    return True
+
+
+def run_words_file(options, out):
+    """Hand out one path for somebody's own words, and make nothing else."""
+    kind = options.for_kind
+    if not kind:
+        out.write("This step needs --for.\n")
+        return EXIT_ERROR
+    key = words_key(options, out)
+    if key is None:
+        return EXIT_ERROR
+    if kind not in wordsfile.KINDS:
+        out.write(wordsfile.NOT_OURS + "\n")
+        return EXIT_REFUSED
+    wordsfile.ensure_words_dir(key)
+    line(out, "words", wordsfile.new_words_path(key, kind))
+    return EXIT_DONE
 
 
 def need(options, name, out):
@@ -500,11 +567,14 @@ def run_list_sources(options, out):
                 % (safe_value(name), listing.by_folder[name])
             )
     out.write("These are the files GTM Base would read.\n")
-    for entry in listing.readable:
+    # The number is what the skill names a file by later, because a file name
+    # is somebody else's text and a number is not (finding N2).
+    for number, entry in enumerate(listing.readable, start=1):
         out.write(
-            "read=%s kind=%s date=%s\n"
+            "read=%s number=%d kind=%s date=%s\n"
             % (
                 safe_value(entry.path),
+                number,
                 safe_value(entry.kind),
                 safe_value(entry.modified_date or "none"),
             )
@@ -558,8 +628,13 @@ def run_freeze_sources(options, out):
 
 def run_add_paste(options, out):
     run_id = need(options, "run", out)
-    label = need(options, "label", out)
     session = need(options, "session", out)
+    if options.label_file:
+        label = words_from(options.label_file, options, out)
+        if label is None:
+            return EXIT_REFUSED
+    else:
+        label = need(options, "label", out)
     if not run_id or not label or not session:
         return EXIT_ERROR
     if options.from_file:
@@ -606,12 +681,22 @@ def say_too_much(out, included_labels, dropped_labels, left_out):
     )
 
 
-def narrowing(options):
-    """The two ways one draft may be narrowed to part of the agreed list."""
-    only = None
+def narrowing(options, out):
+    """The two ways one draft may be narrowed to part of the agreed list.
+
+    Files are named by the number beside them on the list this run printed, and
+    never by their names. Finding N2 of the 2026-09-20 verification round: a
+    name comes off a file on the disk, and a file may be named anything at all,
+    so a name written into a command is somebody else's text in a command.
+    """
+    numbers = None
     if options.only:
-        only = [piece.strip() for piece in options.only.split(",") if piece.strip()]
-    return only, list(options.only_folder or []) or None
+        pieces = [piece.strip() for piece in options.only.split(",") if piece.strip()]
+        if not pieces or not all(piece.isdigit() for piece in pieces):
+            out.write(ONLY_BY_NUMBER + "\n")
+            return None, None, False
+        numbers = [int(piece) for piece in pieces]
+    return numbers, list(options.only_folder or []) or None, True
 
 
 def run_preview(options, out):
@@ -619,13 +704,15 @@ def run_preview(options, out):
     run_id = need(options, "run", out)
     if not step or not run_id:
         return EXIT_ERROR
-    only, only_folder = narrowing(options)
+    only, only_folder, read = narrowing(options, out)
+    if not read:
+        return EXIT_REFUSED
     try:
         previewed = join_flow.preview_step(
             run_id,
             step,
             paste_files=options.paste_file,
-            only=only,
+            only_index=only,
             only_folder=only_folder,
         )
     except ConsentError as refusal:
@@ -672,7 +759,9 @@ def run_assemble(options, out):
     company = need(options, "company", out)
     if not step or not run_id or not company:
         return EXIT_ERROR
-    only, only_folder = narrowing(options)
+    only, only_folder, read = narrowing(options, out)
+    if not read:
+        return EXIT_REFUSED
     try:
         assembled = join_flow.assemble_step(
             step,
@@ -680,7 +769,7 @@ def run_assemble(options, out):
             company,
             options.email or "",
             paste_files=options.paste_file,
-            only=only,
+            only_index=only,
             only_folder=only_folder,
         )
     except ConsentError as refusal:
@@ -720,6 +809,8 @@ def run_review(options, out):
     draft = need(options, "draft", out)
     if not step or not draft:
         return EXIT_ERROR
+    if not a_draft_of_this_run(draft, options, out):
+        return EXIT_REFUSED
     reviewed = join_flow.review_step(step, draft, base_root=options.base)
     if reviewed.ready:
         out.write("ready\n")
@@ -735,7 +826,7 @@ def run_review(options, out):
 def run_what_is_wrong(options, out):
     step = need(options, "step", out)
     if options.answer_file:
-        answer = words_from(options.answer_file, out)
+        answer = words_from(options.answer_file, options, out)
         if answer is None:
             return EXIT_REFUSED
     else:
@@ -752,6 +843,8 @@ def run_approve(options, out):
     run_id = need(options, "run", out)
     if not step or not draft or not run_id:
         return EXIT_ERROR
+    if not a_draft_of_this_run(draft, options, out):
+        return EXIT_REFUSED
     root = None
     if options.base:
         root = base_folder(options, out)
@@ -830,6 +923,8 @@ def run_preview_change(options, out):
     draft = need(options, "draft", out)
     if not draft:
         return EXIT_ERROR
+    if not a_draft_of_this_run(draft, options, out):
+        return EXIT_REFUSED
     reviewed = join_flow.review_step(
         drafting.STEP_CHANGE, draft, base_root=options.base
     )
@@ -840,13 +935,19 @@ def run_preview_change(options, out):
             "it again from the same request.\n"
         )
         return EXIT_REFUSED
-    root = base_folder(options, out) if options.base else None
-    if options.base and root is None:
+    if not need(options, "base", out):
         return EXIT_ERROR
-    proposed = join_flow.preview_change(reviewed.draft, base_root=root)
-    out.write(proposed.four_lines + "\n\n")
-    for label, value in proposed.details:
-        out.write("%s: %s\n" % (label, value))
+    root = base_folder(options, out)
+    if root is None:
+        return EXIT_ERROR
+    try:
+        proposed = join_flow.preview_change(reviewed.draft, base_root=root)
+    except ReviewError as refusal:
+        if refusal.code != join_flow.CODE_NEEDS_THE_BASE:
+            raise
+        out.write(join_flow.NEEDS_THE_BASE + "\n")
+        return EXIT_REFUSED
+    out.write(proposed.summary + "\n\n")
     out.write(join_flow.NOTED_BY_IS_THE_BASES_RECORD + "\n")
     out.write("\n" + proposed.artifact + "\n")
     out.write(join_flow.ENTRY_PREVIEW_ASK + "\n")
@@ -917,7 +1018,7 @@ def run_close(options, out):
         return EXIT_ERROR
     got_in_the_way = options.got_in_the_way
     if options.got_in_the_way_file:
-        got_in_the_way = words_from(options.got_in_the_way_file, out)
+        got_in_the_way = words_from(options.got_in_the_way_file, options, out)
         if got_in_the_way is None:
             return EXIT_REFUSED
     result = join_flow.close_run(
@@ -1035,6 +1136,7 @@ def run_refusal(name):
 
 MODES = {
     "new-run": run_new_run,
+    "words-file": run_words_file,
     "propose-location": run_propose_location,
     "survey": run_survey,
     "list-sources": run_list_sources,
@@ -1071,6 +1173,14 @@ def main(argv=None):
     # The company name is checked here rather than in each step, because it is
     # written into a folder name in one step and into a request in another, and
     # both of those need it to be a name and nothing else.
+    if options.company_file:
+        company = wordsfile.read_words(
+            options.company_file, options.run or options.session or ""
+        )
+        if company is None:
+            sys.stdout.write(wordsfile.NOT_OURS + "\n")
+            return EXIT_REFUSED
+        options.company = company
     if options.company:
         try:
             location.validate_company_name(options.company)

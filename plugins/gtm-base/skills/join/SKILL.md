@@ -98,9 +98,17 @@ Ask for the company name, in one short question. Then say that GTM Base will
 propose a folder and that nothing will be created until they agree to it, and
 run:
 
+Their answer is a name they typed, so it travels in a file rather than in the
+command. Ask this run for one, put the name in it, and use it:
+
 ```
-python3 scripts/join.py propose-location --company "<name>"
+python3 scripts/join.py words-file --run <run identifier> --for company
+python3 scripts/join.py propose-location --company-file <the path it printed>
 ```
+
+The first command prints `words=<path>`. Write the company name into that file
+with your file-writing tool, exactly as they said it, and pass that path. The
+file is read once and taken away. Never put their name in the command itself.
 
 Add `--content-folder <path>` when they named a folder that holds their
 material. That folder is not where the base goes. It is the folder the base will
@@ -198,8 +206,12 @@ When they name the folders, run the same command again with one
 `--only-folder <name>` for each folder they named:
 
 ```
-python3 scripts/join.py list-sources --folder <path> --run <run identifier> --only-folder <name> --only-folder <name>
+python3 scripts/join.py list-sources --folder '<path>' --run <run identifier> --only-folder '<name>' --only-folder '<name>'
 ```
+
+Put single quotation marks round each folder name, as above. A folder name is
+whatever somebody called their folder, and single quotation marks are what
+stops a name being read as part of the command.
 
 Show them that shorter list, and only then ask for the yes. A name that is not
 one of the folders the counts named comes back as `codes=no-such-folder` and
@@ -252,8 +264,13 @@ handed over the same way, and every piece of that text is held for the run
 with:
 
 ```
-python3 scripts/join.py add-paste --run <run identifier> --label "<a short label>" --session <session id> --from <file you wrote it to>
+python3 scripts/join.py words-file --run <run identifier> --for label
+python3 scripts/join.py add-paste --run <run identifier> --label-file <the path it printed> --session <session id> --from <file you wrote it to>
 ```
+
+The short label is usually taken from the name of the file it came out of, and
+a file may be named anything at all, so it goes in a file the first command
+hands out rather than in the command itself.
 
 Handing text over this way is also what tells the safeguard this session has
 read the person's own material, which is why the session identifier belongs on
@@ -294,19 +311,28 @@ it is written. When everything but a handful of their files would be left out,
 say so plainly and suggest naming the folder that holds the documents for this
 draft.
 
-When they name files or a folder, run the preview again with
-`--only "<label>,<label>"` or with `--only-folder <folder>`, and show them the
-new numbers. Both of those narrow the list they already agreed to and neither
-widens it. A name that was not on that list is refused with
-`codes=not-consented`, and the answer to that is to ask them for one of the
-files or folders from the list they were shown.
+When they name files or a folder, run the preview again with `--only` or with
+`--only-folder <folder>`, and show them the new numbers. Both of those narrow
+the list they already agreed to and neither widens it.
+
+`--only` takes the numbers the listing printed beside each file, separated by
+commas, and nothing else: `--only 1,4,7`. It never takes a file name. A file
+name is whatever somebody called their file, so writing one into a command puts
+their text where a command goes, and a command line naming a file is refused
+outright. A number that is not on the list is refused with
+`codes=not-consented`, and the answer to that is to read the list out again and
+ask which of those they mean.
 
 Only when they have said what to draft from, build the request, carrying the
 same narrowing if they gave one:
 
 ```
-python3 scripts/join.py assemble --step <step> --run <run identifier> --company "<name>" --email <their address>
+python3 scripts/join.py assemble --step <step> --run <run identifier> --company-file <the path from step 4> --email <their address>
 ```
+
+Ask for a fresh company file with `words-file --run <run identifier> --for
+company` if the one from step 4 has already been read, because each one is read
+once and then taken away.
 
 Add `--paste-file <path>` once for each piece of text held in step 5. The
 command prints `prompt=<path>` along with the labels of what went in and what
@@ -340,8 +366,13 @@ person is waiting:
 Then check the draft before showing it:
 
 ```
-python3 scripts/join.py review --step <step> --draft <draft file>
+python3 scripts/join.py review --step <step> --run <run identifier> --draft <draft file>
 ```
+
+The draft file is the one `assemble` printed as `draft=`, and it is the only
+file this step will read. A draft written anywhere else is refused, because a
+step that reads any path it is handed is a step a document can point at
+somebody's private notes.
 
 It prints `ready`, or one line of `codes=` naming what it found. On any code,
 write the draft again from the same request and check it again. Never show the
@@ -357,15 +388,17 @@ written into the base saying it was skipped, and until the first document is
 approved there is no base to write it into. From the second document onward
 there are four, with skip among them.
 
-- **What is wrong with this?** Take their answer and run
-  `python3 scripts/join.py what-is-wrong --step <step> --answer-file <path to their words>`.
+- **What is wrong with this?** Ask this run for a file to put their answer in
+  with `python3 scripts/join.py words-file --run <run identifier> --for answer`,
+  write what they said into the path it prints, and run
+  `python3 scripts/join.py what-is-wrong --step <step> --run <run identifier> --answer-file <the path it printed>`.
   It prints a note. Follow the note, write the whole document again, and show
   them the new one. Their words go here and nowhere else.
 - **Edit.** Take their own wording, put it in the draft file, and check it again
   with `review`.
 - **Approve.** For the first document they approve, which is the one that
   creates the base:
-  `python3 scripts/join.py approve --step <step> --draft <draft file> --run <run identifier> --parent <the parent from step 4> --company "<name>"`.
+  `python3 scripts/join.py approve --step <step> --draft <draft file> --run <run identifier> --parent <the parent from step 4> --company-file <a fresh company file>`.
   Add `--email <address>` when they gave one. For every document after it:
   `python3 scripts/join.py approve --step <step> --draft <draft file> --run <run identifier> --base <base folder>`.
   The command prints `base=` and `file=`.
@@ -414,8 +447,11 @@ than given. Write the change from `references/prompts/draft-change-entry.md`, ch
 it with `review --step change-entry`, then run:
 
 ```
-python3 scripts/join.py preview-change --draft <draft file>
+python3 scripts/join.py preview-change --draft <draft file> --run <run identifier> --base <base folder>
 ```
+
+The base has to be on that command. Without it the preview cannot finish the
+change off, and what it shows is not what approving writes.
 
 It prints the four lines first, which is what you show:
 
@@ -426,11 +462,11 @@ What it affects: your customer profile, your positioning
 When to look again: 2026-12-19
 <!-- end change -->
 
-Then it prints the four things that are theirs to correct, one per line: the
-day it happened, who noted it, which documents it affects, and when to look at
-it again. Then it prints the whole change exactly as it would be written down,
-between these two markers, and that is there to be read in full before they
-answer anything:
+Then it prints the three things that are theirs to correct, one per line: the
+day it happened, which documents it affects, and when to look at it again. Who
+noted the change is not one of them, and the command prints the sentence
+saying why, so read that out too. Then comes the whole change, exactly as it
+would be written down, between these two markers:
 
 <!-- artifact -->
 The whole change, settings and all, as `preview-change` printed it.
@@ -473,15 +509,28 @@ or `--answer no`, and say the one sentence it prints.
   waits for them to approve it.
 
 What a "no" prepares is a note asking you for the real wording rather than the
-wording. It opens with "Update needed", and it is not approvable.
+wording, and it is not approvable while it is still that.
 
 1. Read the document and the change, and write what that part of the document
    should say now, in the document's own voice.
-2. Put your wording into the prepared change in place of the note, with the
-   file-writing tool.
-3. Show them what that part says today and what it would say instead, in that
+2. Ask for somewhere to put it with
+   `python3 ../propose-change/scripts/approve_local.py --new-words-file answer`,
+   which prints `words=<path>`, and write your wording into that path.
+3. If the prepared change does not already say which part of the document it
+   is about, list the parts with
+   `python3 ../propose-change/scripts/approve_local.py --staging <path> --sections`,
+   read them out, and ask which one this is about. It prints one numbered line
+   for each part.
+4. Write it in with
+   `python3 ../propose-change/scripts/approve_local.py --staging <path> --wording --words <the path it printed>`,
+   adding `--section <the number they chose>` when you asked. Wording that is
+   the note over again is refused, and so is a file this skill did not hand
+   out.
+5. Show them what that part says today and what it would say instead, in that
    order, both in full.
-4. Ask whether to approve it. Asking before the note is replaced is refused.
+6. Ask whether to approve it. Asking before the wording is written in is
+   refused, because the prepared change carries a marker saying it is still a
+   first draft and only the command above takes that marker off.
 
 ### Step 10. The closing
 <!-- step -->

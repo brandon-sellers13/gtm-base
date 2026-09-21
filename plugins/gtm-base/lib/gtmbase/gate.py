@@ -1109,27 +1109,105 @@ def first_push_is_unreviewed(cwd: str, git: Optional[GitRunner] = None) -> bool:
     return push_conditions.first_push_unreviewed(resolution.base_id or "")
 
 
+# The entries a base's own saved history always holds, and an ordinary
+# repository does not. The map on its own is a file name anybody may use, and
+# holding a base to a name is how an unrelated repository ended up refused
+# every send for ever (finding N1).
+BASE_TREE_MARKERS = (
+    constants.MAP_PATH,
+    constants.CODEOWNERS_PATH,
+    constants.ALLOWLIST_PATH,
+)
+
+
+def _base_id_key(root: str, git: Optional[GitRunner]) -> bool:
+    """Whether this folder carries the name GTM Base knows it by, in its own settings."""
+    runner = runner_or_default(git)
+    found = runner.run(
+        ["config", "--local", "--get", paths.BASE_ID_CONFIG_KEY], cwd=root
+    )
+    return bool(found.ok and found.out())
+
+
+def _joined_names_it(root: str, git: Optional[GitRunner]) -> bool:
+    """Whether this account's record of joined bases names this folder."""
+    real = os.path.realpath(root)
+    # The record as it was written, not the record with every folder checked
+    # first. The question here is only whether this account ever said this
+    # folder is a base, and a folder that cannot be looked at right now is
+    # still one it said.
+    account = machine.load_machine_state_raw()
+    del git
+    for entry in list(getattr(account, "joined", None) or []):
+        named = entry.get("root") if isinstance(entry, dict) else None
+        if isinstance(named, str) and named and os.path.realpath(named) == real:
+            return True
+    return False
+
+
+def _committed_like_a_base(root: str, git: Optional[GitRunner]) -> bool:
+    """Whether the history this folder has saved is a base's history.
+
+    The working folder is not read at all, which is the point of finding V3: a
+    base stopped being a base when one file in the working folder was renamed,
+    and nobody had to save that rename for it to work.
+    """
+    runner = runner_or_default(git)
+    found = runner.run(
+        ["ls-tree", "--name-only", "-z", "HEAD"] + list(BASE_TREE_MARKERS),
+        cwd=root,
+    )
+    if not found.ok:
+        return False
+    held = set(part for part in found.stdout.split("\0") if part)
+    return all(marker in held for marker in BASE_TREE_MARKERS)
+
+
 def _looks_like_a_base(folder: str, git: Optional[GitRunner] = None) -> bool:
-    """Whether this folder is a base by its own shape, joined or not.
+    """Whether this folder is a base, by three things that outlast an edit.
 
-    A base is a repository holding the map, and the top of the repository is
-    what is asked about, so a folder some way down inside one answers the same
-    as the base itself. Nothing about this reads a record of ours, which is the
-    point: the shape is on the disk, in the folder itself, and the whole reason
-    it is read here is that a record can be written over and a shape cannot be
-    without changing the base.
+    Findings V3 and N1 of the 2026-09-20 verification round are the two halves
+    of one mistake. This used to be a look at one file in the working folder,
+    so renaming that one file took a base out of the gate's reach without
+    anything being saved, and an ordinary repository that happened to hold a
+    file of that name was held to a base's rules for ever.
 
-    A repository that is not shaped like a base answers no, and that is what
-    keeps every other repository on this machine working exactly as before.
+    So three things are asked, and any one of them is enough. The folder's own
+    settings carry the name GTM Base knows the base by, which is written once
+    when the base is built and survives everything that happens to the files.
+    This account's record of joined bases names the folder. Or the history the
+    folder has saved holds all of a base's fixed entries, which no ordinary
+    repository does.
+
+    A question that goes wrong is answered yes rather than no. An answer of no
+    takes away everything that is read before a send, and something going
+    wrong is not evidence that there is nothing to read.
     """
     try:
         real = os.path.realpath(folder or "")
-        if paths.is_base_shaped(real):
-            return True
-        root = paths.git_root(real, runner=git)
-        return bool(root and root != real and paths.is_base_shaped(root))
+        top = paths.git_root(real, runner=git)
     except Exception:
+        return True
+    # The top of the repository first, because the saved history is read
+    # against it, and then the folder itself, because the two questions that
+    # read no history can be answered from anywhere inside a base and somebody
+    # has to be able to answer them when git itself cannot say where the top
+    # is. A question nobody can answer leaves a base in reach rather than out
+    # of it.
+    places = []
+    for place in (top, real):
+        if place and place not in places:
+            places.append(place)
+    if not places:
         return False
+    for place in places:
+        for question in (_base_id_key, _joined_names_it, _committed_like_a_base):
+            try:
+                if question(place, git):
+                    return True
+            except Exception:
+                return True
+    return False
 
 
 def named_folder_path(raw: str, cwd: str) -> str:
@@ -1385,8 +1463,13 @@ def check_command(
         if marker.marker_blocks(session_id, include_recent=True):
             return sentence_for(REASON_SOURCES_READ)
 
-        if first_push_is_unreviewed(cwd, git=runner):
-            return sentence_for(REASON_FIRST_PUSH)
+        # Every folder this command would send from, not the folder it was
+        # typed in. Finding V7: naming the base with a folder of its own, or
+        # moving into it first, went round this while the send itself was read
+        # against the base exactly as it should have been.
+        for folder, in_scope in sorted(scope.items()):
+            if in_scope and first_push_is_unreviewed(folder, git=runner):
+                return sentence_for(REASON_FIRST_PUSH)
 
         allowlist, _code = scan.load_allowlist(base_root_for(cwd, git=runner))
 

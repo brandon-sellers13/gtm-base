@@ -1081,6 +1081,75 @@ def reopen_from_opened(
     )
 
 
+# --- Writing the real wording into a first draft ------------------------------
+
+CODE_NOT_A_FIRST_DRAFT = "not-a-first-draft"
+CODE_STILL_THE_NOTE = "still-the-note"
+CODE_NEEDS_A_PART = "needs-the-part-of-the-document"
+
+NOT_A_FIRST_DRAFT = (
+    "That prepared change is not a first draft waiting for wording, so "
+    "nothing was written into it."
+)
+STILL_THE_NOTE = (
+    "What you handed in is the note GTM Base wrote over again rather than the "
+    "wording, so nothing was written. Say what the document should say now, "
+    "in the document's own voice."
+)
+NEEDS_A_PART = (
+    "That change does not say which part of the document it is about, so the "
+    "wording has nowhere to go and would leave what it corrects standing. "
+    "List the parts, ask which one this is about, and name it."
+)
+
+
+def parts_of(base_root: str, staging) -> List[Tuple[str, str]]:
+    """Every part of the document one first draft could be written into.
+
+    Each one comes back as the path and the heading, in the order they are
+    read, so a caller can put a number beside each and take the number back.
+    """
+    found: List[Tuple[str, str]] = []
+    for relative in edited_paths(staging):
+        text = read_text(
+            os.path.join(base_root, relative.replace("/", os.sep))
+        ) or ""
+        lines = text.split("\n")
+        for line in lines[frontmatter_end(lines) :]:
+            if _heading_level(line) == 2:
+                found.append((relative, line.strip()))
+    return found
+
+
+def write_the_wording(base_root: str, staging_path: str, words: str, part=None):
+    """Put the real wording into a first draft, and take the marker off it.
+
+    This is the only way the marker comes off. Findings V8 and N4 of the
+    2026-09-20 verification round: it used to be enough to retype the note
+    slightly, and the wording was allowed to land in a part of its own while
+    the claim it corrected went on standing in the part above.
+    """
+    staging = load_staging(staging_path)
+    if not getattr(staging, "first_draft", False):
+        raise ValidationError(NOT_A_FIRST_DRAFT, code=CODE_NOT_A_FIRST_DRAFT)
+    from . import stale_check
+
+    if stale_check.still_the_note(words):
+        raise ValidationError(STILL_THE_NOTE, code=CODE_STILL_THE_NOTE)
+    text = str(words).strip() + "\n"
+    needs_a_part = any(edit.op == "add" for edit in staging.edits)
+    if needs_a_part and part is None:
+        raise ValidationError(NEEDS_A_PART, code=CODE_NEEDS_A_PART)
+    for edit in staging.edits:
+        if part is not None:
+            edit.path, edit.heading = part
+            edit.op = "replace"
+        edit.text = text
+    staging.first_draft = False
+    atomic_write_text(staging_path, staging.validate().render(), mode=0o600)
+    return staging
+
+
 # --- The path for a person who edited a file themselves -----------------------
 
 
@@ -1194,6 +1263,56 @@ def local_edit_entry(
     return entry.validate(today)
 
 
+# How many identifiers a second hand edit to one document will try before it
+# gives up. It is the number of hand edits one document can carry a record of,
+# which is a long way past anything a person does in a year.
+LOCAL_EDIT_SEQUENCE_CAP = 200
+
+
+def free_local_edit_id(base_root: str, path: str) -> str:
+    """The first identifier for a hand edit that nothing in this base holds.
+
+    Finding N3 of the 2026-09-20 verification round. The identifier was worked
+    out from three fixed things and the number zero, so the second change
+    somebody made by hand to one document always asked for the name the first
+    one already had, and the second one could never be recorded at all. Every
+    place a name is remembered is looked in: the changes waiting, the ones
+    raised, the ones nobody wanted, the record of what was corrected, and both
+    of the folders a base keeps its context changes in.
+    """
+    for sequence in range(LOCAL_EDIT_SEQUENCE_CAP):
+        candidate = ids.staging_id(
+            LOCAL_EDIT_ORIGIN, path, LOCAL_EDIT_ORIGIN, sequence
+        )
+        if not _name_is_taken(base_root, candidate):
+            return candidate
+    raise ValidationError(
+        "There are too many changes recorded for that document already.",
+        code="no-room-for-a-change",
+    )
+
+
+def _name_is_taken(base_root: str, staging_id: str) -> bool:
+    """Whether anything in this base already remembers this identifier."""
+    for folder in (
+        constants.PROPOSALS_PENDING_DIR,
+        constants.PROPOSALS_OPENED_DIR,
+        constants.PROPOSALS_DROPPED_DIR,
+        constants.CHANGES_DIR,
+        constants.LEGACY_CHANGES_DIR,
+    ):
+        whole = os.path.join(base_root, folder.replace("/", os.sep))
+        if os.path.lexists(os.path.join(whole, staging_id + ".md")):
+            return True
+    corrections = os.path.join(base_root, constants.CORRECTIONS_DIR)
+    wanted = "-%s.md" % staging_id
+    try:
+        names = os.listdir(corrections)
+    except OSError:
+        names = []
+    return any(name.endswith(wanted) for name in names)
+
+
 def stage_local_edit(
     base_root: str,
     base_id: str,
@@ -1296,7 +1415,7 @@ def stage_local_edit(
         )
 
     first = edits[0].path
-    staging_id = ids.staging_id(LOCAL_EDIT_ORIGIN, first, LOCAL_EDIT_ORIGIN, 0)
+    staging_id = free_local_edit_id(base_root, first)
     ordered_targets: List[str] = []
     for edit in edits:
         if edit.path not in ordered_targets:

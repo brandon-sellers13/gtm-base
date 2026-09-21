@@ -291,8 +291,28 @@ def write_the_replacement(staging_path, text):
     was = [edit.text for edit in staging.edits]
     for edit in staging.edits:
         edit.text = text
+    # The marker saying these words are still GTM Base's own first draft comes
+    # off here too, because in a real run the command that writes the wording
+    # is what takes it off (findings V8 and N4, 2026-09-20).
+    staging.first_draft = False
     atomic_write_text(staging_path, staging.validate().render(), mode=0o600)
     return was[0] if was else ""
+
+
+def write_the_wording_by_hand(staging_path, text):
+    """Put words into a prepared change without taking the marker off it.
+
+    This is what a retyped note looks like: the words changed, and nothing
+    else did. Nobody may approve one of these, whatever the words now say.
+    """
+    from gtmbase import compose_proposal
+    from gtmbase.fsutil import atomic_write_text
+
+    staging = compose_proposal.load_staging(staging_path)
+    for edit in staging.edits:
+        edit.text = text
+    atomic_write_text(staging_path, staging.validate().render(), mode=0o600)
+    return staging_path
 
 
 def the_section_now(root, relative, heading):

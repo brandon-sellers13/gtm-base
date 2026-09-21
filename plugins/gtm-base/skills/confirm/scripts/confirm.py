@@ -45,9 +45,15 @@ if _lib not in sys.path:
 
 import argparse  # noqa: E402
 
-from gtmbase import confirm, machine, moment, paths, state  # noqa: E402
+from gtmbase import (  # noqa: E402
+    confirm,
+    machine,
+    moment,
+    paths,
+    state,
+    wordsfile,
+)
 from gtmbase.errors import GtmBaseError
-from gtmbase.fsutil import read_text  # noqa: E402
 
 EXIT_DONE = 0
 EXIT_REFUSED = 1
@@ -96,6 +102,10 @@ def build_parser():
         "--show-document",
         help="print the document this question is about, checked first",
     )
+    parser.add_argument(
+        "--new-words-file",
+        help="hand out a file to put somebody's own words in, of one kind",
+    )
     return parser
 
 
@@ -131,16 +141,26 @@ COULD_NOT_READ = (
 )
 
 
-def words_from(path):
-    """What somebody typed, read out of a file rather than off a command line.
+def words_from(path, session):
+    """What somebody typed, read out of a file this script itself handed out.
 
     Their words go in a file and the path goes on the command line, because a
     sentence with a dollar sign and a bracket in it becomes a shell
     instruction the moment it is written into a command. What is read here is
     text and nothing in it is ever run.
+
+    The path has to be one this script handed out. Finding V6 of the
+    2026-09-20 verification round: any path at all used to be read this way, so
+    a document could have somebody's private notes read into their base and
+    written down with nobody asked.
     """
-    text = read_text(path)
-    return None if text is None else text.strip()
+    return wordsfile.read_words(path, session)
+
+
+def a_session(base_id):
+    """Which session this seat is in, which is what its words files belong to."""
+    seat, _problems = state.load_seat(base_id)
+    return seat.get("session_id") or base_id
 
 
 def main(argv=None):
@@ -151,6 +171,17 @@ def main(argv=None):
     if not resolution.joined or not resolution.root or not resolution.base_id:
         sys.stderr.write(NOT_JOINED + "\n")
         return EXIT_ERROR
+
+    if options.new_words_file:
+        if options.new_words_file not in wordsfile.KINDS:
+            sys.stdout.write(wordsfile.NOT_OURS + "\n")
+            return EXIT_REFUSED
+        session = a_session(resolution.base_id)
+        wordsfile.ensure_words_dir(session)
+        sys.stdout.write(
+            "words=%s\n" % wordsfile.new_words_path(session, options.new_words_file)
+        )
+        return EXIT_DONE
 
     if options.pending:
         return show_pending(resolution.base_id)
@@ -195,9 +226,9 @@ def main(argv=None):
 
     reason = options.reason
     if options.reason_file:
-        reason = words_from(options.reason_file)
+        reason = words_from(options.reason_file, a_session(resolution.base_id))
         if reason is None:
-            sys.stdout.write(COULD_NOT_READ + "\n")
+            sys.stdout.write(wordsfile.NOT_OURS + "\n")
             return EXIT_REFUSED
 
     try:

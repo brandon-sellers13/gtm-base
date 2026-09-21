@@ -879,3 +879,85 @@ because whoever can write that file can delete it just as easily as they can
 put another session's name in it. The safeguard the base itself runs is
 unchanged and keeps the age rule whole, since it has no session to compare
 against and only ever runs inside a base.
+
+## Release A, verification round (2026-09-20)
+
+Two reviewers re-checked the first round of fixes. Four findings were still
+open, and the fixes themselves had introduced several new defects. The list is
+`scratchpad/release-a-findings-round2.md` and Astra's report is
+`docs/reviews/2026-09-20-release-a-verify-astra.md`. A failing test came first
+for every one of them, and a finding reachable only through a script has a test
+that runs the script.
+
+- [x] V4. A failed local approval put a document back the way it was last
+      saved, which throws away a change somebody made by hand, because a hand
+      edit is unsaved by definition. The exact bytes are kept beside the note
+      before anything is written, those are what comes back, and the restore is
+      read back and measured before the note is cleared.
+- [x] V5 and N8. A document with an unrelated unsaved change further down was
+      saved whole while the person had read only the part the change was about.
+      Only a change somebody made by hand may have its own files unsaved now,
+      and for those the whole of what saving the file would write is shown.
+- [x] V6 and N9. Every flag that read somebody's words out of a file read any
+      file on the computer. The scripts hand out the path now, inside a folder
+      only the person can open, and a path they did not hand out is refused.
+      Drafts are read from the run's own folder for the same reason, a folder
+      somebody else stood up first is not used, and drafts whose run is gone
+      are swept.
+- [x] N2. The company name, the label on a piece of pasted text, and the files
+      to draft from all stood on command lines where a document could choose
+      what the shell did. The first two travel in words files and the third is
+      named by the number the listing prints.
+- [x] V9. The summary of the closing preview was ordinary text read out of a
+      file somebody typed into. All of it is held apart as data now.
+- [x] V10. The documented preview command left the base out, so it skipped
+      finishing the change off and showed attribution that approving replaced.
+      The base is required, the command is corrected, and the skill no longer
+      calls who noted the change correctable.
+- [x] A test that reads every command out of every skill and puts it to the
+      parser of the script it names, which is the class of miss V10 was.
+
+- [x] V1. The check before a file write used to tidy the path up and then check
+      the tidy one, so a link named with a space in front of it reached the
+      records folder. The name is used exactly as given, both spellings are
+      checked against both spellings of every protected folder, and the folder
+      a base keeps its history in is protected as an entry rather than only as
+      a folder.
+- [x] V2. The guard could be turned off by writing over its own code, because
+      plugin code sat outside every protected place and a failure to start used
+      to mean silence. The installed plugin's folder and the settings that load
+      it are protected, a checkout of your own elsewhere is not, and when the
+      check cannot run the wrapper refuses only what names one of those places.
+- [x] N6. A base's own folders are protected by the shape of the folder rather
+      than by a record that one write can empty, and so is the folder a base
+      belongs with.
+- [x] V3 and N1. What counts as a base is the base id in the folder's own
+      settings, the joined list, or the saved history, and never one file in
+      the working folder. An ordinary repository holding a file of that name is
+      not a base.
+- [x] V7. The first backup rule is checked against every folder a command would
+      send from.
+- [x] V8 and N4. The first draft carries a marker GTM Base writes, one command
+      takes it off, and the wording replaces the part that went out of date.
+- [x] V11 and N5. A day far enough in the future no longer defeats the quiet
+      cap, and putting a reminder off works on a longer confirmation window
+      because the day is clamped when it is written.
+- [x] N7. A settings file with a second name is not read.
+- [x] N3. A second change made by hand gets a name of its own.
+- [x] N10. Recorded in the CHANGELOG as open: file tools from a connected
+      server are not matched, and a command can still build a path no pattern
+      reads. The fail-closed safety check and the client's own permission
+      prompt are what stand behind both.
+
+### What was decided along the way
+
+A broken plugin must never stop ordinary work on the machine, so the wrapper's
+fail-closed refusal applies only to a request that mentions a protected place
+by name, and everything else goes through unlooked at. Development in a source
+checkout that is not the installed copy keeps working, which is why only two
+plugin folders are protected rather than every copy on the disk. A folder
+shaped like a base is protected whether or not this account has joined it,
+which changed one existing scenario. For a change somebody made by hand, the
+whole difference from the saved version is what they approve, because that is
+what saying yes writes down. The scripts choose where a person's words live and
+the assistant never does.

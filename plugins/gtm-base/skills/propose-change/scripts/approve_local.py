@@ -46,7 +46,15 @@ if _lib not in sys.path:
 
 import argparse  # noqa: E402
 
-from gtmbase import approve_local, machine, names, paths  # noqa: E402
+from gtmbase import (  # noqa: E402
+    approve_local,
+    compose_proposal,
+    machine,
+    names,
+    paths,
+    state,
+    wordsfile,
+)
 from gtmbase.errors import GtmBaseError  # noqa: E402
 
 EXIT_DONE = 0
@@ -62,6 +70,19 @@ NEED_THE_HASH = (
     "printed, so nothing is applied to a change that moved since."
 )
 NOTHING_WAITING = "No prepared change is waiting for you to approve."
+NEEDS_THE_WORDING = (
+    "Say where the wording is, with the file this skill handed out for it."
+)
+NOT_ONE_OF_THE_PARTS = (
+    "That is not one of the numbers beside the parts of the document, so "
+    "nothing was written. List them again and name one of those."
+)
+
+
+def a_session(base_id):
+    """Which session this seat is in, which is what its words files belong to."""
+    seat, _problems = state.load_seat(base_id)
+    return seat.get("session_id") or base_id
 
 
 def build_parser():
@@ -84,6 +105,24 @@ def build_parser():
     parser.add_argument("--shown", help="the value the showing printed")
     parser.add_argument(
         "--list", action="store_true", help="say what is waiting to be approved"
+    )
+    parser.add_argument(
+        "--sections",
+        action="store_true",
+        help="list the parts of the document this change is about, numbered",
+    )
+    parser.add_argument(
+        "--wording",
+        action="store_true",
+        help="write the real wording into a first draft",
+    )
+    parser.add_argument("--words", help="the file holding the real wording")
+    parser.add_argument(
+        "--section", help="which numbered part of the document the wording is for"
+    )
+    parser.add_argument(
+        "--new-words-file",
+        help="hand out a file to put somebody's own words in, of one kind",
     )
     return parser
 
@@ -108,6 +147,17 @@ def main(argv=None):
         sys.stderr.write(NOT_JOINED + "\n")
         return EXIT_ERROR
 
+    if options.new_words_file:
+        if options.new_words_file not in wordsfile.KINDS:
+            sys.stdout.write(wordsfile.NOT_OURS + "\n")
+            return EXIT_REFUSED
+        session = a_session(resolution.base_id)
+        wordsfile.ensure_words_dir(session)
+        sys.stdout.write(
+            "words=%s\n" % wordsfile.new_words_path(session, options.new_words_file)
+        )
+        return EXIT_DONE
+
     if options.list:
         waiting = approve_local.waiting(resolution.root)
         if not waiting:
@@ -129,6 +179,55 @@ def main(argv=None):
     staged = options.staging
     if not os.path.isabs(staged):
         staged = os.path.join(here, staged)
+
+    if options.sections:
+        try:
+            staging = compose_proposal.load_staging(staged)
+        except GtmBaseError as failure:
+            sys.stderr.write(str(failure) + "\n")
+            return EXIT_REFUSED
+        for number, (path, heading) in enumerate(
+            compose_proposal.parts_of(resolution.root, staging), start=1
+        ):
+            sys.stdout.write(
+                "section=%d document=%s heading=%s\n"
+                % (number, names.document_name(path), heading.lstrip("#").strip())
+            )
+        return EXIT_DONE
+
+    if options.wording:
+        if not options.words:
+            sys.stderr.write(NEEDS_THE_WORDING + "\n")
+            return EXIT_ERROR
+        words = wordsfile.read_words(
+            options.words, a_session(resolution.base_id)
+        )
+        if words is None:
+            sys.stdout.write(wordsfile.NOT_OURS + "\n")
+            return EXIT_REFUSED
+        part = None
+        if options.section:
+            try:
+                staging = compose_proposal.load_staging(staged)
+                numbered = compose_proposal.parts_of(resolution.root, staging)
+                part = numbered[int(options.section) - 1]
+                if int(options.section) < 1:
+                    raise IndexError
+            except (GtmBaseError, ValueError, IndexError):
+                sys.stdout.write(NOT_ONE_OF_THE_PARTS + "\n")
+                return EXIT_REFUSED
+        try:
+            compose_proposal.write_the_wording(
+                resolution.root, staged, words, part=part
+            )
+        except GtmBaseError as failure:
+            sys.stdout.write(str(failure) + "\n")
+            return EXIT_REFUSED
+        sys.stdout.write(
+            "That wording is in the prepared change, and it is ready to be "
+            "read and approved.\n"
+        )
+        return EXIT_DONE
 
     try:
         if options.not_yet:

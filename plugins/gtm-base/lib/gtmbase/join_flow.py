@@ -51,6 +51,7 @@ from . import (
     sources as sources_module,
     stale_check,
     state,
+    wordsfile,
 )
 from .errors import (
     ConsentError,
@@ -72,9 +73,17 @@ SURVEY_FILE = "survey.json"
 PASTES_DIR = "pastes"
 
 # What the folder holding one run's drafts is called, under the folder this
-# computer keeps temporary work in. The person's own identifier is added to it
-# so nobody else on the machine can stand a folder of that name up first.
-DRAFTS_PARENT = "gtm-base-drafts"
+# computer keeps temporary work in. `wordsfile` owns it now, because a
+# person's own answers go in a folder beside the drafts and both are held to
+# the same rules.
+DRAFTS_PARENT = wordsfile.PARENT_NAME
+
+# A change cannot be shown at all without the base it is for.
+CODE_NEEDS_THE_BASE = "needs-the-base"
+NEEDS_THE_BASE = (
+    "GTM Base cannot show that change without knowing which base it is for, "
+    "so nothing was shown. Run it again and say which base."
+)
 
 # Why a yes could not be taken.
 CODE_NO_LISTING = "no-listing"
@@ -876,7 +885,7 @@ def _in_folder(path: str, root: str, wanted: str) -> bool:
     return wanted in relative.replace(os.sep, "/").split("/")[:-1]
 
 
-def narrow(labelled, root: str = "", only=None, only_folder=None):
+def narrow(labelled, root: str = "", only=None, only_folder=None, only_index=None):
     """Keep only the part of the agreed list the person named for this draft.
 
     This never widens what may be read. It takes the list they already said
@@ -884,8 +893,23 @@ def narrow(labelled, root: str = "", only=None, only_folder=None):
     refused rather than looked for on the disk. More than one folder may be
     named, and each one has to hold something, so a folder named by mistake is
     said out loud rather than quietly adding nothing.
+
+    `only_index` is how the skill names files, by the number beside each one on
+    the list that was printed. Finding N2 of the 2026-09-20 verification round:
+    a label comes off a file name, a file may be named anything at all, and a
+    name written into a command is somebody else's text in a command.
     """
     kept = list(labelled)
+    chosen: Optional[List[str]] = None
+    if only_index:
+        chosen = []
+        for number in only_index:
+            if not isinstance(number, int) or number < 1 or number > len(labelled):
+                raise ConsentError(
+                    "that is not one of the files on the list you agreed to",
+                    code=CODE_NOT_CONSENTED,
+                )
+            chosen.append(labelled[number - 1][1])
     if only_folder:
         names = [only_folder] if isinstance(only_folder, str) else list(only_folder)
         found = []
@@ -915,6 +939,13 @@ def narrow(labelled, root: str = "", only=None, only_folder=None):
                     code=CODE_NOT_CONSENTED,
                 )
         kept = [pair for pair in kept if pair[0] in asked]
+    if chosen is not None:
+        kept = [pair for pair in kept if pair[1] in chosen]
+        if not kept:
+            raise ConsentError(
+                "that is not one of the files on the list you agreed to",
+                code=CODE_NOT_CONSENTED,
+            )
     return kept
 
 
@@ -924,6 +955,7 @@ def read_sources(
     today=None,
     only=None,
     only_folder=None,
+    only_index=None,
 ) -> SourcesRead:
     """Every piece of text this run may draft from, screened and labelled.
 
@@ -956,7 +988,9 @@ def read_sources(
     for path in paste_files or ():
         labelled.append((_label_for(path), path))
     pastes = set(os.path.realpath(path) for path in (paste_files or ()))
-    labelled = narrow(labelled, consent_root(run_id), only, only_folder)
+    labelled = narrow(
+        labelled, consent_root(run_id), only, only_folder, only_index
+    )
 
     for label, path in labelled:
         if os.path.realpath(path) in pastes:
@@ -1023,6 +1057,7 @@ def preview_step(
     today=None,
     only=None,
     only_folder=None,
+    only_index=None,
 ) -> Previewed:
     """Say what one draft would read, and what it would leave out, writing nothing.
 
@@ -1034,7 +1069,12 @@ def preview_step(
     """
     day = today or state.today()
     read = read_sources(
-        run_id, paste_files, today=day, only=only, only_folder=only_folder
+        run_id,
+        paste_files,
+        today=day,
+        only=only,
+        only_folder=only_folder,
+        only_index=only_index,
     )
     plan = drafting.plan_sources(step, read.sources)
     codes = list(plan.codes)
@@ -1061,6 +1101,7 @@ def assemble_step(
     plugin_root: Optional[str] = None,
     only=None,
     only_folder=None,
+    only_index=None,
 ) -> Assembled:
     """Build the request for one step and write it into the run's own folder.
 
@@ -1070,7 +1111,12 @@ def assemble_step(
     """
     day = today or state.today()
     read = read_sources(
-        run_id, paste_files, today=day, only=only, only_folder=only_folder
+        run_id,
+        paste_files,
+        today=day,
+        only=only,
+        only_folder=only_folder,
+        only_index=only_index,
     )
     try:
         assembly = drafting.assemble(
@@ -1106,39 +1152,49 @@ def drafts_dir(run_id: str) -> str:
     consent records of this very run sit there. The assistant never chooses
     this path: it is worked out here from the run and printed for it to use.
 
-    The folder is this person's alone. It is made readable by nobody else, and
-    a name already standing there that is a link, that belongs to somebody
-    else, or that anybody else can write to is refused rather than used, since
-    what goes in here is the company's own writing.
+    The folder is this person's alone, and `wordsfile` is what makes it so.
+    A person's own answers sit in a folder inside this one, for the same
+    reason and under the same rules.
     """
     ids.check_run_id(run_id)
-    parent = os.path.join(
-        tempfile.gettempdir(), "%s-%d" % (DRAFTS_PARENT, os.getuid())
-    )
-    return _private_dir(os.path.join(_private_dir(parent), run_id))
+    return wordsfile.run_dir(run_id)
 
 
 def _private_dir(path: str) -> str:
     """One folder only this person can read, made or checked but never trusted."""
-    if not os.path.lexists(path):
-        try:
-            os.makedirs(path, 0o700)
-        except OSError:
-            raise StateError(
-                "a folder for the drafts could not be made", code="write-failed"
-            )
-        return path
-    info = os.lstat(path)
-    if (
-        not stat.S_ISDIR(info.st_mode)
-        or info.st_uid != os.getuid()
-        or (info.st_mode & 0o077)
-    ):
-        raise StateError(
-            "the folder for the drafts is not one only you can read",
-            code="not-a-file",
-        )
-    return path
+    return wordsfile.private_dir(path)
+
+
+def sweep_drafts_without_a_run() -> List[str]:
+    """Delete the drafts of runs this account no longer has a folder for.
+
+    Finding N9 of the 2026-09-20 verification round. A run that is closed, or
+    swept away because its day has passed, takes its own folder with it, and
+    the drafts beside it were left standing whenever the closing step never
+    happened. Those drafts are the company's own writing, so they go.
+    """
+    removed: List[str] = []
+    try:
+        parent = wordsfile.parent_dir()
+    except StateError:
+        return removed
+    home = join_home()
+    try:
+        names = sorted(os.listdir(parent))
+    except OSError:
+        return removed
+    for name in names:
+        if not ids.is_run_id(name):
+            continue
+        folder = os.path.join(parent, name)
+        if os.path.islink(folder) or not os.path.isdir(folder):
+            continue
+        if os.path.isdir(os.path.join(home, name)):
+            continue
+        shutil.rmtree(folder, ignore_errors=True)
+        if not os.path.isdir(folder):
+            removed.append(name)
+    return removed
 
 
 def draft_path(run_id: str, step: str) -> str:
@@ -1410,15 +1466,24 @@ def closing_question(plugin_root: Optional[str] = None) -> str:
 class ProposedChange(object):
     """One context change, shown whole before a word of it is written down."""
 
-    __slots__ = ("entry", "four_lines", "details", "artifact", "affects")
+    __slots__ = (
+        "entry",
+        "four_lines",
+        "details",
+        "artifact",
+        "affects",
+        "summary",
+    )
 
-    def __init__(self, entry, four_lines, details, artifact, affects):
+    def __init__(self, entry, four_lines, details, artifact, affects, summary=""):
         self.entry = entry
         self.four_lines = four_lines
         # Each item is (label, value), in the order they are read out.
         self.details = list(details)
         self.artifact = artifact
         self.affects = list(affects)
+        # The four lines and the three facts, all of it held apart as data.
+        self.summary = summary
 
     def __repr__(self) -> str:
         return "ProposedChange(entry=%r)" % (getattr(self.entry, "id", None),)
@@ -1499,10 +1564,15 @@ def preview_change(
     address = owner_email
     if base_root and not address:
         address = base_reader.repo_email(base_root, git) or ""
-    if address:
-        draft = review.stamp_entry(
-            draft, None, address, entry_name=review.free_entry_id(base_root)
-        )
+    if not base_root or not address:
+        # Finding V10 of the 2026-09-20 verification round. Without the base
+        # there is no address and no free identifier, so what a preview could
+        # show is a draft of the change rather than the change itself, and
+        # approving it would write down something nobody had read.
+        raise ReviewError(NEEDS_THE_BASE, code=CODE_NEEDS_THE_BASE)
+    draft = review.stamp_entry(
+        draft, None, address, entry_name=review.free_entry_id(base_root)
+    )
     entry = formats.ChangeEntry.parse(draft.text)
     affected = ", ".join(names.document_name(path) for path in entry.affects)
     details = (
@@ -1513,8 +1583,17 @@ def preview_change(
     artifact = "\n".join(
         [ARTIFACT_OPEN, moment.fenced(draft.text.rstrip("\n")), ARTIFACT_CLOSE]
     ) + "\n"
+    # Finding V9. The four lines and the three facts are read straight out of
+    # a file somebody typed into, so all of them are held apart as data and
+    # not only the whole change underneath them.
+    four = four_lines_for(entry)
+    summary = moment.fenced(
+        "\n".join(
+            [four, ""] + ["%s: %s" % (label, value) for label, value in details]
+        )
+    )
     return ProposedChange(
-        entry, four_lines_for(entry), details, artifact, list(entry.affects)
+        entry, four, details, artifact, list(entry.affects), summary
     )
 
 
@@ -1705,8 +1784,11 @@ def skip_the_closing_question(
     until = day + datetime.timedelta(
         days=int(settings.confirmation_threshold_days)
     )
-    state.set_ledger_behind_dismissed_until(base_id, until)
-    return SKIP_RECORDED % until.isoformat()
+    # The day that comes back is the day that was written down, which is
+    # nearer than the day asked for on a base whose window is longer than the
+    # longest quiet. Saying the day that was kept is finding N5.
+    kept = state.set_ledger_behind_dismissed_until(base_id, until, today=day)
+    return SKIP_RECORDED % kept.isoformat()
 
 
 def _linked_folder_of(resolution) -> Optional[str]:

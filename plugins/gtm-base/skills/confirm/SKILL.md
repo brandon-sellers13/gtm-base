@@ -68,7 +68,14 @@ The three answers, said once:
 From inside the base:
 
 - `python3 scripts/confirm.py --question <id> --answer yes`
-- `python3 scripts/confirm.py --question <id> --answer no --reason-file <path to what they said>`
+- `python3 scripts/confirm.py --question <id> --answer no --reason-file <the path it printed>`
+
+  When they say no, ask this skill for somewhere to put their words first,
+  with `python3 scripts/confirm.py --new-words-file reason`. It prints
+  `words=<path>`. Write what they said into that path with your file-writing
+  tool and pass that path. The file is read once and then taken away, and a
+  path this skill did not print is refused, so their words never go in the
+  command itself and no other file on the computer can be read this way.
 - `python3 scripts/confirm.py --question <id> --answer not-now`
 
 The reason is what the person said in their own words. For a no about a

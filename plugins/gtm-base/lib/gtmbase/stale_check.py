@@ -94,6 +94,9 @@ FALLBACK_HEADING = "## Context changes to reflect"
 # flag on a document whose obsolete claim was still sitting in it.
 PLACEHOLDER_SHAPE = "Update needed: %s. This section should reflect that change."
 PLACEHOLDER_TAIL = "This section should reflect that change."
+# The first half of the same note, which is what was left when somebody cut
+# the second half off and the rule stopped recognising it (finding V8).
+PLACEHOLDER_HEAD = "Update needed:"
 
 # What a prepared change says while it is still a first draft.
 DRAFT_CONFIDENCE = "medium"
@@ -538,18 +541,39 @@ def draft_text_for(entry) -> str:
 
 
 def is_the_placeholder(text) -> bool:
-    """Whether some words are still the first draft nobody has replaced.
+    """Whether some words are the first draft, exactly as this module writes it.
 
-    It is decided by the exact words this module writes and by nothing else.
-    Guessing at what an unfinished edit looks like would refuse a person's own
-    wording sooner or later, and the point is not to grade the writing: it is
-    that the words this module puts there are a note to the assistant, not a
-    correction to the document, and nobody should be asked to approve one as
-    though it were.
+    This is not what stops a first draft being approved. What stops that is the
+    marker the prepared change carries, because an exact-text rule was got past
+    by dropping the full stop (finding V8). This is kept for the one thing text
+    can honestly answer: whether some words handed in as the real wording are
+    the note again.
     """
     if not isinstance(text, str):
         return False
     return PLACEHOLDER_TAIL in text
+
+
+def _flattened(text) -> str:
+    """One run of words with its spacing and its letter case taken out."""
+    return " ".join(str(text or "").split()).lower()
+
+
+def still_the_note(text) -> bool:
+    """Whether words handed in as the real wording are the note over again.
+
+    Whitespace and letter case are taken out first, and both halves of the note
+    are looked for, because what got past the old rule was a full stop dropped,
+    a line rewrapped, a double space, lower case, and the second half cut off
+    altogether. Empty words count as the note too: nothing is not a wording.
+    """
+    flat = _flattened(text)
+    if not flat:
+        return True
+    return (
+        _flattened(PLACEHOLDER_TAIL).rstrip(".") in flat
+        or flat.startswith(_flattened(PLACEHOLDER_HEAD).rstrip(":"))
+    )
 
 
 def build_file_proposal(
@@ -604,6 +628,7 @@ def build_file_proposal(
         decision_block=None,
         edits=[formats.Edit(path, heading, operation, drafted + "\n")],
         excerpt=_collapse(entry.body, constants.MAX_EXCERPT_CHARS),
+        first_draft=True,
     )
     return staging.validate()
 
@@ -1001,8 +1026,10 @@ def run(
     if dismiss_quiet_record and not dry_run:
         window = report.settings.confirmation_threshold_days
         until = today + datetime.timedelta(days=window)
-        state.set_ledger_behind_dismissed_until(base_id, until)
-        result.sentences.append(LEDGER_BEHIND_DISMISSED % until.isoformat())
+        kept = state.set_ledger_behind_dismissed_until(
+            base_id, until, today=today
+        )
+        result.sentences.append(LEDGER_BEHIND_DISMISSED % kept.isoformat())
 
     if dry_run:
         result.codes.append(CODE_DRY_RUN)

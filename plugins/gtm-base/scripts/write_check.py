@@ -33,11 +33,17 @@ def locate_lib(start):
     return None
 
 
+# What this says when it could not do its work at all. The wrapper reads it and
+# does its own much smaller check rather than letting the write through
+# unlooked at, which is finding V2 of the 2026-09-20 verification round: a
+# write over this plugin's own code made the next run fail, and a failure was
+# silence, so the write after it went wherever it liked.
+COULD_NOT_RUN = 70
+
+
 _lib = locate_lib(__file__)
 if _lib is None:
-    # A write must never be refused because the library could not be found,
-    # so this one script says nothing at all rather than saying what is wrong.
-    raise SystemExit(0)
+    raise SystemExit(COULD_NOT_RUN)
 if _lib not in sys.path:
     sys.path.insert(0, _lib)
 # --- end of shim ---
@@ -46,7 +52,7 @@ if _lib not in sys.path:
 try:
     from gtmbase import write_hook  # noqa: E402
 except Exception:
-    raise SystemExit(0)
+    raise SystemExit(COULD_NOT_RUN)
 
 
 if __name__ == "__main__":
@@ -55,4 +61,4 @@ if __name__ == "__main__":
     except SystemExit:
         raise
     except Exception:
-        raise SystemExit(0)
+        raise SystemExit(COULD_NOT_RUN)

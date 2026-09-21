@@ -300,6 +300,15 @@ def is_base_shaped(directory: str) -> bool:
 
     The map must be a real file, not a link, because a link is a way to make
     one folder read as two different bases.
+
+    This is a look at the working folder and nothing else, and it is not the
+    answer to whether something is a base. Findings V3 and N1 of the
+    2026-09-20 verification round are the two halves of that difference: one
+    rename nobody had saved made this answer no, and an ordinary repository
+    holding a file of that name made it yes. What the gate asks before it
+    reads a send is `gate._looks_like_a_base`, which asks three things an edit
+    cannot undo. Everything here is for finding a folder to work in, where a
+    renamed map is a reason to stop anyway.
     """
     if not directory or not os.path.isdir(directory):
         return False

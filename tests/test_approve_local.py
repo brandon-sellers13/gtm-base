@@ -1921,6 +1921,13 @@ class TestSavedWorkIsNeverAppliedTwice(unittest.TestCase):
 
 class TestAnUndoThatCannotFinish(unittest.TestCase):
     def test_the_note_is_kept_and_the_run_says_it_could_not(self):
+        """The record this run wrote cannot be taken off the list again.
+
+        This used to make the command that puts a file back the way it was last
+        saved fail. Since finding V4 that command is not how a document comes
+        back, because the bytes kept before the run started are, so the command
+        this stops is the one that takes a newly written record off the list.
+        """
         with support.Sandbox() as sandbox:
             root, base_id = local_base(sandbox)
             staged = stage(root)
@@ -1928,7 +1935,26 @@ class TestAnUndoThatCannotFinish(unittest.TestCase):
 
             applied = approve_local.approve(
                 staged, root, base_id, shown.shown_hash,
-                runner=FailingRunner(["checkout"]), now=NOW,
+                runner=FailingRunner(["rm"]), now=NOW,
+            )
+
+            self.assertEqual(approve_local.STATUS_REFUSED, applied.status)
+            self.assertEqual([approve_local.COULD_NOT_SAVE], applied.reasons)
+            self.assertIsNotNone(approve_local._load_journal(base_id))
+
+    def test_a_kept_copy_that_is_gone_stops_the_run_rather_than_guessing(self):
+        """V4. Nothing is put back from anywhere but the bytes that were kept."""
+        with support.Sandbox() as sandbox:
+            root, base_id = local_base(sandbox)
+            staged = stage(root)
+            shown = stop_once(root, base_id, staged, NoRemoteRunner())
+            import shutil as _shutil
+
+            _shutil.rmtree(approve_local._originals_dir(base_id))
+
+            applied = approve_local.approve(
+                staged, root, base_id, shown.shown_hash,
+                runner=NoRemoteRunner(), now=NOW,
             )
 
             self.assertEqual(approve_local.STATUS_REFUSED, applied.status)
@@ -2257,6 +2283,200 @@ class TestTheScriptRunsEveryAnswer(unittest.TestCase):
 
             self.assertEqual(0, code)
             self.assertEqual(1, len(corrections_in(root)))
+
+
+# --- V4 and V5 of the 2026-09-20 verification round --------------------------
+
+
+HAND_EDIT_SOURCE = (
+    "The quarterly review deck, slide four, said every customer we kept last "
+    "year had between twenty and two hundred people."
+)
+BIGGER_COMPANIES = "Companies of twenty to two hundred people."
+
+
+def a_second_section(root, body="Ten dollars a seat.\n"):
+    """Give the customer profile a second part, saved, for the unrelated edit."""
+    whole = support.read(os.path.join(root, ICP))
+    support.write(os.path.join(root, ICP), whole + "\n## Pricing\n\n" + body)
+    support.git(["add", "-A"], cwd=root)
+    support.git(["commit", "-q", "-m", "pricing"], cwd=root)
+
+
+def a_hand_edit(root, base_id, runner, words=BIGGER_COMPANIES):
+    """The person edits the customer profile themselves, and it is prepared."""
+    whole = support.read(os.path.join(root, ICP))
+    support.write(
+        os.path.join(root, ICP), whole.replace("Companies of any size.", words)
+    )
+    return compose_proposal.stage_local_edit(
+        root, base_id, HAND_EDIT_SOURCE, runner=runner, now=TODAY
+    )
+
+
+class TestAHandEditIsNeverLostWhenApprovalFails(unittest.TestCase):
+    """V4. The rollback used to put the file back the way it was last saved.
+
+    A change somebody made by hand is unsaved by definition, so putting the
+    file back the way it was last saved throws their own words away. What has
+    to come back is the bytes that were in front of them when they answered.
+    """
+
+    def failing_at(self, step):
+        from gtmbase.errors import GitError
+
+        return mock.patch.object(
+            approve_local,
+            step,
+            side_effect=GitError("stopped", code=approve_local.CODE_GIT_FAILED),
+        )
+
+    def test_a_refused_save_leaves_their_own_words_byte_for_byte(self):
+        with support.Sandbox() as sandbox:
+            root, base_id = local_base(sandbox)
+            runner = NoRemoteRunner()
+            staged = a_hand_edit(root, base_id, runner)
+            theirs = support.read(os.path.join(root, ICP))
+            shown = approve_local.show(
+                staged, root, base_id, runner=runner, now=TODAY
+            )
+            self.assertEqual(approve_local.STATUS_SHOWN, shown.status, shown.reasons)
+
+            with self.failing_at("_save_the_work"):
+                applied = approve_local.approve(
+                    staged, root, base_id, shown.shown_hash, runner=runner, now=NOW
+                )
+
+            self.assertEqual(approve_local.STATUS_REFUSED, applied.status)
+            self.assertEqual(
+                theirs,
+                support.read(os.path.join(root, ICP)),
+                "the hand edit was not put back the way the person left it",
+            )
+            self.assertEqual([], corrections_in(root))
+
+    def test_a_failure_at_every_step_leaves_their_own_words_byte_for_byte(self):
+        for step in (
+            "_write_the_files",
+            "_stage_the_files",
+            "_write_the_confirmation_lines",
+            "_save_the_work",
+        ):
+            with support.Sandbox() as sandbox:
+                root, base_id = local_base(sandbox)
+                runner = NoRemoteRunner()
+                staged = a_hand_edit(root, base_id, runner)
+                theirs = support.read(os.path.join(root, ICP))
+                shown = approve_local.show(
+                    staged, root, base_id, runner=runner, now=TODAY
+                )
+
+                with self.failing_at(step):
+                    approve_local.approve(
+                        staged, root, base_id, shown.shown_hash, runner=runner, now=NOW
+                    )
+
+                self.assertEqual(
+                    theirs, support.read(os.path.join(root, ICP)), step
+                )
+
+    def test_a_run_that_stopped_dead_puts_their_own_words_back_next_time(self):
+        with support.Sandbox() as sandbox:
+            root, base_id = local_base(sandbox)
+            runner = NoRemoteRunner()
+            staged = a_hand_edit(root, base_id, runner)
+            theirs = support.read(os.path.join(root, ICP))
+            shown = approve_local.show(
+                staged, root, base_id, runner=runner, now=TODAY
+            )
+            with mock.patch.object(
+                approve_local, "_save_the_work", side_effect=RuntimeError("stopped")
+            ):
+                try:
+                    approve_local.approve(
+                        staged, root, base_id, shown.shown_hash, runner=runner, now=NOW
+                    )
+                except RuntimeError:
+                    pass
+
+            approve_local.show(staged, root, base_id, runner=runner, now=TODAY)
+
+            self.assertEqual(theirs, support.read(os.path.join(root, ICP)))
+
+
+class TestOnlyAHandEditMayBeUnsaved(unittest.TestCase):
+    """V5 and N8. Dirty target files were allowed for every prepared change."""
+
+    def test_a_change_that_is_not_a_hand_edit_still_refuses_an_unsaved_target(self):
+        with support.Sandbox() as sandbox:
+            root, base_id = local_base(sandbox)
+            staged = stage(root)
+            runner = NoRemoteRunner()
+            whole = support.read(os.path.join(root, ICP))
+            support.write(
+                os.path.join(root, ICP),
+                whole.replace("Companies of any size.", "Companies I like."),
+            )
+            shown = approve_local.show(
+                staged, root, base_id, runner=runner, now=TODAY
+            )
+            self.assertEqual(approve_local.STATUS_SHOWN, shown.status, shown.reasons)
+
+            applied = approve_local.approve(
+                staged, root, base_id, shown.shown_hash, runner=runner, now=NOW
+            )
+
+            self.assertEqual(approve_local.STATUS_REFUSED, applied.status)
+            self.assertEqual([approve_local.UNSAVED_EDITS], applied.reasons)
+            self.assertEqual([], corrections_in(root))
+
+    def test_the_whole_difference_is_what_a_hand_edit_is_approved_against(self):
+        with support.Sandbox() as sandbox:
+            root, base_id = local_base(sandbox)
+            a_second_section(root)
+            runner = NoRemoteRunner()
+            staged = a_hand_edit(root, base_id, runner)
+            # Something else in the same document, changed and not saved, that
+            # the prepared change says nothing about.
+            whole = support.read(os.path.join(root, ICP))
+            support.write(
+                os.path.join(root, ICP),
+                whole.replace("Ten dollars a seat.", "Twenty dollars a seat."),
+            )
+
+            shown = approve_local.show(
+                staged, root, base_id, runner=runner, now=TODAY
+            )
+
+            self.assertEqual(approve_local.STATUS_SHOWN, shown.status, shown.reasons)
+            self.assertIn(
+                "Twenty dollars a seat.",
+                shown.artifact,
+                "an unsaved change elsewhere in the document was not shown",
+            )
+            self.assertIn("Ten dollars a seat.", shown.artifact)
+
+    def test_moving_anything_in_the_document_after_it_was_shown_is_refused(self):
+        with support.Sandbox() as sandbox:
+            root, base_id = local_base(sandbox)
+            a_second_section(root)
+            runner = NoRemoteRunner()
+            staged = a_hand_edit(root, base_id, runner)
+            shown = approve_local.show(
+                staged, root, base_id, runner=runner, now=TODAY
+            )
+            whole = support.read(os.path.join(root, ICP))
+            support.write(
+                os.path.join(root, ICP),
+                whole.replace("Ten dollars a seat.", "Twenty dollars a seat."),
+            )
+
+            applied = approve_local.approve(
+                staged, root, base_id, shown.shown_hash, runner=runner, now=NOW
+            )
+
+            self.assertEqual(approve_local.STATUS_MOVED, applied.status)
+            self.assertEqual([], corrections_in(root))
 
 
 if __name__ == "__main__":

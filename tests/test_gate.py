@@ -1195,5 +1195,110 @@ class TestTheSafeguardGitRuns(unittest.TestCase):
             self.assertIn("read your own documents", gate.check_git_hook(lines, root))
 
 
+# --- V3, N1 and V7 of the 2026-09-20 verification round ----------------------
+
+
+class TestWhatCountsAsABase(unittest.TestCase):
+    """V3 and N1. Identity used to rest on one file nobody had saved.
+
+    One rename of the map in the working folder took a base out of the gate's
+    reach entirely, and the opposite error was there too: an ordinary
+    repository that happened to hold a file of that name was held to a base's
+    rules for ever.
+    """
+
+    def a_secret(self, root):
+        commit(root, "context/metrics/notes.md", ["mail jane@acme.com"])
+
+    def test_renaming_the_map_does_not_take_a_base_out_of_reach(self):
+        with Sandbox() as box:
+            root, _base_id = box.base()
+            self.a_secret(root)
+            os.rename(
+                os.path.join(root, "context", "map.md"),
+                os.path.join(root, "context", "map.txt"),
+            )
+
+            self.assertTrue(gate.folder_is_in_scope(root))
+            self.assertIn("an email address", check("git push", root) or "")
+
+    def test_a_copy_of_a_base_with_the_map_taken_out_is_still_a_base(self):
+        with Sandbox() as box:
+            root, _base_id = box.base()
+            self.a_secret(root)
+            other = os.path.join(box.path, "other")
+            git(["clone", "-q", root, other], cwd=box.path)
+            os.remove(os.path.join(other, "context", "map.md"))
+
+            self.assertTrue(gate.folder_is_in_scope(other))
+
+    def test_an_ordinary_repository_holding_that_file_is_not_a_base(self):
+        with Sandbox() as box:
+            plain = os.path.join(box.path, "plain")
+            os.makedirs(os.path.join(plain, "context"))
+            git(["init", "-q", "-b", "main"], cwd=plain)
+            git(["config", "--local", "user.email", "owner@example.com"], cwd=plain)
+            git(["config", "--local", "user.name", "Test Owner"], cwd=plain)
+            write(os.path.join(plain, "context", "map.md"), "a site map\n")
+            write(os.path.join(plain, "notes.md"), "mail jane@acme.com\n")
+            git(["add", "-A"], cwd=plain)
+            git(["commit", "-q", "-m", "first"], cwd=plain)
+
+            self.assertFalse(gate.folder_is_in_scope(plain))
+            self.assertIsNone(check_now("git push origin main", plain))
+
+    def test_the_record_of_joined_bases_emptied_leaves_a_base_in_reach(self):
+        with Sandbox() as box:
+            from gtmbase import paths as paths_module
+
+            root, _base_id = box.base()
+            self.a_secret(root)
+            write(paths_module.machine_state_path(), "{}")
+
+            self.assertTrue(gate.folder_is_in_scope(root))
+
+    def test_a_shape_check_that_goes_wrong_leaves_a_base_in_reach(self):
+        """A question that cannot be answered is never answered no."""
+        with Sandbox() as box:
+            root, _base_id = box.base()
+
+            with mock.patch.object(
+                gate.paths, "is_base_shaped", side_effect=OSError("no")
+            ):
+                self.assertTrue(gate.folder_is_in_scope(root))
+
+
+class TestFirstBackupConsentIsCheckedWhereTheSendIs(unittest.TestCase):
+    """V7. It used to be checked against the folder the command was typed in."""
+
+    def test_a_send_named_with_a_folder_of_its_own_is_checked(self):
+        with Sandbox() as box:
+            root, _base_id = box.base(reviewed=False)
+            elsewhere = os.path.join(box.path, "elsewhere")
+            os.makedirs(elsewhere)
+
+            reason = check_now(
+                "git -C %s push origin main" % root, elsewhere
+            )
+
+            self.assertIn("backup", reason or "")
+
+    def test_a_send_after_moving_into_the_base_is_checked(self):
+        with Sandbox() as box:
+            root, _base_id = box.base(reviewed=False)
+            elsewhere = os.path.join(box.path, "elsewhere")
+            os.makedirs(elsewhere)
+
+            reason = check_now("cd %s && git push origin main" % root, elsewhere)
+
+            self.assertIn("backup", reason or "")
+
+    def test_an_ordinary_repository_is_still_let_through(self):
+        with Sandbox() as box:
+            other = plain_repository(box)
+
+            self.assertIsNone(check_now("git push origin main", other))
+
+
 if __name__ == "__main__":
     unittest.main()

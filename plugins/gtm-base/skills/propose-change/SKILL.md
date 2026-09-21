@@ -135,21 +135,37 @@ second review.
 - A change to a part of a file that is no longer there, because the shared copy
   has moved on since the change was prepared. The proposal is kept and can be
   raised again once the file is put back in order.
-- A change whose words are still the first draft GTM Base wrote. That draft
-  opens with "Update needed" and then repeats the context change back, and it
-  is a note asking you for the real wording rather than a correction anybody
-  can approve. Write what the document should say now, in the document's own
-  voice, put it into the prepared file, show the person what that part of the
-  document says today and what it would say instead, and only then raise it.
+- A change whose words are still the first draft GTM Base wrote. That draft is
+  a note asking you for the real wording rather than a correction anybody can
+  approve, and the prepared change carries a marker saying so, put there by
+  GTM Base itself. Retyping the note does not take that marker off. The one
+  thing that does is
+  `python3 scripts/approve_local.py --staging <path> --wording --words <the path it printed>`,
+  after asking for somewhere to put the wording with
+  `python3 scripts/approve_local.py --new-words-file answer`. When the change
+  does not say which part of the document it is about, list the parts with
+  `python3 scripts/approve_local.py --staging <path> --sections`, ask which one
+  they mean, and add `--section <the number they chose>`. Then show the person
+  what that part of the document says today and what it would say instead, and
+  only then raise it.
 
 ## Running it
 
 From inside the base:
 
 - `python3 scripts/propose.py --staging <path to the staged file>`
-- `python3 scripts/propose.py --local-edit --source-file <path to their words>`,
-  adding `--what-changed-file <path> --records-a-change` when what they said
-  was about the business rather than about a typo
+- `python3 scripts/propose.py --local-edit --source-file <the path it printed>`,
+  adding `--what-changed-file <the path it printed> --records-a-change` when
+  what they said was about the business rather than about a typo
+
+  Their words never go in the command. Ask this skill for somewhere to put them
+  first, once for each answer, with
+  `python3 scripts/propose.py --new-words-file source` and
+  `python3 scripts/propose.py --new-words-file what-changed`. Each prints
+  `words=<path>`. Write what they said into that path with your file-writing
+  tool and pass that path back. Each file is read once and then taken away, and
+  a path this skill did not print is refused, so no other file on the computer
+  can be read into the base this way.
 - `python3 scripts/propose.py --reopen <proposal id>`
 
 The last one raises a proposal again from the copy kept when it was first sent.

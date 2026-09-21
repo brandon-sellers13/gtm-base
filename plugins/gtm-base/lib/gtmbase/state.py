@@ -423,6 +423,14 @@ def load_seat(base_id: str) -> Tuple[dict, List[str]]:
     seat = dict(SEAT_DEFAULTS)
     if os.path.lexists(path) and os.path.islink(path):
         return seat, ["symlink"]
+    # A file with a second name is a file somebody can also write from
+    # somewhere this seat never looks, so it is not read at all. Finding N7 of
+    # the 2026-09-20 verification round.
+    try:
+        if os.path.lexists(path) and os.lstat(path).st_nlink != 1:
+            return seat, ["two-names"]
+    except OSError:
+        return seat, ["two-names"]
     payload = read_json(path)
     if payload is None:
         if os.path.lexists(path):
@@ -500,8 +508,18 @@ def _quiet_is_past_the_longest(seat: dict) -> bool:
     asked_on = seat.get("silent_until_set_on")
     if not isinstance(asked_on, str) or not _DAY_RE.match(asked_on):
         return True
-    longest = _day_of(datetime.date.today() - datetime.timedelta(days=SILENCE_DAYS))
-    return asked_on < longest
+    # A real day on a real calendar. Finding V11 of the 2026-09-20
+    # verification round: the shape was checked and the day was not, so the
+    # last day of the year nine thousand was quiet for ever, and so was any
+    # day at all that has not happened yet.
+    try:
+        year, month, day = (int(piece) for piece in asked_on.split("-"))
+        datetime.date(year, month, day)
+    except (ValueError, TypeError):
+        return True
+    today = datetime.date.today()
+    longest = _day_of(today - datetime.timedelta(days=SILENCE_DAYS))
+    return asked_on < longest or asked_on > _day_of(today)
 
 
 def save_seat(base_id: str, seat: dict) -> dict:
@@ -961,13 +979,15 @@ def load_dismissals(base_id: str) -> Tuple[dict, List[str]]:
     ):
         result["ledger_behind_dismissed_until"] = None
         problems.append("bad-value")
-    elif until is not None and until > _day_of(
-        datetime.date.today() + datetime.timedelta(days=SILENCE_DAYS)
-    ):
-        # A day further out than the longest quiet anybody may ask for is not
-        # honoured, the same way quiet is not. The 2026-09-20 review wrote a
-        # day in the year nine thousand here and the reminder never came back.
-        result["ledger_behind_dismissed_until"] = None
+    elif until is not None and until > _day_of(furthest_quiet()):
+        # A day further out than the longest quiet anybody may ask for is
+        # brought back to that day. The 2026-09-20 review wrote a day in the
+        # year nine thousand here and the reminder never came back, and
+        # throwing the day away instead broke skipping outright on a base
+        # whose confirmation window is longer than the cap, because the person
+        # was told a day and the record went straight in the bin (findings A1
+        # and N5). Clamping keeps both promises.
+        result["ledger_behind_dismissed_until"] = _day_of(furthest_quiet())
         problems.append("bad-value")
     return result, problems
 
@@ -992,13 +1012,40 @@ def is_dismissed(base_id: str, source_id: str) -> bool:
     return source_id in value["inbox_ids"]
 
 
-def set_ledger_behind_dismissed_until(base_id: str, until: datetime.date) -> dict:
+def furthest_quiet(today: Optional[datetime.date] = None) -> datetime.date:
+    """The furthest day off a reminder may ever be put."""
+    day = today or datetime.date.today()
+    if isinstance(day, datetime.datetime):
+        day = day.date()
+    return day + datetime.timedelta(days=SILENCE_DAYS)
+
+
+def set_ledger_behind_dismissed_until(
+    base_id: str, until, today: Optional[datetime.date] = None
+) -> datetime.date:
+    """Put the reminder off, and never further than the longest quiet allows.
+
+    The day that comes back is the day that was written, which may be nearer
+    than the day asked for. Finding N5 of the 2026-09-20 verification round: a
+    base whose confirmation window is longer than the cap had its person told
+    one day and the record thrown away on the next read, so skipping did
+    nothing at all. Bringing it back to the cap here means the day somebody is
+    told is the day that is kept.
+    """
+    wanted = until
+    if isinstance(wanted, datetime.datetime):
+        wanted = wanted.date()
+    if not isinstance(wanted, datetime.date):
+        try:
+            year, month, day = (int(piece) for piece in str(wanted).split("-"))
+            wanted = datetime.date(year, month, day)
+        except (ValueError, TypeError):
+            wanted = today or datetime.date.today()
+    capped = min(wanted, furthest_quiet(today))
     value, _problems = load_dismissals(base_id)
-    value["ledger_behind_dismissed_until"] = (
-        until.isoformat() if isinstance(until, datetime.date) else str(until)
-    )
+    value["ledger_behind_dismissed_until"] = capped.isoformat()
     _save_dismissals(base_id, value)
-    return value
+    return capped
 
 
 # --- Dropped paths -----------------------------------------------------------

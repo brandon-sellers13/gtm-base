@@ -44,9 +44,15 @@ if _lib not in sys.path:
 
 import argparse  # noqa: E402
 
-from gtmbase import compose_proposal, machine, moment, paths, state  # noqa: E402
+from gtmbase import (  # noqa: E402
+    compose_proposal,
+    machine,
+    moment,
+    paths,
+    state,
+    wordsfile,
+)
 from gtmbase.errors import GtmBaseError  # noqa: E402
-from gtmbase.fsutil import read_text  # noqa: E402
 
 EXIT_DONE = 0
 EXIT_REFUSED = 1
@@ -85,6 +91,10 @@ def build_parser():
         "--show-document",
         help="print the document a change is about, with the check run first",
     )
+    parser.add_argument(
+        "--new-words-file",
+        help="hand out a file to put somebody's own words in, of one kind",
+    )
     return parser
 
 
@@ -98,18 +108,26 @@ NEEDS_THE_WORDS = (
 )
 
 
-def words_from(path):
-    """What somebody typed, read out of a file rather than off a command line.
+def words_from(path, session):
+    """What somebody typed, read out of a file this script itself handed out.
 
     Their words go in a file and the path goes on the command line, because a
     person's own sentence with a dollar sign and a bracket in it is a shell
     instruction the moment it is written into a command. The words are read as
     text and nothing in them is ever run.
+
+    The path has to be one this script handed out. Finding V6 of the
+    2026-09-20 verification round: any path at all used to be read this way, so
+    a document could have somebody's private notes read into their base and
+    written down with nobody asked.
     """
-    text = read_text(path)
-    if text is None:
-        return None
-    return text.strip()
+    return wordsfile.read_words(path, session)
+
+
+def a_session(base_id):
+    """Which session this seat is in, which is what its words files belong to."""
+    seat, _problems = state.load_seat(base_id)
+    return seat.get("session_id") or base_id
 
 
 def report(result):
@@ -148,6 +166,22 @@ def main(argv=None):
         sys.stdout.write(text + "\n")
         return EXIT_DONE
 
+    if options.new_words_file:
+        here = os.getcwd()
+        resolution = paths.resolve_base(here, machine.load_machine_state())
+        if not resolution.joined or not resolution.base_id:
+            sys.stderr.write(NOT_JOINED + "\n")
+            return EXIT_ERROR
+        if options.new_words_file not in wordsfile.KINDS:
+            sys.stdout.write(wordsfile.NOT_OURS + "\n")
+            return EXIT_REFUSED
+        session = a_session(resolution.base_id)
+        wordsfile.ensure_words_dir(session)
+        sys.stdout.write(
+            "words=%s\n" % wordsfile.new_words_path(session, options.new_words_file)
+        )
+        return EXIT_DONE
+
     chosen = [bool(options.staging), bool(options.local_edit), bool(options.reopen)]
     if sum(1 for value in chosen if value) != 1:
         sys.stderr.write(
@@ -164,11 +198,12 @@ def main(argv=None):
 
     try:
         if options.local_edit:
+            session = a_session(resolution.base_id)
             source = options.source
             if options.source_file:
-                source = words_from(options.source_file)
+                source = words_from(options.source_file, session)
                 if source is None:
-                    sys.stdout.write(COULD_NOT_READ + "\n")
+                    sys.stdout.write(wordsfile.NOT_OURS + "\n")
                     return EXIT_REFUSED
             if not source:
                 sys.stderr.write(
@@ -178,9 +213,9 @@ def main(argv=None):
                 return EXIT_ERROR
             what_changed = None
             if options.what_changed_file:
-                what_changed = words_from(options.what_changed_file)
+                what_changed = words_from(options.what_changed_file, session)
                 if what_changed is None:
-                    sys.stdout.write(COULD_NOT_READ + "\n")
+                    sys.stdout.write(wordsfile.NOT_OURS + "\n")
                     return EXIT_REFUSED
             if options.records_a_change and not what_changed:
                 sys.stdout.write(NEEDS_THE_WORDS + "\n")

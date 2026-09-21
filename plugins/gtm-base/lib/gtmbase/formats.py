@@ -1454,6 +1454,7 @@ STAGING_FIELDS = (
     "rule_change",
     "confidence",
     "third_party",
+    "first_draft",
 )
 STAGING_SCHEMA = 1
 
@@ -1492,6 +1493,7 @@ class ProposalStaging(object):
         edits=None,
         excerpt="",
         schema=STAGING_SCHEMA,
+        first_draft=False,
     ):
         self.schema = schema
         self.staging_id = staging_id
@@ -1507,6 +1509,12 @@ class ProposalStaging(object):
         self.edits = list(edits or [])
         self.excerpt = excerpt
         self.pr_body = pr_body
+        # Whether the words in the edits are still the note GTM Base wrote
+        # asking for the real wording. Findings V8 and N4 of the 2026-09-20
+        # verification round: this used to be worked out by reading the words,
+        # and every small retyping of them got past that, so it is written
+        # down by whoever put the note there instead.
+        self.first_draft = bool(first_draft)
 
     def frontmatter(self) -> Dict[str, Any]:
         return {
@@ -1520,6 +1528,7 @@ class ProposalStaging(object):
             "rule_change": bool(self.rule_change),
             "confidence": self.confidence,
             "third_party": bool(self.third_party),
+            "first_draft": bool(self.first_draft),
         }
 
     def render(self) -> str:
@@ -1595,6 +1604,9 @@ class ProposalStaging(object):
             confidence=str(fields["confidence"]).strip(),
             third_party=_as_bool(
                 fields.get("third_party", False), "third_party", "proposal"
+            ),
+            first_draft=_as_bool(
+                fields.get("first_draft", False), "first_draft", "proposal"
             ),
             decision_block=decision_block,
             edits=edits,

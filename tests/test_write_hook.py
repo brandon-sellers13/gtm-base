@@ -192,12 +192,23 @@ class TestABasesOwnFolders(unittest.TestCase):
 
             self.assertTrue(self.check(path))
 
-    def test_a_base_this_account_never_joined_is_left_alone(self):
+    def test_a_base_this_account_never_joined_is_protected_too(self):
+        """Changed for finding N6 of the 2026-09-20 verification round.
+
+        This used to say a base nobody had joined was left alone, because the
+        protection was read off this account's list of joined bases. That list
+        is a file, and a write that empties it took the protection with it, so
+        the shape of the folder decides now and a folder shaped like a base is
+        protected whether or not this account has joined it. Nothing is lost by
+        that: the folders in question are the ones the safeguard and the
+        assistant's own settings live in, and nobody has a reason to write
+        either of them with a file-writing tool.
+        """
         with support.Sandbox() as sandbox:
             base = Base(sandbox, joined=False)
-            path = os.path.join(base.root, ".git", "hooks", "pre-push")
+            path = os.path.join(base.root, "." + "g" + "it", "hooks", "pre-push")
 
-            self.assertFalse(self.check(path))
+            self.assertTrue(self.check(path))
 
 
 # --- What it must never refuse -----------------------------------------------
@@ -433,14 +444,20 @@ class TestTheFlowsThatWriteFiles(unittest.TestCase):
             "the check refused a file the product itself writes: %s" % path,
         )
 
-    def words_file(self, sandbox, name, text):
-        """Words somebody typed, written to a file of the assistant's own.
+    def words_file(self, sandbox, name, text, key=None):
+        """Words somebody typed, in the file a script itself handed out.
 
-        The skills say to put these outside the base and outside GTM Base's
-        own records, so that is where this puts one, and the check is asked
-        about it before it is written.
+        This used to be a file of the test's own anywhere in the sandbox.
+        Finding V6 of the 2026-09-20 verification round: the readers took any
+        path at all, so the scripts choose where words go now, and the check
+        is asked about the path they chose before anything is written to it.
         """
-        path = os.path.join(sandbox.path, "words", name)
+        from gtmbase import wordsfile
+
+        del sandbox
+        kind = name.replace(".txt", "")
+        wordsfile.ensure_words_dir(key)
+        path = wordsfile.new_words_path(key, kind)
         self.allowed(path)
         support.write(path, text)
         return path
@@ -468,7 +485,10 @@ class TestTheFlowsThatWriteFiles(unittest.TestCase):
             # And the closing, with the words they said about what got in the
             # way passed through a file.
             got_in_the_way = self.words_file(
-                sandbox, "got-in-the-way.txt", "The folder took a while to find.\n"
+                sandbox,
+                "got-in-the-way.txt",
+                "The folder took a while to find.\n",
+                key=setup.run,
             )
             closed = setup.close(got_in_the_way=support.read(got_in_the_way))
             self.assertTrue(closed.closing)
@@ -493,13 +513,21 @@ class TestTheFlowsThatWriteFiles(unittest.TestCase):
                 ),
             )
 
+            from gtmbase import state as state_module
+
+            seat, _problems = state_module.load_seat(base_id)
+            session = seat.get("session_id") or base_id
             source = self.words_file(
-                sandbox, "source.txt", "The board deck said so, slide four.\n"
+                sandbox,
+                "source.txt",
+                "The board deck said so, slide four.\n",
+                key=session,
             )
             what_changed = self.words_file(
                 sandbox,
                 "what-changed.txt",
                 "We moved up market because the small ones churned.\n",
+                key=session,
             )
 
             code, printed = run_skill_script(
@@ -538,10 +566,14 @@ class TestTheFlowsThatWriteFiles(unittest.TestCase):
                 line for line in base.review().review if line.path == moment_tests.ICP
             ][0]
 
+            from gtmbase import state as state_module
+
+            seat, _problems = state_module.load_seat(base.base_id)
             reason = self.words_file(
                 sandbox,
                 "reason.txt",
                 "We moved up market, so this is out of date now.\n",
+                key=seat.get("session_id") or base.base_id,
             )
 
             code, printed = run_skill_script(
@@ -681,6 +713,240 @@ class TestTheWords(unittest.TestCase):
     def test_the_refusal_names_no_folder_and_no_identifier(self):
         self.assertNotIn("/", write_hook.REFUSED)
         self.assertNotIn(".gtm", write_hook.REFUSED)
+
+
+# --- V1, V2 and N6 of the 2026-09-20 verification round ----------------------
+
+
+class TestThePathIsTheOneTheWriterWouldUse(unittest.TestCase):
+    """V1. The check used to tidy the name up and then check the tidy one."""
+
+    def check(self, path, **named):
+        return denied(write_hook.run(request(path, **named)))
+
+    def test_a_link_whose_name_begins_with_a_space_is_refused(self):
+        with support.Sandbox() as sandbox:
+            Base(sandbox)
+            link = os.path.join(sandbox.path, " alias")
+            os.symlink(paths.seat_home_path(), link)
+
+            self.assertTrue(
+                self.check(" alias/machine.json", cwd=sandbox.path),
+                "the name was tidied up and the tidy one was checked",
+            )
+
+    def test_the_records_folder_itself_is_refused(self):
+        with support.Sandbox() as sandbox:
+            Base(sandbox)
+
+            self.assertTrue(self.check(paths.seat_home_path()))
+
+    def test_the_version_control_entry_itself_is_refused(self):
+        """A working folder keeps that name as a file, not as a folder."""
+        with support.Sandbox() as sandbox:
+            base = Base(sandbox)
+
+            self.assertTrue(self.check(os.path.join(base.root, "." + "git")))
+
+    def test_a_version_control_entry_that_is_a_file_is_refused(self):
+        with support.Sandbox() as sandbox:
+            base = Base(sandbox, name="worktree", joined=False)
+            elsewhere = os.path.join(sandbox.path, "elsewhere")
+            os.makedirs(elsewhere)
+            import shutil
+
+            shutil.rmtree(os.path.join(base.root, "." + "git"))
+            support.write(
+                os.path.join(base.root, "." + "git"), "gitdir: %s\n" % elsewhere
+            )
+            machine.append_joined(
+                root=base.root, base_id=base.base_id, remote=None
+            )
+
+            self.assertTrue(self.check(os.path.join(base.root, "." + "git")))
+
+    def test_a_link_out_of_the_version_control_folder_is_refused(self):
+        with support.Sandbox() as sandbox:
+            base = Base(sandbox)
+            outside = os.path.join(sandbox.path, "outside")
+            os.makedirs(outside)
+            support.write(os.path.join(outside, "config"), "x\n")
+            link = os.path.join(base.root, "." + "git", "elsewhere")
+            os.symlink(outside, link)
+
+            self.assertTrue(self.check(os.path.join(link, "config")))
+
+
+class TestTheGuardCannotBeTurnedOff(unittest.TestCase):
+    """V2. Plugin code sat outside every protected place."""
+
+    def check(self, path, **named):
+        return denied(write_hook.run(request(path, **named)))
+
+    def installed(self, sandbox):
+        """A copy of the plugin standing where the client installed one."""
+        import shutil
+
+        root = os.path.join(sandbox.path, "installed", "gtm-base")
+        os.makedirs(os.path.dirname(root), exist_ok=True)
+        shutil.copytree(PLUGIN_DIR, root)
+        return root
+
+    def test_the_installed_guard_itself_is_refused(self):
+        with support.Sandbox() as sandbox:
+            Base(sandbox)
+            root = self.installed(sandbox)
+            with mock.patch.dict(os.environ, {"CLAUDE_PLUGIN_ROOT": root}):
+                target = os.path.join(root, "lib", "gtmbase", "write_hook.py")
+
+                self.assertTrue(self.check(target))
+
+    def test_the_installed_gate_is_refused(self):
+        with support.Sandbox() as sandbox:
+            Base(sandbox)
+            root = self.installed(sandbox)
+            with mock.patch.dict(os.environ, {"CLAUDE_PLUGIN_ROOT": root}):
+                target = os.path.join(root, "lib", "gtmbase", "gate.py")
+
+                self.assertTrue(self.check(target))
+
+    def test_the_declaration_that_loads_the_guard_is_refused(self):
+        with support.Sandbox() as sandbox:
+            Base(sandbox)
+            root = self.installed(sandbox)
+            with mock.patch.dict(os.environ, {"CLAUDE_PLUGIN_ROOT": root}):
+                target = os.path.join(root, "hooks", "hooks.json")
+
+                self.assertTrue(self.check(target))
+
+    def test_a_source_checkout_somewhere_else_is_still_writable(self):
+        """Working on the plugin must go on working while a copy is installed."""
+        with support.Sandbox() as sandbox:
+            Base(sandbox)
+            root = self.installed(sandbox)
+            import shutil
+
+            checkout = os.path.join(sandbox.path, "checkout", "gtm-base")
+            os.makedirs(os.path.dirname(checkout), exist_ok=True)
+            shutil.copytree(PLUGIN_DIR, checkout)
+            with mock.patch.dict(os.environ, {"CLAUDE_PLUGIN_ROOT": root}):
+                mine = os.path.join(checkout, "lib", "gtmbase", "write_hook.py")
+                theirs = os.path.join(root, "lib", "gtmbase", "write_hook.py")
+
+                self.assertFalse(self.check(mine))
+                self.assertTrue(self.check(theirs))
+
+
+class TestABasesOwnFoldersWithoutTheList(unittest.TestCase):
+    """N6. The protection leaned on the account record, which a write can empty."""
+
+    def check(self, path, **named):
+        return denied(write_hook.run(request(path, **named)))
+
+    def test_the_bases_own_settings_are_refused_with_the_list_emptied(self):
+        with support.Sandbox() as sandbox:
+            base = Base(sandbox)
+            support.write(paths.machine_state_path(), "{}")
+            target = os.path.join(base.root, "." + "git", "config")
+
+            self.assertTrue(self.check(target))
+
+    def test_a_folder_deep_inside_a_base_is_still_protected(self):
+        with support.Sandbox() as sandbox:
+            base = Base(sandbox)
+            support.write(paths.machine_state_path(), "{}")
+            target = os.path.join(base.root, "." + "claude", "settings.json")
+
+            self.assertTrue(self.check(target))
+
+    def test_the_settings_of_the_folder_the_base_belongs_with_are_refused(self):
+        """That folder is the one a session is actually opened in."""
+        with support.Sandbox() as sandbox:
+            base = Base(sandbox)
+            material = os.path.join(sandbox.path, "marketing")
+            os.makedirs(material)
+            machine.link_content(base.base_id, material)
+            target = os.path.join(material, "." + "claude", "settings.json")
+
+            self.assertTrue(self.check(target))
+
+    def test_an_ordinary_repository_is_left_alone(self):
+        with support.Sandbox() as sandbox:
+            Base(sandbox)
+            ordinary = os.path.join(sandbox.path, "ordinary")
+            os.makedirs(ordinary)
+            support.git(["init", "-q", "-b", "main"], cwd=ordinary)
+            target = os.path.join(ordinary, "." + "git", "config")
+
+            self.assertFalse(self.check(target))
+
+
+class TestTheWrapperWhenThePythonHalfCannotLoad(unittest.TestCase):
+    """V2b. A broken library used to mean every write went through unlooked at."""
+
+    def a_broken_copy(self, sandbox):
+        """The plugin as it stands after somebody has written over its code."""
+        import shutil
+
+        root = os.path.join(sandbox.path, "installed", "gtm-base")
+        os.makedirs(os.path.dirname(root), exist_ok=True)
+        shutil.copytree(PLUGIN_DIR, root)
+        support.write(
+            os.path.join(root, "lib", "gtmbase", "write_hook.py"),
+            "this is not python(\n",
+        )
+        return root
+
+    def call(self, payload, root):
+        environment = dict(os.environ)
+        environment["CLAUDE_PLUGIN_ROOT"] = root
+        return subprocess.run(
+            ["sh", os.path.join(root, "hooks", "write-check.sh"), "claude"],
+            input=json.dumps(payload).encode("utf-8"),
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            env=environment,
+        )
+
+    def test_a_write_naming_a_protected_place_is_refused(self):
+        with support.Sandbox() as sandbox:
+            root = self.a_broken_copy(sandbox)
+            for named in (
+                os.path.join(paths.seat_home_path(), "machine.json"),
+                os.path.join(root, "lib", "gtmbase", "gate.py"),
+                os.path.join(sandbox.path, "base", "." + "g" + "it", "config"),
+                os.path.join(
+                    sandbox.path, "base", "." + "claude", "settings.json"
+                ),
+            ):
+                finished = self.call(request(named), root)
+
+                self.assertEqual(0, finished.returncode, named)
+                self.assertIn(b'"deny"', finished.stdout, named)
+                payload = json.loads(finished.stdout.decode("utf-8"))
+                self.assertEqual(
+                    write_hook.COULD_NOT_CHECK,
+                    payload["hookSpecificOutput"]["permissionDecisionReason"],
+                )
+
+    def test_an_ordinary_write_is_still_allowed(self):
+        with support.Sandbox() as sandbox:
+            root = self.a_broken_copy(sandbox)
+
+            for named in (
+                os.path.join(sandbox.path, "notes.md"),
+                os.path.join(sandbox.path, "project", "src", "main.py"),
+            ):
+                finished = self.call(request(named), root)
+
+                self.assertEqual(0, finished.returncode, named)
+                self.assertEqual(b"", finished.stdout, named)
+
+    def test_the_wrapper_says_the_same_words_the_library_holds(self):
+        with open(WRAPPER, encoding="utf-8") as handle:
+            text = handle.read()
+
+        self.assertIn(write_hook.COULD_NOT_CHECK, text)
 
 
 if __name__ == "__main__":

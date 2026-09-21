@@ -81,6 +81,18 @@ CODE_NO_PATH = "no-file-named"
 CODE_SEAT_FOLDER = "in-the-records-folder"
 CODE_BASE_REPOSITORY = "in-a-bases-own-repository-folder"
 CODE_BASE_ASSISTANT_FOLDER = "in-a-bases-assistant-folder"
+CODE_PLUGIN_CODE = "in-the-plugins-own-folder"
+
+# What the client calls the folder it installed this plugin into.
+PLUGIN_ROOT_ENV = "CLAUDE_PLUGIN_ROOT"
+CODE_CLIENT_SETTINGS = "in-the-settings-that-load-this-plugin"
+
+# The files the client reads to decide whether this plugin runs at all.
+CLIENT_SETTINGS_FILES = ("settings.json", "settings.local.json")
+
+# How far up from a file this walks looking for a base. A base sits at the top
+# of its own folders, so a file more levels down than this is not in one.
+MAX_FOLDERS_WALKED = 40
 
 # The one sentence a person reads when a write is refused. It is fixed text:
 # it never names the file, the folder, or which of the three rules caught it,
@@ -92,23 +104,65 @@ REFUSED = (
     "ask the person to make that change themselves."
 )
 
+# The one sentence the wrapper says when this check could not run at all. The
+# shell script holds the same words, and a test holds the two to each other.
+COULD_NOT_CHECK = (
+    "GTM Base could not run its own safety check just now, and this file is "
+    "in a folder it keeps for itself, so nothing was written. Try again, and "
+    "if it keeps happening the plugin needs installing again."
+)
+
 
 def _folded(text: str) -> str:
     """One path with its letter case and its Unicode form folded away."""
     return trust_surface.normalize_component(text or "")
 
 
-def _under(real: str, folder: str) -> bool:
-    """Whether one resolved path sits inside one folder, folded on both sides.
+def _at_or_under(path: str, folder: str) -> bool:
+    """Whether one path is a folder, or sits inside it, folded on both sides.
 
-    Both sides go through the same folding, so a folder that reads as `.GTM-Base`
-    on a Mac, and a name written with its accents taken apart, are compared as
-    the one name they open.
+    Both sides go through the same folding, so a folder that reads as
+    `.GTM-Base` on a Mac, and a name written with its accents taken apart, are
+    compared as the one name they open.
+
+    The folder itself counts, which is finding V1 of the 2026-09-20
+    verification round. A working folder keeps the version-control entry as a
+    file rather than a folder, so a rule that only ever looked inside that name
+    left the one entry that matters wide open.
     """
-    if not folder or not real:
+    if not folder or not path:
         return False
-    prefix = _folded(folder.rstrip(os.sep)) + os.sep
-    return _folded(real).startswith(prefix)
+    one = _folded(path.rstrip(os.sep))
+    other = _folded(folder.rstrip(os.sep))
+    return one == other or one.startswith(other + os.sep)
+
+
+def _reaches(named: str, real: str, folder: str) -> bool:
+    """Whether a write aimed at this path would land in this folder.
+
+    Both the name as it was given and the name with every link followed are
+    checked, against the folder both as it is written and with its own links
+    followed. A link inside a protected folder pointing somewhere else is still
+    a write into that folder as far as the name goes, and a link outside one
+    pointing in is still a write into it as far as the disk goes, so one of the
+    two forms alone lets one of the two through.
+    """
+    if not folder:
+        return False
+    try:
+        settled = os.path.realpath(folder)
+    except Exception:
+        settled = folder
+    for side in (named, real):
+        for place in (folder, settled):
+            if _at_or_under(side, place):
+                return True
+    return False
+
+
+def _under(real: str, folder: str) -> bool:
+    """Kept for callers that only have the resolved form of a path."""
+    return _at_or_under(real, folder)
 
 
 def named_files(payload: Dict[str, Any]) -> List[str]:
@@ -119,6 +173,11 @@ def named_files(payload: Dict[str, Any]) -> List[str]:
     of its own and the documentation names only the one. Nothing that holds
     what would be written is read, so a file whose contents happen to spell a
     path is never mistaken for a write to it.
+
+    The name is used exactly as it was given. It used to have its spaces taken
+    off first, and a link named with a space in front of it then pointed at the
+    records folder while the check looked at a name nothing on the disk
+    answered to (finding V1).
     """
     tool_input = payload.get("tool_input")
     if not isinstance(tool_input, dict):
@@ -132,7 +191,7 @@ def named_files(payload: Dict[str, Any]) -> List[str]:
         named = tool_input.get(key)
         if not isinstance(named, str) or not named.strip():
             continue
-        named = os.path.expanduser(named.strip())
+        named = os.path.expanduser(named)
         if not os.path.isabs(named):
             if cwd is None:
                 continue
@@ -141,35 +200,142 @@ def named_files(payload: Dict[str, Any]) -> List[str]:
     return found
 
 
-def problem_with(real_file: str) -> Optional[str]:
-    """Which of the three rules this path falls under, or nothing at all.
+def plugin_roots() -> List[str]:
+    """Every folder this plugin's own code is running from, as best we can tell.
 
-    Nothing here touches git and nothing here starts another program. The one
-    thing it reads is this account's own short record of the bases it has
-    joined, which is the same file the read check reads and for the same
-    reason: it is the cheapest way to leave.
+    Two answers, because either one on its own can be wrong. The client says
+    where it installed the plugin, and that is the copy whose code the hooks
+    really run. This file's own place on the disk says where the code answering
+    right now came from, and that is the copy an attacker would have to reach.
+    Both are protected, so neither a client that says nothing nor a client that
+    says the wrong thing leaves the guard writable.
+
+    Only those two. A second copy of this repository somewhere else on the
+    computer is somebody working on the plugin, and their work must go on
+    (finding V2).
+    """
+    found: List[str] = []
+    told = os.environ.get(PLUGIN_ROOT_ENV) or ""
+    if told:
+        found.append(os.path.abspath(os.path.expanduser(told)))
+    here = os.path.dirname(os.path.abspath(__file__))
+    # <root>/lib/gtmbase/write_hook.py, so the root is two folders up.
+    found.append(os.path.dirname(os.path.dirname(here)))
+    return [item for item in found if item]
+
+
+def client_settings_files() -> List[str]:
+    """The files that say whether this plugin's own checks run at all.
+
+    A write to one of these turns the guard off without touching a line of its
+    code, which is the same hole from the other side (finding V2).
+    """
+    home = os.path.expanduser("~")
+    folder = os.path.join(home, ASSISTANT_DIR_NAME)
+    return [os.path.join(folder, name) for name in CLIENT_SETTINGS_FILES]
+
+
+def _names_a_guarded_folder(named: str, real: str) -> bool:
+    """Whether either spelling of this path names one of the two folder names.
+
+    This is the cheap way out, and it is the reason a check on every file write
+    on this computer is affordable. Almost no write anywhere names either of
+    these, and the ones that do are the only ones worth walking a folder tree
+    over.
+    """
+    wanted = (_folded(REPOSITORY_DIR_NAME), _folded(ASSISTANT_DIR_NAME))
+    for side in (named, real):
+        for part in str(side or "").replace("\\", "/").replace(os.sep, "/").split("/"):
+            if _folded(part) in wanted:
+                return True
+    return False
+
+
+def _guarded_folders_of(root: str) -> List[str]:
+    """The two folders inside one base or one linked folder that are ours."""
+    return [
+        os.path.join(root, REPOSITORY_DIR_NAME),
+        os.path.join(root, ASSISTANT_DIR_NAME),
+    ]
+
+
+def _base_above(named: str) -> Optional[str]:
+    """The first folder above this path that is shaped like a base.
+
+    Finding N6. The protection of a base's own folders used to be read off this
+    account's list of joined bases, and that list is a file: a write that
+    empties it takes the protection with it. So the folder tree is walked
+    instead, upwards, with no program started and nothing read but the presence
+    of two names. A base holds the map and keeps its own history, and a folder
+    holding both is treated as one.
+    """
+    folder = named if os.path.isdir(named) else os.path.dirname(named)
+    for _step in range(MAX_FOLDERS_WALKED):
+        if not folder:
+            return None
+        try:
+            looks_right = os.path.isfile(
+                os.path.join(folder, constants.MAP_PATH)
+            ) and os.path.lexists(os.path.join(folder, REPOSITORY_DIR_NAME))
+        except Exception:
+            return None
+        if looks_right:
+            return folder
+        parent = os.path.dirname(folder)
+        if parent == folder:
+            return None
+        folder = parent
+    return None
+
+
+def problem_with(named: str, real_file: str) -> Optional[str]:
+    """Which rule this path falls under, or nothing at all.
+
+    Nothing here touches git and nothing here starts another program. The
+    reading it does of the disk is the presence of two names on the way up from
+    the file, and this account's own short record of the bases it has joined,
+    which is the same file the read check reads and for the same reason: it is
+    the cheapest way to leave.
     """
     try:
-        seat = os.path.realpath(paths.seat_home_path())
+        seat = paths.seat_home_path()
     except Exception:
         seat = ""
-    if seat and _under(real_file, seat):
+    if seat and _reaches(named, real_file, seat):
         return CODE_SEAT_FOLDER
 
+    for root in plugin_roots():
+        if _reaches(named, real_file, root):
+            return CODE_PLUGIN_CODE
+    for settings in client_settings_files():
+        if _reaches(named, real_file, settings):
+            return CODE_CLIENT_SETTINGS
+
+    if not _names_a_guarded_folder(named, real_file):
+        return None
+
+    inside = _base_above(named)
+    if inside is None and real_file != named:
+        inside = _base_above(real_file)
+    if inside is not None:
+        for folder in _guarded_folders_of(inside):
+            if _reaches(named, real_file, folder):
+                return CODE_BASE_REPOSITORY
     raw = machine.load_machine_state_raw()
     for entry in list(getattr(raw, "joined", None) or []):
         if not isinstance(entry, dict):
             continue
-        root = entry.get("root")
-        if not isinstance(root, str) or not root:
-            continue
-        for candidate in (root, os.path.realpath(root)):
-            if not _under(real_file, candidate):
+        for key in ("root", "content_root"):
+            root = entry.get(key)
+            if not isinstance(root, str) or not root:
                 continue
-            if _under(real_file, os.path.join(candidate, REPOSITORY_DIR_NAME)):
-                return CODE_BASE_REPOSITORY
-            if _under(real_file, os.path.join(candidate, ASSISTANT_DIR_NAME)):
-                return CODE_BASE_ASSISTANT_FOLDER
+            for folder in _guarded_folders_of(root):
+                if _reaches(named, real_file, folder):
+                    return (
+                        CODE_BASE_REPOSITORY
+                        if folder.endswith(REPOSITORY_DIR_NAME)
+                        else CODE_BASE_ASSISTANT_FOLDER
+                    )
     return None
 
 
@@ -186,8 +352,11 @@ def run(payload: Dict[str, Any]) -> Optional[Dict[str, Any]]:
     if isinstance(tool, str) and tool not in TOOL_NAMES:
         return None
     for named in named_files(payload):
-        real_file = os.path.realpath(named)
-        if problem_with(real_file) is not None:
+        try:
+            real_file = os.path.realpath(named)
+        except Exception:
+            real_file = named
+        if problem_with(named, real_file) is not None:
             return refusal()
     return None
 

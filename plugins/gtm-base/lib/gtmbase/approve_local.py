@@ -36,6 +36,7 @@ of that note. Neither is ever an instruction.
 from __future__ import annotations
 
 import datetime
+import difflib
 import os
 import re
 import shutil
@@ -123,7 +124,13 @@ CHANGE_LABELS = (
 
 # The note left in this seat's folder while a change is being applied.
 JOURNAL_FILE = "local-approval.json"
-JOURNAL_SCHEMA = 2
+JOURNAL_SCHEMA = 3
+
+# The folder beside that note holding the exact bytes each file it names had
+# before this run touched anything. Finding V4 of the 2026-09-20 verification
+# round: a change somebody made by hand is unsaved by definition, so putting a
+# file back the way it was last saved is how their own words were lost.
+ORIGINALS_DIR = "local-approval-originals"
 
 # A whole hidden comment, which never appears in a line a person is shown.
 _COMMENT_RE = re.compile(r"<!--.*?-->")
@@ -540,7 +547,32 @@ def four_lines(base_root: str, staging, entry, walk, today) -> str:
     return "\n".join(lines)
 
 
-def artifact_for(base_root: str, staging, entry, walk, today) -> str:
+def whole_difference(base_root: str, ordered: List[str], git: GitRunner) -> Dict[str, str]:
+    """Everything each of these files says now that it did not say when saved.
+
+    Finding V5 of the 2026-09-20 verification round. A change somebody made by
+    hand is approved with the file still unsaved, and approval saves the whole
+    file rather than the part the change is about, so an unrelated edit further
+    down the same document went in unread. The answer is not to save less, it
+    is to show all of it: this is the whole of what saving the file would put
+    down, and it is what the yes is bound to.
+    """
+    found: Dict[str, str] = {}
+    for relative in ordered:
+        was = _head_text(base_root, relative, git) or ""
+        now = read_text(os.path.join(base_root, relative.replace("/", os.sep))) or ""
+        lines = list(
+            difflib.unified_diff(
+                was.split("\n"), now.split("\n"), n=3, lineterm=""
+            )
+        )
+        # The first two lines of that form name the two sides, which a person
+        # reading this already knows, so they are left out.
+        found[relative] = "\n".join(lines[2:]) if len(lines) > 2 else ""
+    return found
+
+
+def artifact_for(base_root: str, staging, entry, walk, today, differences=None) -> str:
     """The whole prepared change, written out so nothing about it is hidden.
 
     The four labeled lines come first. Then, when the change carries a context
@@ -548,6 +580,10 @@ def artifact_for(base_root: str, staging, entry, walk, today) -> str:
     a first sentence is not what gets written. Then every part of every file it
     changes, as that part reads now and as the change would leave it. This is
     what the yes is bound to, so none of it is ever shortened.
+
+    A change somebody made by hand ends with one more thing: everything in each
+    document that is different from the last time it was saved, all of it,
+    because that is what saying yes to one of those writes down.
     """
     pieces = [ARTIFACT_OPEN, four_lines(base_root, staging, entry, walk, today), ""]
     carried = _carried_entry(staging)
@@ -569,6 +605,19 @@ def artifact_for(base_root: str, staging, entry, walk, today) -> str:
         )
         pieces.append("")
         pieces.append(_quoted(after))
+        pieces.append("")
+    for relative in walk.ordered:
+        text = (differences or {}).get(relative)
+        if text is None:
+            continue
+        document = names.document_name(relative)
+        pieces.append(
+            "Everything in %s that is different from the last time it was "
+            "saved, which is all of what saying yes to this writes down:"
+            % document
+        )
+        pieces.append("")
+        pieces.append(_quoted(text) if text.strip() else "> (nothing is different)")
         pieces.append("")
     pieces.append(ARTIFACT_CLOSE)
     return "\n".join(pieces).rstrip("\n") + "\n"
@@ -607,15 +656,35 @@ def _shown_hash(staged_text: str, base_root: str, ordered: List[str]) -> str:
 class _Reading(object):
     """One prepared change, read and checked once, ready to show or to write."""
 
-    __slots__ = ("staging", "walk", "entry_id", "source_id", "artifact", "shown_hash")
+    __slots__ = (
+        "staging",
+        "walk",
+        "entry_id",
+        "source_id",
+        "artifact",
+        "shown_hash",
+        "by_hand",
+    )
 
-    def __init__(self, staging, walk, entry_id, source_id, artifact, shown_hash):
+    def __init__(
+        self, staging, walk, entry_id, source_id, artifact, shown_hash, by_hand=False
+    ):
         self.staging = staging
         self.walk = walk
         self.entry_id = entry_id
         self.source_id = source_id
         self.artifact = artifact
         self.shown_hash = shown_hash
+        self.by_hand = by_hand
+
+
+def _made_by_hand(staging) -> bool:
+    """Whether this prepared change is a change the person made themselves.
+
+    It is the one kind that is allowed to be sitting unsaved in the base while
+    it is approved, because the unsaved edit is the change.
+    """
+    return str(getattr(staging, "origin", "")) == compose_proposal.LOCAL_EDIT_ORIGIN
 
 
 def _read_and_check(base_root, base_id, staging_path, git, today):
@@ -731,6 +800,19 @@ def _read_and_check(base_root, base_id, staging_path, git, today):
             None,
         )
 
+    if getattr(staging, "first_draft", False) or any(
+        stale_check.still_the_note(after)
+        for _relative, _heading, _before, after in walk.steps
+    ):
+        return (
+            _refused(
+                STATUS_REFUSED,
+                CODE_STILL_A_PLACEHOLDER,
+                STILL_A_PLACEHOLDER,
+                staging.staging_id,
+            ),
+            None,
+        )
     for _relative, _heading, _before, after in walk.steps:
         if stale_check.is_the_placeholder(after):
             return (
@@ -749,14 +831,43 @@ def _read_and_check(base_root, base_id, staging_path, git, today):
     if owner_problems:
         return _many(STATUS_REFUSED, staging.staging_id, owner_problems), None
 
+    by_hand = _made_by_hand(staging)
+    differences = (
+        whole_difference(base_root, walk.ordered, git) if by_hand else None
+    )
+    if differences:
+        # What the yes writes down is the whole of each file, so the whole of
+        # each file's difference is read for things that must never leave.
+        allowlist, _code = compose_proposal.scan.load_allowlist(base_root)
+        hits = []
+        for relative in walk.ordered:
+            hits.extend(
+                compose_proposal.scan.scan_text(
+                    differences.get(relative) or "",
+                    allowlist,
+                    "what you changed in %s" % names.document_name(relative),
+                )
+            )
+        if hits:
+            return (
+                LocalResult(
+                    STATUS_REFUSED,
+                    staging_id=staging.staging_id,
+                    codes=[hit.pattern_class for hit in hits],
+                    reasons=[hit.sentence() for hit in hits],
+                ),
+                None,
+            )
+
     entry = _entry_for(base_root, staging, entry_id)
     return None, _Reading(
         staging,
         walk,
         entry_id,
         source_id,
-        artifact_for(base_root, staging, entry, walk, today),
+        artifact_for(base_root, staging, entry, walk, today, differences),
         _shown_hash(staged_text, base_root, walk.ordered),
+        by_hand,
     )
 
 
@@ -942,6 +1053,86 @@ def _journal_path(base_id: str) -> str:
     return os.path.join(paths.seat_dir(base_id), JOURNAL_FILE)
 
 
+def _originals_dir(base_id: str) -> str:
+    return os.path.join(paths.seat_dir(base_id), ORIGINALS_DIR)
+
+
+def _staged_paths(base_root: str, git: GitRunner):
+    """Every path whose change is already lined up to be saved."""
+    found = git.run(["diff", "--name-only", "--cached"], cwd=base_root)
+    if not found.ok:
+        return set()
+    return set(line.strip() for line in found.stdout.split("\n") if line.strip())
+
+
+def _save_originals(base_id: str, base_root: str, ordered: List[str], git: GitRunner):
+    """Keep the exact bytes of every file this run is about to write over.
+
+    Finding V4 of the 2026-09-20 verification round. Putting a file back the
+    way it was last saved is only the right answer when nothing was unsaved in
+    it, and the whole point of the hand-edit path is that something is. So the
+    bytes that were in front of the person when they answered are kept beside
+    the note, and those are what comes back if anything goes wrong.
+    """
+    folder = _originals_dir(base_id)
+    shutil.rmtree(folder, ignore_errors=True)
+    ensure_dir(folder)
+    staged_now = _staged_paths(base_root, git)
+    saved: List[dict] = []
+    for index, relative in enumerate(ordered):
+        text = read_text(os.path.join(base_root, relative.replace("/", os.sep)))
+        if text is None:
+            continue
+        name = "%d.txt" % index
+        atomic_write_text(os.path.join(folder, name), text, mode=0o600)
+        saved.append(
+            {
+                "path": relative,
+                "hash": ids.content_hash(text),
+                "copy": name,
+                "staged": relative in staged_now,
+            }
+        )
+    return saved
+
+
+def _kept_copies(base_id: str, journal: Optional[dict]) -> Dict[str, dict]:
+    """The kept bytes the note names, keyed by the path each one belongs to."""
+    found: Dict[str, dict] = {}
+    for item in (journal or {}).get("originals") or []:
+        if isinstance(item, dict) and item.get("path"):
+            found[str(item.get("path"))] = item
+    del base_id
+    return found
+
+
+def _put_their_own_back(base_root: str, base_id: str, kept: dict, git: GitRunner) -> bool:
+    """Write one file back to the bytes it held before this run, and check it.
+
+    It comes back true only when the bytes on the disk afterwards are the bytes
+    that were kept, read back and measured, because a restore nobody checked is
+    not a restore anybody should report.
+    """
+    relative = str(kept.get("path"))
+    wanted = str(kept.get("hash") or "")
+    text = read_text(os.path.join(_originals_dir(base_id), str(kept.get("copy") or "")))
+    if text is None or ids.content_hash(text) != wanted:
+        return False
+    full = os.path.join(base_root, relative.replace("/", os.sep))
+    try:
+        atomic_write_text(full, text, mode=0o644, inside=base_root)
+    except (OSError, GtmBaseError):
+        return False
+    back = read_text(full)
+    if back is None or ids.content_hash(back) != wanted:
+        return False
+    if kept.get("staged"):
+        git.run(["add", "--", relative], cwd=base_root)
+    else:
+        git.run(["reset", "-q", "HEAD", "--", relative], cwd=base_root)
+    return True
+
+
 def _load_journal(base_id: str) -> Optional[dict]:
     """The note as it was written, read as data and checked by the caller."""
     payload = read_json(_journal_path(base_id))
@@ -997,10 +1188,27 @@ def _checked_journal(base_id: str, base_root: str):
         settled = os.path.realpath(os.path.join(base_root, relative))
         if settled != real_base and not settled.startswith(real_base + os.sep):
             return None, "the note names a path outside this base"
+    kept = payload.get("originals")
+    if kept is not None and not isinstance(kept, list):
+        return None, "the note holds something that is not a set of kept files"
+    for item in kept or []:
+        if not isinstance(item, dict):
+            return None, "the note holds something that is not a kept file"
+        relative = str(item.get("path") or "")
+        name = str(item.get("copy") or "")
+        try:
+            paths.check_repo_path_syntax(relative, NOTE_PATH_PREFIXES)
+            ids.check_content_hash(str(item.get("hash") or ""))
+        except (PathError, ValueError, TypeError):
+            return None, "the note names a path or a value we never write"
+        if not name or name != os.path.basename(name) or name in (".", ".."):
+            return None, "the note names a kept file we never wrote"
     return payload, None
 
 
-def _write_journal(base_id: str, base_root: str, plan: "_Plan", head: str) -> None:
+def _write_journal(
+    base_id: str, base_root: str, plan: "_Plan", head: str, originals=None
+) -> None:
     atomic_write_json(
         _journal_path(base_id),
         {
@@ -1017,6 +1225,7 @@ def _write_journal(base_id: str, base_root: str, plan: "_Plan", head: str) -> No
                 }
                 for relative, text, in_head in plan.everything()
             ],
+            "originals": list(originals or []),
             "started_at": state.iso_utc(),
         },
     )
@@ -1024,6 +1233,7 @@ def _write_journal(base_id: str, base_root: str, plan: "_Plan", head: str) -> No
 
 def _clear_journal(base_id: str) -> None:
     remove(_journal_path(base_id))
+    shutil.rmtree(_originals_dir(base_id), ignore_errors=True)
 
 
 def _already_saved(base_root: str, journal: dict, git: GitRunner) -> bool:
@@ -1060,7 +1270,9 @@ def _already_saved(base_root: str, journal: dict, git: GitRunner) -> bool:
     return False
 
 
-def _undo_own_work(base_root: str, items: List[dict], git: GitRunner):
+def _undo_own_work(
+    base_root: str, base_id: str, items: List[dict], git: GitRunner, kept=None
+):
     """Put back every path this run wrote and did not save, and nothing else.
 
     A path is only put back when what is on the disk is exactly what this run
@@ -1069,6 +1281,11 @@ def _undo_own_work(base_root: str, items: List[dict], git: GitRunner):
     of those paths is the person's own work, and it is left exactly as they
     left it.
 
+    Where this run kept a file's own bytes from before it started, those bytes
+    are what goes back, not the last saved version. That is finding V4: a
+    change made by hand is unsaved by definition, and the last saved version of
+    such a file is the version without their change in it.
+
     What comes back is two lists: the paths holding the person's own work, and
     the paths this run could not put back at all. They are kept apart because
     they are two different sentences, and the person can do something about
@@ -1076,13 +1293,22 @@ def _undo_own_work(base_root: str, items: List[dict], git: GitRunner):
     """
     theirs: List[str] = []
     stuck: List[str] = []
+    kept = kept or {}
     for item in items:
         relative = str(item.get("path"))
         full = os.path.join(base_root, relative.replace("/", os.sep))
         current = read_text(full)
         if current is None:
             continue
+        mine = kept.get(relative)
+        if mine is not None and ids.content_hash(current) == str(mine.get("hash")):
+            # Already exactly what they had, so there is nothing to put back.
+            continue
         ours = ids.content_hash(current) == str(item.get("hash"))
+        if ours and mine is not None:
+            if not _put_their_own_back(base_root, base_id, mine, git):
+                stuck.append(relative)
+            continue
         if not ours:
             if item.get("in_head"):
                 held = _head_text(base_root, relative, git)
@@ -1150,7 +1376,9 @@ def _finish_unfinished_work(
             saved_work=git.run(["rev-parse", "HEAD"], cwd=base_root).out(),
         )
 
-    theirs, stuck = _undo_own_work(base_root, items, git)
+    theirs, stuck = _undo_own_work(
+        base_root, base_id, items, git, _kept_copies(base_id, journal)
+    )
     if stuck:
         return _refused(STATUS_REFUSED, CODE_GIT_FAILED, COULD_NOT_SAVE, its_id)
     if theirs:
@@ -1220,7 +1448,9 @@ def _save_the_work(base_root: str, plan: "_Plan", git: GitRunner, codes) -> str:
     return git.run(["rev-parse", "HEAD"], cwd=base_root).out()
 
 
-def _ready_to_write_here(base_root: str, git: GitRunner, changing: List[str]):
+def _ready_to_write_here(
+    base_root: str, git: GitRunner, changing: List[str], by_hand: bool
+):
     """Refuse on a folder with anything half done in it that is not this change.
 
     The ordinary rule is that nothing is written into a base while there is
@@ -1229,12 +1459,17 @@ def _ready_to_write_here(base_root: str, git: GitRunner, changing: List[str]):
     are approving, so the ordinary rule refused every hand edit on a base with
     no shared copy and the habit had nowhere to end (findings A4 and H2).
 
-    So the files this change is about are allowed to be unsaved, and nothing
-    else is. Nothing is weakened by that. The yes is still bound to a value
-    taken over the staged change and over the current bytes of exactly these
-    files, so an edit that moved between being shown and being approved is
-    still refused, and any other unsaved work anywhere in the base still stops
-    the run with the sentence it always did.
+    So the files a change made by hand is about are allowed to be unsaved, and
+    nothing else is, and every other kind of prepared change is held to the
+    ordinary rule exactly as it always was. That narrowing is finding V5 of the
+    verification round: a change that came from somewhere else has no reason to
+    find its own target file already edited, and allowing it there let an
+    unrelated unsaved edit be saved without anybody reading it.
+
+    Nothing is weakened for the one kind that is allowed. The yes is bound to a
+    value taken over the staged change and over the current bytes of exactly
+    these files, and what was shown was the whole of each file's difference, so
+    a file that moved between being shown and being approved is still refused.
     """
     on_default, _code = paths.head_is_default_branch(base_root, runner=git)
     if not on_default:
@@ -1242,7 +1477,7 @@ def _ready_to_write_here(base_root: str, git: GitRunner, changing: List[str]):
     status = git.run(["status", "--porcelain"], cwd=base_root)
     if not status.ok:
         return CODE_GIT_FAILED, COULD_NOT_SAVE
-    allowed = set(changing)
+    allowed = set(changing) if by_hand else set()
     # The whole output, not the trimmed form. The first two characters of a
     # line say what state a path is in and the first of them is often a space,
     # so trimming the output moves every path along by one character.
@@ -1313,7 +1548,9 @@ def approve(
     if not shown_hash or shown_hash != reading.shown_hash:
         return _refused(STATUS_MOVED, CODE_MOVED, MOVED, reading.staging.staging_id)
 
-    stopped = _ready_to_write_here(base_root, git, reading.walk.ordered)
+    stopped = _ready_to_write_here(
+        base_root, git, reading.walk.ordered, reading.by_hand
+    )
     if stopped is not None:
         code, sentence = stopped
         return _refused(
@@ -1333,7 +1570,12 @@ def approve(
         )
 
     head = git.run(["rev-parse", "HEAD"], cwd=base_root).out()
-    _write_journal(base_id, base_root, plan, head)
+    # Their own bytes are kept before one byte of this run's work is written,
+    # so there is never a moment where the only copy of a hand edit is the one
+    # this run is about to write over.
+    originals = _save_originals(base_id, base_root, reading.walk.ordered, git)
+    _write_journal(base_id, base_root, plan, head, originals)
+    kept = {str(item["path"]): item for item in originals}
 
     try:
         written = _write_the_files(base_root, plan)
@@ -1343,6 +1585,7 @@ def approve(
     except GtmBaseError as failure:
         theirs, stuck = _undo_own_work(
             base_root,
+            base_id,
             [
                 {
                     "path": relative,
@@ -1352,6 +1595,7 @@ def approve(
                 for relative, text, in_head in plan.everything()
             ],
             git,
+            kept,
         )
         if not stuck and not theirs:
             _clear_journal(base_id)

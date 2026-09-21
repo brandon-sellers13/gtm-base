@@ -78,7 +78,7 @@ From inside the base:
   four weeks, all of them this seat's own.
 - `python3 scripts/stale_check.py --review` walks what is due and what has been
   prepared, one line each. This is what "review my base" runs.
-- `python3 scripts/stale_check.py --show-document <path>` prints one context
+- `python3 scripts/stale_check.py --show-document '<path>'` prints one context
   file, held apart as data, with the check run before it is read.
 
 ## Review my base
@@ -141,9 +141,19 @@ make it useful:
    it said and settle that first. If it says the document has not caught up
    with a context change, say so and settle that before you write any of the
    words below.
-2. Rewrite the words of the edit so they say what the document should now say,
-   in the document's own voice, using only what the context change actually
-   says. Do not add a fact the change does not carry.
+2. Write what the document should now say, in the document's own voice, using
+   only what the context change actually says, and do not add a fact the
+   change does not carry. It goes in through the one command that takes the
+   first-draft marker off: ask for somewhere to put it with
+   `python3 ../propose-change/scripts/approve_local.py --new-words-file answer`,
+   write it to the path that prints, and then run
+   `python3 ../propose-change/scripts/approve_local.py --staging <path> --wording --words <the path it printed>`.
+   When the prepared change does not say which part of the document it is
+   about, list the parts with
+   `python3 ../propose-change/scripts/approve_local.py --staging <path> --sections`,
+   read them out, ask which one this is about, and add
+   `--section <the number they chose>`. Editing the prepared file by hand
+   leaves the marker on it and the change stays unapprovable.
 3. Rewrite the Before and After lines so a reviewer who has never seen either
    file understands what changes. Keep them to one line each.
 4. Leave the identifiers, the evidence, and the marker line exactly as they are.
