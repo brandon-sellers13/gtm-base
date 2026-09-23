@@ -33,6 +33,7 @@ from . import (
     gate,
     ghcmd,
     ids,
+    names,
     paths,
     push_conditions,
     scan,
@@ -167,6 +168,9 @@ def still_a_first_draft(staging, base_id=None) -> bool:
             # that went out of date, so the claim it corrects would still be
             # standing afterwards, whatever the words now say.
             return True
+        if edit.op == "remove":
+            # A part taken out puts no words in at all (finding R10).
+            continue
         if stale_check.still_the_note(getattr(edit, "text", None)):
             return True
     return False
@@ -410,12 +414,21 @@ def frontmatter_end(lines: List[str]) -> int:
     return 0
 
 
-def find_heading(lines: List[str], heading: str, start: int = 0) -> int:
-    """Where a heading is, matched as a whole line and nothing else."""
+def find_heading(
+    lines: List[str], heading: str, start: int = 0, occurrence: int = 1
+) -> int:
+    """Where a heading is, matched as a whole line and nothing else.
+
+    The occurrence says which one is meant when the same heading is there more
+    than once, counting from one (finding R10 of Astra's third look).
+    """
     wanted = heading.strip()
+    seen = 0
     for index in range(start, len(lines)):
         if lines[index].strip() == wanted:
-            return index
+            seen += 1
+            if seen >= max(1, int(occurrence or 1)):
+                return index
     return -1
 
 
@@ -435,14 +448,33 @@ def apply_edit(text: str, edit) -> str:
     A replacement keeps the heading and puts the new words under it, up to the
     next heading of the same size or bigger. An addition puts the new words at
     the end of the part that heading names, or at the end of the file when the
-    heading is not there yet.
+    heading is not there yet. Taking a part out removes the heading and
+    everything under it, up to the next heading of the same size or bigger.
     """
     lines = text.split("\n")
     body_starts = frontmatter_end(lines)
     heading = (edit.heading or "").strip()
     block = [""] + edit.text.strip("\n").split("\n") + [""]
-    index = find_heading(lines, heading, body_starts)
+    index = find_heading(
+        lines, heading, body_starts, getattr(edit, "occurrence", 1)
+    )
 
+    if edit.op == "remove":
+        if index < 0:
+            raise ConflictError(
+                "the heading is no longer in the file", code=CODE_HEADING_MISSING
+            )
+        stop = section_end(lines, index)
+        start = index
+        # The blank lines between this part and the one above it go with it,
+        # so the document reads as if the part had never been there.
+        while start > body_starts and not lines[start - 1].strip():
+            start -= 1
+        if stop >= len(lines):
+            result = lines[:start]
+        else:
+            result = lines[:start] + [""] + lines[stop:]
+        return "\n".join(result).rstrip("\n") + "\n"
     if edit.op == "replace":
         if index < 0:
             raise ConflictError(
@@ -459,6 +491,105 @@ def apply_edit(text: str, edit) -> str:
 
 
 # --- The pieces the proposal carries -----------------------------------------
+
+
+def hand_edit_targets(staging) -> List[str]:
+    """Every document a change made by hand is about, in the order it names them.
+
+    Finding R10 of Astra's third look. These come from the files the person
+    changed and the bytes recorded for each, not from the parts the change is
+    described by, so a document whose change no part describes is still one
+    this change saves, shows the whole difference of, and checks for having
+    moved. A change prepared before that carries its targets only through its
+    parts, and for that one the parts are the answer.
+    """
+    ordered: List[str] = []
+    for path in list(staging.target_paths or []):
+        if path not in ordered:
+            ordered.append(path)
+    recorded = list(getattr(staging, "target_bytes", None) or [])
+    if ordered and len(recorded) == len(ordered):
+        return ordered
+    return edited_paths(staging)
+
+
+def targets_of(staging) -> List[str]:
+    """Every document one prepared change is about, whatever made it."""
+    if str(getattr(staging, "origin", "")) == LOCAL_EDIT_ORIGIN:
+        return hand_edit_targets(staging)
+    return edited_paths(staging)
+
+
+class WaitingChange(object):
+    """One prepared change that is really waiting, read and checked once."""
+
+    __slots__ = ("staging_id", "path", "staging", "targets", "missing")
+
+    def __init__(self, staging_id, path, staging, targets, missing):
+        self.staging_id = staging_id
+        self.path = path
+        self.staging = staging
+        self.targets = list(targets)
+        # The documents it is about that are no longer in the base. A change
+        # with any is one nothing can ever be done with, and it is said out
+        # loud rather than listed as something to approve.
+        self.missing = list(missing)
+
+
+def waiting_changes(base_root: str) -> List[WaitingChange]:
+    """Every prepared change waiting in this base, by one reading of the folder.
+
+    Finding R11 of Astra's third look. The closing learned to count only a
+    change filed under a name GTM Base issued, with that name written inside
+    it, and the two readers that list what is waiting in a review went on
+    counting anything that parsed, so a change renamed to notes.md was listed
+    by both, pointing at a file name that was not there any more. Every one of
+    them reads this now, so none of them can disagree.
+
+    What comes back holds every change whose file is a plain file named after
+    an identifier GTM Base issued, holding that same identifier, that parses,
+    and that is about at least one document. Whether each of those documents
+    is still in the base is recorded rather than filtered, because the closing
+    has to say when one is gone and the readers have to leave it out.
+    """
+    found: List[WaitingChange] = []
+    folder = os.path.join(base_root, constants.PROPOSALS_PENDING_DIR)
+    if not os.path.isdir(folder):
+        return found
+    try:
+        names_here = sorted(os.listdir(folder))
+    except OSError:
+        return found
+    for name in names_here:
+        if not name.endswith(".md"):
+            continue
+        whole = os.path.join(folder, name)
+        if os.path.islink(whole) or not os.path.isfile(whole):
+            continue
+        staging_id = name[: -len(".md")]
+        try:
+            ids.check_staging_id(staging_id)
+        except (ValueError, TypeError):
+            continue
+        text = read_text(whole)
+        if text is None:
+            continue
+        try:
+            staging = formats.ProposalStaging.parse(text).validate()
+        except (ValidationError, PathError):
+            continue
+        if staging.staging_id != staging_id:
+            continue
+        targets = targets_of(staging)
+        if not targets:
+            continue
+        missing = [
+            path
+            for path in targets
+            if not os.path.isfile(os.path.join(base_root, path.replace("/", os.sep)))
+        ]
+        found.append(WaitingChange(staging_id, whole, staging, targets, missing))
+    return found
 
 
 def edited_paths(staging) -> List[str]:
@@ -1150,15 +1281,20 @@ def reopen_from_opened(
 
 # --- Writing the real wording into a first draft ------------------------------
 
-CODE_NOT_A_FIRST_DRAFT = "not-a-first-draft"
+
 CODE_STILL_THE_NOTE = "still-the-note"
 CODE_NEEDS_A_PART = "needs-the-part-of-the-document"
 CODE_NO_PARTS_AT_ALL = "the-document-has-no-parts"
 
-NOT_A_FIRST_DRAFT = (
-    "That prepared change is not a first draft waiting for wording, so "
-    "nothing was written into it."
+# A change somebody made by hand is worded by their document, so the wording
+# command has nothing of its own to write into one (finding R7 of Astra's
+# third look, which let every other prepared change be reworded).
+MADE_BY_HAND_WORDING = (
+    "That change is one you made by hand, so its wording is what your document "
+    "says. Change the document itself and ask for the change to be prepared "
+    "again."
 )
+CODE_MADE_BY_HAND_WORDING = "wording-of-a-hand-edit"
 STILL_THE_NOTE = (
     "What you handed in is the note GTM Base wrote over again rather than the "
     "wording, so nothing was written. Say what the document should say now, "
@@ -1179,41 +1315,63 @@ NO_PARTS_AT_ALL = (
 )
 
 
-def parts_of(base_root: str, staging) -> List[Tuple[str, str]]:
+def parts_of(base_root: str, staging) -> List[Tuple[str, str, int]]:
     """Every part of the document one first draft could be written into.
 
-    Each one comes back as the path and the heading, in the order they are
-    read, so a caller can put a number beside each and take the number back.
+    Each one comes back as the path, the heading, and which one of that
+    heading it is, in the order they are read, so a caller can put a number
+    beside each and take the number back. The third is what tells two parts
+    with the same heading apart (finding R10 of Astra's third look).
     """
-    found: List[Tuple[str, str]] = []
+    found: List[Tuple[str, str, int]] = []
     for relative in edited_paths(staging):
         text = read_text(
             os.path.join(base_root, relative.replace("/", os.sep))
         ) or ""
         lines = text.split("\n")
+        seen: Dict[str, int] = {}
         for line in lines[frontmatter_end(lines) :]:
             if _heading_level(line) == 2:
-                found.append((relative, line.strip()))
+                heading = line.strip()
+                seen[heading] = seen.get(heading, 0) + 1
+                found.append((relative, heading, seen[heading]))
     return found
 
 
 def write_the_wording(
     base_root: str, staging_path: str, words: str, part=None, base_id=None
 ):
-    """Put the real wording into a first draft, and take the marker off it.
+    """Put the real wording into a prepared change, and take the marker off it.
 
     This is the only way the marker comes off. Findings V8 and N4 of the
     2026-09-20 verification round: it used to be enough to retype the note
     slightly, and the wording was allowed to land in a part of its own while
     the claim it corrected went on standing in the part above.
+
+    It is also how the wording of a change still waiting is revised, as many
+    times as the owner asks. Finding R7 of Astra's third look: the first
+    wording took the marker off, and the next correction the owner asked for
+    was refused as not a first draft, after the words for it had been read
+    and thrown away. Every revision is held to the same rules as the first,
+    and every one moves the change on, so what was shown before it is never
+    what gets approved.
     """
-    staging = load_staging(staging_path)
-    # The same question approval asks, because a prepared change refused by
-    # one and not the other can never be finished at all. Finding N4: the
-    # marker line reading false, a change written before that line existed,
-    # and a name left on this seat's record each did exactly that.
-    if not still_a_first_draft(staging, base_id):
-        raise ValidationError(NOT_A_FIRST_DRAFT, code=CODE_NOT_A_FIRST_DRAFT)
+    from . import approve_local
+
+    try:
+        resolved, _named = approve_local.checked_staging_path(base_root, staging_path)
+    except PathError:
+        raise ValidationError(
+            approve_local.NOT_WAITING_HERE, code=approve_local.CODE_NOT_WAITING_HERE
+        )
+    staging = load_staging(resolved)
+    if staging.origin == LOCAL_EDIT_ORIGIN:
+        raise ValidationError(MADE_BY_HAND_WORDING, code=CODE_MADE_BY_HAND_WORDING)
+    if not staging.edits:
+        raise ValidationError(
+            "This proposal changes nothing, so there is nothing to send.",
+            code=CODE_NO_EDITS,
+        )
     from . import stale_check
 
     if stale_check.still_the_note(words):
@@ -1226,11 +1384,13 @@ def write_the_wording(
         raise ValidationError(NEEDS_A_PART, code=CODE_NEEDS_A_PART)
     for edit in staging.edits:
         if part is not None:
-            edit.path, edit.heading = part
+            edit.path, edit.heading = part[0], part[1]
+            edit.occurrence = int(part[2]) if len(part) > 2 else 1
             edit.op = "replace"
         edit.text = text
     staging.first_draft = False
-    atomic_write_text(staging_path, staging.validate().render(), mode=0o600)
+    staging.revision = int(getattr(staging, "revision", 0) or 0) + 1
+    atomic_write_text(resolved, staging.validate().render(), mode=0o600)
     if base_id:
         state.clear_first_draft(base_id, staging.staging_id)
     return staging
@@ -1280,15 +1440,20 @@ def _committed_text(base_root: str, relative: str, git: GitRunner) -> str:
     return result.stdout if result.ok else ""
 
 
-def _sections_with_levels(text: str) -> "Dict[str, str]":
-    """Every part of a file that a change can be described by, keyed by heading.
+def _sections_with_levels(text: str) -> "Dict[Tuple[str, int], str]":
+    """Every part of a file that a change can be described by.
 
-    Only the words directly under a heading count, and the title of the file is
-    left out. A heading that has smaller headings under it is described by those
-    instead, so one change is never reported twice.
+    Each part is keyed by its heading and by which one of that heading it is,
+    counting from one, because a document can hold the same heading twice and
+    a table keyed by the heading alone kept only the last of them (finding R10
+    of Astra's third look). Only the words directly under a heading count, and
+    the title of the file is left out. A heading that has smaller headings
+    under it is described by those instead, so one change is never reported
+    twice.
     """
     lines = text.split("\n")
-    found: Dict[str, str] = {}
+    found: Dict[Tuple[str, int], str] = {}
+    seen: Dict[str, int] = {}
     index = frontmatter_end(lines)
     while index < len(lines):
         level = _heading_level(lines[index])
@@ -1296,11 +1461,37 @@ def _sections_with_levels(text: str) -> "Dict[str, str]":
             stop = index + 1
             while stop < len(lines) and not _heading_level(lines[stop]):
                 stop += 1
-            found[lines[index].strip()] = "\n".join(lines[index + 1 : stop]).strip("\n")
+            heading = lines[index].strip()
+            seen[heading] = seen.get(heading, 0) + 1
+            found[(heading, seen[heading])] = "\n".join(
+                lines[index + 1 : stop]
+            ).strip("\n")
             index = stop
             continue
         index += 1
     return found
+
+
+def _has_parts(text: str) -> bool:
+    """Whether a document has any part below its title at all."""
+    lines = text.split("\n")
+    return any(
+        _heading_level(line) >= 2 for line in lines[frontmatter_end(lines) :]
+    )
+
+
+# What a person is told when every change they made to a document with parts
+# in it is outside all of them: above the first heading, in the title, or in
+# the settings at the top. The sentence saying a document has no headings was
+# said here before, which was untrue of a document that has them (finding R10
+# of Astra's third look).
+OUTSIDE_EVERY_PART = (
+    "Everything you changed in %s is above its first heading, so no part of it "
+    "changed. Make the change in the part it is about, and ask again."
+)
+# What the change says a part will read afterwards, when the person took that
+# part out.
+PART_TAKEN_OUT = "This part is taken out."
 
 
 # The one thing this path asks on top of where the material came from. It is
@@ -1475,36 +1666,58 @@ def stage_local_edit(
             code=CODE_LOCAL_TOO_LONG,
         )
 
+    # The documents this change is about are the documents the person changed,
+    # every one of them, whatever the parts below manage to describe. Finding
+    # R10 of Astra's third look: they used to be read off the parts, so a
+    # change the parts could not describe could not be prepared at all.
     edits: List[formats.Edit] = []
     before_parts: List[str] = []
     after_parts: List[str] = []
+    any_parts = False
     for relative in changed:
         now_text = read_text(os.path.join(base_root, relative)) or ""
         was_text = _committed_text(base_root, relative, git)
+        any_parts = any_parts or _has_parts(now_text) or _has_parts(was_text)
         current = _sections_with_levels(now_text)
         previous = _sections_with_levels(was_text)
-        for heading, body in current.items():
-            if previous.get(heading) == body:
+        for (heading, occurrence), body in current.items():
+            if previous.get((heading, occurrence)) == body:
                 continue
-            operation = "replace" if heading in previous else "add"
-            edits.append(formats.Edit(relative, heading, operation, body + "\n"))
+            operation = "replace" if (heading, occurrence) in previous else "add"
+            edits.append(
+                formats.Edit(
+                    relative, heading, operation, body + "\n", occurrence=occurrence
+                )
+            )
             before_parts.append(
-                previous.get(heading)
+                previous.get((heading, occurrence))
                 or "This part of %s was not there before." % relative
             )
             after_parts.append(body)
+        # A part that is gone is described as taken out, which is all a person
+        # who deleted an obsolete part did.
+        for (heading, occurrence), body in previous.items():
+            if (heading, occurrence) in current:
+                continue
+            edits.append(
+                formats.Edit(relative, heading, "remove", "", occurrence=occurrence)
+            )
+            before_parts.append(body)
+            after_parts.append(PART_TAKEN_OUT)
     if not edits:
+        if any_parts:
+            raise ValidationError(
+                OUTSIDE_EVERY_PART % names.document_name(changed[0]),
+                code=CODE_LOCAL_NO_SECTION,
+            )
         # The same sentence the wording command says, because it is the same
         # thing wrong with the document and the same thing to do about it
         # (finding P3).
         raise ValidationError(NO_PARTS_AT_ALL, code=CODE_LOCAL_NO_SECTION)
 
-    first = edits[0].path
+    first = changed[0]
     staging_id = free_local_edit_id(base_root, first)
-    ordered_targets: List[str] = []
-    for edit in edits:
-        if edit.path not in ordered_targets:
-            ordered_targets.append(edit.path)
+    ordered_targets: List[str] = list(changed)
     entry = None
     if records_a_change:
         entry = local_edit_entry(
@@ -1539,12 +1752,8 @@ def stage_local_edit(
     # The exact bytes of each document this change was made from, so that
     # whether it has moved on since is a question about the document rather
     # than about what happens when the edits are applied twice (finding N1).
-    ordered_for_bytes: List[str] = []
-    for one in edits:
-        if one.path not in ordered_for_bytes:
-            ordered_for_bytes.append(one.path)
     target_bytes = []
-    for relative in ordered_for_bytes:
+    for relative in ordered_targets:
         data = read_bytes(os.path.join(base_root, relative.replace("/", os.sep)))
         if data is None:
             raise ValidationError(
@@ -1558,7 +1767,7 @@ def stage_local_edit(
         staging_id=staging_id,
         origin=LOCAL_EDIT_ORIGIN,
         intake_path=LOCAL_EDIT_ORIGIN,
-        target_paths=[edit.path for edit in edits],
+        target_paths=list(ordered_targets),
         sequence=0,
         rule_change=False,
         confidence="high",
@@ -1570,11 +1779,6 @@ def stage_local_edit(
         excerpt=source_text.strip(),
         target_bytes=target_bytes,
     )
-    ordered: List[str] = []
-    for path in staging.target_paths:
-        if path not in ordered:
-            ordered.append(path)
-    staging.target_paths = ordered
     staging.validate()
 
     folder = ensure_dir(os.path.join(base_root, constants.PROPOSALS_PENDING_DIR))

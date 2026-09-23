@@ -45,7 +45,6 @@ from . import (
     compose_proposal,
     confirm,
     constants,
-    formats,
     names,
     paths,
     stale,
@@ -405,29 +404,13 @@ def staged_change_for(
     change prepared for the first is not a fix for the second, so saying one is
     ready would send somebody to approve the wrong thing.
     """
-    folder = os.path.join(base_root, constants.PROPOSALS_PENDING_DIR)
-    if not os.path.isdir(folder):
-        return None
-    try:
-        names_here = sorted(os.listdir(folder))
-    except OSError:
-        return None
-    for name in names_here:
-        if not name.endswith(".md"):
+    # The same one reading of the folder every other reader takes (R11).
+    for change in compose_proposal.waiting_changes(base_root):
+        if change.missing or path not in change.targets:
             continue
-        full = os.path.join(folder, name)
-        text = read_text(full)
-        if text is None:
+        if entry_id and _entry_of_staging(change.staging) != entry_id:
             continue
-        try:
-            staging = formats.ProposalStaging.parse(text).validate()
-        except (ValidationError, PathError):
-            continue
-        if path not in compose_proposal.edited_paths(staging):
-            continue
-        if entry_id and _entry_of_staging(staging) != entry_id:
-            continue
-        return full
+        return change.path
     return None
 
 

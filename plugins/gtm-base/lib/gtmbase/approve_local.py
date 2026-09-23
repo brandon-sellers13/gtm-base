@@ -239,6 +239,22 @@ APPLIED = "%s now says what this change said, and you are recorded as approving 
 KEPT = "The prepared change is still waiting, and nothing in your base changed."
 DROPPED = "The prepared change is gone, and nothing in your base changed."
 ASK = "Approve this change, leave it for now, or drop it?"
+# How a part taken out by a change is introduced in what a person reads, and
+# how one of several parts with the same heading is named (finding R10 of
+# Astra's third look).
+PART_TAKEN_OUT_NOW = (
+    "The part of %s called %s, which this change takes out, as it reads now:"
+)
+PART_OF_SEVERAL = "%s, the %s part with that heading"
+# Said under the whole difference of a document when some of what changed is
+# only spaces, tabs, or line endings, which a reader cannot see in the literal
+# difference above it (finding R8 of Astra's third look).
+WHITESPACE_ONLY = (
+    "Some of what changed in %s is only spaces, tabs, or line endings, which "
+    "do not show above. Here are those lines again with every space shown as "
+    "\u00b7, every tab as \u2192, and every extra line-ending character as "
+    "\u240d."
+)
 
 
 # --- What comes back ---------------------------------------------------------
@@ -452,9 +468,9 @@ def _recorded_already(base_root: str, staging_id: str) -> bool:
 class _Walk(object):
     """Every file this change rewrites, and what each part said before and after."""
 
-    __slots__ = ("texts", "steps", "ordered", "leave_alone")
+    __slots__ = ("texts", "steps", "ordered", "leave_alone", "kinds")
 
-    def __init__(self, texts, steps, ordered, leave_alone=None):
+    def __init__(self, texts, steps, ordered, leave_alone=None, kinds=None):
         # texts maps a path to the whole file as this change would leave it.
         self.texts = texts
         # steps is one (path, heading, before, after) for each edit, in order.
@@ -463,6 +479,10 @@ class _Walk(object):
         # The paths this change does not write at all, because the file in
         # front of the person already is the change (finding N1).
         self.leave_alone = set(leave_alone or [])
+        # One (operation, which of its heading, how many share that heading)
+        # for each step, so a part taken out and one of two parts with the
+        # same heading can be said as what they are (finding R10).
+        self.kinds = list(kinds or [(None, 1, 1)] * len(steps))
 
 
 def _walk_a_hand_edit(base_root: str, staging, git: GitRunner) -> "_Walk":
@@ -485,7 +505,9 @@ def _walk_a_hand_edit(base_root: str, staging, git: GitRunner) -> "_Walk":
     """
     texts: Dict[str, str] = {}
     steps: List[Tuple[str, str, str, str]] = []
-    ordered = compose_proposal.edited_paths(staging)
+    kinds: List[Tuple[Optional[str], int, int]] = []
+    # Every document the person changed, whatever the parts describe (R10).
+    ordered = compose_proposal.hand_edit_targets(staging)
     for relative in ordered:
         now = read_text_exactly(
             os.path.join(base_root, relative.replace("/", os.sep))
@@ -498,15 +520,24 @@ def _walk_a_hand_edit(base_root: str, staging, git: GitRunner) -> "_Walk":
     for one in staging.edits:
         relative = paths.canonical_context_path(base_root, one.path)
         was = _head_text(base_root, relative, git) or ""
+        now = texts.get(relative)
+        if now is None:
+            now = read_text_exactly(
+                os.path.join(base_root, relative.replace("/", os.sep))
+            ) or ""
+        which = getattr(one, "occurrence", 1)
         steps.append(
             (
                 relative,
                 one.heading,
-                _section_now(was, one.heading),
-                _section_now(texts[relative], one.heading),
+                _section_now(was, one.heading, which),
+                "" if one.op == "remove" else _section_now(now, one.heading, which),
             )
         )
-    return _Walk(texts, steps, ordered, leave_alone=ordered)
+        kinds.append(
+            (one.op, which, max(_how_many(was, one.heading), _how_many(now, one.heading)))
+        )
+    return _Walk(texts, steps, ordered, leave_alone=ordered, kinds=kinds)
 
 
 def _walk_the_edits(base_root: str, staging) -> "_Walk":
@@ -520,6 +551,7 @@ def _walk_the_edits(base_root: str, staging) -> "_Walk":
     """
     texts: Dict[str, str] = {}
     steps: List[Tuple[str, str, str, str]] = []
+    kinds: List[Tuple[Optional[str], int, int]] = []
     for edit in staging.edits:
         relative = paths.canonical_context_path(base_root, edit.path)
         if relative not in texts:
@@ -529,20 +561,51 @@ def _walk_the_edits(base_root: str, staging) -> "_Walk":
                     "the file is not there any more", code=CODE_CONFLICT
                 )
             texts[relative] = text
-        before = _section_now(texts[relative], edit.heading)
+        which = getattr(edit, "occurrence", 1)
+        before = _section_now(texts[relative], edit.heading, which)
         after_text = compose_proposal.apply_edit(texts[relative], edit)
         steps.append(
-            (relative, edit.heading, before, _section_now(after_text, edit.heading))
+            (
+                relative,
+                edit.heading,
+                before,
+                ""
+                if edit.op == "remove"
+                else _section_now(after_text, edit.heading, which),
+            )
+        )
+        kinds.append(
+            (
+                edit.op,
+                which,
+                max(
+                    _how_many(texts[relative], edit.heading),
+                    _how_many(after_text, edit.heading),
+                ),
+            )
         )
         texts[relative] = after_text
-    return _Walk(texts, steps, compose_proposal.edited_paths(staging))
+    return _Walk(
+        texts, steps, compose_proposal.edited_paths(staging), kinds=kinds
+    )
 
 
-def _section_now(text: str, heading: str) -> str:
+def _how_many(text: str, heading: str) -> int:
+    """How many parts of this version of the file carry this heading."""
+    lines = text.split("\n")
+    wanted = (heading or "").strip()
+    return sum(
+        1
+        for line in lines[compose_proposal.frontmatter_end(lines) :]
+        if wanted and line.strip() == wanted
+    )
+
+
+def _section_now(text: str, heading: str, occurrence: int = 1) -> str:
     """The words under one heading as this version of the file reads."""
     lines = text.split("\n")
     index = compose_proposal.find_heading(
-        lines, heading, compose_proposal.frontmatter_end(lines)
+        lines, heading, compose_proposal.frontmatter_end(lines), occurrence
     )
     if index < 0:
         return ""
@@ -570,6 +633,63 @@ def _quoted(text: str) -> str:
     """A piece of a file, marked as something read rather than written."""
     lines = str(text or "").strip("\n").split("\n")
     return "\n".join(("> " + line.rstrip()) if line.strip() else ">" for line in lines)
+
+
+_BACKTICKS_RE = re.compile(r"`+")
+
+
+def _fenced(text: str, language: str = "") -> str:
+    """Text inside a fence no run of backticks in it can close.
+
+    Finding R8 of Astra's third look. The whole difference was shown as quoted
+    text, which a screen renders: an image added by hand showed as a picture,
+    a link hid where it went, and spaces at the end of a line were taken off.
+    Inside a fence it is shown as the characters it is, and the fence is one
+    backtick longer than the longest run of them in the text.
+    """
+    longest = max((len(run) for run in _BACKTICKS_RE.findall(text)), default=0)
+    fence = "`" * max(3, longest + 1)
+    return "%s%s\n%s\n%s" % (fence, language, text, fence)
+
+
+def _visible(line: str) -> str:
+    """One line with its spaces, tabs, and return characters made visible."""
+    return (
+        line.replace(" ", "\u00b7").replace("\t", "\u2192").replace("\r", "\u240d")
+    )
+
+
+def _whitespace_lines(difference: str) -> List[str]:
+    """The lines of a difference whose change a reader could not see.
+
+    A line with spaces or tabs at its end, a line holding a tab or a return
+    character, a line of nothing but spaces, and a line taken out and put back
+    with only its spacing changed.
+    """
+    found: List[str] = []
+    taken: List[str] = []
+    added: List[str] = []
+    for line in difference.split("\n"):
+        if not line or line[0] not in "+-":
+            continue
+        body = line[1:]
+        (taken if line[0] == "-" else added).append(line)
+        if (
+            body != body.rstrip()
+            or "\t" in body
+            or "\r" in body
+            or (body and not body.strip())
+        ):
+            if line not in found:
+                found.append(line)
+    squeezed = lambda text: re.sub(r"\s+", "", text[1:])
+    for one in taken:
+        for other in added:
+            if one[1:] != other[1:] and squeezed(one) == squeezed(other):
+                for line in (one, other):
+                    if line not in found:
+                        found.append(line)
+    return found
 
 
 def _entry_for(base_root: str, staging, entry_id: Optional[str]):
@@ -681,9 +801,19 @@ def artifact_for(base_root: str, staging, entry, walk, today, differences=None) 
         pieces.append("")
         pieces.append(_quoted(carried.render()))
         pieces.append("")
-    for relative, heading, before, after in walk.steps:
+    for (relative, heading, before, after), (operation, which, count) in zip(
+        walk.steps, walk.kinds
+    ):
         document = names.document_name(relative)
         part = _one_line(heading.lstrip("#"))
+        if count > 1:
+            part = PART_OF_SEVERAL % (part, _ordinal(which))
+        if operation == "remove":
+            pieces.append(PART_TAKEN_OUT_NOW % (document, part))
+            pieces.append("")
+            pieces.append(_quoted(before) if before.strip() else "> (nothing there)")
+            pieces.append("")
+            continue
         pieces.append("The part of %s called %s, as it reads now:" % (document, part))
         pieces.append("")
         pieces.append(_quoted(before) if before.strip() else "> (nothing there yet)")
@@ -706,10 +836,41 @@ def artifact_for(base_root: str, staging, entry, walk, today, differences=None) 
             % document
         )
         pieces.append("")
-        pieces.append(_quoted(text) if text.strip() else "> (nothing is different)")
+        if not text.strip():
+            pieces.append("> (nothing is different)")
+            pieces.append("")
+            continue
+        pieces.append(_fenced(text, "diff"))
         pieces.append("")
+        hidden = _whitespace_lines(text)
+        if hidden:
+            pieces.append(WHITESPACE_ONLY % document)
+            pieces.append("")
+            pieces.append(_fenced("\n".join(_visible(line) for line in hidden)))
+            pieces.append("")
     pieces.append(ARTIFACT_CLOSE)
     return "\n".join(pieces).rstrip("\n") + "\n"
+
+
+_ORDINALS = (
+    "first",
+    "second",
+    "third",
+    "fourth",
+    "fifth",
+    "sixth",
+    "seventh",
+    "eighth",
+    "ninth",
+    "tenth",
+)
+
+
+def _ordinal(which: int) -> str:
+    """The word for which one, counting from one, as a person would say it."""
+    if 1 <= which <= len(_ORDINALS):
+        return _ORDINALS[which - 1]
+    return "number %d" % which
 
 
 def _hash_of_parts(parts: List[str]) -> str:
@@ -780,7 +941,7 @@ def _a_document_that_moved_on(base_root: str, staging) -> Optional[str]:
     by an older build carries none, and for that one there is nothing to
     compare, so it is left to the rest of the checks.
     """
-    ordered = compose_proposal.edited_paths(staging)
+    ordered = compose_proposal.hand_edit_targets(staging)
     recorded = list(getattr(staging, "target_bytes", None) or [])
     if len(recorded) != len(ordered):
         return None
@@ -930,9 +1091,15 @@ def _read_and_check(base_root, base_id, staging_path, git, today):
             None,
         )
 
+    # A part taken out puts no words in, so there are no words of it to be
+    # the note (finding R10).
+    written_words = [
+        after
+        for (_relative, _heading, _before, after), kind in zip(walk.steps, walk.kinds)
+        if kind[0] != "remove"
+    ]
     if compose_proposal.still_a_first_draft(staging, base_id) or any(
-        stale_check.still_the_note(after)
-        for _relative, _heading, _before, after in walk.steps
+        stale_check.still_the_note(after) for after in written_words
     ):
         return (
             _refused(
@@ -943,7 +1110,7 @@ def _read_and_check(base_root, base_id, staging_path, git, today):
             ),
             None,
         )
-    for _relative, _heading, _before, after in walk.steps:
+    for after in written_words:
         if stale_check.is_the_placeholder(after):
             return (
                 _refused(
@@ -1214,6 +1381,45 @@ def _staged_paths(base_root: str, git: GitRunner):
     return set(line.strip() for line in found.stdout.split("\n") if line.strip())
 
 
+# What a line of the index says about one path, as the note keeps it. Both go
+# onto a git command line when a failed run puts the index back, so the note
+# is only believed when each is written the one way git writes it.
+_INDEX_MODES = ("100644", "100755", "120000")
+_OBJECT_RE = re.compile(r"^[0-9a-f]{40}(?:[0-9a-f]{24})?$")
+
+
+def _index_entry(base_root: str, relative: str, git: GitRunner):
+    """What the index holds for one path: (read, (mode, object) or None).
+
+    Finding R1 of Astra's third look. The note kept only whether a path was
+    lined up to be saved, so a failed run put back a different version from
+    the one the person had lined up, and when the file on the disk already
+    matched it put nothing back at all. This is the exact entry, so exactly
+    that can be put back and checked.
+    """
+    found = git.run(["ls-files", "-s", "--", relative], cwd=base_root)
+    if not found.ok:
+        return False, None
+    lines = [line for line in found.stdout.split("\n") if line.strip()]
+    if not lines:
+        return True, None
+    if len(lines) != 1:
+        # More than one entry is a path in the middle of a clash, which this
+        # module will not try to put back.
+        return False, None
+    head, _tab, name = lines[0].partition("\t")
+    parts = head.split()
+    if (
+        len(parts) != 3
+        or parts[2] != "0"
+        or name != relative
+        or parts[0] not in _INDEX_MODES
+        or not _OBJECT_RE.match(parts[1])
+    ):
+        return False, None
+    return True, (parts[0], parts[1])
+
+
 def _save_originals(base_id: str, base_root: str, ordered: List[str], git: GitRunner):
     """Keep the exact bytes of every file this run is about to write over.
 
@@ -1239,6 +1445,26 @@ def _save_originals(base_id: str, base_root: str, ordered: List[str], git: GitRu
                 COULD_NOT_KEEP % names.document_name(relative),
                 code=CODE_COULD_NOT_KEEP,
             )
+        # What the index holds for it and who may read and write it are kept
+        # apart from the bytes, because either can differ while the bytes are
+        # the same (finding R1 of Astra's third look). A path whose index entry
+        # cannot be read exactly is one this run could not put back, so it
+        # stops the run before anything is written.
+        read, entry = _index_entry(base_root, relative, git)
+        if not read:
+            raise ValidationError(
+                COULD_NOT_KEEP % names.document_name(relative),
+                code=CODE_COULD_NOT_KEEP,
+            )
+        try:
+            file_mode = os.stat(
+                os.path.join(base_root, relative.replace("/", os.sep))
+            ).st_mode & 0o7777
+        except OSError:
+            raise ValidationError(
+                COULD_NOT_KEEP % names.document_name(relative),
+                code=CODE_COULD_NOT_KEEP,
+            )
         name = "%d.bytes" % index
         atomic_write_bytes(os.path.join(folder, name), data, mode=0o600)
         saved.append(
@@ -1247,6 +1473,10 @@ def _save_originals(base_id: str, base_root: str, ordered: List[str], git: GitRu
                 "hash": ids.bytes_hash(data),
                 "copy": name,
                 "staged": relative in staged_now,
+                "index": (
+                    {"mode": entry[0], "blob": entry[1]} if entry is not None else None
+                ),
+                "file_mode": file_mode,
             }
         )
     return saved
@@ -1262,12 +1492,70 @@ def _kept_copies(base_id: str, journal: Optional[dict]) -> Dict[str, dict]:
     return found
 
 
+def _kept_mode(kept: dict) -> Optional[int]:
+    """The permissions the note kept for a file, when it kept any."""
+    value = kept.get("file_mode")
+    if isinstance(value, int) and not isinstance(value, bool) and 0 <= value <= 0o7777:
+        return value
+    return None
+
+
+def _put_the_rest_back(base_root: str, kept: dict, git: GitRunner) -> bool:
+    """Put back what the index held and who may read the file, and check both.
+
+    Finding R1 of Astra's third look. This used to run only when the bytes had
+    to be written, it forced one set of permissions, and it ignored whether
+    git had done what it was asked. Now it runs whether or not the bytes
+    already match, and it comes back true only when the index and the
+    permissions afterwards are exactly what was kept.
+    """
+    relative = str(kept.get("path"))
+    full = os.path.join(base_root, relative.replace("/", os.sep))
+    mode = _kept_mode(kept)
+    if mode is not None:
+        try:
+            os.chmod(full, mode)
+            if os.stat(full).st_mode & 0o7777 != mode:
+                return False
+        except OSError:
+            return False
+    if "index" not in kept:
+        # A note written before the index was kept says only whether the
+        # path was lined up, which is the best that can be put back for it.
+        if kept.get("staged"):
+            return git.run(["add", "--", relative], cwd=base_root).ok
+        return git.run(["reset", "-q", "HEAD", "--", relative], cwd=base_root).ok
+    entry = kept.get("index")
+    if entry is None:
+        result = git.run(
+            ["rm", "-q", "--cached", "--ignore-unmatch", "--", relative],
+            cwd=base_root,
+        )
+        wanted = None
+    else:
+        wanted = (str(entry.get("mode")), str(entry.get("blob")))
+        result = git.run(
+            [
+                "update-index",
+                "--add",
+                "--cacheinfo",
+                "%s,%s,%s" % (wanted[0], wanted[1], relative),
+            ],
+            cwd=base_root,
+        )
+    if not result.ok:
+        return False
+    read, now = _index_entry(base_root, relative, git)
+    return read and now == wanted
+
+
 def _put_their_own_back(base_root: str, base_id: str, kept: dict, git: GitRunner) -> bool:
     """Write one file back to the bytes it held before this run, and check it.
 
     It comes back true only when the bytes on the disk afterwards are the bytes
-    that were kept, read back and measured, because a restore nobody checked is
-    not a restore anybody should report.
+    that were kept, read back and measured, and the index and the permissions
+    are what was kept as well, because a restore nobody checked is not a
+    restore anybody should report.
     """
     relative = str(kept.get("path"))
     wanted = str(kept.get("hash") or "")
@@ -1277,18 +1565,17 @@ def _put_their_own_back(base_root: str, base_id: str, kept: dict, git: GitRunner
     if data is None or ids.bytes_hash(data) != wanted:
         return False
     full = os.path.join(base_root, relative.replace("/", os.sep))
+    mode = _kept_mode(kept)
     try:
-        atomic_write_bytes(full, data, mode=0o644, inside=base_root)
+        atomic_write_bytes(
+            full, data, mode=mode if mode is not None else 0o644, inside=base_root
+        )
     except (OSError, GtmBaseError):
         return False
     back = read_bytes(full)
     if back is None or ids.bytes_hash(back) != wanted:
         return False
-    if kept.get("staged"):
-        git.run(["add", "--", relative], cwd=base_root)
-    else:
-        git.run(["reset", "-q", "HEAD", "--", relative], cwd=base_root)
-    return True
+    return _put_the_rest_back(base_root, kept, git)
 
 
 def _load_journal(base_id: str) -> Optional[dict]:
@@ -1363,6 +1650,18 @@ def _checked_journal(base_id: str, base_root: str):
             return None, "the note names a kept file we never wrote"
         if not name or name != os.path.basename(name) or name in (".", ".."):
             return None, "the note names a kept file we never wrote"
+        # What the index held goes onto a git command line when it is put
+        # back, so it is believed only in the one shape git writes it (R1).
+        entry = item.get("index")
+        if entry is not None:
+            if (
+                not isinstance(entry, dict)
+                or str(entry.get("mode")) not in _INDEX_MODES
+                or not _OBJECT_RE.match(str(entry.get("blob") or ""))
+            ):
+                return None, "the note names an index entry we never write"
+        if "file_mode" in item and _kept_mode(item) is None:
+            return None, "the note names permissions we never write"
     return payload, None
 
 
@@ -1467,7 +1766,13 @@ def _undo_own_work(
             and exactly is not None
             and ids.bytes_hash(exactly) == str(mine.get("hash"))
         ):
-            # Already exactly what they had, so there is nothing to put back.
+            # The bytes are already exactly what they had, which says nothing
+            # about what they had lined up to be saved or who could read the
+            # file. Finding R1 of Astra's third look: this is where a version
+            # lined up by hand was lost, because nothing past the bytes was
+            # put back. Both are put back and checked here as well.
+            if not _put_the_rest_back(base_root, mine, git):
+                stuck.append(relative)
             continue
         ours = ids.content_hash(current) == str(item.get("hash"))
         if ours and mine is not None:
@@ -1856,32 +2161,19 @@ def waiting(
     approve is a list item that wastes somebody's afternoon.
     """
     git = runner_or_default(runner)
-    folder = os.path.join(base_root, constants.PROPOSALS_PENDING_DIR)
-    if not os.path.isdir(folder):
+    # One reading of the folder, the same one the closing and the other review
+    # reader take (finding R11 of Astra's third look).
+    changes = [
+        change
+        for change in compose_proposal.waiting_changes(base_root)
+        if not change.missing
+    ]
+    if not changes:
         return []
     address = _who_is_approving(base_root, git)
     found: List[Tuple[str, List[str]]] = []
-    for name in sorted(os.listdir(folder)):
-        if not name.endswith(".md"):
+    for change in changes:
+        if _owner_problems(base_root, change.targets, address, git):
             continue
-        text = read_text(os.path.join(folder, name))
-        if text is None:
-            continue
-        try:
-            staging = formats.ProposalStaging.parse(text).validate()
-        except (ValidationError, PathError):
-            continue
-        targets = compose_proposal.edited_paths(staging)
-        if not targets:
-            continue
-        if any(
-            not os.path.isfile(
-                os.path.join(base_root, path.replace("/", os.sep))
-            )
-            for path in targets
-        ):
-            continue
-        if _owner_problems(base_root, targets, address, git):
-            continue
-        found.append((staging.staging_id, targets))
+        found.append((change.staging_id, change.targets))
     return found

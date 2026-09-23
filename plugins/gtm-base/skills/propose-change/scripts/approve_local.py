@@ -73,6 +73,12 @@ NOTHING_WAITING = "No prepared change is waiting for you to approve."
 NEEDS_THE_WORDING = (
     "Say where the wording is, with the file this skill handed out for it."
 )
+# Said after every wording, the first and every revision after it, because
+# each one needs reading again before a yes means anything (finding R7).
+WORDING_WRITTEN = (
+    "That wording is in the prepared change. Show the change again and read "
+    "it before approving, because any earlier showing no longer counts."
+)
 NOT_ONE_OF_THE_PARTS = (
     "That is not one of the numbers beside the parts of the document, so "
     "nothing was written. List them again and name one of those."
@@ -192,7 +198,7 @@ def main(argv=None):
         except GtmBaseError as failure:
             sys.stderr.write(str(failure) + "\n")
             return EXIT_REFUSED
-        for number, (path, heading) in enumerate(
+        for number, (path, heading, _which) in enumerate(
             compose_proposal.parts_of(resolution.root, staging), start=1
         ):
             sys.stdout.write(
@@ -205,8 +211,10 @@ def main(argv=None):
         if not options.words:
             sys.stderr.write(NEEDS_THE_WORDING + "\n")
             return EXIT_ERROR
+        # Read without taking the file away, so a refusal leaves the words
+        # where they were (finding R7 of Astra's third look).
         words = wordsfile.read_words(
-            options.words, a_session(resolution.base_id)
+            options.words, a_session(resolution.base_id), consume=False
         )
         if words is None:
             sys.stdout.write(wordsfile.NOT_OURS + "\n")
@@ -233,10 +241,8 @@ def main(argv=None):
         except GtmBaseError as failure:
             sys.stdout.write(str(failure) + "\n")
             return EXIT_REFUSED
-        sys.stdout.write(
-            "That wording is in the prepared change, and it is ready to be "
-            "read and approved.\n"
-        )
+        wordsfile.consume_words(options.words, a_session(resolution.base_id))
+        sys.stdout.write(WORDING_WRITTEN + "\n")
         return EXIT_DONE
 
     try:

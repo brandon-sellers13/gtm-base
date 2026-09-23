@@ -1102,3 +1102,51 @@ reviewers' scripts.
 
 #### Review
 Every review round found real defects, and the later rounds mostly found what the earlier fixes introduced: a guard that could be switched off through itself, a data-loss path in a relaxed check, words files that read any file, a fallback that refused every write, a moved check that refused ordinary edits. Three things would have caught most of them sooner and are now tests: payloads shaped like what the client really sends, documented commands run from the skill text itself, and byte comparisons that compare bytes.
+
+## Release A, Astra's third verification (2026-09-23)
+
+Astra's third look at 5f8076b found ten things that block the release and one
+that does not. The list is `docs/reviews/2026-09-23-release-a-verify-3-astra.md`.
+A failing test came first for every one, built from Astra's own scenario, in
+the order R10, R7, R9, then R1 to R6, R8, R11. Nothing is saved or sent.
+
+- [x] R10. A hand edit that takes a part out, or edits the first of two parts
+      with the same heading, can be prepared and approved. The documents come
+      from the changed files and their bytes; the summary can say a part is
+      taken out and which of two same-named parts it means.
+- [x] R7. The wording of a prepared change can be revised any number of times.
+      Each revision is held to the same rules, moves the shown value on, and
+      the words file goes only after the wording is written.
+- [x] R9. One numbered order for files, folders, and proposed places, printed,
+      kept, and taken back alike. Every listing prints the folder numbers. The
+      walk now runs the additions sentences describe and checks every flag a
+      sentence names, and what it found is corrected in the skills.
+- [x] R1. A failed approval puts back the index entry and the permissions,
+      checks both, and keeps the recovery note when either cannot come back.
+- [x] R2 and R3. The write check compares every place a known base keeps its
+      history before the name shortcut, and knows a base whose map is gone by
+      the same three questions as the send check. The miss path starts nothing.
+- [x] R4. An error in the write check ends in the wrapper's failure status.
+- [x] R5. The smaller check takes out dots and follows links before comparing.
+- [x] R6. The config command is parsed: action, file, key, both section names.
+- [x] R8. The whole difference is a literal fenced diff, and whitespace-only
+      changes are shown again visibly.
+- [x] R11. One validated inventory of what is waiting, read by the closing and
+      both review readers.
+- [x] CHANGELOG sentences Astra's table flags are corrected in place, and the
+      still-open list names concurrency, words-file provenance, first-draft
+      provenance, and the untested ask.
+- [x] Atlas figures 6 and 7 brought up to date, not republished.
+- [ ] Brandon: an outside look at this round's fixes, since each fix to a
+      safety rule is new code.
+- [ ] Brandon: run docs/walkthroughs/2026-09-release-a-live-check.md.
+
+#### Review
+Nine of the eleven were the round before's fixes falling short at an edge the
+tests did not reach: a rollback that stopped at bytes, a shortcut placed before
+the comparison it was meant to protect, a summary keyed by heading, a words
+file consumed before the refusal, a walk that read commands but not sentences.
+Run over the committed skills, the extended walk flagged documented additions
+in three of the four walked skills: folder names on the command line, a flag
+that puts somebody's words on the command line, a folder narrowed by a name the
+script refuses, and additions attached to the wrong command.

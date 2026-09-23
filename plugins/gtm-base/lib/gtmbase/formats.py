@@ -1145,13 +1145,18 @@ EDIT_FIELDS = ("path", "heading", "op", "text")
 class Edit(object):
     """One change to one section of one context file."""
 
-    __slots__ = ("path", "heading", "op", "text")
+    __slots__ = ("path", "heading", "op", "text", "occurrence")
 
-    def __init__(self, path: str, heading: str, op: str, text: str):
+    def __init__(self, path: str, heading: str, op: str, text: str, occurrence=1):
         self.path = path
         self.heading = heading
         self.op = op
         self.text = text
+        # Which part with this heading the edit means, counting from one, for
+        # a document holding the same heading more than once. Finding R10 of
+        # Astra's third look: the first of two parts with one heading could
+        # not be described at all, because only the heading named a part.
+        self.occurrence = occurrence
 
     def as_dict(self) -> Dict[str, str]:
         return {
@@ -1168,6 +1173,15 @@ class Edit(object):
             raise ValidationError("an edit heading is one line", code="bad-heading")
         if not isinstance(self.text, str):
             raise ValidationError("an edit carries text", code="bad-edit-text")
+        if (
+            not isinstance(self.occurrence, int)
+            or isinstance(self.occurrence, bool)
+            or self.occurrence < 1
+        ):
+            raise ValidationError(
+                "an edit names which part it means by a whole number",
+                code="bad-occurrence",
+            )
         return self
 
 
@@ -1456,6 +1470,7 @@ STAGING_FIELDS = (
     "third_party",
     "first_draft",
     "target_bytes",
+    "revision",
 )
 STAGING_SCHEMA = 1
 
@@ -1496,6 +1511,7 @@ class ProposalStaging(object):
         schema=STAGING_SCHEMA,
         first_draft=False,
         target_bytes=None,
+        revision=0,
     ):
         self.schema = schema
         self.staging_id = staging_id
@@ -1526,8 +1542,19 @@ class ProposalStaging(object):
         # is a question about its bytes, and it used to be answered by applying
         # the edits again and asking whether the answer matched.
         self.target_bytes = list(target_bytes or [])
+        # How many times the wording has been written into this change. Every
+        # revision moves it on, so the value a showing printed stops matching
+        # even when the new words are the same as the old ones, and a fresh
+        # look is always needed (finding R7 of Astra's third look).
+        self.revision = revision
 
     def frontmatter(self) -> Dict[str, Any]:
+        fields = self._fields()
+        if self.revision:
+            fields["revision"] = int(self.revision)
+        return fields
+
+    def _fields(self) -> Dict[str, Any]:
         return {
             "schema": self.schema,
             "staging_id": self.staging_id,
@@ -1549,13 +1576,15 @@ class ProposalStaging(object):
             parts.append("## %s\n\n%s" % (CHANGE_SECTION, _fenced(self.decision_block)))
         parts.append("## %s\n" % EDITS_SECTION)
         for number, edit in enumerate(self.edits, start=1):
+            occurrence = getattr(edit, "occurrence", 1)
             parts.append(
-                "### Edit %d\n\npath: %s\nheading: %s\nop: %s\n\n%s"
+                "### Edit %d\n\npath: %s\nheading: %s\nop: %s\n%s\n%s"
                 % (
                     number,
                     edit.path,
                     edit.heading if edit.heading else EMPTY,
                     edit.op,
+                    ("occurrence: %d\n" % occurrence) if occurrence != 1 else "",
                     _fenced(edit.text),
                 )
             )
@@ -1625,6 +1654,7 @@ class ProposalStaging(object):
             target_bytes=_as_list(
                 fields.get("target_bytes", []), "target_bytes", "proposal"
             ),
+            revision=fields.get("revision", 0),
             decision_block=decision_block,
             edits=edits,
             excerpt=excerpt,
@@ -1642,14 +1672,20 @@ class ProposalStaging(object):
         while index < len(lines):
             line = lines[index]
             if line.startswith("### Edit"):
-                current = {"path": None, "heading": None, "op": None, "text": None}
+                current = {
+                    "path": None,
+                    "heading": None,
+                    "op": None,
+                    "text": None,
+                    "occurrence": None,
+                }
                 edits.append(current)  # type: ignore[arg-type]
                 index += 1
                 continue
             if current is None:
                 index += 1
                 continue
-            for name in ("path", "heading", "op"):
+            for name in ("path", "heading", "op", "occurrence"):
                 prefix = name + ":"
                 if line.startswith(prefix):
                     current[name] = line[len(prefix) :].strip()
@@ -1667,12 +1703,22 @@ class ProposalStaging(object):
                     code="missing-field",
                 )
             heading = raw["heading"] or ""
+            occurrence = 1
+            if raw["occurrence"] is not None:
+                try:
+                    occurrence = int(raw["occurrence"])
+                except ValueError:
+                    raise ValidationError(
+                        "an edit names which part it means by a whole number",
+                        code="bad-occurrence",
+                    )
             built.append(
                 Edit(
                     raw["path"],
                     "" if heading == EMPTY else heading,
                     raw["op"],
                     raw["text"],
+                    occurrence=occurrence,
                 )
             )
         return built
@@ -1681,6 +1727,14 @@ class ProposalStaging(object):
         if self.schema != STAGING_SCHEMA:
             raise ValidationError(
                 "this proposal was written by a different version", code="wrong-schema"
+            )
+        if (
+            not isinstance(self.revision, int)
+            or isinstance(self.revision, bool)
+            or self.revision < 0
+        ):
+            raise ValidationError(
+                "the proposal's revision is not a whole number", code="bad-revision"
             )
         check_staging_id(self.staging_id)
         _in_vocabulary(self.origin, constants.LEDGER_ORIGINS, "origin", "proposal")

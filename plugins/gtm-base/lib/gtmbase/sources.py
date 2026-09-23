@@ -814,7 +814,15 @@ class ConsentList(object):
         """
         if not isinstance(session_id, str) or not session_id.strip():
             raise ValueError("a frozen list needs the session it belongs to")
-        wanted = sorted(set(os.path.realpath(path) for path in paths_))
+        # In the order the list was shown, because the number printed beside
+        # each file is what the person names it by afterwards (finding R9 of
+        # Astra's third look: this was sorted, so the file printed first was
+        # not the file numbered one).
+        wanted: List[str] = []
+        for path in paths_:
+            real = os.path.realpath(path)
+            if real not in wanted:
+                wanted.append(real)
         frozen_at = (
             datetime.datetime.now(datetime.timezone.utc)
             .replace(microsecond=0)

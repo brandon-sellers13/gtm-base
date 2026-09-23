@@ -201,14 +201,8 @@ def new_words_path(key: str, kind: str) -> str:
     )
 
 
-def read_words(path: str, key: str) -> Optional[str]:
-    """What somebody typed, read once out of a file this code handed out.
-
-    Nothing comes back for a path this code did not hand out, which is finding
-    V6: every other path on this computer used to be readable this way. The
-    file is taken away once it has been read, because a person's own words have
-    no reason to stay on the disk after they are written down.
-    """
+def _handed_out(path: str, key: str) -> Optional[str]:
+    """The real path of a words file this code handed out, or nothing."""
     given = str(path or "")
     if not given:
         return None
@@ -233,9 +227,35 @@ def read_words(path: str, key: str) -> Optional[str]:
         return None
     if info.st_size > MAX_WORDS_BYTES:
         return None
+    return real
+
+
+def read_words(path: str, key: str, consume: bool = True) -> Optional[str]:
+    """What somebody typed, read out of a file this code handed out.
+
+    Nothing comes back for a path this code did not hand out, which is finding
+    V6: every other path on this computer used to be readable this way. The
+    file is taken away once it has been read, because a person's own words have
+    no reason to stay on the disk after they are written down. A caller whose
+    work can still be refused reads without taking it away, and takes it away
+    with `consume_words` only once the work is done (finding R7 of Astra's
+    third look: words read and thrown away before a refusal were words the
+    person had to type again).
+    """
+    real = _handed_out(path, key)
+    if real is None:
+        return None
     text = read_text(real)
-    remove(real)
+    if consume:
+        remove(real)
     return None if text is None else text.strip()
+
+
+def consume_words(path: str, key: str) -> None:
+    """Take away a words file this code handed out, once its words are used."""
+    real = _handed_out(path, key)
+    if real is not None:
+        remove(real)
 
 
 def clear_words(key: str) -> None:

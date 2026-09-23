@@ -522,43 +522,12 @@ def _documents_with_a_change_waiting(base_root: str):
     """
     found: List[str] = []
     orphaned: List[str] = []
-    folder = os.path.join(base_root, constants.PROPOSALS_PENDING_DIR)
-    if not os.path.isdir(folder):
-        return found, orphaned
-    for name in sorted(os.listdir(folder)):
-        if not name.endswith(".md"):
+    # One reading of the folder, shared with both review readers (R11).
+    for change in compose_proposal.waiting_changes(base_root):
+        if change.missing:
+            orphaned.append(change.staging_id)
             continue
-        whole = os.path.join(folder, name)
-        if os.path.islink(whole) or not os.path.isfile(whole):
-            continue
-        staging_id = name[: -len(".md")]
-        try:
-            ids.check_staging_id(staging_id)
-        except (ValueError, TypeError):
-            continue
-        text = read_text(whole)
-        if text is None:
-            continue
-        try:
-            staging = formats.ProposalStaging.parse(text).validate()
-        except (ValidationError, PathError):
-            continue
-        if staging.staging_id != staging_id:
-            continue
-        targets = compose_proposal.edited_paths(staging)
-        if not targets:
-            continue
-        missing = [
-            path
-            for path in targets
-            if not os.path.isfile(
-                os.path.join(base_root, path.replace("/", os.sep))
-            )
-        ]
-        if missing:
-            orphaned.append(staging_id)
-            continue
-        for path in targets:
+        for path in change.targets:
             if path not in found:
                 found.append(path)
     return found, orphaned
@@ -1383,25 +1352,17 @@ def _review_prepared_changes(result, report, base_root, git, lines) -> None:
 
 
 def _prepared_elsewhere(base_root: str):
-    """Every prepared change waiting, on a base whose review happens elsewhere."""
-    found = []
-    folder = os.path.join(base_root, constants.PROPOSALS_PENDING_DIR)
-    if not os.path.isdir(folder):
-        return found
-    for name in sorted(os.listdir(folder)):
-        if not name.endswith(".md"):
-            continue
-        text = read_text(os.path.join(folder, name))
-        if text is None:
-            continue
-        try:
-            staging = formats.ProposalStaging.parse(text).validate()
-        except (ValidationError, PathError):
-            continue
-        targets = compose_proposal.edited_paths(staging)
-        if targets:
-            found.append((staging.staging_id, targets))
-    return found
+    """Every prepared change waiting, on a base whose review happens elsewhere.
+
+    It reads the one inventory the closing and the local review read, and it
+    leaves out a change about a document that is gone, the way they do
+    (finding R11 of Astra's third look).
+    """
+    return [
+        (change.staging_id, change.targets)
+        for change in compose_proposal.waiting_changes(base_root)
+        if not change.missing
+    ]
 
 
 def _ledger_flags(report) -> List[Tuple[str, str]]:

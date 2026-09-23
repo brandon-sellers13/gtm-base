@@ -124,8 +124,10 @@ setup this file belongs to, and without it the file is not one GTM Base can
 read. The file is read once and then taken away, so ask for a fresh one for
 each step that needs the name. Never put their name in the command itself.
 
-Add `--content-folder <path>` when they named a folder that holds their
-material. That folder is not where the base goes. It is the folder the base will
+When they named a folder that holds their material, add
+`--content-folder-file <a fresh folder file>`: a fresh file from the same
+`words-file` command with `--for folder`, holding that folder, because a folder
+name never goes in a command. That folder is not where the base goes. It is the folder the base will
 be linked to, so that opening Claude Code there brings the base along. The
 command creates nothing. It prints one sentence saying where the base would go,
 and the machine readable lines `target=`, `parent=`, `reason=`, and, when they
@@ -143,7 +145,7 @@ for a company of that name, so ask them for a name that tells the two apart and
 run the command again with it. Never build over a folder that is already there.
 
 If they say they would rather have the base sit inside the folder their material
-is in, run the command again with `--beside` as well as `--content-folder`. The
+is in, run the command again with `--beside --content-folder-file <a fresh folder file>`. The
 same checks run on that folder, and it is refused when another tool already
 keeps a history for it, when another program copies it off the computer on its
 own, or when it is inside a base or inside the folder GTM Base keeps for itself.
@@ -152,9 +154,9 @@ does any app automatically copy this folder, or your whole home folder, to cloud
 storage. If they say yes, do not build there.
 
 Only when they have said yes does anything get created, and that happens later,
-at the moment they approve the first document. Pass the same
-`--content-folder <path>` to `approve` on that first document, so the base is
-linked at the moment it comes into being.
+at the moment they approve the first document. Pass the same folder to
+`approve` on that first document, in a fresh file, the way step 6 shows, so the
+base is linked at the moment it comes into being.
 
 ### Step 5. What will be read, and the yes that fixes the list
 
@@ -173,7 +175,7 @@ path and pass it back. A folder name is whatever somebody called their folder,
 so it never goes in the command itself, and the file is read once and then
 taken away, so ask for a fresh one before each of the three steps below.
 
-It prints one sentence and then one `place=<folder> score=<number>` line for
+It prints one sentence and then one `place=<folder> number=<number> score=<number>` line for
 each place it found, with a count of each kind of document after it, and a
 `note=` line for anything it left out. Say that sentence word for word and say
 nothing else about the places. It is one of these three:
@@ -192,13 +194,15 @@ python3 scripts/join.py words-file --run <run identifier> --for folder
 python3 scripts/join.py list-sources --folder-file <the path it printed> --run <run identifier> --from-survey
 ```
 
-Add one `--add <folder>` for each folder they named to add and one
-`--drop <folder>` for each one they named to drop. The files lying loose at the
-top of the folder they named are a place of their own, and its name on the
-`place=` line is a single full stop, so that is what to pass to `--drop` when
-they say those files do not belong. A name that is not a folder of the one they
-named comes back as `codes=no-such-folder` and nothing is shown, so ask them
-for a folder that is there. Dropping every place comes back as
+Add one `--add-file <a fresh folder file>` for each folder they named to add,
+with that one folder written in it, and one `--drop <place number>` for each
+place they named to drop, using the number the survey printed beside it. A
+place is never dropped by its name, and a name is refused. The files lying
+loose at the top of the folder they named are a place of their own, and its
+name on the `place=` line is a single full stop, so drop that place by its
+number when they say those files do not belong. A folder to add that is not a
+folder of the one they named comes back as `codes=no-such-folder` and nothing
+is shown, so ask them for a folder that is there. Dropping every place comes back as
 `codes=no-folders-chosen`, and the answer to that is to ask which folder holds
 the material and list that one.
 
@@ -217,14 +221,14 @@ a large number of files spread across several folders, which is what a whole
 working repository looks like rather than a folder of marketing material. This
 is the backstop behind the step above and it rarely happens once the places
 have been settled. Do not ask for a yes over that list. The command has already printed the sentence that
-names the two numbers and the `folder=<name> count=<number>` lines that go with
+names the two numbers and the `folder=<name> number=<number> count=<number>` lines that go with
 it. Say that sentence and read the folders and their counts out. It is this
 sentence:
 
 That folder holds <number> files across <number> folders, most of which are probably not marketing material. Which of these folders hold your customer profiles, positioning, messaging, or plans?
 
-When they name the folders, run the same command again with one
-`--only-folder <name>` for each folder they named:
+When they name the folders, run the same command again, naming each folder
+by the number printed beside it:
 
 ```
 python3 scripts/join.py words-file --run <run identifier> --for folder
@@ -336,11 +340,12 @@ say so plainly and suggest naming the folder that holds the documents for this
 draft.
 
 When they name files or a folder, run the preview again with `--only` or with
-`--only-folder <folder>`, and show them the new numbers. Both of those narrow
+`--only-folder <number>`, the number the list printed beside that folder, and
+show them the new numbers. Both of those narrow
 the list they already agreed to and neither widens it.
 
 `--only` takes the numbers the listing printed beside each file, separated by
-commas, and nothing else: `--only 1,4,7`. It never takes a file name. A file
+commas, and nothing else: `--only 1,2`. It never takes a file name. A file
 name is whatever somebody called their file, so writing one into a command puts
 their text where a command goes, and a command line naming a file is refused
 outright. A number that is not on the list is refused with
@@ -359,7 +364,7 @@ The company file from step 4 has already been read and taken away, so this
 step asks for a fresh one, and so does every step after it that needs the
 name.
 
-Add `--paste-file <path>` once for each piece of text held in step 5. The
+Add `--paste-file <the path add-paste printed>` once for each piece of text held in step 5. The
 command prints `prompt=<path>` along with the labels of what went in and what
 had to be left out. Read that file and follow it: it is the request you write
 the draft from. Write your draft to the file the command names as `draft=`.
@@ -424,7 +429,9 @@ there are four, with skip among them.
 - **Approve.** For the first document they approve, which is the one that
   creates the base:
   `python3 scripts/join.py approve --step <step> --draft <draft file> --run <run identifier> --parent <the parent from step 4> --company-file <a fresh company file>`.
-  Add `--email <address>` when they gave one. For every document after it:
+  Add `--email <address>` when they gave one, and
+  `--content-folder-file <a fresh folder file>` when they named a folder in
+  step 4. For every document after it:
   `python3 scripts/join.py approve --step <step> --draft <draft file> --run <run identifier> --base <base folder>`.
   The command prints `base=` and `file=`.
   If it prints the sentence saying GTM Base needs their work email address,
@@ -585,6 +592,9 @@ wording, and it is not approvable while it is still that.
 6. Ask whether to approve it. Asking before the wording is written in is
    refused, because the prepared change carries a marker saying it is still a
    first draft and only the command above takes that marker off.
+7. If they want different words, ask for a new file, write their words into
+   it, run the same command again, and show the change again before asking
+   for the yes. An earlier showing no longer counts once the wording changes.
 
 ### Step 10. The closing
 <!-- step -->

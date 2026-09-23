@@ -1,0 +1,9 @@
+You reviewed Release A of GTM Base three times. Your latest report is docs/reviews/2026-09-20-release-a-verify-2-astra.md (findings 1 to 11). You reviewed commit 457e034 because the brief named it, and you excluded the later commits. Four later commits (6bdfdc8, ad4f2d4, 7476eb7, 5f8076b) contain further fixes from two other reviewers, and some of them target the same defects you found. HEAD is the release candidate. Read only; change nothing. Output a written review in markdown.
+
+## Do
+1. For each of your eleven findings in that report, say CLOSED or STILL OPEN **at HEAD**, with the file and line at HEAD that closes it, or the scenario that still fails. Check the fix itself, and say when a test asserts something weaker than the finding. Use line numbers at HEAD.
+2. Review what the four later commits added that you have not seen. `git log 457e034..HEAD` and `git show --stat` each commit. Pay attention to: the hand-edit path, which now saves the working file as it stands and tells "moved" by an exact-bytes hash recorded at preparation; `stale_check._documents_with_a_change_waiting` and the finding it drives; `compose_proposal.still_a_first_draft` and the seat's first-drafts record; the rewritten shell fallback in hooks/write-check.sh and its "ask" answers; base identity asked across all refs, and the refusal of config commands naming the base id key; tests/test_skills_and_scripts_agree.py, which now claims to extract every command line from the SKILL.md text, run it, and fail on an unrun line.
+3. Update your residual-risk list and your CHANGELOG assessment for HEAD.
+
+## Output
+Findings ranked critical, high, medium, low, each with file and line at HEAD, a concrete scenario, and the smallest fix. Then the verdict: ready to release, ready with the listed changes, or not ready. If not ready, name exactly which findings block. Be adversarial and specific. Do not pad.

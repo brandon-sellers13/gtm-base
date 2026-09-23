@@ -2925,6 +2925,547 @@ class TestEveryOrdinaryShapeOfHandEdit(unittest.TestCase):
             self.assertEqual(approve_local.STATUS_MOVED, shown.status)
 
 
+# --- R10 of Astra's third verification ---------------------------------------
+
+
+def _put_exact(path, text):
+    with open(path, "w", encoding="utf-8", newline="") as handle:
+        handle.write(text)
+
+
+def _saved_as(root, relative, text):
+    """Save one document as the base's last saved version."""
+    _put_exact(os.path.join(root, relative), text)
+    support.git(["add", "-A"], cwd=root)
+    support.git(["commit", "-q", "-m", "as it was"], cwd=root)
+
+
+class TestHandEditsTheSummaryCouldNotDescribe(unittest.TestCase):
+    """R10. Two ordinary hand edits could not be prepared at all.
+
+    Preparing a hand edit walked only the parts the document still had, and
+    kept them in a table keyed by heading, so a second part with the same
+    heading wrote over the first. Taking out a part that was no longer true,
+    with nothing else changed, and editing the first of two parts with the
+    same heading, with the second left alone, were both refused with a
+    sentence saying the document had no headings in it. These are Astra's two
+    scenarios exactly: in each one the change is the only change.
+    """
+
+    TWO_PARTS = support.ICP_TEXT + "\n## Pricing\n\nTen dollars a seat.\n"
+    TWO_NOTES = (
+        support.ICP_TEXT + "\n## Notes\n\nFirst words.\n\n## Notes\n\nSecond words.\n"
+    )
+
+    def test_a_part_taken_out_with_nothing_else_changed_is_approved(self):
+        with support.Sandbox() as sandbox:
+            root, base_id = local_base(sandbox)
+            _saved_as(root, ICP, self.TWO_PARTS)
+            full = os.path.join(root, ICP)
+            _put_exact(full, support.ICP_TEXT)
+            theirs = bytes_of(full)
+            runner = NoRemoteRunner()
+
+            staged = compose_proposal.stage_local_edit(
+                root, base_id, HAND_EDIT_SOURCE, runner=runner, now=TODAY
+            )
+            staging = compose_proposal.load_staging(staged)
+            self.assertEqual(
+                [("## Pricing", "remove")],
+                [(edit.heading, edit.op) for edit in staging.edits],
+            )
+            shown = approve_local.show(staged, root, base_id, runner=runner, now=TODAY)
+            self.assertEqual(approve_local.STATUS_SHOWN, shown.status, shown.reasons)
+            # The summary says the part is taken out, and shows what it said.
+            self.assertIn("Pricing", shown.artifact)
+            self.assertIn("takes out", shown.artifact)
+            self.assertIn("Ten dollars a seat.", shown.artifact)
+            applied = approve_local.approve(
+                staged, root, base_id, shown.shown_hash, runner=runner, now=NOW
+            )
+
+            self.assertEqual(
+                approve_local.STATUS_APPLIED, applied.status, applied.reasons
+            )
+            self.assertEqual(theirs, saved_bytes(root, ICP))
+            self.assertEqual(theirs, bytes_of(full))
+
+    def test_the_first_of_two_parts_with_one_heading_is_approved(self):
+        with support.Sandbox() as sandbox:
+            root, base_id = local_base(sandbox)
+            _saved_as(root, ICP, self.TWO_NOTES)
+            full = os.path.join(root, ICP)
+            _put_exact(
+                full, self.TWO_NOTES.replace("First words.", "First words, edited.")
+            )
+            theirs = bytes_of(full)
+            runner = NoRemoteRunner()
+
+            staged = compose_proposal.stage_local_edit(
+                root, base_id, HAND_EDIT_SOURCE, runner=runner, now=TODAY
+            )
+            staging = compose_proposal.load_staging(staged)
+            self.assertEqual(1, len(staging.edits))
+            self.assertEqual("## Notes", staging.edits[0].heading)
+            self.assertEqual("replace", staging.edits[0].op)
+            self.assertEqual(1, staging.edits[0].occurrence)
+            shown = approve_local.show(staged, root, base_id, runner=runner, now=TODAY)
+            self.assertEqual(approve_local.STATUS_SHOWN, shown.status, shown.reasons)
+            # The part shown is the first one, before and after.
+            summary = shown.artifact.split("different from the last time")[0]
+            self.assertIn("First words.", summary)
+            self.assertIn("First words, edited.", summary)
+            self.assertNotIn("Second words.", summary)
+            applied = approve_local.approve(
+                staged, root, base_id, shown.shown_hash, runner=runner, now=NOW
+            )
+
+            self.assertEqual(
+                approve_local.STATUS_APPLIED, applied.status, applied.reasons
+            )
+            self.assertEqual(theirs, saved_bytes(root, ICP))
+
+    def test_the_second_of_two_parts_with_one_heading_says_which_one(self):
+        with support.Sandbox() as sandbox:
+            root, base_id = local_base(sandbox)
+            _saved_as(root, ICP, self.TWO_NOTES)
+            full = os.path.join(root, ICP)
+            _put_exact(
+                full, self.TWO_NOTES.replace("Second words.", "Second words, edited.")
+            )
+            runner = NoRemoteRunner()
+
+            staged = compose_proposal.stage_local_edit(
+                root, base_id, HAND_EDIT_SOURCE, runner=runner, now=TODAY
+            )
+            staging = compose_proposal.load_staging(staged)
+            self.assertEqual(2, staging.edits[0].occurrence)
+            shown = approve_local.show(staged, root, base_id, runner=runner, now=TODAY)
+            self.assertEqual(approve_local.STATUS_SHOWN, shown.status, shown.reasons)
+            summary = shown.artifact.split("different from the last time")[0]
+            self.assertIn("Second words.", summary)
+            self.assertIn("Second words, edited.", summary)
+            self.assertNotIn("First words.", summary)
+            self.assertIn("second", summary)
+
+    def test_one_of_two_parts_with_one_heading_taken_out(self):
+        with support.Sandbox() as sandbox:
+            root, base_id = local_base(sandbox)
+            _saved_as(root, ICP, self.TWO_NOTES)
+            full = os.path.join(root, ICP)
+            _put_exact(
+                full, self.TWO_NOTES.replace("\n## Notes\n\nSecond words.\n", "")
+            )
+            runner = NoRemoteRunner()
+            staged = compose_proposal.stage_local_edit(
+                root, base_id, HAND_EDIT_SOURCE, runner=runner, now=TODAY
+            )
+            shown = approve_local.show(staged, root, base_id, runner=runner, now=TODAY)
+            self.assertEqual(approve_local.STATUS_SHOWN, shown.status, shown.reasons)
+            applied = approve_local.approve(
+                staged, root, base_id, shown.shown_hash, runner=runner, now=NOW
+            )
+            self.assertEqual(
+                approve_local.STATUS_APPLIED, applied.status, applied.reasons
+            )
+            self.assertEqual(bytes_of(full), saved_bytes(root, ICP))
+
+    def _two_documents(self, root):
+        other = "context/strategy/positioning.md"
+        _saved_as(
+            root,
+            other,
+            support.ICP_TEXT.replace("kind: icp", "kind: positioning").replace(
+                "# Ideal customer profile", "# Positioning\n\nOld opening."
+            ),
+        )
+        _put_exact(
+            os.path.join(root, ICP),
+            support.ICP_TEXT.replace("Companies of any size.", BIGGER_COMPANIES),
+        )
+        positioning = os.path.join(root, other)
+        _put_exact(
+            positioning,
+            support.read(positioning).replace("Old opening.", "New opening."),
+        )
+        return other, positioning
+
+    def test_every_changed_document_is_a_target_whatever_the_summary_says(self):
+        with support.Sandbox() as sandbox:
+            root, base_id = local_base(sandbox)
+            other, positioning = self._two_documents(root)
+            runner = NoRemoteRunner()
+
+            staged = compose_proposal.stage_local_edit(
+                root, base_id, HAND_EDIT_SOURCE, runner=runner, now=TODAY
+            )
+            staging = compose_proposal.load_staging(staged)
+            self.assertEqual(sorted([ICP, other]), sorted(staging.target_paths))
+            self.assertEqual(2, len(staging.target_bytes))
+            shown = approve_local.show(staged, root, base_id, runner=runner, now=TODAY)
+            self.assertEqual(approve_local.STATUS_SHOWN, shown.status, shown.reasons)
+            self.assertIn("New opening.", shown.artifact)
+            applied = approve_local.approve(
+                staged, root, base_id, shown.shown_hash, runner=runner, now=NOW
+            )
+            self.assertEqual(
+                approve_local.STATUS_APPLIED, applied.status, applied.reasons
+            )
+            self.assertEqual(bytes_of(positioning), saved_bytes(root, other))
+            self.assertEqual(bytes_of(os.path.join(root, ICP)), saved_bytes(root, ICP))
+
+    def test_a_target_whose_bytes_moved_is_refused_even_without_a_part(self):
+        with support.Sandbox() as sandbox:
+            root, base_id = local_base(sandbox)
+            _other, positioning = self._two_documents(root)
+            runner = NoRemoteRunner()
+            staged = compose_proposal.stage_local_edit(
+                root, base_id, HAND_EDIT_SOURCE, runner=runner, now=TODAY
+            )
+            with open(positioning, "ab") as handle:
+                handle.write(b"More.\n")
+
+            shown = approve_local.show(staged, root, base_id, runner=runner, now=TODAY)
+
+            self.assertEqual(approve_local.STATUS_MOVED, shown.status)
+
+    def test_a_change_only_above_the_first_part_says_so_truthfully(self):
+        with support.Sandbox() as sandbox:
+            root, base_id = local_base(sandbox)
+            _put_exact(
+                os.path.join(root, ICP),
+                support.ICP_TEXT.replace(
+                    "# Ideal customer profile", "# Ideal customer profile\n\nOpening."
+                ),
+            )
+            runner = NoRemoteRunner()
+            with self.assertRaises(compose_proposal.ValidationError) as caught:
+                compose_proposal.stage_local_edit(
+                    root, base_id, HAND_EDIT_SOURCE, runner=runner, now=TODAY
+                )
+            self.assertEqual(
+                compose_proposal.OUTSIDE_EVERY_PART % names.document_name(ICP),
+                str(caught.exception),
+            )
+
+    def test_the_shared_copy_path_takes_a_part_out_and_finds_the_right_one(self):
+        # A base with a shared copy applies the parts rather than saving the
+        # document, so the two new shapes have to apply as well as show.
+        removed = formats.Edit(ICP, "## Pricing", "remove", "")
+        self.assertEqual(
+            support.ICP_TEXT, compose_proposal.apply_edit(self.TWO_PARTS, removed)
+        )
+        second = formats.Edit(ICP, "## Notes", "replace", "Changed.\n", occurrence=2)
+        self.assertEqual(
+            self.TWO_NOTES.replace("Second words.", "Changed."),
+            compose_proposal.apply_edit(self.TWO_NOTES, second),
+        )
+
+    def test_the_occurrence_survives_being_written_and_read_back(self):
+        with support.Sandbox() as sandbox:
+            root, base_id = local_base(sandbox)
+            _saved_as(root, ICP, self.TWO_NOTES)
+            _put_exact(
+                os.path.join(root, ICP),
+                self.TWO_NOTES.replace("Second words.", "Second words, edited."),
+            )
+            staged = compose_proposal.stage_local_edit(
+                root, base_id, HAND_EDIT_SOURCE, runner=NoRemoteRunner(), now=TODAY
+            )
+            again = formats.ProposalStaging.parse(
+                compose_proposal.load_staging(staged).render()
+            )
+            self.assertEqual(2, again.edits[0].occurrence)
+
+
+
+# --- R1 of Astra's third verification ----------------------------------------
+
+
+def _index_entry(root, relative):
+    """The mode and the stored version the index holds for one path."""
+    finished = subprocess.run(
+        ["git", "ls-files", "-s", "--", relative],
+        cwd=root,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+    )
+    line = finished.stdout.decode("utf-8").strip()
+    return line.split("\t")[0] if line else ""
+
+
+def _staged_bytes(root, relative):
+    finished = subprocess.run(
+        ["git", "show", ":" + relative],
+        cwd=root,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+    )
+    return finished.stdout
+
+
+def _a_hook_that_refuses_every_save(root):
+    hooks = os.path.join(root, ".git", "hooks")
+    os.makedirs(hooks, exist_ok=True)
+    hook = os.path.join(hooks, "pre-commit")
+    with open(hook, "w") as handle:
+        handle.write("#!/bin/sh\nexit 1\n")
+    os.chmod(hook, 0o755)
+
+
+class TestAFailedApprovalLeavesTheIndexAsItWas(unittest.TestCase):
+    """R1. A failed approval still lost what the person had lined up to save.
+
+    Astra's scenario exactly: they line up version B of the customer profile
+    to be saved, carry on editing it into C, prepare C as a hand edit, and
+    approve it with a check before saving that refuses. Approval lines up C,
+    the save is refused, and the rollback saw that the file on the disk was
+    already C and put nothing back, so B was gone from what they had lined up
+    and nothing said so. The file's permissions were forced to one value on
+    the way back as well.
+    """
+
+    def scenario(self, sandbox, mode=0o640):
+        root, base_id = local_base(sandbox)
+        full = os.path.join(root, ICP)
+        support.write(
+            full,
+            support.read(full).replace(
+                "Companies of any size.", "Companies of fifty and up."
+            ),
+        )
+        support.git(["add", "--", ICP], cwd=root)
+        support.write(
+            full,
+            support.read(full).replace(
+                "Companies of fifty and up.", BIGGER_COMPANIES
+            ),
+        )
+        os.chmod(full, mode)
+        return root, base_id, full
+
+    def test_the_lined_up_version_and_the_permissions_come_back(self):
+        with support.Sandbox() as sandbox:
+            root, base_id, full = self.scenario(sandbox)
+            lined_up = _staged_bytes(root, ICP)
+            entry = _index_entry(root, ICP)
+            theirs = bytes_of(full)
+            runner = NoRemoteRunner()
+            staged = compose_proposal.stage_local_edit(
+                root, base_id, HAND_EDIT_SOURCE, runner=runner, now=TODAY
+            )
+            shown = approve_local.show(staged, root, base_id, runner=runner, now=TODAY)
+            self.assertEqual(approve_local.STATUS_SHOWN, shown.status, shown.reasons)
+            _a_hook_that_refuses_every_save(root)
+
+            applied = approve_local.approve(
+                staged, root, base_id, shown.shown_hash, runner=runner, now=NOW
+            )
+
+            self.assertEqual(approve_local.STATUS_REFUSED, applied.status)
+            self.assertEqual(theirs, bytes_of(full))
+            self.assertEqual(lined_up, _staged_bytes(root, ICP))
+            self.assertEqual(entry, _index_entry(root, ICP))
+            self.assertEqual(0o640, os.stat(full).st_mode & 0o7777)
+            # Everything came back, so there is nothing left to recover.
+            self.assertIsNone(approve_local._load_journal(base_id))
+
+    def test_a_file_that_was_not_lined_up_is_not_lined_up_afterwards(self):
+        with support.Sandbox() as sandbox:
+            root, base_id = local_base(sandbox)
+            runner = NoRemoteRunner()
+            staged = a_hand_edit(root, base_id, runner)
+            entry = _index_entry(root, ICP)
+            shown = approve_local.show(staged, root, base_id, runner=runner, now=TODAY)
+            _a_hook_that_refuses_every_save(root)
+
+            approve_local.approve(
+                staged, root, base_id, shown.shown_hash, runner=runner, now=NOW
+            )
+
+            self.assertEqual(entry, _index_entry(root, ICP))
+            self.assertEqual(
+                saved_bytes(root, ICP), _staged_bytes(root, ICP)
+            )
+
+    def test_the_permissions_come_back_when_the_bytes_had_to_be_written(self):
+        # A change that is not a hand edit writes the document itself, so a
+        # failure puts the kept bytes back, and it used to put them back with
+        # permissions of its own choosing.
+        with support.Sandbox() as sandbox:
+            root, base_id = local_base(sandbox)
+            full = os.path.join(root, ICP)
+            os.chmod(full, 0o600)
+            theirs = bytes_of(full)
+            staged = stage(root)
+            runner = NoRemoteRunner()
+            shown = approve_local.show(staged, root, base_id, runner=runner, now=TODAY)
+            self.assertEqual(approve_local.STATUS_SHOWN, shown.status, shown.reasons)
+            _a_hook_that_refuses_every_save(root)
+
+            approve_local.approve(
+                staged, root, base_id, shown.shown_hash, runner=runner, now=NOW
+            )
+
+            self.assertEqual(theirs, bytes_of(full))
+            self.assertEqual(0o600, os.stat(full).st_mode & 0o7777)
+
+    def test_the_recovery_note_stays_when_the_index_cannot_be_put_back(self):
+        with support.Sandbox() as sandbox:
+            root, base_id, full = self.scenario(sandbox)
+            runner = NoRemoteRunner()
+            staged = compose_proposal.stage_local_edit(
+                root, base_id, HAND_EDIT_SOURCE, runner=runner, now=TODAY
+            )
+            shown = approve_local.show(staged, root, base_id, runner=runner, now=TODAY)
+            _a_hook_that_refuses_every_save(root)
+            real_run = runner.run
+
+            def refusing_to_line_up(args, *rest, **options):
+                if args and args[0] == "update-index":
+                    return GitResult(1, "", "refused")
+                return real_run(args, *rest, **options)
+
+            with mock.patch.object(runner, "run", side_effect=refusing_to_line_up):
+                applied = approve_local.approve(
+                    staged, root, base_id, shown.shown_hash, runner=runner, now=NOW
+                )
+
+            self.assertEqual(approve_local.STATUS_REFUSED, applied.status)
+            self.assertIsNotNone(approve_local._load_journal(base_id))
+
+    def test_a_note_naming_an_index_value_we_never_write_is_refused(self):
+        with support.Sandbox() as sandbox:
+            root, base_id = local_base(sandbox)
+            staged = stage(root)
+            state.update_seat(base_id)
+            support.write(
+                approve_local._journal_path(base_id),
+                __import__("json").dumps(
+                    {
+                        "schema": approve_local.JOURNAL_SCHEMA,
+                        "staging_id": STAGING,
+                        "base_root": os.path.realpath(root),
+                        "subject": "x",
+                        "head": "a" * 40,
+                        "paths": [{"path": ICP, "hash": ids.content_hash("x")}],
+                        "originals": [
+                            {
+                                "path": ICP,
+                                "hash": ids.content_hash("x"),
+                                "copy": "0.bytes",
+                                "index": {"mode": "100644", "blob": "--output=x"},
+                            }
+                        ],
+                    }
+                ),
+            )
+
+            shown = approve_local.show(
+                staged, root, base_id, runner=NoRemoteRunner(), now=TODAY
+            )
+
+            self.assertEqual(approve_local.CODE_NOTE_UNREADABLE, shown.codes[0])
+
+
+
+# --- R8 of Astra's third verification ----------------------------------------
+
+
+def _the_whole_difference(artifact):
+    """The fenced block the whole difference is shown in, as it was written."""
+    import re as _re
+
+    after = artifact.split("which is all of what saying yes to this writes down:")[1]
+    match = _re.search(r"\n(`{3,})diff\n(.*?)\n\1\n", after, _re.S)
+    if match is None:
+        raise AssertionError("the whole difference is not in a fenced block:\n" + after)
+    return match.group(1), match.group(2), after
+
+
+class TestTheWholeDifferenceIsShownAsItIs(unittest.TestCase):
+    """R8. The whole difference was shown as quoted text a screen renders.
+
+    An image added by hand showed as an image, a link showed its words and
+    hid where it went, and spaces at the end of a line were taken off, so what
+    a person read was not what saying yes would write down. Astra's probe
+    added two spaces at the end of a line and watched them disappear.
+    """
+
+    def shown_for(self, sandbox, change):
+        root, base_id = local_base(sandbox)
+        full = os.path.join(root, ICP)
+        _put_exact(full, change(support.read(full)))
+        runner = NoRemoteRunner()
+        staged = compose_proposal.stage_local_edit(
+            root, base_id, HAND_EDIT_SOURCE, runner=runner, now=TODAY
+        )
+        shown = approve_local.show(staged, root, base_id, runner=runner, now=TODAY)
+        self.assertEqual(approve_local.STATUS_SHOWN, shown.status, shown.reasons)
+        return shown
+
+    def test_an_image_and_a_link_are_shown_as_the_words_that_make_them(self):
+        with support.Sandbox() as sandbox:
+            shown = self.shown_for(
+                sandbox,
+                lambda text: text.replace(
+                    "Companies of any size.",
+                    "Companies of any size. See [the deck](https://example.com/deck) "
+                    "and ![a chart](https://example.com/chart.png).",
+                ),
+            )
+
+            _fence, body, _after = _the_whole_difference(shown.artifact)
+            self.assertIn(
+                "+Companies of any size. See [the deck](https://example.com/deck) "
+                "and ![a chart](https://example.com/chart.png).",
+                body.split("\n"),
+            )
+
+    def test_spaces_at_the_end_of_a_line_are_kept_and_pointed_out(self):
+        with support.Sandbox() as sandbox:
+            shown = self.shown_for(
+                sandbox,
+                lambda text: text.replace(
+                    "Companies of any size.", "Companies of any size.  "
+                ),
+            )
+
+            _fence, body, after = _the_whole_difference(shown.artifact)
+            self.assertIn("+Companies of any size.  ", body.split("\n"))
+            self.assertIn(
+                approve_local.WHITESPACE_ONLY % names.document_name(ICP), after
+            )
+            self.assertIn("+Companies\u00b7of\u00b7any\u00b7size.\u00b7\u00b7", after)
+
+    def test_a_fence_in_the_document_cannot_close_the_block(self):
+        with support.Sandbox() as sandbox:
+            shown = self.shown_for(
+                sandbox,
+                lambda text: text.replace(
+                    "Companies of any size.",
+                    "Companies of any size.\n\n````\nAnything at all.\n````",
+                ),
+            )
+
+            fence, body, _after = _the_whole_difference(shown.artifact)
+            self.assertGreater(len(fence), 4)
+            self.assertIn("+````", body.split("\n"))
+            self.assertIn("+Anything at all.", body.split("\n"))
+
+    def test_an_ordinary_change_says_nothing_about_spaces(self):
+        with support.Sandbox() as sandbox:
+            shown = self.shown_for(
+                sandbox,
+                lambda text: text.replace("Companies of any size.", BIGGER_COMPANIES),
+            )
+
+            _fence, body, after = _the_whole_difference(shown.artifact)
+            self.assertIn("+" + BIGGER_COMPANIES, body.split("\n"))
+            self.assertNotIn(
+                approve_local.WHITESPACE_ONLY % names.document_name(ICP), after
+            )
+
 
 if __name__ == "__main__":
     unittest.main()

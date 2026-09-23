@@ -52,8 +52,8 @@ things are asked before it is built, one at a time and never in one breath.
 An edit somebody made themselves is the one moment the base can learn why a
 document changed without anybody having to remember to tell it, so it asks,
 once, and their answer decides whether a context change is written down at all.
-The first question is where the edit came from; their answer becomes the
-evidence the reviewer reads, and it is passed as `--source`. Then ask this:
+The first question is where the edit came from, and the answer travels in a
+file passed as `--source-file` as the evidence the reviewer reads. Then ask:
 
 <!-- ask -->
 What changed, and why?
@@ -70,10 +70,9 @@ Read what they say and decide one thing only.
   python3 scripts/propose.py --new-words-file what-changed
   ```
 
-  Write them to the path it prints, and pass
-  `--what-changed-file <the path it printed> --records-a-change`. It travels
-  with the proposal and is written into the base when the proposal is
-  accepted.
+  Write them to the path it prints, and pass that path with the hand edit,
+  as Running it shows below. It travels with the proposal and is written into
+  the base when the proposal is accepted.
 - An answer about a spelling mistake, a broken link, or a heading is not a
   context change. Pass neither, and the proposal is exactly what it would have
   been before they were asked. Never turn a typo into a context change, and
@@ -154,15 +153,21 @@ second review.
   a note asking you for the real wording rather than a correction anybody can
   approve, and the prepared change carries a marker saying so, put there by
   GTM Base itself. Retyping the note does not take that marker off. The one
-  thing that does is
-  `python3 scripts/approve_local.py --staging <path> --wording --words <the path it printed>`,
-  after asking for somewhere to put the wording with
-  `python3 scripts/approve_local.py --new-words-file answer`. When the change
-  does not say which part of the document it is about, list the parts with
+  thing that does is to ask for somewhere to put the wording with
+  `python3 scripts/approve_local.py --new-words-file answer`, write the wording
+  to the path it prints, and run
+  `python3 scripts/approve_local.py --staging <path> --wording --words <the path it printed>`.
+  When the change does not say which part of the document it is about, list
+  the parts with
   `python3 scripts/approve_local.py --staging <path> --sections`, ask which one
-  they mean, and add `--section <the number they chose>`. Then show the person
+  they mean, and write the wording into that part with
+  `python3 scripts/approve_local.py --staging <path> --wording --words <the path it printed> --section <the number they chose>`.
+  Then show the person
   what that part of the document says today and what it would say instead, and
-  only then raise it.
+  only then raise it. When they want the wording changed again, ask for a new
+  file and run the same command again, as many times as they ask. Every time
+  the wording changes, show the change again before asking for a yes, because
+  an earlier showing no longer counts.
 
 ## Running it
 

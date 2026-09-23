@@ -65,17 +65,67 @@ ask_without_checking() {
   printf '{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"ask","permissionDecisionReason":"%s"}}\n' "$ask_about_settings"
 }
 
+# One path with every "." and ".." taken out, the way the disk reads them.
+# Finding R5 of Astra's third look: a path written with a dot in the middle, or
+# relative to the folder it sits in, named no protected place as text while
+# reaching one on the disk.
+lexical() {
+  result=""
+  old_ifs=$IFS
+  IFS=/
+  set -f
+  for piece in $1; do
+    case "$piece" in
+      '' | .) ;;
+      ..) result=${result%/*} ;;
+      *) result="$result/$piece" ;;
+    esac
+  done
+  set +f
+  IFS=$old_ifs
+  [ -n "$result" ] || result=/
+  printf '%s' "$result"
+}
+
+# The same path with every link followed in the part of it that is there.
+resolved() {
+  head=$(lexical "$1")
+  tail=""
+  while [ "$head" != "/" ] && [ ! -d "$head" ]; do
+    tail="/${head##*/}$tail"
+    head=${head%/*}
+    [ -n "$head" ] || head=/
+  done
+  real=$(CDPATH= cd -P -- "$head" 2> /dev/null && pwd -P) || real=$head
+  [ "$real" = "/" ] && real=""
+  printf '%s%s' "$real" "$tail"
+}
+
+# Whether one path, in either of its two spellings, is a folder or sits in it,
+# with the folder in either of its two spellings too. Letter case is folded.
+reaches() {
+  for side in "$(lexical "$1")" "$(resolved "$1")"; do
+    lower_side=$(printf '%s' "$side" | tr '[:upper:]' '[:lower:]')
+    for place in "$(lexical "$2")" "$(resolved "$2")"; do
+      lower_place=$(printf '%s' "$place" | tr '[:upper:]' '[:lower:]')
+      case "$lower_side" in
+        "$lower_place" | "$lower_place"/*) return 0 ;;
+      esac
+    done
+  done
+  return 1
+}
+
 # Whether one path is one of the person's own files that say which checks run
 # at all. The real check asks about these rather than refusing them, and this
 # asks about the same ones, because being broken is no reason to wave through
 # the one change that could switch it off for good (finding P4).
 is_asked_about() {
-  candidate=$(printf '%s' "$1" | tr '[:upper:]' '[:lower:]')
-  settings=$(printf '%s' "$HOME/.claude" | tr '[:upper:]' '[:lower:]')
-  case "$candidate" in
-    "$settings"/settings.json | "$settings"/settings.local.json) return 0 ;;
-    "$settings"/plugins | "$settings"/plugins/*) return 0 ;;
-  esac
+  for one in settings.json settings.local.json plugins; do
+    if reaches "$1" "$HOME/.claude/$one"; then
+      return 0
+    fi
+  done
   return 1
 }
 
@@ -104,30 +154,29 @@ named_files() {
 # apart from the same two names anywhere else by looking for the map beside
 # them, the way the real check does by walking up from the file.
 is_protected() {
-  candidate=$(printf '%s' "$1" | tr '[:upper:]' '[:lower:]')
-  lower_plugin=$(printf '%s' "$plugin_root" | tr '[:upper:]' '[:lower:]')
-  case "$candidate" in
-    "$lower_plugin" | "$lower_plugin"/*) return 0 ;;
-  esac
-  seat="${GTM_BASE_HOME:-$HOME/.gtm-base}"
-  lower_seat=$(printf '%s' "$seat" | tr '[:upper:]' '[:lower:]')
-  case "$candidate" in
-    "$lower_seat" | "$lower_seat"/*) return 0 ;;
-  esac
-  for name in ".git" ".claude"; do
-    case "$candidate/" in
-      */"$name"/*)
-        # Everything before that folder name is the folder holding it, and a
-        # folder holding the map is a base. The length is measured on the
-        # folded spelling and the characters are taken from the one on the
-        # disk, so a name written in other letters finds the same folder.
-        folded=${candidate%%/"$name"/*}
-        before=$(printf '%s' "$1" | cut -c "1-${#folded}")
-        if [ -f "$before/context/map.md" ]; then
-          return 0
-        fi
-        ;;
-    esac
+  if reaches "$1" "$plugin_root"; then
+    return 0
+  fi
+  if reaches "$1" "${GTM_BASE_HOME:-$HOME/.gtm-base}"; then
+    return 0
+  fi
+  for spelled in "$(lexical "$1")" "$(resolved "$1")"; do
+    candidate=$(printf '%s' "$spelled" | tr '[:upper:]' '[:lower:]')
+    for name in ".git" ".claude"; do
+      case "$candidate/" in
+        */"$name"/*)
+          # Everything before that folder name is the folder holding it, and
+          # a folder holding the map is a base. The length is measured on the
+          # folded spelling and the characters are taken from the one on the
+          # disk, so a name written in other letters finds the same folder.
+          folded=${candidate%%/"$name"/*}
+          before=$(printf '%s' "$spelled" | cut -c "1-${#folded}")
+          if [ -f "$before/context/map.md" ]; then
+            return 0
+          fi
+          ;;
+      esac
+    done
   done
   return 1
 }

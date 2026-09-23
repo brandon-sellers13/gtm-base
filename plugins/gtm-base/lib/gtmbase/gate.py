@@ -696,22 +696,16 @@ def _classify_git(
         # a base was unremarked, and putting it on an ordinary repository made
         # that repository answer for a base.
         #
-        # Finding N7 of the final pass narrowed and widened this at once. A
-        # command that only reads a setting changes nothing and is allowed, a
-        # command working on a file of its own is not about a base at all, and
-        # the two ways of taking a whole section away were missed.
-        lowered = [str(token).lower() for token in rest]
-        section = paths.BASE_ID_CONFIG_KEY.split(".")[0]
-        if any(name in ("-f", "--file", "--global", "--system") for name in lowered):
-            return
-        if any(name in ("--get", "--get-all", "--get-regexp", "--list", "-l") for name in lowered):
-            return
-        for index, token in enumerate(lowered):
-            if token in ("--remove-section", "--rename-section"):
-                if index + 1 < len(lowered) and lowered[index + 1] == section:
-                    result.deny(REASON_BASE_NAME)
-            if paths.BASE_ID_CONFIG_KEY in token:
-                result.deny(REASON_BASE_NAME)
+        # Finding R6 of Astra's third look is why the command is parsed rather
+        # than searched: a file option was exempted whatever file it named,
+        # including the base's own settings file, a section renamed into the
+        # protected one was read by the name it came from, and a value that
+        # only held the text of the key was refused.
+        where = folder.resolve(directory) if (directory and folder) else directory
+        if where is None and folder is not None:
+            where = folder.path
+        if _config_changes_the_base_name(rest, where):
+            result.deny(REASON_BASE_NAME)
         return
     if subcommand not in ("push", "send-pack"):
         return
@@ -719,6 +713,145 @@ def _classify_git(
     push.directory = folder.resolve(directory) if (directory and folder) else directory
     push.folder = folder.here() if folder else None
     result.pushes.append(push)
+
+
+# What one `git config` command can do, by the option or the word that says so.
+_CONFIG_READS = (
+    "--get",
+    "--get-all",
+    "--get-regexp",
+    "--get-urlmatch",
+    "--get-color",
+    "--get-colorbool",
+    "-l",
+    "--list",
+)
+_CONFIG_WORDS = {
+    "get": None,
+    "list": None,
+    "set": "set",
+    "unset": "unset",
+    "rename-section": "rename",
+    "remove-section": "remove",
+    "edit": "edit",
+}
+_CONFIG_OPTIONS = {
+    "--unset": "unset",
+    "--unset-all": "unset",
+    "--add": "set",
+    "--replace-all": "set",
+    "--rename-section": "rename",
+    "--remove-section": "remove",
+    "-e": "edit",
+    "--edit": "edit",
+}
+# Options that take the next word as their value.
+_CONFIG_VALUED = ("--type", "--default", "--comment", "--value", "--url", "--blob")
+# The names a repository's own settings file goes by, inside its history folder.
+_REPOSITORY_SETTINGS_NAMES = ("config", "config.worktree")
+
+
+def _names_repository_settings(named: str, where: Optional[str]) -> bool:
+    """Whether a file named with `-f` is a repository's own settings file.
+
+    A name this cannot follow, because it is built from a variable or from
+    another command, is read as that file, because the question is whether a
+    command may change the name a base is known by and not knowing is not no.
+    """
+    text = str(named or "")
+    if not text or "$" in text or "`" in text:
+        return True
+    candidate = os.path.expanduser(text)
+    if not os.path.isabs(candidate):
+        if not where:
+            return os.path.basename(candidate).lower() in _REPOSITORY_SETTINGS_NAMES
+        candidate = os.path.join(where, candidate)
+    try:
+        real = os.path.realpath(candidate)
+    except Exception:
+        return True
+    if os.path.basename(real).lower() not in _REPOSITORY_SETTINGS_NAMES:
+        return False
+    holder = os.path.dirname(real)
+    return (
+        os.path.basename(holder).lower() == ".git"
+        or os.path.isfile(os.path.join(holder, "HEAD"))
+    )
+
+
+def _config_changes_the_base_name(rest: Sequence[str], where: Optional[str]) -> bool:
+    """Whether one `git config` command changes the name a base is known by.
+
+    What it does, which settings file it works on, the setting it names, and
+    both names of a section it renames are read out of the command, both in
+    the older form with options and in the newer form with a word first.
+    Reading a setting changes nothing. A settings file of the person's own,
+    or their own settings for the whole account or the whole computer, is not
+    a base's. Anything else that sets, takes away, or renames the setting or
+    its section, or opens the repository's own settings to be edited, does.
+    """
+    section = paths.BASE_ID_CONFIG_KEY.split(".")[0]
+    tokens = [str(token) for token in rest]
+    action = "set"
+    if tokens and not tokens[0].startswith("-"):
+        word = tokens[0].lower()
+        if word in _CONFIG_WORDS:
+            if _CONFIG_WORDS[word] is None:
+                return False
+            action = _CONFIG_WORDS[word]
+            tokens = tokens[1:]
+    named_file = None
+    positional: List[str] = []
+    index = 0
+    while index < len(tokens):
+        token = tokens[index]
+        name, sign, value = token.partition("=")
+        lowered = name.lower()
+        if token == "--":
+            positional.extend(tokens[index + 1 :])
+            break
+        if lowered in ("-f", "--file"):
+            if sign:
+                named_file = value
+                index += 1
+            else:
+                named_file = tokens[index + 1] if index + 1 < len(tokens) else ""
+                index += 2
+            continue
+        if token.startswith("-f") and not token.startswith("--") and len(token) > 2:
+            named_file = token[2:]
+            index += 1
+            continue
+        if lowered in ("--global", "--system"):
+            return False
+        if lowered in _CONFIG_READS or lowered == "--blob":
+            return False
+        if lowered in _CONFIG_OPTIONS:
+            action = _CONFIG_OPTIONS[lowered]
+            index += 1
+            continue
+        if lowered in _CONFIG_VALUED and not sign:
+            index += 2
+            continue
+        if token.startswith("-"):
+            index += 1
+            continue
+        positional.append(token)
+        index += 1
+    if named_file is not None and not _names_repository_settings(named_file, where):
+        return False
+    if action == "edit":
+        return True
+    if action == "rename":
+        return any(name.strip().lower() == section for name in positional[:2])
+    if action == "remove":
+        return bool(positional) and positional[0].strip().lower() == section
+    if not positional:
+        return False
+    if action == "set" and len(positional) < 2:
+        # One name and no value is the older way of reading a setting.
+        return False
+    return positional[0].strip().lower() == paths.BASE_ID_CONFIG_KEY
 
 
 def _parse_push(rest: Sequence[str], result: Classification) -> PushSpec:

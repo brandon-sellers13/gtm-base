@@ -80,6 +80,108 @@ def commands_in(path):
     return found
 
 
+# A flag written in prose, in backticks, next to a command: "Add `--email
+# <address>` when they gave one." Finding R9 of Astra's third look is why these
+# are read at all: the walk ran only the command lines, so the optional
+# additions a skill describes in its sentences were never run, and the sixth
+# documented command that did not work as written was one of those.
+_PROSE_FLAG_RE = re.compile(r"`(--[^`\n]+)`")
+_HEADING_LINE_RE = re.compile(r"^#{1,6}\s")
+
+
+def _is_a_hand_out(words):
+    """Whether a command only hands out a file, which nothing is added to."""
+    return "words-file" in words or "--new-words-file" in words
+
+
+def _script_of(words):
+    for word in words:
+        if word.endswith(".py"):
+            return os.path.basename(word)
+    return None
+
+
+_PARSERS = {}
+
+
+def _actions_of(script):
+    """Every flag one script accepts, and whether each one takes a value."""
+    if script not in _PARSERS:
+        taken = {}
+        for action in parser_for(SCRIPTS[script])._actions:
+            for name in action.option_strings:
+                taken[name] = action.nargs != 0
+        _PARSERS[script] = taken
+    return _PARSERS[script]
+
+
+def prose_flags_in(path):
+    """Every flag a document names in its sentences, and what it belongs to.
+
+    Each one comes back as (line, the words in backticks, the line of the
+    command it belongs to, that command, and whether it is something to run).
+    It belongs to the nearest command before it in the same section that does
+    not only hand out a file and does not already carry that flag. A bare flag
+    that needs a value, such as "what to pass to `--drop`", is a flag being
+    named rather than an addition to run, and it is still checked against the
+    script it belongs to.
+    """
+    with open(path, encoding="utf-8") as handle:
+        text = handle.read()
+    commands = []
+    for match in _COMMAND_RE.finditer(text):
+        command = match.group("command").strip().rstrip("`").strip()
+        commands.append((match.start(), text[: match.start()].count("\n") + 1, command))
+    headings = []
+    offset = 0
+    for line in text.split("\n"):
+        if _HEADING_LINE_RE.match(line):
+            headings.append(offset)
+        offset += len(line) + 1
+    found = []
+    for match in _PROSE_FLAG_RE.finditer(text):
+        span = match.group(1).strip()
+        if "python3" in span:
+            continue
+        line_number = text[: match.start()].count("\n") + 1
+        first = span.split()[0].split("=")[0]
+        base = None
+        for start, number, command in reversed(commands):
+            if start >= match.start():
+                continue
+            if any(start < heading < match.start() for heading in headings):
+                break
+            words = words_of(command)
+            if _is_a_hand_out(words) or first in words:
+                continue
+            base = (number, command)
+            break
+        runnable = False
+        if base is not None:
+            script = _script_of(words_of(base[1]))
+            takes_value = _actions_of(script).get(first) if script in SCRIPTS else None
+            runnable = not (len(span.split()) == 1 and takes_value)
+        found.append(
+            (
+                line_number,
+                span,
+                base[0] if base else None,
+                base[1] if base else None,
+                runnable,
+            )
+        )
+    return found
+
+
+def commands_with_prose(path):
+    """Every command line, and every command as a sentence says to extend it."""
+    found = list(commands_in(path))
+    for line_number, span, _base_line, base, runnable in prose_flags_in(path):
+        if runnable:
+            found.append((line_number, base + " " + span))
+    return found
+
+
 def words_of(command):
     """One command line split into words, with the placeholders kept whole."""
     words = []
@@ -109,7 +211,7 @@ class TestEverySkillCommandIsOneItsScriptAccepts(unittest.TestCase):
         problems = []
         parsers = {}
         for path in every_skill_file():
-            for line_number, command in commands_in(path):
+            for line_number, command in commands_with_prose(path):
                 words = words_of(command)
                 script = None
                 for word in words:
@@ -135,11 +237,44 @@ class TestEverySkillCommandIsOneItsScriptAccepts(unittest.TestCase):
                         )
         self.assertEqual([], problems)
 
+    def test_every_flag_named_in_a_sentence_is_one_its_script_knows(self):
+        """R9. A flag in a sentence is still a flag somebody will type."""
+        problems = []
+        for path in every_skill_file():
+            scripts = set(
+                _script_of(words_of(command)) for _n, command in commands_in(path)
+            )
+            for line_number, span, _base_line, base, _runnable in prose_flags_in(path):
+                first = span.split()[0].split("=")[0]
+                if base is not None:
+                    owners = [_script_of(words_of(base))]
+                else:
+                    owners = [name for name in scripts if name in SCRIPTS]
+                if not any(
+                    name in SCRIPTS and first in _actions_of(name) for name in owners
+                ):
+                    problems.append(
+                        "%s line %d names %s, which %s does not accept"
+                        % (
+                            os.path.basename(path),
+                            line_number,
+                            first,
+                            " or ".join(str(name) for name in owners) or "no script",
+                        )
+                    )
+                if first in THEIR_OWN_WORDS:
+                    problems.append(
+                        "%s line %d tells the assistant to put somebody's words "
+                        "on a command line with %s"
+                        % (os.path.basename(path), line_number, first)
+                    )
+        self.assertEqual([], problems)
+
     def test_no_command_carries_words_somebody_else_wrote(self):
         """A fixed word such as yes is fine. Anything to be filled in is not."""
         problems = []
         for path in every_skill_file():
-            for line_number, command in commands_in(path):
+            for line_number, command in commands_with_prose(path):
                 words = words_of(command)
                 for index, word in enumerate(words):
                     flag = word.split("=")[0]
@@ -174,7 +309,7 @@ class TestEverySkillCommandIsOneItsScriptAccepts(unittest.TestCase):
         """N9. A draft is only read from the folder that run was given."""
         problems = []
         for path in every_skill_file():
-            for line_number, command in commands_in(path):
+            for line_number, command in commands_with_prose(path):
                 words = words_of(command)
                 if "--draft" not in words:
                     continue
@@ -223,6 +358,8 @@ CONSUMES_WORDS = (
     "--source-file",
     "--what-changed-file",
     "--words",
+    "--content-folder-file",
+    "--add-file",
 )
 
 # One documented command per script that is actually run, with the placeholders
@@ -235,7 +372,7 @@ class TestEveryCommandThatNamesAFileSaysWhichRunItIsFor(unittest.TestCase):
     def test_no_documented_command_leaves_the_key_out(self):
         problems = []
         for path in every_skill_file():
-            for line_number, command in commands_in(path):
+            for line_number, command in commands_with_prose(path):
                 words = words_of(command)
                 if not any(flag in words for flag in NEEDS_A_KEY):
                     continue
@@ -381,6 +518,7 @@ class TestTheSkillsAsTheyAreWritten(unittest.TestCase):
         path = self.value_of(printed, "words")
         self.assertTrue(path, printed)
         support.write(path, text)
+        state.setdefault("handed", {})[kind] = path
         return path
 
     def a_run(self, state):
@@ -398,15 +536,54 @@ class TestTheSkillsAsTheyAreWritten(unittest.TestCase):
             state["run"] = self.value_of(printed, "run")
         return state["run"]
 
+    # Which kind of words file each flag reads, so that a command carrying two
+    # of them is filled with the two files it was handed, each by its own
+    # hand-out, rather than with whichever was handed out last (R9).
+    KIND_OF_FLAG = {
+        "--words": "answer",
+        "--folder-file": "folder",
+        "--company-file": "company",
+        "--label-file": "label",
+        "--answer-file": "answer",
+        "--got-in-the-way-file": "got-in-the-way",
+        "--reason-file": "reason",
+        "--source-file": "source",
+        "--what-changed-file": "what-changed",
+        "--content-folder-file": "folder",
+        "--add-file": "folder",
+    }
+
+    def _flag_before(self, command, placeholder):
+        before = command.split(placeholder, 1)[0].split()
+        return before[-1] if before else ""
+
     def _the_path_it_printed(self, state, command):
         """The last path a command printed, which depends on the command.
 
         Two steps of the skill fill this in: one with the file a words command
-        handed out, and one with the document the reconcile step named.
+        handed out, and one with the document the reconcile step named. The
+        file handed out is the one of the kind the flag in front of it reads,
+        and it has to have been handed out by a command before this one.
         """
-        if "--file" in shlex.split(command):
+        flag = self._flag_before(command, "<the path it printed>")
+        if flag == "--file":
             return self.a_document_to_ask_about(state)
+        kind = self.KIND_OF_FLAG.get(flag)
+        if kind is not None:
+            return (state.get("handed") or {}).get(kind)
         return state.get("words")
+
+    def _a_fresh_folder_file(self, state, command):
+        """A folder file the skill asks for in words: the folder they named, or
+        for a folder to add, one folder inside it."""
+        flag = self._flag_before(command, "<a fresh folder file>")
+        text = "customers" if flag == "--add-file" else state["material"]
+        return self.a_words_file(state, "folder", text)
+
+    def _a_place_to_drop(self, state, command):
+        """The number of a place the survey printed, never the only one."""
+        numbers = state.get("place_numbers") or []
+        return numbers[-1] if len(numbers) > 1 else None
 
     def a_kept_proposal(self, state):
         """A proposal that was raised and kept, which is what is raised again.
@@ -464,8 +641,17 @@ class TestTheSkillsAsTheyAreWritten(unittest.TestCase):
         "<a short label>": lambda self, state, command: "a note from the call",
         "<file you wrote it to>": lambda self, state, command: state.get("paste"),
         "<the path from step 4>": lambda self, state, command: state.get("words"),
-        "<a fresh company file>": lambda self, state, command: state.get("words"),
-        "<a fresh folder file>": lambda self, state, command: state.get("words"),
+        "<a fresh company file>": lambda self, state, command: self.a_words_file(
+            state, "company", self.WORDS["company"]
+        ),
+        "<a fresh folder file>": _a_fresh_folder_file,
+        "<place number>": _a_place_to_drop,
+        "<the number they chose>": lambda self, state, command: "1",
+        "<path to their words>": lambda self, state, command: state.get("words"),
+        "<address>": lambda self, state, command: "dana@acme.test",
+        "<the path add-paste printed>": lambda self, state, command: state.get(
+            "held_paste"
+        ),
         "<proposal id>": lambda self, state, command: self.a_kept_proposal(state),
         "<path to the staged file>": lambda self, state, command: state.get("staged"),
         "<the path it printed for the words>": lambda self, state, command: state.get("words"),
@@ -567,6 +753,7 @@ class TestTheSkillsAsTheyAreWritten(unittest.TestCase):
         support.write(path, text or "Acme")
         state["words"] = path
         state["words_kind"] = kind
+        state.setdefault("handed", {})[kind] = path
 
     def after(self, mode, state, printed):
         """Read out of what it printed whatever the next commands need."""
@@ -594,6 +781,16 @@ class TestTheSkillsAsTheyAreWritten(unittest.TestCase):
                 if line.startswith("folder=") and " number=" in line:
                     state["folder_number"] = line.split(" number=")[1].split(" ")[0]
                     break
+        if mode == "survey":
+            state["place_numbers"] = [
+                line.split(" number=")[1].split(" ")[0]
+                for line in printed.split("\n")
+                if line.startswith("place=") and " number=" in line
+            ]
+        if mode == "add-paste":
+            held = self.value_of(printed, "paste")
+            if held:
+                state["held_paste"] = held
 
     def a_draft_for(self, step):
         import test_join_setup_flow as flow
@@ -661,26 +858,65 @@ class TestTheSkillsAsTheyAreWritten(unittest.TestCase):
             return True
         return member == members[index % len(members)]
 
+    def _additions(self, path):
+        """What sentences say to add to each command, keyed by its line."""
+        found = {}
+        for line_number, span, base_line, _base, runnable in prose_flags_in(path):
+            if not runnable:
+                continue
+            found.setdefault(base_line, []).append((line_number, span))
+        return found
+
     def test_every_documented_command_runs_as_it_is_written(self):
         for relative in self.WALKED:
             with self.subTest(document=relative):
-                lines = commands_in(self.document(relative))
-                self.assertTrue(lines, "no commands found in %s" % relative)
-                self.document_walked = relative
-                self.alternatives = self._alternatives(lines)
-                passes = max(
-                    [2] + [len(members) for members in self.alternatives.values()]
-                )
-                ran = set()
-                for index in range(passes):
-                    ran.update(self.walk(lines, index))
-                never = [
-                    "%d: %s" % (number, command)
-                    for number, command in lines
-                    if number not in ran
-                    and os.path.basename(shlex.split(command)[0]) in SCRIPTS
-                ]
-                self.assertEqual([], never, "a documented command was never run")
+                self.walk_everything(self.document(relative), relative)
+
+    def walk_everything(self, path, relative):
+        """Every command in one document, and every addition its sentences name."""
+        lines = commands_in(path)
+        self.assertTrue(lines, "no commands found in %s" % relative)
+        self.document_walked = relative
+        self.alternatives = self._alternatives(lines)
+        self.additions = self._additions(path)
+        self.additions_ran = set()
+        self.times_taken = {}
+        wanted = set(
+            number
+            for extra in self.additions.values()
+            for number, _span in extra
+        )
+        passes = max(
+            [2]
+            + [len(members) for members in self.alternatives.values()]
+            + [len(extra) + 1 for extra in self.additions.values()]
+        )
+        ran = set()
+        index = 0
+        # A command that is one of several alternatives is taken only on
+        # some passes, so the walk goes on until every addition has run
+        # on a pass that took its command, within a bound.
+        while index < passes or (
+            wanted - self.additions_ran and index < passes * 4
+        ):
+            ran.update(self.walk(lines, index))
+            index += 1
+        never = [
+            "%d: %s" % (number, command)
+            for number, command in lines
+            if number not in ran
+            and os.path.basename(shlex.split(command)[0]) in SCRIPTS
+        ]
+        self.assertEqual([], never, "a documented command was never run")
+        never_added = [
+            "%d: %s" % (number, span)
+            for extra in self.additions.values()
+            for number, span in extra
+            if number not in self.additions_ran
+        ]
+        self.assertEqual(
+            [], never_added, "an addition a sentence describes was never run"
+        )
 
     def a_base_already_set_up(self, sandbox, state):
         """A base with a change recorded and a document behind it.
@@ -730,6 +966,19 @@ class TestTheSkillsAsTheyAreWritten(unittest.TestCase):
                 mode = words[1] if len(words) > 1 and not words[1].startswith("-") else ""
                 if not self._taken_this_pass(words, command, index):
                     continue
+                # One pass runs the command as it is printed, and each of the
+                # others adds one of the things a sentence says to add to it.
+                extra = (getattr(self, "additions", None) or {}).get(line_number) or []
+                taken = getattr(self, "times_taken", None)
+                if taken is None:
+                    taken = self.times_taken = {}
+                choice = taken.get(line_number, 0) % (len(extra) + 1)
+                taken[line_number] = taken.get(line_number, 0) + 1
+                if choice:
+                    addition_line, addition = extra[choice - 1]
+                    command = command + " " + addition
+                    words = shlex.split(command)
+                    self.additions_ran.add(addition_line)
                 self.before(mode, state, command)
                 filled = self.fill(command, state)
                 finished = self.run_line(filled, state["cwd"])
@@ -766,6 +1015,10 @@ class TestTheSkillsAsTheyAreWritten(unittest.TestCase):
                     # step has to ask for one of its own.
                     state.pop("words", None)
                     state.pop("words_kind", None)
+                    for flag in shlex.split(filled):
+                        kind = self.KIND_OF_FLAG.get(flag)
+                        if kind is not None:
+                            (state.get("handed") or {}).pop(kind, None)
                 if mode in ("approve", "skip") and state.get("base"):
                     state["cwd"] = state["base"]
                     if state["step"] == "icp":
@@ -788,18 +1041,28 @@ class TestNoCommandCarriesAFolderNameEither(unittest.TestCase):
     and a folder chosen off a list is chosen by the number beside it.
     """
 
-    BY_FILE_OR_NUMBER = ("--folder", "--only-folder")
+    # R9 added the three that were still left: the folder a base belongs
+    # with, a folder to add to the places proposed, and a place to drop.
+    BY_FILE_OR_NUMBER = (
+        "--folder",
+        "--only-folder",
+        "--content-folder",
+        "--add",
+        "--drop",
+    )
+    NUMBERS = ("<number>", "<place number>")
 
     def test_no_documented_command_puts_a_folder_name_in_it(self):
         problems = []
         for path in every_skill_file():
-            for line_number, command in commands_in(path):
+            for line_number, command in commands_with_prose(path):
                 words = words_of(command)
                 for index, word in enumerate(words):
                     if word.split("=")[0] not in self.BY_FILE_OR_NUMBER:
                         continue
                     value = words[index + 1] if index + 1 < len(words) else ""
-                    if "<" not in value or value == "<number>":
+                    two = " ".join(words[index + 1 : index + 3])
+                    if "<" not in value or value in self.NUMBERS or two in self.NUMBERS:
                         # A number is not somebody else's text, so a command
                         # that takes one is a command anybody can type safely.
                         continue
@@ -865,6 +1128,55 @@ class TestTheWalkCannotCoverForASkill(unittest.TestCase):
         self.assertTrue(
             any("path it printed" in message for message in raised), raised
         )
+
+    def test_an_addition_named_in_a_sentence_is_run_and_can_fail(self):
+        """R9. The optional additions a sentence names are run like the rest.
+
+        This is the documented variant Astra found broken: the sentence said
+        to narrow a draft with a folder by its name, which the script refuses.
+        The walk ran only whole command lines, so it never ran this one.
+        """
+        relative = "join/SKILL.md"
+        line = "`--only-folder <number>`, the number the list printed beside that folder,"
+        path = self.a_copy_without(relative, line)
+        with open(path, encoding="utf-8") as handle:
+            text = handle.read()
+        # The copy is the old sentence, with a folder named by its name.
+        source = os.path.join(SKILLS_DIR, "join", "SKILL.md")
+        with open(source, encoding="utf-8") as handle:
+            original = handle.read()
+        with open(path, "w", encoding="utf-8") as handle:
+            handle.write(original.replace(line, "`--only-folder <folder>`,"))
+        del text
+        walk = TestTheSkillsAsTheyAreWritten(
+            "test_every_documented_command_runs_as_it_is_written"
+        )
+
+        with self.assertRaises(AssertionError) as caught:
+            walk.walk_everything(path, relative)
+
+        self.assertIn("--only-folder", str(caught.exception))
+
+    def test_a_flag_a_sentence_names_must_be_one_the_script_knows(self):
+        import tempfile
+
+        folder = tempfile.mkdtemp(prefix="gtm-base-skill-")
+        self.addCleanup(__import__("shutil").rmtree, folder, True)
+        path = os.path.join(folder, "SKILL.md")
+        with open(path, "w", encoding="utf-8") as handle:
+            handle.write(
+                "Run `python3 scripts/propose.py --staging <path to the staged file>`.\n"
+                "Add `--invented-flag` when it helps.\n"
+                "Their answer is passed as `--source`.\n"
+            )
+
+        found = prose_flags_in(path)
+
+        self.assertEqual(
+            ["--invented-flag", "--source"], [item[1] for item in found]
+        )
+        self.assertNotIn("--invented-flag", _actions_of("propose.py"))
+        self.assertIn("--source", THEIR_OWN_WORDS)
 
     def test_a_command_for_a_script_nobody_knows_fails(self):
         import tempfile

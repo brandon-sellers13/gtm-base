@@ -285,6 +285,10 @@ def build_parser():
     parser.add_argument("--step", help="icp, change-entry, or positioning")
     parser.add_argument("--company", help="the company the base is for")
     parser.add_argument("--content-folder", help="the folder holding their material")
+    parser.add_argument(
+        "--content-folder-file",
+        help="a file holding the folder that holds their material",
+    )
     parser.add_argument("--folder", help="the folder to list or to fix the list of")
     parser.add_argument(
         "--folder-file", help="a file holding the folder to list or to fix"
@@ -327,11 +331,18 @@ def build_parser():
         help="one more folder to list alongside the places proposed",
     )
     parser.add_argument(
+        "--add-file",
+        action="append",
+        default=[],
+        dest="added_files",
+        help="a file holding one more folder to list, once per folder",
+    )
+    parser.add_argument(
         "--drop",
         action="append",
         default=[],
         dest="dropped",
-        help="one of the places proposed to leave out, once per folder",
+        help="the number of one place proposed to leave out, once per place",
     )
     parser.add_argument(
         "--only-folder",
@@ -414,6 +425,55 @@ def chosen_folders(options, out):
             return None, False
         found.append(shown[number - 1])
     return found, True
+
+
+def dropped_places(options, out):
+    """Which of the places the finding step proposed the person dropped.
+
+    They are named by the number the finding step printed beside each place,
+    for the same reason every other folder is (finding R9 of Astra's third
+    look, which found the places still named by name).
+    """
+    asked = [str(item).strip() for item in (options.dropped or []) if str(item).strip()]
+    if not asked:
+        return [], True
+    if not all(item.isdigit() for item in asked):
+        out.write(FOLDERS_BY_NUMBER + "\n")
+        return None, False
+    found = join_flow.load_survey(options.run) if options.run else None
+    places = found["places"] if found else []
+    chosen = []
+    for item in asked:
+        number = int(item)
+        if number < 1 or number > len(places):
+            out.write(NO_SUCH_FOLDER_NUMBER + "\n")
+            return None, False
+        chosen.append(places[number - 1])
+    return chosen, True
+
+
+def added_places(options, out):
+    """The folders the person named to add, read out of the files they are in."""
+    added = list(options.added or [])
+    for path in options.added_files or []:
+        text = words_from(path, options, out)
+        if text is None:
+            return None, False
+        added.append(text)
+    return added, True
+
+
+def the_content_folder(options, out):
+    """The folder somebody keeps their material in, from a file when one is named.
+
+    A folder is never put on a command line by the skill, because a folder
+    called Brandon's Docs breaks the command that carries it (finding F6 of
+    the third look, which this one flag was left out of until R9).
+    """
+    if options.content_folder_file:
+        text = words_from(options.content_folder_file, options, out)
+        return text, text is not None
+    return options.content_folder, True
 
 
 def the_folder(options, out):
@@ -534,6 +594,10 @@ def run_propose_location(options, out):
     company = need(options, "company", out)
     if not company:
         return EXIT_ERROR
+    content_folder, read = the_content_folder(options, out)
+    if not read:
+        return EXIT_REFUSED
+    options.content_folder = content_folder
     try:
         proposal = join_flow.propose_location(
             company,
@@ -567,15 +631,22 @@ def run_survey(options, out):
         return EXIT_ERROR
     found = join_flow.survey_sources(run_id, folder)
     out.write(found.sentence() + "\n")
-    for place in found.places:
+    # The number is what a place is dropped by afterwards, in the order the
+    # places were written down (finding R9 of Astra's third look).
+    for number, place in enumerate(found.places, start=1):
         counts = " ".join(
             "%s=%d" % (safe_value(kind), place.counts_by_kind[kind])
             for kind, _words in constants.MARKETING_KINDS
             if place.counts_by_kind.get(kind)
         )
         out.write(
-            "place=%s score=%d%s\n"
-            % (safe_value(place.relative_folder), place.score, " " + counts if counts else "")
+            "place=%s number=%d score=%d%s\n"
+            % (
+                safe_value(place.relative_folder),
+                number,
+                place.score,
+                " " + counts if counts else "",
+            )
         )
     for note in found.notes:
         line(out, "note", note)
@@ -597,14 +668,20 @@ def run_list_sources(options, out):
     only_folders, read = chosen_folders(options, out)
     if not read:
         return EXIT_REFUSED
+    dropped, read = dropped_places(options, out)
+    if not read:
+        return EXIT_REFUSED
+    added, read = added_places(options, out)
+    if not read:
+        return EXIT_REFUSED
     try:
         listing = join_flow.list_sources(
             folder,
             run_id,
             only_folders=only_folders,
             from_survey=options.from_survey,
-            added=options.added,
-            dropped=options.dropped,
+            added=added,
+            dropped=dropped,
         )
     except ConsentError as refusal:
         sentence = LIST_REFUSALS.get(refusal.code)
@@ -622,15 +699,20 @@ def run_list_sources(options, out):
             }
             + "\n"
         )
-        for number, name in enumerate(sorted(listing.by_folder), start=1):
-            out.write(
-                "folder=%s number=%d count=%d\n"
-                % (safe_value(name), number, listing.by_folder[name])
-            )
+    # Every listing prints the folder numbers, in the order they are written
+    # down, and so the order a number is taken back against. A small listing
+    # printed none, and a narrowed one printed numbers that chose a folder it
+    # had just left out (finding R9 of Astra's third look).
+    for number, name in enumerate(join_flow.folders_in_order(listing), start=1):
+        out.write(
+            "folder=%s number=%d count=%d\n"
+            % (safe_value(name), number, listing.by_folder[name])
+        )
     out.write("These are the files GTM Base would read.\n")
     # The number is what the skill names a file by later, because a file name
-    # is somebody else's text and a number is not (finding N2).
-    for number, entry in enumerate(listing.readable, start=1):
+    # is somebody else's text and a number is not (finding N2), and it is the
+    # number of the file written down in that place (finding R9).
+    for number, entry in enumerate(join_flow.files_in_order(listing), start=1):
         out.write(
             "read=%s number=%d kind=%s date=%s\n"
             % (
@@ -914,6 +996,10 @@ def run_approve(options, out):
         root = base_folder(options, out)
         if root is None:
             return EXIT_ERROR
+    content_folder, read = the_content_folder(options, out)
+    if not read:
+        return EXIT_REFUSED
+    options.content_folder = content_folder
     result = join_flow.approve_step(
         step,
         draft,

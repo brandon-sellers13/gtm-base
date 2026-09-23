@@ -45,3 +45,22 @@
 - When a rule is relaxed for one case (unsaved edits allowed for a hand edit), scope it to exactly that case and ask what the failure and the success path each do to the person's bytes.
 - Writing a file is not finished until it has been read back and compared.
 - Never write a client's file names into a public repository; the names alone carry segments and prospects.
+
+## 2026-09-23, Astra's third verification
+- A shortcut that lets almost everything go has to come after every comparison
+  that can be made cheaply, not before it. The write check let a path go on the
+  strength of its name before asking whether it was a base's history folder
+  kept somewhere else.
+- A rollback is not finished when the bytes match. Whatever else the run
+  touched, the index entry and the permissions, has to be kept, put back, and
+  read back on its own, including when the bytes were never written.
+- Consume input only after the work it feeds succeeds. A words file thrown
+  away before a refusal is somebody's typing lost.
+- A summary keyed by a name loses the second thing with that name. Key parts
+  by name and position, and derive what is saved from the files, not from the
+  summary.
+- A documented command lives in sentences as well as in command lines. The
+  walk has to read the additions a sentence names, or the sixth broken variant
+  ships the way the first five did.
+- A test fixture that is missing one of a real base's fixed entries proves
+  nothing about a real base. Build it the way a base is really built.

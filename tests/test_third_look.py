@@ -850,6 +850,78 @@ class TestTheFallbackAsksAboutTheSameThings(unittest.TestCase):
             )
 
 
+# --- R11 of Astra's third verification ---------------------------------------
+
+
+class TestOneInventoryOfWhatIsWaiting(unittest.TestCase):
+    """R11. The closing and the two review readers disagreed about what waits.
+
+    The closing learned in the round before this one to count only a change
+    filed under a name GTM Base issued, with that name inside it, about
+    documents that are all still there. The two readers that list what is
+    waiting in a review did not, so a valid change renamed to notes.md was
+    listed by both of them, pointing at a file name that no longer exists,
+    while the closing said nothing was waiting. Astra's probe exactly.
+    """
+
+    def setup(self, sandbox):
+        return TestWhatCountsAsAChangeWaiting.a_base_with_a_change_waiting(
+            self, sandbox
+        )
+
+    def every_reader(self, root):
+        from gtmbase import approve_local
+
+        found, _orphaned = stale_check._documents_with_a_change_waiting(root)
+        return (
+            sorted(found),
+            sorted(
+                path
+                for _staging_id, targets in approve_local.waiting(
+                    root, runner=support.NoRemoteRunner()
+                )
+                for path in targets
+            ),
+            sorted(
+                path
+                for _staging_id, targets in stale_check._prepared_elsewhere(root)
+                for path in targets
+            ),
+        )
+
+    def test_a_change_renamed_to_notes_is_waiting_nowhere(self):
+        with support.Sandbox() as sandbox:
+            root, _base_id, staged = self.setup(sandbox)
+            os.rename(
+                staged,
+                os.path.join(os.path.dirname(staged), "notes.md"),
+            )
+
+            self.assertEqual(([], [], []), self.every_reader(root))
+
+    def test_a_change_under_another_issued_name_is_waiting_nowhere(self):
+        with support.Sandbox() as sandbox:
+            root, _base_id, staged = self.setup(sandbox)
+            os.rename(
+                staged,
+                os.path.join(os.path.dirname(staged), "stg-" + "c" * 16 + ".md"),
+            )
+
+            self.assertEqual(([], [], []), self.every_reader(root))
+
+    def test_a_change_about_a_document_that_is_gone_is_waiting_nowhere(self):
+        with support.Sandbox() as sandbox:
+            root, _base_id, _staged = self.setup(sandbox)
+            os.remove(os.path.join(root, ICP))
+
+            self.assertEqual(([], [], []), self.every_reader(root))
+
+    def test_a_real_change_is_waiting_in_every_reader(self):
+        with support.Sandbox() as sandbox:
+            root, _base_id, _staged = self.setup(sandbox)
+
+            self.assertEqual(([ICP], [ICP], [ICP]), self.every_reader(root))
+
 
 if __name__ == "__main__":
     unittest.main()

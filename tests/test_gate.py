@@ -1419,6 +1419,83 @@ class TestTheNameABaseIsKnownByCannotBeChanged(unittest.TestCase):
             )
 
 
+# --- R6 of Astra's third verification ----------------------------------------
+
+
+class TestTheConfigCommandIsReadForWhatItReallyChanges(unittest.TestCase):
+    """R6. The protection of the name a base is known by exempted its own file.
+
+    Any command naming a file of its own was let through, including one naming
+    the base's own settings file, so the name could be taken away. A section
+    renamed into the protected one was read by the name it came from, so the
+    name could be put on an ordinary repository. And a setting whose value only
+    contained the text of the key was refused. These are Astra's commands.
+    """
+
+    DOT_GIT = "." + "git"
+
+    def test_the_commands_astra_ran_are_refused(self):
+        with Sandbox() as box:
+            root, _base_id = box.base()
+            own = self.DOT_GIT + "/config"
+            for command in (
+                "git config -f %s --unset gtmbase.id" % own,
+                "git config --local other.id anything && "
+                "git config --local --rename-section other gtmbase",
+            ):
+                with self.subTest(command=command):
+                    self.assertTrue(check_now(command, root))
+
+    def test_every_spelling_of_a_change_to_it_is_refused(self):
+        with Sandbox() as box:
+            root, _base_id = box.base()
+            own = os.path.join(root, self.DOT_GIT, "config")
+            for command in (
+                "git config --file=%s/config gtmbase.id x" % self.DOT_GIT,
+                "git config -f %s --unset-all GTMBase.ID" % own,
+                "git config --file %s --remove-section gtmbase" % own,
+                "git config --rename-section other GTMBASE",
+                "git config --rename-section gtmbase other",
+                "git config --add gtmbase.id x",
+                "git config --replace-all gtmbase.id x",
+                "git config --worktree gtmbase.id x",
+                "git config set gtmbase.id x",
+                "git config unset gtmbase.id",
+                "git config rename-section other gtmbase",
+                "git config remove-section gtmbase",
+                "git config --edit",
+                "git -C %s config -f %s/config --unset gtmbase.id" % (root, self.DOT_GIT),
+            ):
+                with self.subTest(command=command):
+                    self.assertTrue(check_now(command, root))
+
+    def test_a_section_renamed_into_it_is_refused_in_an_ordinary_repository(self):
+        with Sandbox() as box:
+            other = plain_repository(box)
+
+            self.assertTrue(
+                check_now(
+                    "git config --local --rename-section other gtmbase", other
+                )
+            )
+
+    def test_a_value_that_only_holds_the_text_is_allowed(self):
+        with Sandbox() as box:
+            root, _base_id = box.base()
+            for command in (
+                "git config --local user.name gtmbase.id",
+                "git config --get gtmbase.id",
+                "git config get gtmbase.id",
+                "git config --get-regexp gtmbase",
+                "git config --local --list",
+                "git config list",
+                "git config -f other.cfg gtmbase.id anything",
+                "git config --global user.email dana@example.com",
+                "git config --local --rename-section other another",
+            ):
+                with self.subTest(command=command):
+                    self.assertIsNone(check_now(command, root))
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -1354,5 +1354,348 @@ class TestTheFolderThePluginsLiveIn(unittest.TestCase):
 
 
 
+
+# --- R2 and R3 of Astra's third verification ---------------------------------
+
+DOT_GIT = "." + "git"
+DOT_CLAUDE = "." + "claude"
+
+
+def _no_program_may_start():
+    def watched(*arguments, **named):
+        raise AssertionError("the check started a program")
+
+    return mock.patch("subprocess.run", watched), mock.patch("subprocess.Popen", watched)
+
+
+class TestAHistoryFolderKeptSomewhereElse(unittest.TestCase):
+    """R2. A base whose history folder is kept elsewhere left it writable.
+
+    Astra's scenario: the base's version-control entry resolves to a folder
+    whose own path names neither guarded folder, so the shortcut that lets
+    almost every write go without a second look let a write to that folder's
+    settings go too. The places a base keeps its history are now worked out
+    and compared before that shortcut.
+    """
+
+    def check(self, path, **named):
+        return denied(write_hook.run(request(path, **named)))
+
+    def kept_elsewhere(self, sandbox, joined=True):
+        import shutil
+
+        base = Base(sandbox, joined=joined)
+        external = os.path.join(sandbox.path, "external", "repo-meta")
+        os.makedirs(os.path.dirname(external))
+        shutil.move(os.path.join(base.root, DOT_GIT), external)
+        support.write(os.path.join(base.root, DOT_GIT), "gitdir: %s\n" % external)
+        return base, external
+
+    def test_the_settings_of_a_history_folder_kept_elsewhere_are_refused(self):
+        with support.Sandbox() as sandbox:
+            _base, external = self.kept_elsewhere(sandbox)
+
+            self.assertTrue(self.check(os.path.join(external, "config")))
+            self.assertTrue(
+                self.check(os.path.join(external, "hooks", "pre-push"))
+            )
+
+    def test_the_same_with_the_joined_list_emptied(self):
+        with support.Sandbox() as sandbox:
+            base, external = self.kept_elsewhere(sandbox)
+            support.write(paths.machine_state_path(), "{}")
+
+            self.assertTrue(
+                self.check(os.path.join(external, "config"), cwd=base.root)
+            )
+
+    def test_a_history_folder_reached_through_a_link(self):
+        with support.Sandbox() as sandbox:
+            import shutil
+
+            base = Base(sandbox)
+            external = os.path.join(sandbox.path, "linked-meta")
+            shutil.move(os.path.join(base.root, DOT_GIT), external)
+            os.symlink(external, os.path.join(base.root, DOT_GIT))
+
+            self.assertTrue(self.check(os.path.join(external, "config")))
+
+    def test_the_shared_history_of_a_base_that_is_a_second_working_folder(self):
+        with support.Sandbox() as sandbox:
+            source = Base(sandbox, name="source", joined=False)
+            common = os.path.join(sandbox.path, "external", "shared-meta")
+            support.git(["clone", "-q", "--bare", source.root, common], cwd=sandbox.path)
+            support.git(
+                ["config", "gtmbase.id", source.base_id], cwd=common
+            )
+            second = os.path.join(sandbox.path, "second")
+            support.git(["worktree", "add", "-q", second, "main"], cwd=common)
+            machine.append_joined(root=second, base_id=source.base_id, remote=None)
+            own = os.path.join(common, "worktrees", "second")
+
+            self.assertTrue(self.check(os.path.join(common, "config")))
+            self.assertTrue(self.check(os.path.join(own, "HEAD")))
+
+    def test_an_ordinary_file_elsewhere_still_starts_no_program(self):
+        with support.Sandbox() as sandbox:
+            self.kept_elsewhere(sandbox)
+            elsewhere = os.path.join(sandbox.path, "elsewhere", "notes.md")
+            support.write(elsewhere, "# Notes\n")
+            first, second = _no_program_may_start()
+            with first, second:
+                said = write_hook.run(request(elsewhere))
+
+            self.assertIsNone(said)
+
+
+class TestABaseWhoseMapIsGone(unittest.TestCase):
+    """R3. Renaming the map of a base nobody joined took its guard away.
+
+    The guard knew a base only by the map in its working folder and by the
+    list of bases this account joined. An unjoined copy of a base with its map
+    renamed matched neither, so its own history folder and its assistant
+    settings could be written. The push gate already knew it for a base by its
+    history, and now the guard asks the same questions.
+    """
+
+    def check(self, path, **named):
+        return denied(write_hook.run(request(path, **named)))
+
+    def a_copy_without_its_map(self, sandbox):
+        from gtmbase import constants
+
+        source = Base(sandbox, name="source", joined=False)
+        # A base made the way a base is really made holds all three of the
+        # entries its history is known by.
+        support.write(
+            os.path.join(source.root, constants.CODEOWNERS_PATH), "/context/ @owner\n"
+        )
+        support.git(["add", "-A"], cwd=source.root)
+        support.git(["commit", "-q", "-m", "owners"], cwd=source.root)
+        clone = os.path.join(sandbox.path, "copy")
+        support.git(["clone", "-q", source.root, clone], cwd=sandbox.path)
+        os.rename(
+            os.path.join(clone, "context", "map.md"),
+            os.path.join(clone, "context", "old-map.md"),
+        )
+        return clone
+
+    def test_its_safeguard_before_a_send_is_refused(self):
+        with support.Sandbox() as sandbox:
+            clone = self.a_copy_without_its_map(sandbox)
+
+            self.assertTrue(
+                self.check(os.path.join(clone, DOT_GIT, "hooks", "pre-push"))
+            )
+
+    def test_its_assistant_settings_are_refused(self):
+        with support.Sandbox() as sandbox:
+            clone = self.a_copy_without_its_map(sandbox)
+
+            self.assertTrue(
+                self.check(os.path.join(clone, DOT_CLAUDE, "settings.json"))
+            )
+
+    def test_a_base_that_carries_its_name_is_known_without_starting_anything(self):
+        with support.Sandbox() as sandbox:
+            base = Base(sandbox, joined=False)
+            os.rename(
+                os.path.join(base.root, "context", "map.md"),
+                os.path.join(base.root, "context", "old-map.md"),
+            )
+            first, second = _no_program_may_start()
+            with first, second:
+                said = write_hook.run(
+                    request(os.path.join(base.root, DOT_GIT, "hooks", "pre-push"))
+                )
+
+            self.assertTrue(denied(said))
+
+    def test_an_ordinary_repository_is_still_left_alone(self):
+        with support.Sandbox() as sandbox:
+            ordinary = os.path.join(sandbox.path, "ordinary")
+            os.makedirs(ordinary)
+            support.git(["init", "-q", "-b", "main"], cwd=ordinary)
+            support.write(os.path.join(ordinary, "README.md"), "hi\n")
+            support.git(["add", "-A"], cwd=ordinary)
+            support.git(["commit", "-q", "-m", "one"], cwd=ordinary)
+
+            self.assertFalse(
+                self.check(os.path.join(ordinary, DOT_CLAUDE, "settings.json"))
+            )
+            self.assertFalse(
+                self.check(os.path.join(ordinary, DOT_GIT, "hooks", "pre-push"))
+            )
+
+
+
+# --- R4 and R5 of Astra's third verification ---------------------------------
+
+
+class TestAnErrorWhileCheckingRunsTheSmallerCheck(unittest.TestCase):
+    """R4. An error inside the real check let a protected write through.
+
+    It printed nothing and answered success, so the wrapper never reached
+    the smaller check it keeps for a check that could not run. Astra's probe
+    put an error into the check and got success with nothing printed.
+    """
+
+    def main_with(self, payload, **patches):
+        import io
+
+        stdin = io.StringIO(json.dumps(payload))
+        stdout = io.StringIO()
+        with mock.patch("sys.stdin", stdin), mock.patch("sys.stdout", stdout):
+            return write_hook.main([]), stdout.getvalue()
+
+    def test_an_error_in_the_check_is_the_failure_status(self):
+        with support.Sandbox():
+            with mock.patch.object(
+                write_hook, "run", side_effect=OSError("stopped")
+            ):
+                code, printed = self.main_with(request("/tmp/anything.md"))
+
+            self.assertEqual(write_hook.COULD_NOT_RUN, code)
+            self.assertEqual("", printed)
+
+    def test_an_error_while_answering_is_the_failure_status_too(self):
+        import io
+
+        class Broken(io.StringIO):
+            def write(self, text):
+                raise OSError("the answer could not be written")
+
+        with support.Sandbox():
+            with mock.patch("sys.stdin", io.StringIO(json.dumps(request(paths.machine_state_path())))), mock.patch("sys.stdout", Broken()):
+                code = write_hook.main([])
+
+            self.assertEqual(write_hook.COULD_NOT_RUN, code)
+
+    def test_the_status_is_the_one_the_wrapper_treats_as_a_failure(self):
+        with open(SCRIPT, encoding="utf-8") as handle:
+            text = handle.read()
+
+        self.assertIn("COULD_NOT_RUN = %d" % write_hook.COULD_NOT_RUN, text)
+        self.assertNotEqual(0, write_hook.COULD_NOT_RUN)
+
+    def a_copy_whose_check_fails_while_running(self, sandbox):
+        import shutil
+
+        root = os.path.join(sandbox.path, "installed", "gtm-base")
+        os.makedirs(os.path.dirname(root), exist_ok=True)
+        shutil.copytree(PLUGIN_DIR, root)
+        target = os.path.join(root, "lib", "gtmbase", "write_hook.py")
+        with open(target, "a", encoding="utf-8") as handle:
+            handle.write(
+                "\n\ndef run(payload):\n    raise OSError('stopped')\n"
+            )
+        return root
+
+    def test_through_the_wrapper_a_protected_write_is_refused(self):
+        with support.Sandbox() as sandbox:
+            root = self.a_copy_whose_check_fails_while_running(sandbox)
+            base = Base(sandbox)
+            environment = dict(os.environ)
+            environment["CLAUDE_PLUGIN_ROOT"] = root
+            for named, wanted in (
+                (os.path.join(base.root, "." + "git", "config"), b'"deny"'),
+                (os.path.join(sandbox.path, "notes.md"), b""),
+            ):
+                finished = subprocess.run(
+                    ["sh", os.path.join(root, "hooks", "write-check.sh"), "claude"],
+                    input=json.dumps(request(named)).encode("utf-8"),
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
+                    env=environment,
+                )
+
+                self.assertEqual(0, finished.returncode)
+                if wanted:
+                    self.assertIn(wanted, finished.stdout, named)
+                else:
+                    self.assertEqual(b"", finished.stdout, named)
+
+
+class TestTheSmallerCheckReadsDotsTheWayTheDiskDoes(unittest.TestCase):
+    """R5. A path with a dot or two dots in it got past the smaller check.
+
+    Astra ran the smaller check's own definitions and got nothing back for
+    the records folder written with a dot in the middle, and nothing for the
+    settings file written relative to the folder it sits in, which is how an
+    ordinary relative path reaches it.
+    """
+
+    def a_broken_copy(self, sandbox):
+        return TestTheWrapperWhenThePythonHalfCannotLoad.a_broken_copy(self, sandbox)
+
+    def answer(self, named, root, cwd=None):
+        environment = dict(os.environ)
+        environment["CLAUDE_PLUGIN_ROOT"] = root
+        finished = subprocess.run(
+            ["sh", os.path.join(root, "hooks", "write-check.sh"), "claude"],
+            input=json.dumps(request(named, cwd=cwd)).encode("utf-8"),
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            env=environment,
+        )
+        self.assertEqual(0, finished.returncode)
+        if b'"deny"' in finished.stdout:
+            return "deny"
+        if b'"ask"' in finished.stdout:
+            return "ask"
+        return "nothing"
+
+    def test_astras_three_paths(self):
+        with support.Sandbox() as sandbox:
+            root = self.a_broken_copy(sandbox)
+            home = os.path.expanduser("~")
+            assistant = os.path.join(home, "." + "claude")
+            os.makedirs(assistant, exist_ok=True)
+            seat = paths.seat_home_path()
+            os.makedirs(seat, exist_ok=True)
+            seat_parent, seat_name = os.path.split(seat)
+
+            self.assertEqual(
+                "ask", self.answer(os.path.join(assistant, "settings.json"), root)
+            )
+            self.assertEqual(
+                "ask",
+                self.answer(assistant + "/./settings.json", root),
+            )
+            self.assertEqual(
+                "deny",
+                self.answer(seat_parent + "/./" + seat_name + "/machine.json", root),
+            )
+            self.assertEqual(
+                "ask", self.answer("./settings.json", root, cwd=assistant)
+            )
+
+    def test_two_dots_and_a_link_are_read_as_the_place_they_reach(self):
+        with support.Sandbox() as sandbox:
+            root = self.a_broken_copy(sandbox)
+            seat = paths.seat_home_path()
+            os.makedirs(seat, exist_ok=True)
+            seat_parent, seat_name = os.path.split(seat)
+            work = os.path.join(sandbox.path, "work")
+            os.makedirs(work)
+            os.symlink(seat, os.path.join(work, "shortcut"))
+
+            self.assertEqual(
+                "deny",
+                self.answer(
+                    os.path.join(work, "..", "..", os.path.relpath(seat, os.path.dirname(sandbox.path)), "machine.json"),
+                    root,
+                ),
+            )
+            self.assertEqual(
+                "deny",
+                self.answer(os.path.join(work, "shortcut", "machine.json"), root),
+            )
+            self.assertEqual(
+                "nothing",
+                self.answer(os.path.join(work, ".", "notes.md"), root),
+            )
+
+
 if __name__ == "__main__":
     unittest.main()

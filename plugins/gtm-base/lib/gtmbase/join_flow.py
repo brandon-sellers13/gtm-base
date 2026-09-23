@@ -740,14 +740,45 @@ def list_sources(
                 # The folders the counts named, in the order they were printed,
                 # so the skill can name one by its number afterwards rather
                 # than by a name a folder's author chose (finding F6).
-                "folder_names": sorted(whole.by_folder),
-                "paths": sorted(
-                    os.path.realpath(entry.path) for entry in listing.readable
-                ),
+                "folder_names": folders_in_order(listing),
+                "paths": [
+                    os.path.realpath(entry.path)
+                    for entry in files_in_order(listing)
+                ],
             },
             inside=paths.seat_home(),
         )
     return listing
+
+
+def files_in_order(listing) -> list:
+    """The files of a listing in the one order they are shown and numbered.
+
+    Finding R9 of Astra's third look. The listing was printed in the order the
+    folder was walked and written down sorted, so the number printed beside a
+    file chose a different file afterwards. This is the one order: what is
+    printed, what is written down, and what a number is taken back against.
+    """
+    kept = []
+    seen = set()
+    for entry in listing.readable:
+        real = os.path.realpath(entry.path)
+        if real in seen:
+            continue
+        seen.add(real)
+        kept.append(entry)
+    return kept
+
+
+def folders_in_order(listing) -> List[str]:
+    """The folders of a listing in the one order they are shown and numbered.
+
+    These are the folders of the list as it is shown, narrowed or not. They
+    used to be written down from the whole folder while the narrowed list was
+    printed, so the folder shown as number one was one that had just been
+    left out (finding R9 of Astra's third look).
+    """
+    return sorted(listing.by_folder)
 
 
 def folders_shown(run_id: str) -> List[str]:

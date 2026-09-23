@@ -31,11 +31,16 @@ check's four rules.
    three places. That is almost every write on this computer, and it is the
    only reason a check on every file write is affordable at all.
 2. It writes nothing anywhere.
-3. It reaches no network, and runs nothing: no git, no subprocess of any kind,
-   on any path through it.
-4. Anything that goes wrong is nothing at all: no output, exit zero. It fails
-   open on its own errors on purpose, because the layer that has to hold when
-   a record is forged anyway is the gate, which fails closed by itself.
+3. It reaches no network, and runs nothing on the path almost every write
+   takes. The one question it may start a program for is whether a
+   repository whose map is gone is a base by its saved history, and it asks
+   that only for a write into a repository's own history folder or assistant
+   folder, which is the question the check before a send asks too (finding
+   R3 of Astra's third look).
+4. Anything that goes wrong prints nothing and ends with the wrapper's
+   failure status, so the wrapper runs its own smaller check on the path. It
+   used to end with success, and then nothing checked the path at all
+   (finding R4 of Astra's third look).
 
 Claude Code's hook documentation, read on 2026-09-20 at
 https://code.claude.com/docs/en/hooks, is what this relies on. What it gives a
@@ -128,6 +133,12 @@ REFUSED = (
 
 # The one sentence the wrapper says when this check could not run at all. The
 # shell script holds the same words, and a test holds the two to each other.
+# The status that tells the wrapper this check did not run to the end, so the
+# wrapper's own smaller check looks at the path instead. The script that loads
+# this module ends with the same number when the module cannot load, and a
+# test holds the two together.
+COULD_NOT_RUN = 70
+
 COULD_NOT_CHECK = (
     "GTM Base could not run its own safety check just now, and this file is "
     "in a folder it keeps for itself, so nothing was written. Installing the "
@@ -325,14 +336,177 @@ def _base_above(named: str) -> Optional[str]:
     return None
 
 
-def problem_with(named: str, real_file: str) -> Optional[str]:
+def _first_line(path: str) -> str:
+    """The first line of a small file, or nothing when it cannot be read."""
+    try:
+        with open(path, "r", encoding="utf-8", errors="replace") as handle:
+            return handle.readline(4096).strip()
+    except Exception:
+        return ""
+
+
+def _history_places(root: str) -> List[str]:
+    """Every place one repository keeps its history, read off the disk.
+
+    Finding R2 of Astra's third look. A repository's history folder does not
+    have to sit inside it: the entry can be a file naming a folder anywhere,
+    or a link to one, and a second working folder shares the settings of the
+    repository it came from, which live somewhere else again. A write to any
+    of those is a write to the base's own settings, and none of their paths
+    need name either guarded folder. Nothing here starts a program: it is the
+    presence of one entry, and at most two small files read.
+    """
+    entry = os.path.join(root, REPOSITORY_DIR_NAME)
+    found = [entry]
+    history = None
+    try:
+        if os.path.isdir(entry):
+            history = entry
+        elif os.path.isfile(entry):
+            line = _first_line(entry)
+            if line.lower().startswith("gitdir:"):
+                named = line[len("gitdir:") :].strip()
+                if named:
+                    if not os.path.isabs(named):
+                        named = os.path.join(root, named)
+                    history = os.path.normpath(named)
+                    found.append(history)
+    except Exception:
+        return found
+    if history is None:
+        return found
+    common = _first_line(os.path.join(history, "commondir"))
+    if common:
+        if not os.path.isabs(common):
+            common = os.path.join(history, common)
+        found.append(os.path.normpath(common))
+    return found
+
+
+# The key a base's name is kept under in the settings of its own history,
+# split the way the settings file writes it.
+_ID_SECTION = "gtmbase"
+_ID_KEY = "id"
+
+
+def _settings_name_a_base(root: str) -> bool:
+    """Whether a repository's own settings carry the name GTM Base knows it by.
+
+    The settings file is read as text, so no program is started. It is the
+    first of the three questions the check before a send asks, and the only
+    one of them that can be answered this cheaply (finding R3 of Astra's
+    third look).
+    """
+    for place in _history_places(root)[1:] or _history_places(root):
+        for name in ("config", "config.worktree"):
+            try:
+                with open(
+                    os.path.join(place, name), "r", encoding="utf-8", errors="replace"
+                ) as handle:
+                    text = handle.read(256 * 1024)
+            except Exception:
+                continue
+            section = ""
+            for raw in text.split("\n"):
+                line = raw.split("#", 1)[0].split(";", 1)[0].strip()
+                if not line:
+                    continue
+                if line.startswith("["):
+                    section = line.strip("[]").strip().split(" ", 1)[0].lower()
+                    continue
+                key, _sign, value = line.partition("=")
+                if (
+                    section == _ID_SECTION
+                    and key.strip().lower() == _ID_KEY
+                    and value.strip().strip('"')
+                ):
+                    return True
+    return False
+
+
+def _joined_roots() -> List[str]:
+    """Every base this account's record names, as the record wrote them."""
+    raw = machine.load_machine_state_raw()
+    found = []
+    for entry in list(getattr(raw, "joined", None) or []):
+        if not isinstance(entry, dict):
+            continue
+        root = entry.get("root")
+        if isinstance(root, str) and root:
+            found.append(root)
+    return found
+
+
+def _cheaply_a_base(folder: str, joined: Sequence[str]) -> bool:
+    """Whether a repository is a base by the questions that start no program."""
+    try:
+        if os.path.isfile(os.path.join(folder, constants.MAP_PATH)):
+            return True
+        real = os.path.realpath(folder)
+        if any(os.path.realpath(root) == real for root in joined):
+            return True
+        return _settings_name_a_base(folder)
+    except Exception:
+        return True
+
+
+def _repository_above(path: str) -> Optional[str]:
+    """The nearest folder above a path holding a version-control entry."""
+    folder = path if os.path.isdir(path) else os.path.dirname(path)
+    for _step in range(MAX_FOLDERS_WALKED):
+        if not folder:
+            return None
+        try:
+            if os.path.lexists(os.path.join(folder, REPOSITORY_DIR_NAME)):
+                return folder
+        except Exception:
+            return None
+        parent = os.path.dirname(folder)
+        if parent == folder:
+            return None
+        folder = parent
+    return None
+
+
+def _a_base_by_its_history(folder: str) -> bool:
+    """The question the check before a send asks of a saved history.
+
+    It starts git, so it is asked only of a repository a write is aimed into
+    the history folder or the assistant folder of. A question git could not
+    answer leaves the folder in reach rather than out of it, the same way the
+    check before a send answers it.
+    """
+    from . import gate
+
+    try:
+        return gate._committed_like_a_base(folder, None)
+    except Exception:
+        return True
+
+
+def _known_bases(cwd: Optional[str], joined: Sequence[str]) -> List[str]:
+    """Every base whose history places are compared before the shortcut.
+
+    The bases this account joined, and the base the session is open in, found
+    from the folder it is open in by the questions that start no program, so
+    that emptying the joined list does not take the second one away.
+    """
+    found = list(joined)
+    if cwd:
+        above = _repository_above(cwd)
+        if above is not None and above not in found and _cheaply_a_base(above, joined):
+            found.append(above)
+    return found
+
+
+def problem_with(named: str, real_file: str, cwd: Optional[str] = None) -> Optional[str]:
     """Which rule this path falls under, or nothing at all.
 
-    Nothing here touches git and nothing here starts another program. The
-    reading it does of the disk is the presence of two names on the way up from
-    the file, and this account's own short record of the bases it has joined,
-    which is the same file the read check reads and for the same reason: it is
-    the cheapest way to leave.
+    On the path almost every write takes, nothing here starts another program.
+    The reading it does of the disk is the presence of a few names on the way
+    up from the file, this account's own short record of the bases it has
+    joined, which is the same file the read check reads and for the same
+    reason, and the entry each of those bases keeps its history through.
     """
     try:
         seat = paths.seat_home_path()
@@ -355,14 +529,34 @@ def problem_with(named: str, real_file: str) -> Optional[str]:
     if asking is None and _reaches(named, real_file, client_plugins_dir()):
         asking = CODE_CLIENT_SETTINGS
 
+    # Every place a known base keeps its history is compared before the
+    # shortcut below, because none of those places has to name a guarded
+    # folder (finding R2 of Astra's third look).
+    joined = _joined_roots()
+    for root in _known_bases(cwd, joined):
+        for folder in _history_places(root):
+            if _reaches(named, real_file, folder):
+                return CODE_BASE_REPOSITORY
+
     if not _names_a_guarded_folder(named, real_file):
         return asking
 
     inside = _base_above(named)
     if inside is None and real_file != named:
         inside = _base_above(real_file)
+    if inside is None:
+        # A base whose map is gone is still a base (finding R3 of Astra's
+        # third look). The questions that start nothing come first, and the
+        # one about its saved history only for the nearest repository.
+        for side in (named, real_file):
+            above = _repository_above(side)
+            if above is None:
+                continue
+            if _cheaply_a_base(above, joined) or _a_base_by_its_history(above):
+                inside = above
+            break
     if inside is not None:
-        for folder in _guarded_folders_of(inside):
+        for folder in _guarded_folders_of(inside) + _history_places(inside):
             if _reaches(named, real_file, folder):
                 return CODE_BASE_REPOSITORY
     raw = machine.load_machine_state_raw()
@@ -396,12 +590,14 @@ def run(payload: Dict[str, Any]) -> Optional[Dict[str, Any]]:
     if isinstance(tool, str) and tool not in TOOL_NAMES:
         return None
     asking = False
+    cwd = payload.get("cwd")
+    cwd = cwd if isinstance(cwd, str) and os.path.isabs(cwd) else None
     for named in named_files(payload):
         try:
             real_file = os.path.realpath(named)
         except Exception:
             real_file = named
-        found = problem_with(named, real_file)
+        found = problem_with(named, real_file, cwd)
         if found == CODE_CLIENT_SETTINGS:
             asking = True
             continue
@@ -433,24 +629,20 @@ def _answer(say: str, sentence: str) -> Dict[str, Any]:
 def main(argv: Sequence[str]) -> int:
     """Read the request from standard input and print at most one object.
 
-    Every way this can go wrong ends the same way: nothing printed, and zero.
+    Every way this can go wrong ends the same way: nothing printed, and the
+    failure status, so the wrapper's smaller check reads the path instead.
+    Finding R4 of Astra's third look: an error here used to end with success
+    and nothing printed, which the wrapper read as a check that ran and found
+    nothing, and a write into a protected place went through.
     """
     del argv
     try:
         raw = sys.stdin.read()
-    except Exception:
-        return 0
-    try:
         payload = json.loads(raw)
-    except Exception:
-        return 0
-    try:
         answer = run(payload)
-    except Exception:
-        return 0
-    if answer:
-        try:
+        if answer:
             sys.stdout.write(json.dumps(answer, ensure_ascii=False) + "\n")
-        except Exception:
-            return 0
+            sys.stdout.flush()
+    except Exception:
+        return COULD_NOT_RUN
     return 0

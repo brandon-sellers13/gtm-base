@@ -151,9 +151,12 @@ make it useful:
    When the prepared change does not say which part of the document it is
    about, list the parts with
    `python3 ../propose-change/scripts/approve_local.py --staging <path> --sections`,
-   read them out, ask which one this is about, and add
-   `--section <the number they chose>`. Editing the prepared file by hand
-   leaves the marker on it and the change stays unapprovable.
+   read them out, ask which one this is about, and write the wording into that
+   part with
+   `python3 ../propose-change/scripts/approve_local.py --staging <path> --wording --words <the path it printed> --section <the number they chose>`.
+   Editing the prepared file by hand
+   leaves the marker on it and the change stays unapprovable. The same command
+   writes a corrected wording in again whenever the person asks for one.
 3. Rewrite the Before and After lines so a reviewer who has never seen either
    file understands what changes. Keep them to one line each.
 4. Leave the identifiers, the evidence, and the marker line exactly as they are.

@@ -179,8 +179,10 @@ CORRECTION_CLASSES = (
 )
 # How sure a proposal is of itself.
 CONFIDENCE_LEVELS = ("low", "medium", "high")
-# What one proposed edit does to a section.
-EDIT_OPERATIONS = ("add", "replace")
+# What one proposed edit does to a section. Taking a part out is its own
+# operation because a hand edit that only deletes a part could not be
+# described otherwise (finding R10 of Astra's third look).
+EDIT_OPERATIONS = ("add", "replace", "remove")
 # How widely the conversation behind an inbox item was already shared.
 INBOX_VISIBILITIES = ("public-channel", "private-channel", "direct-message")
 # How an inbox item reached the inbox.

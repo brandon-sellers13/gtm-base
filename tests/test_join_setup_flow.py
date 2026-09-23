@@ -2574,8 +2574,8 @@ class TestThePlacesAreProposedBeforeTheList(unittest.TestCase):
             self.assertEqual(0, finished.returncode, finished.stderr)
             self.assertIn("Is this it? Say yes, name a folder to add", printed)
             self.assertIn(
-                "place=marketing score=12 customer-profile=1 persona=1 "
-                "positioning=2",
+                "place=marketing number=1 score=12 customer-profile=1 "
+                "persona=1 positioning=2",
                 printed,
             )
             self.assertIn("note=thin:engineering", printed)
@@ -2590,7 +2590,7 @@ class TestThePlacesAreProposedBeforeTheList(unittest.TestCase):
 
             listed = subprocess.run(
                 [sys.executable, SHIM, "list-sources", "--folder", content,
-                 "--run", run, "--from-survey", "--drop", "other-co"],
+                 "--run", run, "--from-survey", "--drop", "3"],
                 env=dict(os.environ),
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
@@ -3265,6 +3265,236 @@ class TestTheScriptAnswersFromTheCommandLine(unittest.TestCase):
             self.assertIn(
                 "Hidden parts removed from template.md: 3 comments.", printed
             )
+
+
+
+# --- R9 of Astra's third verification ----------------------------------------
+
+
+class TestANumberSelectsWhatWasShownBesideIt(unittest.TestCase):
+    """R9. A number shown beside a file or a folder chose a different one.
+
+    The listing printed files in the order the folder was walked and wrote
+    them down sorted, so the file printed first was not the file numbered one
+    afterwards. The folders were printed from the list as narrowed and written
+    down from the whole list, so after narrowing, the folder shown as one was
+    a folder that had just been left out. And a small listing printed no
+    folder numbers at all. These are Astra's two probes exactly.
+    """
+
+    def script(self, *arguments):
+        import sys
+
+        return subprocess.run(
+            [sys.executable, SHIM] + [str(item) for item in arguments],
+            env=dict(os.environ),
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+        )
+
+    def numbered(self, printed, name):
+        found = {}
+        for one in printed.split("\n"):
+            if one.startswith(name + "=") and " number=" in one:
+                value = one[len(name) + 1 :].split(" number=")[0].strip('"')
+                number = int(one.split(" number=")[1].split(" ")[0])
+                found[number] = value
+        return found
+
+    def test_the_file_numbered_one_is_the_file_printed_first(self):
+        with support.Sandbox():
+            content = os.path.join(os.environ["HOME"], "content")
+            support.write(
+                os.path.join(content, "z-profile.md"),
+                "# Who we sell to\n\nSmall teams.\n",
+            )
+            support.write(
+                os.path.join(content, "a", "positioning.md"),
+                "# Positioning\n\nWe win on setup time.\n",
+            )
+            run = join_flow.new_run(TODAY)
+
+            shown = self.script("list-sources", "--folder", content, "--run", run)
+            self.assertEqual(0, shown.returncode, shown.stderr)
+            files = self.numbered(shown.stdout.decode("utf-8"), "read")
+            self.assertTrue(files[1].endswith("z-profile.md"), files)
+            self.assertTrue(files[2].endswith("positioning.md"), files)
+            frozen = self.script(
+                "freeze-sources", "--folder", content, "--session", SESSION,
+                "--run", run,
+            )
+            self.assertEqual(0, frozen.returncode, frozen.stdout)
+
+            previewed = self.script(
+                "preview", "--step", "icp", "--run", run, "--only", "1"
+            )
+
+            printed = previewed.stdout.decode("utf-8")
+            self.assertEqual(0, previewed.returncode, printed)
+            going_in = [
+                one for one in printed.split("\n") if one.startswith("included=")
+            ]
+            self.assertEqual(1, len(going_in), printed)
+            self.assertIn("z-profile", going_in[0])
+
+    def five_folders(self):
+        content = os.path.join(os.environ["HOME"], "folders")
+        for name in ("aaa", "b", "c", "d", "e"):
+            support.write(
+                os.path.join(content, name, "notes-%s.md" % name),
+                "# Notes\n\nSomething written down.\n",
+            )
+        return content
+
+    def test_a_small_listing_prints_the_folder_numbers(self):
+        with support.Sandbox():
+            content = self.five_folders()
+            run = join_flow.new_run(TODAY)
+
+            shown = self.script("list-sources", "--folder", content, "--run", run)
+
+            folders = self.numbered(shown.stdout.decode("utf-8"), "folder")
+            self.assertEqual(
+                {1: "aaa", 2: "b", 3: "c", 4: "d", 5: "e"}, folders
+            )
+
+    def test_a_narrowed_list_is_numbered_as_it_was_shown(self):
+        with support.Sandbox():
+            content = self.five_folders()
+            run = join_flow.new_run(TODAY)
+            self.script("list-sources", "--folder", content, "--run", run)
+
+            narrowed = self.script(
+                "list-sources", "--folder", content, "--run", run,
+                "--only-folder", "2", "--only-folder", "3",
+                "--only-folder", "4", "--only-folder", "5",
+            )
+            folders = self.numbered(narrowed.stdout.decode("utf-8"), "folder")
+            self.assertEqual({1: "b", 2: "c", 3: "d", 4: "e"}, folders)
+
+            again = self.script(
+                "list-sources", "--folder", content, "--run", run,
+                "--only-folder", "1",
+            )
+
+            printed = again.stdout.decode("utf-8")
+            self.assertEqual(0, again.returncode, printed)
+            files = self.numbered(printed, "read")
+            self.assertEqual(1, len(files), printed)
+            self.assertIn("notes-b.md", files[1])
+            self.assertNotIn("aaa", printed.split("These are the files")[1])
+
+
+class TestTheProposedPlacesAreChosenByNumberToo(unittest.TestCase):
+    """R9. The places the finding step proposed were dropped by their names.
+
+    A folder name is somebody else's text, and the skill still said to put
+    one on the command line to drop a place, and to put the folder a person
+    named to add straight into the command as well.
+    """
+
+    def company(self):
+        return TestThePlacesAreProposedBeforeTheList.company(self)
+
+    def script(self, *arguments):
+        return TestANumberSelectsWhatWasShownBesideIt.script(self, *arguments)
+
+    def test_the_places_are_printed_with_their_numbers(self):
+        with support.Sandbox():
+            content = self.company()
+            run = join_flow.new_run(TODAY)
+
+            found = self.script("survey", "--folder", content, "--run", run)
+
+            places = TestANumberSelectsWhatWasShownBesideIt.numbered(
+                self, found.stdout.decode("utf-8"), "place"
+            )
+            self.assertEqual({1: "marketing", 2: ".", 3: "other-co"}, places)
+
+    def test_a_place_is_dropped_by_its_number(self):
+        with support.Sandbox():
+            content = self.company()
+            run = join_flow.new_run(TODAY)
+            self.script("survey", "--folder", content, "--run", run)
+
+            listed = self.script(
+                "list-sources", "--folder", content, "--run", run,
+                "--from-survey", "--drop", "3",
+            )
+
+            printed = listed.stdout.decode("utf-8")
+            self.assertEqual(0, listed.returncode, printed)
+            self.assertIn("marketing/positioning.md", printed)
+            self.assertNotIn("other-co/positioning.md", printed)
+
+    def test_a_place_named_on_the_command_line_is_refused(self):
+        with support.Sandbox():
+            content = self.company()
+            run = join_flow.new_run(TODAY)
+            self.script("survey", "--folder", content, "--run", run)
+
+            listed = self.script(
+                "list-sources", "--folder", content, "--run", run,
+                "--from-survey", "--drop", "other-co",
+            )
+
+            self.assertEqual(1, listed.returncode)
+            self.assertIn(
+                "Name the folders by the number", listed.stdout.decode("utf-8")
+            )
+
+    def test_a_folder_to_add_travels_in_a_file(self):
+        with support.Sandbox():
+            content = self.company()
+            run = join_flow.new_run(TODAY)
+            self.script("survey", "--folder", content, "--run", run)
+            handed = self.script("words-file", "--run", run, "--for", "folder")
+            path = handed.stdout.decode("utf-8").split("words=")[1].split("\n")[0]
+            support.write(path.strip().strip('"'), "engineering")
+
+            listed = self.script(
+                "list-sources", "--folder", content, "--run", run,
+                "--from-survey", "--add-file", path.strip().strip('"'),
+            )
+
+            printed = listed.stdout.decode("utf-8")
+            self.assertEqual(0, listed.returncode, printed + listed.stderr.decode())
+            self.assertIn("engineering/", printed)
+            self.assertEqual(["engineering"], join_flow.load_listing(run)["added"])
+
+
+class TestTheFolderABaseBelongsWithTravelsInAFile(unittest.TestCase):
+    """R9's walk found this one: the folder somebody keeps their material in
+    was put on the command line, the one kind of folder F6 of the third look
+    left there."""
+
+    def script(self, *arguments):
+        return TestANumberSelectsWhatWasShownBesideIt.script(self, *arguments)
+
+    def words(self, run, kind, text):
+        handed = self.script("words-file", "--run", run, "--for", kind)
+        path = (
+            handed.stdout.decode("utf-8").split("words=")[1].split("\n")[0]
+        ).strip().strip('"')
+        support.write(path, text)
+        return path
+
+    def test_the_place_for_a_base_reads_the_folder_from_a_file(self):
+        with support.Sandbox():
+            content = os.path.join(os.environ["HOME"], "Brandon's Docs")
+            os.makedirs(content)
+            run = join_flow.new_run(TODAY)
+
+            proposed = self.script(
+                "propose-location", "--run", run,
+                "--company-file", self.words(run, "company", "Acme"),
+                "--content-folder-file", self.words(run, "folder", content),
+            )
+
+            printed = proposed.stdout.decode("utf-8")
+            self.assertEqual(0, proposed.returncode, printed + proposed.stderr.decode())
+            self.assertIn("belongs-with=", printed)
+            self.assertIn("Brandon's Docs", printed)
 
 
 if __name__ == "__main__":

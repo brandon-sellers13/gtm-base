@@ -306,7 +306,7 @@ def write_the_replacement(staging_path, text):
         if edit.op == "add" and edit.heading == stale_check.FALLBACK_HEADING:
             parts = [
                 heading
-                for _path, heading in compose_proposal.parts_of(root, staging)
+                for _path, heading, _which in compose_proposal.parts_of(root, staging)
             ]
             if parts:
                 edit.heading = parts[0]

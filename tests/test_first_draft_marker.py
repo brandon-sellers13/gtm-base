@@ -395,6 +395,174 @@ class TestOneOrdinaryEditOfThePreparedChange(unittest.TestCase):
             self.assertFalse(state.is_a_first_draft(base_id, staging_id))
 
 
+# --- R7 of Astra's third verification ----------------------------------------
+
+
+class TestTheWordingCanBeRevisedAgain(unittest.TestCase):
+    """R7. A second wording correction was refused after its file was taken.
+
+    The first wording took the marker and this seat's record off, which is
+    right, and then the one command for writing wording refused the owner's
+    next correction as not a first draft, after it had already read and
+    thrown away the file holding their new words. This is Astra's scenario
+    exactly, through the documented command.
+    """
+
+    def words(self, root, text):
+        handed = run_script(root, ["--new-words-file", "answer"])
+        path = value_of(handed.stdout.decode("utf-8"), "words")
+        if not path:
+            raise AssertionError(handed.stdout + handed.stderr)
+        support.write(path, text)
+        return path
+
+    def first_wording(self, root, staged):
+        done = run_script(
+            root,
+            [
+                "--staging",
+                staged,
+                "--wording",
+                "--words",
+                self.words(root, "We sell to companies of twenty and up."),
+            ],
+        )
+        self.assertEqual(0, done.returncode, done.stdout + done.stderr)
+
+    def test_a_second_correction_through_the_documented_command_is_written(self):
+        with support.Sandbox() as sandbox:
+            root, base_id = local_base(sandbox)
+            staged = a_first_draft(root, body=NAMES_THE_PART)
+            self.first_wording(root, staged)
+            second = self.words(root, "We sell to companies of fifty and up.")
+
+            done = run_script(
+                root, ["--staging", staged, "--wording", "--words", second]
+            )
+
+            self.assertEqual(0, done.returncode, done.stdout + done.stderr)
+            staging = compose_proposal.load_staging(staged)
+            self.assertIn("fifty and up", staging.edits[0].text)
+            self.assertFalse(os.path.exists(second))
+            shown = approve_local.show(
+                staged, root, base_id, runner=support.NoRemoteRunner(), now=TODAY
+            )
+            self.assertEqual(approve_local.STATUS_SHOWN, shown.status, shown.reasons)
+            self.assertIn("fifty and up", shown.artifact)
+
+    def test_any_number_of_revisions_may_follow(self):
+        with support.Sandbox() as sandbox:
+            root, _base_id = local_base(sandbox)
+            staged = a_first_draft(root, body=NAMES_THE_PART)
+            self.first_wording(root, staged)
+            for number in ("thirty", "forty", "sixty"):
+                path = self.words(root, "We sell to companies of %s and up." % number)
+                done = run_script(
+                    root, ["--staging", staged, "--wording", "--words", path]
+                )
+                self.assertEqual(0, done.returncode, done.stdout + done.stderr)
+                self.assertIn(
+                    number, compose_proposal.load_staging(staged).edits[0].text
+                )
+
+    def test_a_revision_needs_a_fresh_look_even_with_the_same_words(self):
+        with support.Sandbox() as sandbox:
+            root, base_id = local_base(sandbox)
+            staged = a_first_draft(root, body=NAMES_THE_PART)
+            self.first_wording(root, staged)
+            earlier = approve_local.show(
+                staged, root, base_id, runner=support.NoRemoteRunner(), now=TODAY
+            )
+            self.assertEqual(approve_local.STATUS_SHOWN, earlier.status)
+            same = self.words(root, "We sell to companies of twenty and up.")
+
+            done = run_script(
+                root, ["--staging", staged, "--wording", "--words", same]
+            )
+            self.assertEqual(0, done.returncode, done.stdout + done.stderr)
+
+            applied = approve_local.approve(
+                staged,
+                root,
+                base_id,
+                earlier.shown_hash,
+                runner=support.NoRemoteRunner(),
+                now=NOW,
+            )
+            self.assertEqual(approve_local.STATUS_MOVED, applied.status)
+
+    def test_a_revision_that_is_the_note_again_is_refused_and_keeps_the_file(self):
+        with support.Sandbox() as sandbox:
+            root, _base_id = local_base(sandbox)
+            staged = a_first_draft(root, body=NAMES_THE_PART)
+            self.first_wording(root, staged)
+            before = support.read(staged)
+            note = self.words(
+                root,
+                "update needed: we stopped selling to small companies  "
+                "this section should reflect that change",
+            )
+
+            done = run_script(
+                root, ["--staging", staged, "--wording", "--words", note]
+            )
+
+            self.assertNotEqual(0, done.returncode)
+            self.assertEqual(before, support.read(staged))
+            # Nothing was written, so the words are still there to be fixed.
+            self.assertTrue(os.path.exists(note))
+
+    def test_a_refused_first_wording_keeps_its_file_too(self):
+        with support.Sandbox() as sandbox:
+            root, _base_id = local_base(sandbox)
+            staged = a_first_draft(root)
+            path = self.words(root, "We sell to companies of twenty and up.")
+
+            # The change names no part, so the first wording needs one.
+            done = run_script(
+                root, ["--staging", staged, "--wording", "--words", path]
+            )
+
+            self.assertNotEqual(0, done.returncode)
+            self.assertTrue(os.path.exists(path))
+            done = run_script(
+                root,
+                ["--staging", staged, "--wording", "--words", path, "--section", "1"],
+            )
+            self.assertEqual(0, done.returncode, done.stdout + done.stderr)
+            self.assertFalse(os.path.exists(path))
+
+    def test_a_change_made_by_hand_is_not_reworded_this_way(self):
+        with support.Sandbox() as sandbox:
+            root, base_id = local_base(sandbox)
+            full = os.path.join(root, ICP)
+            support.write(
+                full,
+                support.read(full).replace(
+                    "Companies of any size.", "Companies of fifty and up."
+                ),
+            )
+            staged = compose_proposal.stage_local_edit(
+                root,
+                base_id,
+                "The quarterly review said so, on slide four of the deck.",
+                runner=support.NoRemoteRunner(),
+                now=TODAY,
+            )
+            before = support.read(staged)
+            path = self.words(root, "Companies of eighty and up.")
+
+            done = run_script(
+                root, ["--staging", staged, "--wording", "--words", path]
+            )
+
+            self.assertNotEqual(0, done.returncode)
+            self.assertIn(
+                compose_proposal.MADE_BY_HAND_WORDING, done.stdout.decode("utf-8")
+            )
+            self.assertEqual(before, support.read(staged))
+            self.assertTrue(os.path.exists(path))
+
 
 if __name__ == "__main__":
     unittest.main()
