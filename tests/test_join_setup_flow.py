@@ -3497,5 +3497,142 @@ class TestTheFolderABaseBelongsWithTravelsInAFile(unittest.TestCase):
             self.assertIn("Brandon's Docs", printed)
 
 
+# --- N4 of Astra's fourth verification ---------------------------------------
+
+
+class TestAFolderNumberMeansTheFolderTheListingCounted(unittest.TestCase):
+    """N4. A folder chosen by number still reached files shown under another.
+
+    The listing counts each file under the folder at the top it sits in, and
+    the narrowing matched a folder name anywhere in a file's path, so the
+    folder `b` took in `a/b/notes.md`, shown under `a`. The files lying loose
+    at the top, shown as `.`, could not be chosen at all. And a folder named to
+    add outside the folder being looked through was cut down to its last name
+    and chose the folder of that name inside it. These are Astra's three.
+    """
+
+    def script(self, *arguments):
+        return TestANumberSelectsWhatWasShownBesideIt.script(self, *arguments)
+
+    def numbered(self, printed, name):
+        return TestANumberSelectsWhatWasShownBesideIt.numbered(self, printed, name)
+
+    def listed_and_agreed(self, content):
+        run = join_flow.new_run(TODAY)
+        shown = self.script("list-sources", "--folder", content, "--run", run)
+        self.assertEqual(0, shown.returncode, shown.stderr)
+        folders = self.numbered(shown.stdout.decode("utf-8"), "folder")
+        frozen = self.script(
+            "freeze-sources", "--folder", content, "--session", SESSION, "--run", run
+        )
+        self.assertEqual(0, frozen.returncode, frozen.stdout)
+        return run, dict((name, number) for number, name in folders.items())
+
+    def included(self, run, number):
+        previewed = self.script(
+            "preview", "--step", "icp", "--run", run, "--only-folder", str(number)
+        )
+        printed = previewed.stdout.decode("utf-8")
+        self.assertEqual(0, previewed.returncode, printed)
+        return [one for one in printed.split("\n") if one.startswith("included=")]
+
+    def nested(self):
+        content = os.path.join(os.environ["HOME"], "content")
+        support.write(
+            os.path.join(content, "a", "b", "notes.md"), "# Notes\n\nDeep inside a.\n"
+        )
+        support.write(
+            os.path.join(content, "b", "other.md"), "# Other\n\nAt the top in b.\n"
+        )
+        support.write(
+            os.path.join(content, "z-profile.md"), "# Who we sell to\n\nSmall teams.\n"
+        )
+        return content
+
+    def test_the_folder_b_is_only_the_folder_b_at_the_top(self):
+        with support.Sandbox():
+            run, numbers = self.listed_and_agreed(self.nested())
+
+            going_in = self.included(run, numbers["b"])
+
+            self.assertEqual(1, len(going_in), going_in)
+            self.assertIn("other", going_in[0])
+
+    def test_the_files_at_the_top_can_be_chosen(self):
+        with support.Sandbox():
+            run, numbers = self.listed_and_agreed(self.nested())
+
+            going_in = self.included(run, numbers["."])
+
+            self.assertEqual(1, len(going_in), going_in)
+            self.assertIn("z-profile", going_in[0])
+
+    def test_a_folder_still_holds_what_is_nested_inside_it(self):
+        with support.Sandbox():
+            run, numbers = self.listed_and_agreed(self.nested())
+
+            going_in = self.included(run, numbers["a"])
+
+            self.assertEqual(1, len(going_in), going_in)
+            self.assertIn("notes", going_in[0])
+
+    def add_named_in_a_file(self, content, run, text):
+        handed = self.script("words-file", "--run", run, "--for", "folder")
+        path = handed.stdout.decode("utf-8").split("words=")[1].split("\n")[0]
+        path = path.strip().strip('"')
+        support.write(path, text)
+        return self.script(
+            "list-sources", "--folder", content, "--run", run,
+            "--from-survey", "--add-file", path,
+        )
+
+    def test_a_folder_outside_is_refused_rather_than_a_namesake_chosen(self):
+        with support.Sandbox():
+            content = TestThePlacesAreProposedBeforeTheList.company(self)
+            outside = os.path.join(os.environ["HOME"], "outside", "engineering")
+            support.write(os.path.join(outside, "runbook.md"), "# Runbook\n\nSteps.\n")
+            run = join_flow.new_run(TODAY)
+            self.script("survey", "--folder", content, "--run", run)
+
+            listed = self.add_named_in_a_file(content, run, outside)
+
+            printed = listed.stdout.decode("utf-8")
+            self.assertEqual(1, listed.returncode, printed)
+            self.assertIn("codes=" + join_flow.CODE_ADDED_NOT_DIRECTLY_INSIDE, printed)
+            self.assertIn(join_flow.ADDED_NOT_DIRECTLY_INSIDE, printed)
+            self.assertNotIn("engineering/", printed)
+
+    def test_a_folder_inside_named_in_full_is_added(self):
+        with support.Sandbox():
+            content = TestThePlacesAreProposedBeforeTheList.company(self)
+            run = join_flow.new_run(TODAY)
+            self.script("survey", "--folder", content, "--run", run)
+
+            listed = self.add_named_in_a_file(
+                content, run, os.path.join(content, "engineering")
+            )
+
+            printed = listed.stdout.decode("utf-8")
+            self.assertEqual(0, listed.returncode, printed + listed.stderr.decode())
+            self.assertIn("engineering/", printed)
+
+    def test_a_folder_below_the_top_is_refused_rather_than_cut_short(self):
+        with support.Sandbox():
+            content = TestThePlacesAreProposedBeforeTheList.company(self)
+            support.write(
+                os.path.join(content, "marketing", "engineering", "x.md"), "# X\n\nY.\n"
+            )
+            run = join_flow.new_run(TODAY)
+            self.script("survey", "--folder", content, "--run", run)
+
+            listed = self.add_named_in_a_file(content, run, "marketing/engineering")
+
+            self.assertEqual(1, listed.returncode, listed.stdout)
+            self.assertIn(
+                "codes=" + join_flow.CODE_ADDED_NOT_DIRECTLY_INSIDE,
+                listed.stdout.decode("utf-8"),
+            )
+
+
 if __name__ == "__main__":
     unittest.main()

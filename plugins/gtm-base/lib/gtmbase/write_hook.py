@@ -412,7 +412,10 @@ def _settings_name_a_base(root: str) -> bool:
                 if not line:
                     continue
                 if line.startswith("["):
-                    section = line.strip("[]").strip().split(" ", 1)[0].lower()
+                    # The whole header, subsection and all: `[gtmbase "demo"]`
+                    # holds `gtmbase.demo.id`, which is not a base's name
+                    # (finding N6 of Astra's fourth look).
+                    section = line.strip("[]").strip().lower()
                     continue
                 key, _sign, value = line.partition("=")
                 if (
@@ -499,6 +502,29 @@ def _known_bases(cwd: Optional[str], joined: Sequence[str]) -> List[str]:
     return found
 
 
+def _into_the_sessions_own_history(
+    named: str, real_file: str, cwd: Optional[str], known: Sequence[str]
+) -> Optional[str]:
+    """The repository the session is open in, when a write reaches its history.
+
+    Finding N3 of Astra's fourth look. A copy of a base known only by its
+    saved history, whose history folder is kept somewhere else, was not among
+    the known bases, and a write straight into that folder named neither
+    guarded folder, so the shortcut let it go before its history was asked
+    about. Its history places are worked out from the disk first, and only a
+    write that reaches one of them goes on to the question that starts git.
+    """
+    if not cwd:
+        return None
+    above = _repository_above(cwd)
+    if above is None or above in known:
+        return None
+    for folder in _history_places(above):
+        if _reaches(named, real_file, folder):
+            return above
+    return None
+
+
 def problem_with(named: str, real_file: str, cwd: Optional[str] = None) -> Optional[str]:
     """Which rule this path falls under, or nothing at all.
 
@@ -533,10 +559,14 @@ def problem_with(named: str, real_file: str, cwd: Optional[str] = None) -> Optio
     # shortcut below, because none of those places has to name a guarded
     # folder (finding R2 of Astra's third look).
     joined = _joined_roots()
-    for root in _known_bases(cwd, joined):
+    known = _known_bases(cwd, joined)
+    for root in known:
         for folder in _history_places(root):
             if _reaches(named, real_file, folder):
                 return CODE_BASE_REPOSITORY
+    own = _into_the_sessions_own_history(named, real_file, cwd, known)
+    if own is not None and _a_base_by_its_history(own):
+        return CODE_BASE_REPOSITORY
 
     if not _names_a_guarded_folder(named, real_file):
         return asking

@@ -1435,5 +1435,93 @@ class TestTheSkillAPersonReads(unittest.TestCase):
         self.assertIn("--staging", finished.stdout.decode("utf-8"))
 
 
+# --- The shared hand edits residual of Astra's fourth verification ----------
+
+THREE_NOTES = support.ICP_TEXT + (
+    "\n## Notes\n\nFirst.\n\n## Notes\n\nSecond.\n\n## Notes\n\nThird.\n"
+)
+ONLY_THE_FIRST = support.ICP_TEXT + "\n## Notes\n\nFirst.\n"
+
+
+def _removing(*occurrences):
+    return [
+        formats.Edit(ICP, "## Notes", "remove", "", occurrence=which)
+        for which in occurrences
+    ]
+
+
+class TestRemovalsCountFromTheDocumentAsItWas(
+    support.PastTheFirstBackupReview, unittest.TestCase
+):
+    """Taking out the second and third of three parts with one heading failed.
+
+    Each part is numbered in the document as it stood before any of them was
+    taken out, and they were applied one after another, so taking out the
+    second made the third the second and the next step found no third.
+    Astra's probe raised a missing heading on exactly this.
+    """
+
+    def a_base_with_three_notes(self, sandbox):
+        root, base_id, remote = base_with_a_shared_copy(sandbox)
+        with open(os.path.join(root, ICP), "w", encoding="utf-8", newline="") as handle:
+            handle.write(THREE_NOTES)
+        support.git(["add", "-A"], cwd=root)
+        support.git(["commit", "-q", "-m", "three notes"], cwd=root)
+        support.git(["push", "-q", "origin", "main"], cwd=root)
+        return root, base_id, remote
+
+    def test_the_shared_copy_takes_out_the_second_and_the_third(self):
+        import test_approve_local
+
+        for order in ((2, 3), (3, 2)):
+            with self.subTest(order=order):
+                with support.Sandbox() as sandbox:
+                    root, base_id, remote = self.a_base_with_three_notes(sandbox)
+                    staged = stage(
+                        root, test_approve_local.custom_staging(
+                            staging_id=STAGING, edits=_removing(*order)
+                        )
+                    )
+
+                    result = compose_proposal.propose(
+                        staged, root, base_id, gh=RecordingGh(), now=TODAY,
+                        session_id="sess-1",
+                    )
+
+                    self.assertEqual(
+                        compose_proposal.STATUS_OPENED, result.status, result.reasons
+                    )
+                    self.assertEqual(ONLY_THE_FIRST, show(remote, BRANCH, ICP))
+
+    def test_this_computer_takes_out_the_second_and_the_third(self):
+        import test_approve_local
+
+        with support.Sandbox() as sandbox:
+            root, base_id = test_approve_local.local_base(sandbox)
+            with open(os.path.join(root, ICP), "w", encoding="utf-8", newline="") as handle:
+                handle.write(THREE_NOTES)
+            support.git(["add", "-A"], cwd=root)
+            support.git(["commit", "-q", "-m", "three notes"], cwd=root)
+            staged = stage(
+                root, test_approve_local.custom_staging(edits=_removing(2, 3))
+            )
+            runner = support.NoRemoteRunner()
+
+            shown, applied = test_approve_local.show_and_approve(
+                root, base_id, staged, runner
+            )
+
+            self.assertEqual("applied", applied.status, applied.reasons)
+            self.assertEqual(ONLY_THE_FIRST, support.read(os.path.join(root, ICP)))
+
+    def test_one_removal_still_takes_out_the_one_it_names(self):
+        text = THREE_NOTES
+        for edit in compose_proposal.in_original_positions(_removing(2)):
+            text = compose_proposal.apply_edit(text, edit)
+        self.assertEqual(
+            support.ICP_TEXT + "\n## Notes\n\nFirst.\n\n## Notes\n\nThird.\n", text
+        )
+
+
 if __name__ == "__main__":
     unittest.main()

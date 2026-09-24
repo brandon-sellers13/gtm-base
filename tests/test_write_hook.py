@@ -1697,5 +1697,183 @@ class TestTheSmallerCheckReadsDotsTheWayTheDiskDoes(unittest.TestCase):
             )
 
 
+# --- N3 and N6 of Astra's fourth verification --------------------------------
+
+
+def _history_moved_out(root, sandbox, name):
+    """Move a repository's history folder elsewhere and leave a file naming it."""
+    import shutil
+
+    external = os.path.join(sandbox.path, "external", name)
+    os.makedirs(os.path.dirname(external), exist_ok=True)
+    shutil.move(os.path.join(root, DOT_GIT), external)
+    support.write(os.path.join(root, DOT_GIT), "gitdir: %s\n" % external)
+    return external
+
+
+def _ordinary_repository(sandbox, name="ordinary"):
+    ordinary = os.path.join(sandbox.path, name)
+    os.makedirs(ordinary)
+    support.git(["init", "-q", "-b", "main"], cwd=ordinary)
+    support.write(os.path.join(ordinary, "README.md"), "hi\n")
+    support.git(["add", "-A"], cwd=ordinary)
+    support.git(["commit", "-q", "-m", "one"], cwd=ordinary)
+    return ordinary
+
+
+class TestAHistoryOnlyBaseWithItsHistoryElsewhere(unittest.TestCase):
+    """N3. A copy known for a base only by its history, kept elsewhere.
+
+    Astra's scenario: an unjoined copy of a base with no name in its own
+    settings and its map renamed, whose history folder is a file pointing
+    at a folder elsewhere. With the session open inside the copy, a write
+    straight to that folder's settings went through without a question
+    asked, because the cheap questions all said no and the shortcut came
+    before the one about its history.
+    """
+
+    def check(self, path, **named):
+        return denied(write_hook.run(request(path, **named)))
+
+    def the_copy(self, sandbox):
+        clone = TestABaseWhoseMapIsGone.a_copy_without_its_map(self, sandbox)
+        return clone, _history_moved_out(clone, sandbox, "repo-meta")
+
+    def test_its_settings_elsewhere_are_refused(self):
+        with support.Sandbox() as sandbox:
+            clone, external = self.the_copy(sandbox)
+
+            self.assertTrue(
+                self.check(os.path.join(external, "config"), cwd=clone)
+            )
+            self.assertTrue(
+                self.check(
+                    os.path.join(external, "hooks", "pre-push"),
+                    cwd=os.path.join(clone, "context"),
+                )
+            )
+
+    def test_an_ordinary_repository_with_its_history_elsewhere_is_left_alone(self):
+        with support.Sandbox() as sandbox:
+            ordinary = _ordinary_repository(sandbox)
+            external = _history_moved_out(ordinary, sandbox, "ordinary-meta")
+
+            self.assertFalse(
+                self.check(os.path.join(external, "config"), cwd=ordinary)
+            )
+
+    def test_an_ordinary_write_inside_the_copy_still_starts_no_program(self):
+        with support.Sandbox() as sandbox:
+            clone, _external = self.the_copy(sandbox)
+            notes = os.path.join(clone, "context", "notes.md")
+            first, second = _no_program_may_start()
+            with first, second:
+                said = write_hook.run(request(notes, cwd=clone))
+
+            self.assertIsNone(said)
+
+
+class TestASubsectionIsNotTheBasesName(unittest.TestCase):
+    """N6. A setting under a subsection was read as the name of a base.
+
+    `[gtmbase "demo"]` holds a setting git calls `gtmbase.demo.id`, not the
+    one a base is known by, and an ordinary repository carrying it had its
+    own assistant settings refused. This is Astra's settings file, and the
+    older dotted way of writing a subsection beside it.
+    """
+
+    def check(self, path, **named):
+        return denied(write_hook.run(request(path, **named)))
+
+    def with_settings(self, sandbox, text, name):
+        ordinary = _ordinary_repository(sandbox, name)
+        with open(os.path.join(ordinary, DOT_GIT, "config"), "a") as handle:
+            handle.write(text)
+        return ordinary
+
+    def test_a_subsection_leaves_an_ordinary_repository_alone(self):
+        with support.Sandbox() as sandbox:
+            for name, text in (
+                ("quoted", '[gtmbase "demo"]\n\tid = ordinary-demo\n'),
+                ("dotted", "[gtmbase.demo]\n\tid = ordinary-demo\n"),
+            ):
+                ordinary = self.with_settings(sandbox, text, name)
+                with self.subTest(text=text):
+                    self.assertFalse(write_hook._settings_name_a_base(ordinary))
+                    self.assertFalse(
+                        self.check(os.path.join(ordinary, DOT_CLAUDE, "settings.json"))
+                    )
+
+    def test_the_section_itself_is_still_the_name(self):
+        with support.Sandbox() as sandbox:
+            for name, text in (
+                ("plain", "[gtmbase]\n\tid = abc\n"),
+                ("capitals", "[GTMBase]\n  ID = abc\n"),
+            ):
+                ordinary = self.with_settings(sandbox, text, name)
+                with self.subTest(text=text):
+                    self.assertTrue(write_hook._settings_name_a_base(ordinary))
+
+
+# --- N7 of Astra's fourth verification ---------------------------------------
+
+
+class TestTheSmallerCheckFollowsALinkBeforeGoingUp(unittest.TestCase):
+    """N7. Two dots after a link went up from where the link sat.
+
+    On a Mac `/etc` is a link to `/private/etc`, so `/etc/../gtm-install`
+    reaches `/private/gtm-install` on the disk. The smaller check took the two
+    dots out first and read `/gtm-install`, and said nothing about a write into
+    the plugin's own folder. A last piece that is a link to a file was not
+    followed at all. Astra's shape, built inside the sandbox.
+    """
+
+    def answer(self, named, root):
+        return TestTheSmallerCheckReadsDotsTheWayTheDiskDoes.answer(self, named, root)
+
+    def links(self, sandbox):
+        root = TestTheWrapperWhenThePythonHalfCannotLoad.a_broken_copy(self, sandbox)
+        installed = os.path.dirname(root)
+        os.makedirs(os.path.join(installed, "deep"))
+        elsewhere = os.path.join(sandbox.path, "elsewhere")
+        os.makedirs(elsewhere)
+        os.symlink(os.path.join(installed, "deep"), os.path.join(elsewhere, "link"))
+        return root, elsewhere
+
+    def test_a_link_then_two_dots_reaches_the_plugin(self):
+        with support.Sandbox() as sandbox:
+            root, elsewhere = self.links(sandbox)
+            named = os.path.join(
+                elsewhere, "link", "..", os.path.basename(root), "lib", "gtmbase",
+                "gate.py",
+            )
+
+            self.assertEqual("deny", self.answer(named, root))
+
+    def test_a_link_to_a_file_in_the_plugin_is_followed(self):
+        with support.Sandbox() as sandbox:
+            root, elsewhere = self.links(sandbox)
+            shortcut = os.path.join(elsewhere, "code.py")
+            os.symlink(os.path.join(root, "lib", "gtmbase", "gate.py"), shortcut)
+
+            self.assertEqual("deny", self.answer(shortcut, root))
+
+    def test_a_link_then_two_dots_to_an_ordinary_place_says_nothing(self):
+        with support.Sandbox() as sandbox:
+            root, elsewhere = self.links(sandbox)
+            ordinary = os.path.join(sandbox.path, "notes.md")
+            support.write(ordinary, "# Notes\n")
+            os.symlink(ordinary, os.path.join(elsewhere, "notes-link.md"))
+
+            for named in (
+                os.path.join(elsewhere, "link", "..", "deep", "notes.md"),
+                os.path.join(elsewhere, "link", "..", "..", "new", "file.md"),
+                os.path.join(elsewhere, "notes-link.md"),
+                os.path.join(elsewhere, "not-there", "..", "notes.md"),
+            ):
+                with self.subTest(named=named):
+                    self.assertEqual("nothing", self.answer(named, root))
+
+
 if __name__ == "__main__":
     unittest.main()

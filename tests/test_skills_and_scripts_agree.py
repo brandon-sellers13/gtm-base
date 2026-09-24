@@ -173,12 +173,101 @@ def prose_flags_in(path):
     return found
 
 
+# What a sentence's flag does to the command it belongs to. NAMED is a flag
+# the command already carries or a flag being named rather than added, so
+# there is nothing new to run. ADD runs the command with it added. A pair
+# ("replace", words) runs the command with those words replaced by it, as well
+# as the command as printed, and ("drop", words) runs it with those words left
+# off.
+NAMED = "named"
+ADD = "add"
+
+# Finding N10 of Astra's fourth look. The nearest command before a sentence is
+# not always the command it is about: three flags in the stale check's update
+# step sit in a section with no command line, so they were dropped before the
+# check that every addition ran, and `--for folder` in the setup skill was
+# added to the command after the hand-out it is about. Each of those is said
+# here, by the document, the words in backticks, and words only the command
+# it belongs to holds. Anything else with no command is a failure.
+ASSIGNED = {
+    ("join/SKILL.md", "--for folder"): (
+        "join.py words-file --run <run identifier> --for company",
+        ("replace", "--for company"),
+    ),
+    ("join/SKILL.md", "--base"): (
+        "join.py link --base",
+        ("drop", "--base <base folder or company name>"),
+    ),
+    ("propose-change/SKILL.md", "--source-file"): (
+        "propose.py --local-edit --source-file",
+        NAMED,
+    ),
+    ("stale-check/SKILL.md", "--move-changes"): ("stale_check.py --move-changes", NAMED),
+    ("stale-check/SKILL.md", "--every-seat-updated"): (
+        "stale_check.py --move-changes",
+        ADD,
+    ),
+    ("stale-check/SKILL.md", "--not-now-move"): ("stale_check.py --not-now-move", NAMED),
+}
+
+
+def _documented_command(path, line_number, wanted):
+    """The documented command holding `wanted`, nearest before the line."""
+    matches = [
+        (number, command)
+        for number, command in commands_in(path)
+        if wanted in command
+    ]
+    before = [pair for pair in matches if pair[0] < line_number]
+    if before:
+        return before[-1]
+    return matches[0] if matches else (None, None)
+
+
+def assigned_prose(path):
+    """Every flag a sentence names, with its command and what it does to it.
+
+    Each comes back as (line, the words in backticks, the line of the command,
+    that command, and the action), and the second list is every flag that is
+    something to run and belongs to no command at all.
+    """
+    relative = os.path.relpath(path, SKILLS_DIR).replace(os.sep, "/")
+    found = []
+    unassigned = []
+    for line_number, span, base_line, base, runnable in prose_flags_in(path):
+        said = ASSIGNED.get((relative, span))
+        if said is not None:
+            wanted, action = said
+            number, command = _documented_command(path, line_number, wanted)
+            if command is None:
+                unassigned.append((line_number, span))
+                continue
+            found.append((line_number, span, number, command, action))
+            continue
+        if base is None:
+            unassigned.append((line_number, span))
+            continue
+        found.append((line_number, span, base_line, base, ADD if runnable else NAMED))
+    return found, unassigned
+
+
+def with_addition(command, action, span):
+    """The command lines one addition makes out of one documented command."""
+    if action == ADD:
+        return [command + " " + span]
+    if isinstance(action, tuple) and action[0] == "replace":
+        return [command.replace(action[1], span), command]
+    if isinstance(action, tuple) and action[0] == "drop":
+        return [" ".join(command.replace(action[1], " ").split())]
+    return []
+
+
 def commands_with_prose(path):
     """Every command line, and every command as a sentence says to extend it."""
     found = list(commands_in(path))
-    for line_number, span, _base_line, base, runnable in prose_flags_in(path):
-        if runnable:
-            found.append((line_number, base + " " + span))
+    for line_number, span, _base_line, base, action in assigned_prose(path)[0]:
+        for variant in with_addition(base, action, span):
+            found.append((line_number, variant))
     return found
 
 
@@ -237,6 +326,42 @@ class TestEverySkillCommandIsOneItsScriptAccepts(unittest.TestCase):
                         )
         self.assertEqual([], problems)
 
+    def test_every_instruction_in_a_sentence_belongs_to_a_command(self):
+        """N10. A flag with no command before it was dropped without a word."""
+        problems = []
+        for path in every_skill_file():
+            for line_number, span in assigned_prose(path)[1]:
+                problems.append(
+                    "%s line %d says to run %s and it belongs to no command"
+                    % (os.path.basename(path), line_number, span)
+                )
+        self.assertEqual([], problems)
+
+    def test_a_flag_for_a_hand_out_belongs_to_the_hand_out(self):
+        """N10. `--for folder` was added to the command after the hand-out."""
+        path = os.path.join(SKILLS_DIR, "join", "SKILL.md")
+        owners = [
+            command
+            for _line, span, _number, command, _action in assigned_prose(path)[0]
+            if span == "--for folder"
+        ]
+        self.assertTrue(owners)
+        for command in owners:
+            self.assertIn("words-file", command)
+
+    def test_the_updates_answers_run_together(self):
+        """N10. The update's two answers are one command, and it is run."""
+        path = os.path.join(SKILLS_DIR, "stale-check", "SKILL.md")
+        variants = [command for _line, command in commands_with_prose(path)]
+        self.assertTrue(
+            any(
+                "--move-changes" in words_of(command)
+                and "--every-seat-updated" in words_of(command)
+                for command in variants
+            ),
+            variants,
+        )
+
     def test_every_flag_named_in_a_sentence_is_one_its_script_knows(self):
         """R9. A flag in a sentence is still a flag somebody will type."""
         problems = []
@@ -244,7 +369,7 @@ class TestEverySkillCommandIsOneItsScriptAccepts(unittest.TestCase):
             scripts = set(
                 _script_of(words_of(command)) for _n, command in commands_in(path)
             )
-            for line_number, span, _base_line, base, _runnable in prose_flags_in(path):
+            for line_number, span, _base_line, base, _action in assigned_prose(path)[0]:
                 first = span.split()[0].split("=")[0]
                 if base is not None:
                     owners = [_script_of(words_of(base))]
@@ -859,12 +984,12 @@ class TestTheSkillsAsTheyAreWritten(unittest.TestCase):
         return member == members[index % len(members)]
 
     def _additions(self, path):
-        """What sentences say to add to each command, keyed by its line."""
+        """What sentences say to do to each command, keyed by its line."""
         found = {}
-        for line_number, span, base_line, _base, runnable in prose_flags_in(path):
-            if not runnable:
+        for line_number, span, base_line, _base, action in assigned_prose(path)[0]:
+            if action == NAMED:
                 continue
-            found.setdefault(base_line, []).append((line_number, span))
+            found.setdefault(base_line, []).append((line_number, span, action))
         return found
 
     def test_every_documented_command_runs_as_it_is_written(self):
@@ -884,7 +1009,7 @@ class TestTheSkillsAsTheyAreWritten(unittest.TestCase):
         wanted = set(
             number
             for extra in self.additions.values()
-            for number, _span in extra
+            for number, _span, _action in extra
         )
         passes = max(
             [2]
@@ -911,7 +1036,7 @@ class TestTheSkillsAsTheyAreWritten(unittest.TestCase):
         never_added = [
             "%d: %s" % (number, span)
             for extra in self.additions.values()
-            for number, span in extra
+            for number, span, _action in extra
             if number not in self.additions_ran
         ]
         self.assertEqual(
@@ -974,58 +1099,63 @@ class TestTheSkillsAsTheyAreWritten(unittest.TestCase):
                     taken = self.times_taken = {}
                 choice = taken.get(line_number, 0) % (len(extra) + 1)
                 taken[line_number] = taken.get(line_number, 0) + 1
+                variants = [command]
                 if choice:
-                    addition_line, addition = extra[choice - 1]
-                    command = command + " " + addition
-                    words = shlex.split(command)
+                    addition_line, addition, action = extra[choice - 1]
+                    variants = with_addition(command, action, addition)
                     self.additions_ran.add(addition_line)
-                self.before(mode, state, command)
-                filled = self.fill(command, state)
-                finished = self.run_line(filled, state["cwd"])
-                printed = finished.stdout.decode("utf-8")
-                if mode in self.REFUSED_ON_PURPOSE:
-                    self.assertNotEqual(
-                        0, finished.returncode, "%d: %s" % (line_number, filled)
-                    )
-                    self.assertNotEqual(b"", finished.stdout)
-                else:
-                    self.assertEqual(
-                        0,
-                        finished.returncode,
-                        "line %d was refused: %s\n%s\n%s"
-                        % (
-                            line_number,
-                            filled,
-                            printed,
-                            finished.stderr.decode("utf-8"),
-                        ),
-                    )
-                self.handed_out(state, filled, printed)
-                self.after(mode, state, printed)
-                if "--local-edit" in shlex.split(filled):
-                    # The hand edit that story needed is put back, because the
-                    # next story in the same skill is a different one and
-                    # starts on a base with nothing half done in it.
-                    support.git(
-                        ["checkout", "HEAD", "--", state["document"]],
-                        cwd=state["base"],
-                    )
-                if any(flag in shlex.split(filled) for flag in CONSUMES_WORDS):
-                    # A words file is read once and taken away, so the next
-                    # step has to ask for one of its own.
-                    state.pop("words", None)
-                    state.pop("words_kind", None)
-                    for flag in shlex.split(filled):
-                        kind = self.KIND_OF_FLAG.get(flag)
-                        if kind is not None:
-                            (state.get("handed") or {}).pop(kind, None)
-                if mode in ("approve", "skip") and state.get("base"):
-                    state["cwd"] = state["base"]
-                    if state["step"] == "icp":
-                        state["step"] = "positioning"
+                for one in variants:
+                    self.run_one(line_number, one, mode, state)
                 ran.append(line_number)
 
         return ran
+
+    def run_one(self, line_number, command, mode, state):
+        """Run one command line of a walk and keep what it leaves behind."""
+        self.before(mode, state, command)
+        filled = self.fill(command, state)
+        finished = self.run_line(filled, state["cwd"])
+        printed = finished.stdout.decode("utf-8")
+        if mode in self.REFUSED_ON_PURPOSE:
+            self.assertNotEqual(
+                0, finished.returncode, "%d: %s" % (line_number, filled)
+            )
+            self.assertNotEqual(b"", finished.stdout)
+        else:
+            self.assertEqual(
+                0,
+                finished.returncode,
+                "line %d was refused: %s\n%s\n%s"
+                % (
+                    line_number,
+                    filled,
+                    printed,
+                    finished.stderr.decode("utf-8"),
+                ),
+            )
+        self.handed_out(state, filled, printed)
+        self.after(mode, state, printed)
+        if "--local-edit" in shlex.split(filled):
+            # The hand edit that story needed is put back, because the
+            # next story in the same skill is a different one and
+            # starts on a base with nothing half done in it.
+            support.git(
+                ["checkout", "HEAD", "--", state["document"]],
+                cwd=state["base"],
+            )
+        if any(flag in shlex.split(filled) for flag in CONSUMES_WORDS):
+            # A words file is read once and taken away, so the next
+            # step has to ask for one of its own.
+            state.pop("words", None)
+            state.pop("words_kind", None)
+            for flag in shlex.split(filled):
+                kind = self.KIND_OF_FLAG.get(flag)
+                if kind is not None:
+                    (state.get("handed") or {}).pop(kind, None)
+        if mode in ("approve", "skip") and state.get("base"):
+            state["cwd"] = state["base"]
+            if state["step"] == "icp":
+                state["step"] = "positioning"
 
 
 

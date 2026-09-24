@@ -655,6 +655,7 @@ def run_survey(options, out):
 
 LIST_REFUSALS = {
     join_flow.CODE_NO_SUCH_FOLDER: NO_SUCH_FOLDER,
+    join_flow.CODE_ADDED_NOT_DIRECTLY_INSIDE: join_flow.ADDED_NOT_DIRECTLY_INSIDE,
     join_flow.CODE_NO_SURVEY: NO_SURVEY_YET,
     join_flow.CODE_NO_FOLDERS_CHOSEN: NO_FOLDERS_CHOSEN,
 }

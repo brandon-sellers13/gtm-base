@@ -564,5 +564,251 @@ class TestTheWordingCanBeRevisedAgain(unittest.TestCase):
             self.assertTrue(os.path.exists(path))
 
 
+# --- N2 of Astra's fourth verification ---------------------------------------
+
+
+class TestARevisionThatLandsWhileApprovalReads(unittest.TestCase):
+    """N2. A revision written during approval went through on the old yes.
+
+    Approval read the prepared change once for the value the yes is checked
+    against and again for what it validates and writes. A wording command
+    landing between the two reads wrote revision two's words under revision
+    one's value, which the owner had seen. Astra's scenario, with the second
+    read made to see the revision exactly where it would land.
+    """
+
+    words = TestTheWordingCanBeRevisedAgain.words
+    first_wording = TestTheWordingCanBeRevisedAgain.first_wording
+
+    def revisions(self, root, staged):
+        """The prepared change at revision one and at revision two, as text."""
+        self.first_wording(root, staged)
+        first = support.read(staged)
+        done = run_script(
+            root,
+            [
+                "--staging", staged, "--wording", "--words",
+                self.words(root, "We sell to companies of fifty and up."),
+            ],
+        )
+        self.assertEqual(0, done.returncode, done.stdout + done.stderr)
+        second = support.read(staged)
+        support.write(staged, first)
+        return first, second
+
+    def test_what_is_written_is_what_was_shown(self):
+        from unittest import mock
+
+        with support.Sandbox() as sandbox:
+            root, base_id = local_base(sandbox)
+            staged = a_first_draft(root, body=NAMES_THE_PART)
+            _first, second = self.revisions(root, staged)
+            runner = support.NoRemoteRunner()
+            shown = approve_local.show(staged, root, base_id, runner=runner, now=TODAY)
+            self.assertEqual(approve_local.STATUS_SHOWN, shown.status, shown.reasons)
+            real_read = approve_local.read_text
+            landed = []
+
+            def the_revision_lands_after_this_read(path, *rest, **named):
+                got = real_read(path, *rest, **named)
+                if not landed and os.path.realpath(path) == os.path.realpath(staged):
+                    landed.append(True)
+                    support.write(staged, second)
+                return got
+
+            with mock.patch.object(
+                approve_local, "read_text", the_revision_lands_after_this_read
+            ):
+                applied = approve_local.approve(
+                    staged, root, base_id, shown.shown_hash, runner=runner, now=NOW
+                )
+
+            self.assertTrue(landed)
+            written = support.read(os.path.join(root, ICP))
+            self.assertNotIn("fifty and up", written)
+            self.assertEqual(
+                approve_local.STATUS_APPLIED, applied.status, applied.reasons
+            )
+            self.assertIn("twenty and up", written)
+
+    def test_an_ordinary_revision_still_shows_and_applies(self):
+        with support.Sandbox() as sandbox:
+            root, base_id = local_base(sandbox)
+            staged = a_first_draft(root, body=NAMES_THE_PART)
+            _first, second = self.revisions(root, staged)
+            support.write(staged, second)
+            runner = support.NoRemoteRunner()
+
+            shown = approve_local.show(staged, root, base_id, runner=runner, now=TODAY)
+            applied = approve_local.approve(
+                staged, root, base_id, shown.shown_hash, runner=runner, now=NOW
+            )
+
+            self.assertEqual(
+                approve_local.STATUS_APPLIED, applied.status, applied.reasons
+            )
+            self.assertIn("fifty and up", support.read(os.path.join(root, ICP)))
+
+
+# --- N9 of Astra's fourth verification ---------------------------------------
+
+
+def _the_script():
+    import importlib.util
+
+    spec = importlib.util.spec_from_file_location("gtm_base_wording_shim", SCRIPT)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def _run_in(root, module, arguments):
+    import contextlib
+    import io
+
+    was = os.getcwd()
+    os.chdir(root)
+    printed = io.StringIO()
+    try:
+        with contextlib.redirect_stdout(printed):
+            code = module.main([str(item) for item in arguments])
+    finally:
+        os.chdir(was)
+    return code, printed.getvalue()
+
+
+class TestAWordsFileIsClaimedOnce(unittest.TestCase):
+    """N9. A words file read without being taken could be used twice.
+
+    The wording command reads the file, does its work, and only then takes
+    the file away by its name. Two commands could read the same file before
+    either finished, and a file the owner wrote again under that name while
+    the first one ran was the file taken away. Astra's two probes, run through
+    the command itself with the second command and the owner's rewrite landing
+    while the first is writing.
+    """
+
+    words = TestTheWordingCanBeRevisedAgain.words
+    first_wording = TestTheWordingCanBeRevisedAgain.first_wording
+
+    def during_the_wording(self, root, staged, path, what_happens):
+        """Run the wording command with something happening while it writes."""
+        from unittest import mock
+
+        module = _the_script()
+        real = compose_proposal.write_the_wording
+        seen = []
+
+        def writing(*arguments, **named):
+            if not seen:
+                seen.append(None)
+                seen[0] = what_happens()
+            return real(*arguments, **named)
+
+        with mock.patch.object(module.compose_proposal, "write_the_wording", writing):
+            code, printed = _run_in(
+                root, module, ["--staging", staged, "--wording", "--words", path]
+            )
+        return code, printed, seen[0] if seen else None
+
+    def test_a_second_command_cannot_use_the_same_words(self):
+        with support.Sandbox() as sandbox:
+            root, _base_id = local_base(sandbox)
+            staged = a_first_draft(root, body=NAMES_THE_PART)
+            self.first_wording(root, staged)
+            path = self.words(root, "We sell to companies of fifty and up.")
+
+            def a_second_command():
+                return _run_in(
+                    root,
+                    _the_script(),
+                    ["--staging", staged, "--wording", "--words", path],
+                )
+
+            code, printed, second = self.during_the_wording(
+                root, staged, path, a_second_command
+            )
+
+            self.assertEqual(0, code, printed)
+            self.assertNotEqual(0, second[0], second[1])
+            self.assertIn(wordsfile.NOT_OURS, second[1])
+
+    def test_words_written_again_meanwhile_are_not_taken_away(self):
+        with support.Sandbox() as sandbox:
+            root, _base_id = local_base(sandbox)
+            staged = a_first_draft(root, body=NAMES_THE_PART)
+            self.first_wording(root, staged)
+            path = self.words(root, "We sell to companies of fifty and up.")
+            newer = "We sell to companies of sixty and up."
+
+            code, printed, _ = self.during_the_wording(
+                root, staged, path, lambda: support.write(path, newer)
+            )
+
+            self.assertEqual(0, code, printed)
+            self.assertTrue(os.path.exists(path))
+            self.assertEqual(newer, support.read(path))
+            self.assertIn(
+                "fifty and up", compose_proposal.load_staging(staged).edits[0].text
+            )
+
+    def test_a_removal_that_fails_is_said_and_the_words_cannot_be_used_again(self):
+        from unittest import mock
+
+        with support.Sandbox() as sandbox:
+            root, _base_id = local_base(sandbox)
+            staged = a_first_draft(root, body=NAMES_THE_PART)
+            self.first_wording(root, staged)
+            path = self.words(root, "We sell to companies of fifty and up.")
+            module = _the_script()
+
+            with mock.patch.object(
+                wordsfile, "_take_away", side_effect=OSError("refused")
+            ):
+                code, printed = _run_in(
+                    root, module, ["--staging", staged, "--wording", "--words", path]
+                )
+
+            self.assertEqual(0, code, printed)
+            self.assertIn(wordsfile.WORDS_STILL_THERE, printed)
+            again, said = _run_in(
+                root, _the_script(), ["--staging", staged, "--wording", "--words", path]
+            )
+            self.assertNotEqual(0, again, said)
+
+    def test_a_refusal_keeps_the_words_under_their_own_name(self):
+        with support.Sandbox() as sandbox:
+            root, _base_id = local_base(sandbox)
+            staged = a_first_draft(root, body=NAMES_THE_PART)
+            self.first_wording(root, staged)
+            path = self.words(root, "update needed: this section should reflect that change")
+            before = support.read(path)
+
+            code, printed = _run_in(
+                root, _the_script(), ["--staging", staged, "--wording", "--words", path]
+            )
+
+            self.assertNotEqual(0, code, printed)
+            self.assertEqual(before, support.read(path))
+            self.assertEqual(
+                [os.path.basename(path)], sorted(os.listdir(os.path.dirname(path)))
+            )
+
+    def test_an_ordinary_wording_takes_its_file_away(self):
+        with support.Sandbox() as sandbox:
+            root, _base_id = local_base(sandbox)
+            staged = a_first_draft(root, body=NAMES_THE_PART)
+            self.first_wording(root, staged)
+            path = self.words(root, "We sell to companies of fifty and up.")
+
+            code, printed = _run_in(
+                root, _the_script(), ["--staging", staged, "--wording", "--words", path]
+            )
+
+            self.assertEqual(0, code, printed)
+            self.assertNotIn(wordsfile.WORDS_STILL_THERE, printed)
+            self.assertEqual([], os.listdir(os.path.dirname(path)))
+
+
 if __name__ == "__main__":
     unittest.main()

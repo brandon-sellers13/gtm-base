@@ -64,3 +64,16 @@
   ships the way the first five did.
 - A test fixture that is missing one of a real base's fixed entries proves
   nothing about a real base. Build it the way a base is really built.
+
+## 2026-09-23, Astra's fourth verification
+- A restore has three answers, not two: the kept value, this run's own value,
+  and something newer that belongs to somebody else. Keep this run's own value
+  before writing, and restore only over the first two.
+- Read a file once. A value hashed from one read and a plan built from a second
+  read is two files with one approval.
+- Consume the thing that was read, not the name it was read from. A rename to a
+  name only this command knows is the claim.
+- When a listing and a selection both decide membership, they have to call the
+  same function. Two rules for "in this folder" is a number that picks something
+  else.
+- Read machine output in its machine form (`-z`), never its display form.

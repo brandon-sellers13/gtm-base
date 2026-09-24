@@ -1150,3 +1150,54 @@ Run over the committed skills, the extended walk flagged documented additions
 in three of the four walked skills: folder names on the command line, a flag
 that puts somebody's words on the command line, a folder narrowed by a name the
 script refuses, and additions attached to the wrong command.
+
+## Release A, Astra's fourth verification (2026-09-23)
+
+Astra's fourth look at bd3bbcf found nine things that block the release and
+one that does not. The list is `docs/reviews/2026-09-23-release-a-verify-4-astra.md`.
+A failing test came first for every one, built from Astra's own scenario,
+with a test of the ordinary path beside it, in the order N8, N5, N6, N4, N2,
+N1, N9, N3, N7, N10, then the composed removals. Nothing is saved or sent.
+
+- [x] N8. The index entry is read with `ls-files -s -z`, so a document named
+      with an accent can be approved.
+- [x] N5. `-t path` is read as an option and its value; opening the settings
+      to edit is refused only in a base.
+- [x] N6. A subsection header is kept whole, so `[gtmbase "demo"]` is not the
+      name of a base.
+- [x] N4. Narrowing by folder number uses the listing's own top-folder rule,
+      `.` included; a folder to add must be the survey folder or directly in
+      it, and anything else is refused with a sentence of its own.
+- [x] N2. Approval parses, checks, hashes, and writes from its one reading.
+- [x] N1. This run's own index value and permissions are kept before it
+      writes; recovery restores each only from the kept or this run's value,
+      keeps newer permissions, and keeps a newer index entry and the note
+      until that entry is saved.
+- [x] N9. A words file is claimed by renaming it before it is read; the
+      wording command gives it back on a refusal and says when it could not
+      be taken away.
+- [x] N3. A write straight into the session's own repository's history
+      folder kept elsewhere is asked about its saved history before the
+      shortcut.
+- [x] N7. The shell fallback follows each existing piece before `..`, and
+      follows a link to a file at the end of a path.
+- [x] N10. The walk fails on a sentence flag that belongs to no command;
+      four are assigned by name and the update's two answers, the folder
+      hand-out, and link without a base are run.
+- [x] Shared hand edits: removals are numbered against the document as it
+      stood, on this computer and on a shared copy.
+- [x] CHANGELOG lines 273, 275, 277, 279, 281, 285, 287 corrected in place;
+      the fourth look added; the still-open list says what is left.
+- [x] Atlas figures 6 and 7 brought up to date, not republished.
+- [ ] Brandon: an outside look at this round's fixes.
+- [ ] Brandon: run docs/walkthroughs/2026-09-release-a-live-check.md.
+
+#### Review
+All ten sat in code the round before added or at an edge its tests did not
+reach: a restore that never asked what was there now, a second read of a file
+the first read had already hashed, a words file consumed by its name rather
+than by what was read, a parser that knew long options but not short ones, a
+folder rule that differed between the listing and the narrowing, git's display
+quoting read as a name, and a check that asked about every known base except
+the one the session was standing in. Found in passing and left open: a hand
+edit to a document with an accent in its name is still refused.

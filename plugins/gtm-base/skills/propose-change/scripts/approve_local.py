@@ -211,12 +211,12 @@ def main(argv=None):
         if not options.words:
             sys.stderr.write(NEEDS_THE_WORDING + "\n")
             return EXIT_ERROR
-        # Read without taking the file away, so a refusal leaves the words
-        # where they were (finding R7 of Astra's third look).
-        words = wordsfile.read_words(
-            options.words, a_session(resolution.base_id), consume=False
-        )
-        if words is None:
+        # Claimed for this command alone, and given back on a refusal, so a
+        # second command cannot use the same words and a refusal leaves them
+        # where they were (findings R7 of Astra's third look and N9 of her
+        # fourth).
+        claim = wordsfile.claim_words(options.words, a_session(resolution.base_id))
+        if claim is None:
             sys.stdout.write(wordsfile.NOT_OURS + "\n")
             return EXIT_REFUSED
         part = None
@@ -228,21 +228,27 @@ def main(argv=None):
                 if int(options.section) < 1:
                     raise IndexError
             except (GtmBaseError, ValueError, IndexError):
+                wordsfile.release_words(claim)
                 sys.stdout.write(NOT_ONE_OF_THE_PARTS + "\n")
                 return EXIT_REFUSED
         try:
             compose_proposal.write_the_wording(
                 resolution.root,
                 staged,
-                words,
+                claim.text,
                 part=part,
                 base_id=resolution.base_id,
             )
         except GtmBaseError as failure:
+            wordsfile.release_words(claim)
             sys.stdout.write(str(failure) + "\n")
             return EXIT_REFUSED
-        wordsfile.consume_words(options.words, a_session(resolution.base_id))
+        except BaseException:
+            wordsfile.release_words(claim)
+            raise
         sys.stdout.write(WORDING_WRITTEN + "\n")
+        if not wordsfile.consume_claim(claim):
+            sys.stdout.write(wordsfile.WORDS_STILL_THERE + "\n")
         return EXIT_DONE
 
     try:

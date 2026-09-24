@@ -3467,5 +3467,176 @@ class TestTheWholeDifferenceIsShownAsItIs(unittest.TestCase):
             )
 
 
+# --- N8 of Astra's fourth verification ---------------------------------------
+
+ACCENTED = "context/strategy/stratégie.md"
+
+
+class TestADocumentWhoseNameIsNotPlainLetters(unittest.TestCase):
+    """N8. A document named with an accent could not be approved.
+
+    Git writes such a name in quotes with escapes when it lists the index, so
+    the entry kept before approval never matched the name it was read for and
+    approval stopped before anything was written. Astra's path exactly.
+    """
+
+    def accented_base(self, sandbox):
+        root, base_id = local_base(sandbox)
+        _saved_as(root, ACCENTED, support.read(os.path.join(root, ICP)))
+        return root, base_id
+
+    def test_the_index_entry_is_read_for_an_accented_name(self):
+        with support.Sandbox() as sandbox:
+            root, _base_id = self.accented_base(sandbox)
+            read, entry = approve_local._index_entry(root, ACCENTED, GitRunner())
+            self.assertTrue(read)
+            self.assertEqual("100644", entry[0])
+
+    def test_a_prepared_change_to_an_accented_document_is_approved(self):
+        with support.Sandbox() as sandbox:
+            root, base_id = self.accented_base(sandbox)
+            staged = stage(
+                root,
+                custom_staging(
+                    edits=[
+                        formats.Edit(
+                            ACCENTED, "## Firmographics", "replace", BIGGER_COMPANIES + "\n"
+                        )
+                    ]
+                ),
+            )
+            runner = NoRemoteRunner()
+
+            shown, applied = show_and_approve(root, base_id, staged, runner)
+
+            self.assertEqual(approve_local.STATUS_SHOWN, shown.status, shown.reasons)
+            self.assertEqual(
+                approve_local.STATUS_APPLIED, applied.status, applied.reasons
+            )
+            self.assertIn(BIGGER_COMPANIES, saved_bytes(root, ACCENTED).decode("utf-8"))
+
+    def test_a_plain_name_is_still_read_the_same_way(self):
+        with support.Sandbox() as sandbox:
+            root, _base_id = local_base(sandbox)
+            read, entry = approve_local._index_entry(root, ICP, GitRunner())
+            self.assertTrue(read)
+            self.assertEqual("100644", entry[0])
+            read, entry = approve_local._index_entry(
+                root, "context/strategy/nothing.md", GitRunner()
+            )
+            self.assertEqual((True, None), (read, entry))
+
+
+# --- N1 of Astra's fourth verification ---------------------------------------
+
+
+class TestRecoveryKeepsWhatCameAfterTheRun(unittest.TestCase):
+    """N1. Recovery put back the index and permissions over newer ones.
+
+    Astra's scenario: approval keeps staged B, working C, and permissions
+    0640, and stops after lining up C. The owner then lines up D and sets
+    0600, leaving the working bytes at C. Recovery saw the working bytes it
+    kept and put back B and 0640 without asking what was there now, and said
+    everything had come back.
+    """
+
+    scenario = TestAFailedApprovalLeavesTheIndexAsItWas.scenario
+
+    def stopped(self, sandbox):
+        root, base_id, full = self.scenario(sandbox)
+        runner = NoRemoteRunner()
+        staged = compose_proposal.stage_local_edit(
+            root, base_id, HAND_EDIT_SOURCE, runner=runner, now=TODAY
+        )
+        lined_up = _staged_bytes(root, ICP)
+        stop_once(root, base_id, staged, runner)
+        self.assertIsNotNone(approve_local._load_journal(base_id))
+        return root, base_id, full, staged, runner, lined_up
+
+    def recover(self, root, base_id, staged, runner):
+        codes = []
+        result = approve_local._finish_unfinished_work(
+            root, base_id, os.path.basename(staged)[: -len(".md")], runner, codes
+        )
+        return result, codes
+
+    def test_a_newer_index_entry_and_newer_permissions_are_kept(self):
+        with support.Sandbox() as sandbox:
+            root, base_id, full, staged, runner, _lined_up = self.stopped(sandbox)
+            working = bytes_of(full)
+            _put_exact(full, working.decode("utf-8") + "\nD, lined up later.\n")
+            support.git(["add", "--", ICP], cwd=root)
+            newer = _staged_bytes(root, ICP)
+            with open(full, "wb") as handle:
+                handle.write(working)
+            os.chmod(full, 0o600)
+
+            result, _codes = self.recover(root, base_id, staged, runner)
+
+            self.assertEqual(newer, _staged_bytes(root, ICP))
+            self.assertEqual(0o600, os.stat(full).st_mode & 0o7777)
+            self.assertEqual(working, bytes_of(full))
+            self.assertIsNotNone(result)
+            self.assertEqual(approve_local.CODE_UNSAVED_EDITS, result.codes[0])
+            self.assertIsNotNone(approve_local._load_journal(base_id))
+
+    def test_newer_permissions_alone_are_kept_and_the_index_comes_back(self):
+        with support.Sandbox() as sandbox:
+            root, base_id, full, staged, runner, lined_up = self.stopped(sandbox)
+            os.chmod(full, 0o600)
+
+            result, codes = self.recover(root, base_id, staged, runner)
+
+            self.assertIsNone(result)
+            self.assertIn(approve_local.CODE_UNDONE, codes)
+            self.assertEqual(lined_up, _staged_bytes(root, ICP))
+            self.assertEqual(0o600, os.stat(full).st_mode & 0o7777)
+
+    def test_a_newer_entry_that_was_then_saved_no_longer_holds_anything_up(self):
+        with support.Sandbox() as sandbox:
+            root, base_id, full, staged, runner, _lined_up = self.stopped(sandbox)
+            _put_exact(full, bytes_of(full).decode("utf-8") + "\nD, saved.\n")
+            support.git(["add", "--", ICP], cwd=root)
+            support.git(["commit", "-q", "-m", "their own"], cwd=root)
+
+            result, codes = self.recover(root, base_id, staged, runner)
+
+            self.assertIsNone(result, result and result.reasons)
+            self.assertIn(approve_local.CODE_UNDONE, codes)
+
+    def test_with_nothing_newer_the_originals_come_back_as_before(self):
+        with support.Sandbox() as sandbox:
+            root, base_id, full, staged, runner, lined_up = self.stopped(sandbox)
+            working = bytes_of(full)
+
+            result, codes = self.recover(root, base_id, staged, runner)
+
+            self.assertIsNone(result)
+            self.assertIn(approve_local.CODE_UNDONE, codes)
+            self.assertEqual(lined_up, _staged_bytes(root, ICP))
+            self.assertEqual(0o640, os.stat(full).st_mode & 0o7777)
+            self.assertEqual(working, bytes_of(full))
+            self.assertIsNone(approve_local._load_journal(base_id))
+
+    def test_a_written_file_whose_permissions_this_run_set_gets_its_own_back(self):
+        # Not a hand edit: this run writes the document, with permissions of
+        # its own, and those are this run's value to put back.
+        with support.Sandbox() as sandbox:
+            root, base_id = local_base(sandbox)
+            full = os.path.join(root, ICP)
+            os.chmod(full, 0o600)
+            theirs = bytes_of(full)
+            staged = stage(root)
+            runner = NoRemoteRunner()
+            stop_once(root, base_id, staged, runner)
+            self.assertEqual(0o644, os.stat(full).st_mode & 0o7777)
+
+            result, codes = self.recover(root, base_id, staged, runner)
+
+            self.assertIsNone(result, result and result.reasons)
+            self.assertEqual(theirs, bytes_of(full))
+            self.assertEqual(0o600, os.stat(full).st_mode & 0o7777)
+
+
 if __name__ == "__main__":
     unittest.main()

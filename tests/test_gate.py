@@ -1497,5 +1497,65 @@ class TestTheConfigCommandIsReadForWhatItReallyChanges(unittest.TestCase):
                     self.assertIsNone(check_now(command, root))
 
 
+# --- N5 of Astra's fourth verification ---------------------------------------
+
+
+class TestTheConfigCommandWithATypeAndAnEditor(unittest.TestCase):
+    """N5. A type option hid the name, and the editor was refused everywhere.
+
+    `-t path` was read as an option with nothing after it, so `path` was taken
+    for the setting and the real one went unread. And opening the settings to
+    edit was refused in a repository that is not a base, where it can take
+    nothing away from one. These are Astra's commands.
+    """
+
+    def test_a_type_option_does_not_hide_the_setting(self):
+        with Sandbox() as box:
+            root, _base_id = box.base()
+            other = plain_repository(box)
+            for command in (
+                "git config --local -t path gtmbase.id anything",
+                "git config -tpath gtmbase.id anything",
+                "git config --type path gtmbase.id anything",
+                "git config --type=path gtmbase.id anything",
+                "git config -t bool --unset gtmbase.id",
+            ):
+                for where in (root, other):
+                    with self.subTest(command=command, where=where):
+                        self.assertTrue(check_now(command, where))
+
+    def test_a_type_option_on_an_ordinary_setting_is_allowed(self):
+        with Sandbox() as box:
+            root, _base_id = box.base()
+            for command in (
+                "git config --local -t bool core.bare false",
+                "git config -t path --get gtmbase.id",
+                "git config --type=int core.bigfilethreshold 512",
+            ):
+                with self.subTest(command=command):
+                    self.assertIsNone(check_now(command, root))
+
+    def test_the_editor_is_allowed_in_an_ordinary_repository(self):
+        with Sandbox() as box:
+            other = plain_repository(box)
+            for command in ("git config --edit", "git config -e", "git config edit"):
+                with self.subTest(command=command):
+                    self.assertIsNone(check_now(command, other))
+
+    def test_the_editor_is_still_refused_in_a_base(self):
+        with Sandbox() as box:
+            root, _base_id = box.base()
+            other = plain_repository(box)
+            for command in (
+                "git config --edit",
+                "git config -e",
+                "git config edit",
+                "git -C %s config --edit" % root,
+            ):
+                with self.subTest(command=command):
+                    where = other if command.startswith("git -C") else root
+                    self.assertTrue(check_now(command, where))
+
+
 if __name__ == "__main__":
     unittest.main()

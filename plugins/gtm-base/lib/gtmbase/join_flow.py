@@ -93,6 +93,15 @@ CODE_LISTING_CHANGED = "listing-changed"
 CODE_NARROW_FIRST = "narrow-first"
 # A folder was named that the list does not hold.
 CODE_NO_SUCH_FOLDER = "no-such-folder"
+# A folder named to add is not directly inside the folder being looked
+# through, so no folder of the listing is the one they meant (finding N4 of
+# Astra's fourth look).
+CODE_ADDED_NOT_DIRECTLY_INSIDE = "added-folder-not-directly-inside"
+ADDED_NOT_DIRECTLY_INSIDE = (
+    "The folder named to add is not directly inside the folder being looked "
+    "through, so nothing was shown. Ask for a folder that sits directly "
+    "inside it instead."
+)
 # A list was asked for from a finding step that has not been run for this run.
 CODE_NO_SURVEY = "no-survey"
 # Every place the finding step proposed was dropped and none was added, so
@@ -641,6 +650,29 @@ def load_survey(run_id: str):
     }
 
 
+def _added_place(root: str, name: str) -> Optional[str]:
+    """The place a folder named to add is, or None when it is not one.
+
+    Finding N4 of Astra's fourth look. The name was cut down to its last part,
+    so a folder outside the one being looked through chose the folder of the
+    same name inside it. It is read against the folder being looked through
+    now, and it has to be that folder or one directly inside it, because the
+    listing counts files by the folder at the top they sit in.
+    """
+    if not root:
+        return None
+    top = os.path.realpath(root)
+    candidate = os.path.expanduser(name)
+    if not os.path.isabs(candidate):
+        candidate = os.path.join(top, candidate)
+    real = os.path.realpath(candidate)
+    if real == top:
+        return "."
+    if os.path.dirname(real) != top:
+        return None
+    return os.path.basename(real)
+
+
 def chosen_places(run_id: str, added=None, dropped=None):
     """The places to list: what was proposed, plus adds, less drops.
 
@@ -663,7 +695,12 @@ def chosen_places(run_id: str, added=None, dropped=None):
             )
         chosen.remove(wanted)
     for name in [str(item).strip() for item in (added or []) if str(item).strip()]:
-        wanted = name.strip("/").replace(os.sep, "/").split("/")[-1] or name
+        wanted = _added_place(found["root"], name)
+        if wanted is None:
+            raise ConsentError(
+                "that folder is not one at the top of the folder being looked through",
+                code=CODE_ADDED_NOT_DIRECTLY_INSIDE,
+            )
         if wanted not in chosen:
             chosen.append(wanted)
     if not chosen:
@@ -920,16 +957,22 @@ CODE_NOT_CONSENTED = "not-consented"
 
 
 def _in_folder(path: str, root: str, wanted: str) -> bool:
-    """Whether one file sits inside a named folder of the list that was agreed."""
+    """Whether one file sits inside a named folder of the list that was agreed.
+
+    By the listing's own rule, the folder at the top a file sits in, with a
+    full stop for the files lying loose at the top. Finding N4 of Astra's
+    fourth look: a folder name matched anywhere in a file's path, so the
+    folder `b` took in a file shown under `a`, and `.` matched nothing.
+    """
     if not root:
-        return wanted in path.replace(os.sep, "/").split("/")[:-1]
+        return False
     try:
         relative = os.path.relpath(path, root)
     except ValueError:
         return False
-    if relative.startswith(".."):
+    if relative == ".." or relative.startswith(".." + os.sep):
         return False
-    return wanted in relative.replace(os.sep, "/").split("/")[:-1]
+    return sources_module.top_folder(path, root) == wanted
 
 
 def narrow(labelled, root: str = "", only=None, only_folder=None, only_index=None):

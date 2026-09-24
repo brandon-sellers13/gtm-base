@@ -240,6 +240,16 @@ def load_staging(path: str) -> "formats.ProposalStaging":
             "GTM Base could not read the staged proposal at %s." % path,
             code=CODE_UNREADABLE,
         )
+    return staging_from_text(text)
+
+
+def staging_from_text(text: str) -> "formats.ProposalStaging":
+    """One staged proposal from text already read, held to the same limits.
+
+    Approval parses, checks, hashes, and writes from the one reading it took
+    (finding N2 of Astra's fourth look), so it needs this without a second
+    read of the file.
+    """
     if len(text.encode("utf-8", "replace")) > constants.MAX_ARTIFACT_BYTES:
         raise ValidationError(
             "That staged proposal is larger than GTM Base will read.",
@@ -488,6 +498,32 @@ def apply_edit(text: str, edit) -> str:
     else:
         result = lines + [""] + [heading] + block
     return "\n".join(result).rstrip("\n") + "\n"
+
+
+def in_original_positions(edits) -> list:
+    """The edits, each numbered in the document as it was before any of them.
+
+    A part is named by its heading and which of the parts with that heading
+    it is, counted in the document as it stood. Edits are applied one after
+    another, and taking out an earlier part with the same heading makes every
+    later one a number smaller, so taking out the second and the third of
+    three found no third (the shared hand edits Astra's fourth look named).
+    Each later edit is moved down by the parts before it already taken out.
+    """
+    taken: Dict[Tuple[str, str], List[int]] = {}
+    placed = []
+    for one in edits:
+        key = (str(one.path), (one.heading or "").strip())
+        which = max(1, int(getattr(one, "occurrence", 1) or 1))
+        earlier = sum(1 for gone in taken.get(key, []) if gone < which)
+        if earlier:
+            one = formats.Edit(
+                one.path, one.heading, one.op, one.text, occurrence=which - earlier
+            )
+        if one.op == "remove":
+            taken.setdefault(key, []).append(which)
+        placed.append(one)
+    return placed
 
 
 # --- The pieces the proposal carries -----------------------------------------
@@ -1173,7 +1209,7 @@ def _prepare(
 ) -> List[str]:
     """Apply the edits, write the context change and the record, and save it."""
     ordered = edited_paths(staging)
-    for edit in staging.edits:
+    for edit in in_original_positions(staging.edits):
         # Checked here and not only against the clone, because the same name
         # can be an ordinary file in one copy of a base and a link pointing
         # somewhere else entirely in another.

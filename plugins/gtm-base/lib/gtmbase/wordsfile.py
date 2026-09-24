@@ -67,6 +67,10 @@ KINDS = (
 MAX_WORDS_BYTES = 64 * 1024
 
 _NAME_RE = re.compile(r"^[a-z-]{1,32}-[0-9a-f]{16}\.txt$")
+# A words file while one command holds it. The name no longer matches the
+# one above, so no other command can read it (finding N9 of Astra's fourth
+# look).
+_CLAIMED_RE = re.compile(r"^[a-z-]{1,32}-[0-9a-f]{16}\.txt\.claimed-[0-9a-f]{8}$")
 
 CODE_NOT_OURS = "not-a-words-file-we-handed-out"
 CODE_NOT_A_DRAFT = "not-a-draft-file-we-named"
@@ -87,6 +91,11 @@ NOT_A_DRAFT = (
 NO_PLACE_FOR_WORDS = (
     "GTM Base could not make a folder that only you can open, so it has "
     "nowhere safe to put somebody's words and did nothing at all."
+)
+WORDS_STILL_THERE = (
+    "The wording was written, but GTM Base could not take away the file that "
+    "held their words, so a copy of them is still on this computer. It will "
+    "not be read again."
 )
 
 
@@ -230,32 +239,97 @@ def _handed_out(path: str, key: str) -> Optional[str]:
     return real
 
 
-def read_words(path: str, key: str, consume: bool = True) -> Optional[str]:
-    """What somebody typed, read out of a file this code handed out.
+class Claim(object):
+    """One words file held by one command, and the words it held."""
 
-    Nothing comes back for a path this code did not hand out, which is finding
-    V6: every other path on this computer used to be readable this way. The
-    file is taken away once it has been read, because a person's own words have
-    no reason to stay on the disk after they are written down. A caller whose
-    work can still be refused reads without taking it away, and takes it away
-    with `consume_words` only once the work is done (finding R7 of Astra's
-    third look: words read and thrown away before a refusal were words the
-    person had to type again).
+    __slots__ = ("original", "held", "identity", "text")
+
+    def __init__(self, original: str, held: str, identity, text: str):
+        self.original = original
+        self.held = held
+        self.identity = identity
+        self.text = text
+
+
+def claim_words(path: str, key: str) -> Optional[Claim]:
+    """Take one words file for this command alone, and read it.
+
+    Finding N9 of Astra's fourth look. A file read and taken away later by
+    its name could be read by a second command in between, and a file the
+    owner wrote again under that name meanwhile was the one taken away. The
+    file is moved to a name only this command knows before it is read, so a
+    second command finds nothing, and what is taken away afterwards is that
+    same file and nothing written since.
     """
     real = _handed_out(path, key)
     if real is None:
         return None
-    text = read_text(real)
-    if consume:
-        remove(real)
-    return None if text is None else text.strip()
+    held = "%s.claimed-%s" % (real, secrets.token_hex(4))
+    try:
+        os.rename(real, held)
+        info = os.lstat(held)
+    except OSError:
+        return None
+    text = read_text(held)
+    claim = Claim(real, held, (info.st_dev, info.st_ino), "")
+    if text is None:
+        release_words(claim)
+        return None
+    claim.text = text.strip()
+    return claim
 
 
-def consume_words(path: str, key: str) -> None:
-    """Take away a words file this code handed out, once its words are used."""
-    real = _handed_out(path, key)
-    if real is not None:
-        remove(real)
+def release_words(claim: Claim) -> None:
+    """Put a claimed file back under its own name, for the owner to try again.
+
+    Anything written under that name since is left exactly as it is, and the
+    claimed copy stays where it is rather than going over it.
+    """
+    try:
+        os.link(claim.held, claim.original)
+    except OSError:
+        return
+    try:
+        os.unlink(claim.held)
+    except OSError:
+        pass
+
+
+def _take_away(path: str) -> None:
+    os.unlink(path)
+
+
+def consume_claim(claim: Claim) -> bool:
+    """Take away the claimed file itself. True only when it is gone."""
+    try:
+        info = os.lstat(claim.held)
+    except OSError:
+        return not os.path.lexists(claim.held)
+    if (info.st_dev, info.st_ino) != claim.identity:
+        return False
+    try:
+        _take_away(claim.held)
+    except OSError:
+        return False
+    return not os.path.lexists(claim.held)
+
+
+def read_words(path: str, key: str) -> Optional[str]:
+    """What somebody typed, read out of a file this code handed out.
+
+    Nothing comes back for a path this code did not hand out, which is finding
+    V6: every other path on this computer used to be readable this way. The
+    file is claimed and taken away as it is read, because a person's own words
+    have no reason to stay on the disk after they are written down. A caller
+    whose work can still be refused claims the file with `claim_words` instead
+    and takes it away only once the work is done (finding R7 of Astra's third
+    look, and N9 of her fourth).
+    """
+    claim = claim_words(path, key)
+    if claim is None:
+        return None
+    consume_claim(claim)
+    return claim.text
 
 
 def clear_words(key: str) -> None:
@@ -269,7 +343,7 @@ def clear_words(key: str) -> None:
     except OSError:
         return
     for name in names:
-        if _NAME_RE.match(name):
+        if _NAME_RE.match(name) or _CLAIMED_RE.match(name):
             remove(os.path.join(folder, name))
 
 

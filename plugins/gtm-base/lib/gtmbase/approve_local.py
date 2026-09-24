@@ -552,7 +552,9 @@ def _walk_the_edits(base_root: str, staging) -> "_Walk":
     texts: Dict[str, str] = {}
     steps: List[Tuple[str, str, str, str]] = []
     kinds: List[Tuple[Optional[str], int, int]] = []
-    for edit in staging.edits:
+    for said, edit in zip(
+        staging.edits, compose_proposal.in_original_positions(staging.edits)
+    ):
         relative = paths.canonical_context_path(base_root, edit.path)
         if relative not in texts:
             text = read_text(os.path.join(base_root, relative.replace("/", os.sep)))
@@ -577,7 +579,9 @@ def _walk_the_edits(base_root: str, staging) -> "_Walk":
         kinds.append(
             (
                 edit.op,
-                which,
+                # Which part it was in the document as it stood, which is the
+                # one the person reads about.
+                getattr(said, "occurrence", 1),
                 max(
                     _how_many(texts[relative], edit.heading),
                     _how_many(after_text, edit.heading),
@@ -985,8 +989,12 @@ def _read_and_check(base_root, base_id, staging_path, git, today):
     staged_text = read_text(resolved)
     if staged_text is None:
         return _refused(STATUS_REFUSED, CODE_UNREADABLE, UNREADABLE, staging_id), None
+    # The one reading is parsed, checked, hashed, and written from. Finding N2
+    # of Astra's fourth look: the file was read again here, so a revision that
+    # landed between the two reads was written under the value of the one
+    # before it, which the owner had seen.
     try:
-        staging = compose_proposal.load_staging(resolved)
+        staging = compose_proposal.staging_from_text(staged_text)
     except GtmBaseError as failure:
         return (
             _refused(
@@ -1375,10 +1383,10 @@ def _originals_dir(base_id: str) -> str:
 
 def _staged_paths(base_root: str, git: GitRunner):
     """Every path whose change is already lined up to be saved."""
-    found = git.run(["diff", "--name-only", "--cached"], cwd=base_root)
+    found = git.run(["diff", "--name-only", "--cached", "-z"], cwd=base_root)
     if not found.ok:
         return set()
-    return set(line.strip() for line in found.stdout.split("\n") if line.strip())
+    return set(name for name in found.stdout.split("\0") if name)
 
 
 # What a line of the index says about one path, as the note keeps it. Both go
@@ -1397,10 +1405,13 @@ def _index_entry(base_root: str, relative: str, git: GitRunner):
     matched it put nothing back at all. This is the exact entry, so exactly
     that can be put back and checked.
     """
-    found = git.run(["ls-files", "-s", "--", relative], cwd=base_root)
+    # Records end in a NUL and names come out as they are (finding N8 of
+    # Astra's fourth look): without it git quotes and escapes a name with an
+    # accent in it, which then never matched the name it was read for.
+    found = git.run(["ls-files", "-s", "-z", "--", relative], cwd=base_root)
     if not found.ok:
         return False, None
-    lines = [line for line in found.stdout.split("\n") if line.strip()]
+    lines = [line for line in found.stdout.split("\0") if line]
     if not lines:
         return True, None
     if len(lines) != 1:
@@ -1420,7 +1431,30 @@ def _index_entry(base_root: str, relative: str, git: GitRunner):
     return True, (parts[0], parts[1])
 
 
-def _save_originals(base_id: str, base_root: str, ordered: List[str], git: GitRunner):
+def _this_runs_blob(
+    base_root: str, relative: str, text: Optional[str], git: GitRunner
+) -> Optional[str]:
+    """The stored version this run will line up for a path, worked out first.
+
+    Finding N1 of Astra's fourth look. Recovery has to tell the index entry
+    this run lined up from one the person lined up afterwards, so the value
+    this run will put there is kept before anything is written. `text` is
+    None for a file this run saves as it stands, whose bytes are already on
+    the disk.
+    """
+    if text is None:
+        found = git.run(["hash-object", "--", relative], cwd=base_root)
+    else:
+        found = git.run(
+            ["hash-object", "--path=" + relative, "--stdin"], cwd=base_root, input=text
+        )
+    value = found.out() if found.ok else ""
+    return value if _OBJECT_RE.match(value) else None
+
+
+def _save_originals(
+    base_id: str, base_root: str, ordered: List[str], git: GitRunner, plan=None
+):
     """Keep the exact bytes of every file this run is about to write over.
 
     Finding V4 of the 2026-09-20 verification round. Putting a file back the
@@ -1465,20 +1499,42 @@ def _save_originals(base_id: str, base_root: str, ordered: List[str], git: GitRu
                 COULD_NOT_KEEP % names.document_name(relative),
                 code=CODE_COULD_NOT_KEEP,
             )
+        # And what this run will leave there itself, so that recovery puts
+        # back only what is still this run's and keeps anything newer
+        # (finding N1 of Astra's fourth look). A file saved as it stands
+        # keeps its permissions; a file this run writes gets the ones it
+        # writes with.
+        ours_blob = None
+        ours_mode = file_mode
+        if plan is not None:
+            texts = dict((path, text) for path, text, _in_head in plan.files)
+            leave = relative in plan.leave_alone or relative not in texts
+            ours_blob = _this_runs_blob(
+                base_root, relative, None if leave else texts[relative], git
+            )
+            if ours_blob is None:
+                raise ValidationError(
+                    COULD_NOT_KEEP % names.document_name(relative),
+                    code=CODE_COULD_NOT_KEEP,
+                )
+            if not leave:
+                ours_mode = _WRITTEN_MODE
         name = "%d.bytes" % index
         atomic_write_bytes(os.path.join(folder, name), data, mode=0o600)
-        saved.append(
-            {
-                "path": relative,
-                "hash": ids.bytes_hash(data),
-                "copy": name,
-                "staged": relative in staged_now,
-                "index": (
-                    {"mode": entry[0], "blob": entry[1]} if entry is not None else None
-                ),
-                "file_mode": file_mode,
-            }
-        )
+        record = {
+            "path": relative,
+            "hash": ids.bytes_hash(data),
+            "copy": name,
+            "staged": relative in staged_now,
+            "index": (
+                {"mode": entry[0], "blob": entry[1]} if entry is not None else None
+            ),
+            "file_mode": file_mode,
+        }
+        if ours_blob is not None:
+            record["ours_blob"] = ours_blob
+            record["ours_file_mode"] = ours_mode
+        saved.append(record)
     return saved
 
 
@@ -1492,40 +1548,106 @@ def _kept_copies(base_id: str, journal: Optional[dict]) -> Dict[str, dict]:
     return found
 
 
-def _kept_mode(kept: dict) -> Optional[int]:
+def _kept_mode(kept: dict, key: str = "file_mode") -> Optional[int]:
     """The permissions the note kept for a file, when it kept any."""
-    value = kept.get("file_mode")
+    value = kept.get(key)
     if isinstance(value, int) and not isinstance(value, bool) and 0 <= value <= 0o7777:
         return value
     return None
 
 
-def _put_the_rest_back(base_root: str, kept: dict, git: GitRunner) -> bool:
+# What putting back the index and the permissions came to.
+_BACK = "back"
+_STUCK = "stuck"
+_NEWER = "newer"
+
+
+def _mode_to_end_with(full: str, kept: dict) -> Optional[int]:
+    """The permissions a file should end with, or None to leave them be.
+
+    The kept ones while the file still has the kept ones or this run's own;
+    anything else was set after this run, by somebody else, and it is left
+    exactly as it is (finding N1 of Astra's fourth look). A note that never
+    said what this run's own were is only trusted to put back its own kept
+    ones over the ones this run writes with.
+    """
+    mode = _kept_mode(kept)
+    if mode is None:
+        return None
+    try:
+        now = os.stat(full).st_mode & 0o7777
+    except OSError:
+        return mode
+    ours = _kept_mode(kept, "ours_file_mode")
+    if ours is None and "ours_blob" not in kept:
+        ours = _WRITTEN_MODE
+    if now == mode or now == ours:
+        return mode
+    return None
+
+
+def _head_entry(base_root: str, relative: str, git: GitRunner):
+    """What the last save holds for one path, as (read, (mode, object) or None)."""
+    found = git.run(["ls-tree", "-z", "HEAD", "--", relative], cwd=base_root)
+    if not found.ok:
+        return False, None
+    records = [record for record in found.stdout.split("\0") if record]
+    if not records:
+        return True, None
+    head, _tab, name = records[0].partition("\t")
+    parts = head.split()
+    if len(records) != 1 or len(parts) != 3 or name != relative:
+        return False, None
+    return True, (parts[0], parts[2])
+
+
+def _put_the_rest_back(base_root: str, kept: dict, git: GitRunner) -> str:
     """Put back what the index held and who may read the file, and check both.
 
     Finding R1 of Astra's third look. This used to run only when the bytes had
     to be written, it forced one set of permissions, and it ignored whether
     git had done what it was asked. Now it runs whether or not the bytes
-    already match, and it comes back true only when the index and the
-    permissions afterwards are exactly what was kept.
+    already match, and it checks that the index and the permissions
+    afterwards are exactly what was kept.
+
+    Finding N1 of Astra's fourth look. Each is put back only while it still
+    holds the kept value or this run's own. Permissions set since are left as
+    they are. An index entry lined up since is left as it is too, and it
+    comes back as newer, so the note stays, until that entry has been saved.
     """
     relative = str(kept.get("path"))
     full = os.path.join(base_root, relative.replace("/", os.sep))
-    mode = _kept_mode(kept)
+    mode = _mode_to_end_with(full, kept)
     if mode is not None:
         try:
             os.chmod(full, mode)
             if os.stat(full).st_mode & 0o7777 != mode:
-                return False
+                return _STUCK
         except OSError:
-            return False
+            return _STUCK
     if "index" not in kept:
         # A note written before the index was kept says only whether the
         # path was lined up, which is the best that can be put back for it.
         if kept.get("staged"):
-            return git.run(["add", "--", relative], cwd=base_root).ok
-        return git.run(["reset", "-q", "HEAD", "--", relative], cwd=base_root).ok
+            done = git.run(["add", "--", relative], cwd=base_root).ok
+        else:
+            done = git.run(["reset", "-q", "HEAD", "--", relative], cwd=base_root).ok
+        return _BACK if done else _STUCK
     entry = kept.get("index")
+    original = (
+        None if entry is None else (str(entry.get("mode")), str(entry.get("blob")))
+    )
+    read, now = _index_entry(base_root, relative, git)
+    if not read:
+        return _STUCK
+    if now == original:
+        return _BACK
+    ours = str(kept.get("ours_blob") or "")
+    if now is None or not ours or now[1] != ours:
+        # Lined up after this run by somebody else. It is theirs and it stays;
+        # once they have saved it there is nothing left of this run's in it.
+        saved, held = _head_entry(base_root, relative, git)
+        return _BACK if saved and held == now else _NEWER
     if entry is None:
         result = git.run(
             ["rm", "-q", "--cached", "--ignore-unmatch", "--", relative],
@@ -1544,12 +1666,12 @@ def _put_the_rest_back(base_root: str, kept: dict, git: GitRunner) -> bool:
             cwd=base_root,
         )
     if not result.ok:
-        return False
+        return _STUCK
     read, now = _index_entry(base_root, relative, git)
-    return read and now == wanted
+    return _BACK if read and now == wanted else _STUCK
 
 
-def _put_their_own_back(base_root: str, base_id: str, kept: dict, git: GitRunner) -> bool:
+def _put_their_own_back(base_root: str, base_id: str, kept: dict, git: GitRunner) -> str:
     """Write one file back to the bytes it held before this run, and check it.
 
     It comes back true only when the bytes on the disk afterwards are the bytes
@@ -1563,18 +1685,24 @@ def _put_their_own_back(base_root: str, base_id: str, kept: dict, git: GitRunner
         os.path.join(_originals_dir(base_id), str(kept.get("copy") or ""))
     )
     if data is None or ids.bytes_hash(data) != wanted:
-        return False
+        return _STUCK
     full = os.path.join(base_root, relative.replace("/", os.sep))
-    mode = _kept_mode(kept)
+    mode = _mode_to_end_with(full, kept)
+    if mode is None:
+        # Permissions set since this run are kept on the bytes put back.
+        try:
+            mode = os.stat(full).st_mode & 0o7777
+        except OSError:
+            mode = _kept_mode(kept)
     try:
         atomic_write_bytes(
             full, data, mode=mode if mode is not None else 0o644, inside=base_root
         )
     except (OSError, GtmBaseError):
-        return False
+        return _STUCK
     back = read_bytes(full)
     if back is None or ids.bytes_hash(back) != wanted:
-        return False
+        return _STUCK
     return _put_the_rest_back(base_root, kept, git)
 
 
@@ -1661,6 +1789,10 @@ def _checked_journal(base_id: str, base_root: str):
             ):
                 return None, "the note names an index entry we never write"
         if "file_mode" in item and _kept_mode(item) is None:
+            return None, "the note names permissions we never write"
+        if "ours_blob" in item and not _OBJECT_RE.match(str(item.get("ours_blob"))):
+            return None, "the note names an index entry we never write"
+        if "ours_file_mode" in item and _kept_mode(item, "ours_file_mode") is None:
             return None, "the note names permissions we never write"
     return payload, None
 
@@ -1771,13 +1903,19 @@ def _undo_own_work(
             # file. Finding R1 of Astra's third look: this is where a version
             # lined up by hand was lost, because nothing past the bytes was
             # put back. Both are put back and checked here as well.
-            if not _put_the_rest_back(base_root, mine, git):
+            came_to = _put_the_rest_back(base_root, mine, git)
+            if came_to == _STUCK:
                 stuck.append(relative)
+            elif came_to == _NEWER:
+                theirs.append(relative)
             continue
         ours = ids.content_hash(current) == str(item.get("hash"))
         if ours and mine is not None:
-            if not _put_their_own_back(base_root, base_id, mine, git):
+            came_to = _put_their_own_back(base_root, base_id, mine, git)
+            if came_to == _STUCK:
                 stuck.append(relative)
+            elif came_to == _NEWER:
+                theirs.append(relative)
             continue
         if not ours:
             if item.get("in_head"):
@@ -1863,6 +2001,10 @@ def _finish_unfinished_work(
 # --- Writing it --------------------------------------------------------------
 
 
+# The permissions this run writes a document with.
+_WRITTEN_MODE = 0o644
+
+
 def _write_the_files(base_root: str, plan: "_Plan") -> List[str]:
     """Put down every file this change rewrites, and the records beside them."""
     written = []
@@ -1871,7 +2013,7 @@ def _write_the_files(base_root: str, plan: "_Plan") -> List[str]:
             atomic_write_text(
                 os.path.join(base_root, relative.replace("/", os.sep)),
                 text,
-                mode=0o644,
+                mode=_WRITTEN_MODE,
                 inside=base_root,
             )
         written.append(relative)
@@ -2044,7 +2186,7 @@ def approve(
     # Their own bytes are kept before one byte of this run's work is written,
     # so there is never a moment where the only copy of a hand edit is the one
     # this run is about to write over.
-    originals = _save_originals(base_id, base_root, reading.walk.ordered, git)
+    originals = _save_originals(base_id, base_root, reading.walk.ordered, git, plan)
     _write_journal(base_id, base_root, plan, head, originals)
     kept = {str(item["path"]): item for item in originals}
 

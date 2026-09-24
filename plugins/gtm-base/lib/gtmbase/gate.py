@@ -397,7 +397,9 @@ class PushSpec(object):
 class Classification(object):
     """What one command line turned out to be."""
 
-    __slots__ = ("deny_reason", "pushes", "gh_writes", "has_gh", "has_git")
+    __slots__ = (
+        "deny_reason", "pushes", "gh_writes", "has_gh", "has_git", "config_edits"
+    )
 
     def __init__(self):
         self.deny_reason: Optional[str] = None
@@ -405,6 +407,11 @@ class Classification(object):
         self.gh_writes: List[List[str]] = []
         self.has_gh = False
         self.has_git = False
+        # The folders a `git config --edit` would open the settings of. Only a
+        # base's settings are protected, and telling a base from an ordinary
+        # repository takes a look at the folder, so it is asked afterwards
+        # (finding N5 of Astra's fourth look).
+        self.config_edits: List[Optional[str]] = []
 
     @property
     def needs_scan(self) -> bool:
@@ -704,7 +711,10 @@ def _classify_git(
         where = folder.resolve(directory) if (directory and folder) else directory
         if where is None and folder is not None:
             where = folder.path
-        if _config_changes_the_base_name(rest, where):
+        verdict = _config_changes_the_base_name(rest, where)
+        if verdict == _CONFIG_EDIT:
+            result.config_edits.append(_config_edit_folder(rest, where))
+        elif verdict:
             result.deny(REASON_BASE_NAME)
         return
     if subcommand not in ("push", "send-pack"):
@@ -746,7 +756,12 @@ _CONFIG_OPTIONS = {
     "--edit": "edit",
 }
 # Options that take the next word as their value.
-_CONFIG_VALUED = ("--type", "--default", "--comment", "--value", "--url", "--blob")
+_CONFIG_VALUED = (
+    "--type", "-t", "--default", "--comment", "--value", "--url", "--blob"
+)
+# What `_config_changes_the_base_name` answers for a command that opens the
+# settings in an editor, which changes a base's name only in a base.
+_CONFIG_EDIT = "edit"
 # The names a repository's own settings file goes by, inside its history folder.
 _REPOSITORY_SETTINGS_NAMES = ("config", "config.worktree")
 
@@ -831,6 +846,8 @@ def _config_changes_the_base_name(rest: Sequence[str], where: Optional[str]) -> 
             index += 1
             continue
         if lowered in _CONFIG_VALUED and not sign:
+            # `-t path` is a type and its value (finding N5 of Astra's fourth
+            # look): skipping only the option made the value the setting.
             index += 2
             continue
         if token.startswith("-"):
@@ -841,7 +858,7 @@ def _config_changes_the_base_name(rest: Sequence[str], where: Optional[str]) -> 
     if named_file is not None and not _names_repository_settings(named_file, where):
         return False
     if action == "edit":
-        return True
+        return _CONFIG_EDIT
     if action == "rename":
         return any(name.strip().lower() == section for name in positional[:2])
     if action == "remove":
@@ -852,6 +869,38 @@ def _config_changes_the_base_name(rest: Sequence[str], where: Optional[str]) -> 
         # One name and no value is the older way of reading a setting.
         return False
     return positional[0].strip().lower() == paths.BASE_ID_CONFIG_KEY
+
+
+def _config_edit_folder(rest: Sequence[str], where: Optional[str]) -> Optional[str]:
+    """The folder whose settings a `git config --edit` would open.
+
+    A settings file named with `-f` inside a history folder belongs to the
+    folder that history folder sits in; anything else is the folder the
+    command runs in. None is a folder nobody could work out, which is read as
+    a base.
+    """
+    tokens = [str(token) for token in rest]
+    named = None
+    for index, token in enumerate(tokens):
+        if token in ("-f", "--file"):
+            named = tokens[index + 1] if index + 1 < len(tokens) else ""
+        elif token.startswith("--file="):
+            named = token.split("=", 1)[1]
+        elif token.startswith("-f") and not token.startswith("--") and len(token) > 2:
+            named = token[2:]
+    if named is None:
+        return where
+    if not named or "$" in named or "`" in named:
+        return None
+    candidate = os.path.expanduser(named)
+    if not os.path.isabs(candidate):
+        if not where:
+            return None
+        candidate = os.path.join(where, candidate)
+    holder = os.path.dirname(os.path.realpath(candidate))
+    if os.path.basename(holder).lower() == ".git":
+        return os.path.dirname(holder)
+    return holder
 
 
 def _parse_push(rest: Sequence[str], result: Classification) -> PushSpec:
@@ -1044,6 +1093,7 @@ def _merge(result: Classification, other: Classification) -> None:
     result.gh_writes.extend(other.gh_writes)
     result.has_gh = result.has_gh or other.has_gh
     result.has_git = result.has_git or other.has_git
+    result.config_edits.extend(other.config_edits)
 
 
 # --- Working out what a send would carry -------------------------------------
@@ -1630,6 +1680,9 @@ def check_command(
         return sentence_for(REASON_UNTOKENIZABLE)
     if result.deny_reason:
         return sentence_for(result.deny_reason)
+    for folder in result.config_edits:
+        if folder is None or _looks_like_a_base(folder, runner):
+            return sentence_for(REASON_BASE_NAME)
 
     # The record of having read somebody's own documents, in the half of it
     # that holds wherever a send comes from: a record standing there that

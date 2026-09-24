@@ -87,18 +87,62 @@ lexical() {
   printf '%s' "$result"
 }
 
-# The same path with every link followed in the part of it that is there.
+# The same path the way the disk reaches it. Each piece that is there is
+# followed, links and all, before the next piece is read, so a link followed by
+# two dots goes up from where the link leads and not from where it sits
+# (finding N7 of Astra's fourth look: on a Mac, /etc/.. is /private). What is
+# not there is added on as it is written, with its dots taken out, and a last
+# piece that is a link to a file is followed too. The second argument counts
+# links to files already followed, so a loop of them ends.
 resolved() {
-  head=$(lexical "$1")
-  tail=""
-  while [ "$head" != "/" ] && [ ! -d "$head" ]; do
-    tail="/${head##*/}$tail"
-    head=${head%/*}
-    [ -n "$head" ] || head=/
+  real=""
+  suffix=""
+  old_ifs=$IFS
+  IFS=/
+  set -f
+  for piece in $1; do
+    case "$piece" in
+      '' | .) ;;
+      ..)
+        if [ -n "$suffix" ]; then
+          suffix=${suffix%/*}
+        else
+          real=${real%/*}
+        fi
+        ;;
+      *)
+        if [ -z "$suffix" ] && [ -d "$real/$piece" ]; then
+          real=$(CDPATH= cd -P -- "$real/$piece" 2> /dev/null && pwd -P) ||
+            real="$real/$piece"
+          [ "$real" = "/" ] && real=""
+        else
+          suffix="$suffix/$piece"
+        fi
+        ;;
+    esac
   done
-  real=$(CDPATH= cd -P -- "$head" 2> /dev/null && pwd -P) || real=$head
-  [ "$real" = "/" ] && real=""
-  printf '%s%s' "$real" "$tail"
+  set +f
+  IFS=$old_ifs
+  depth=${2:-0}
+  case "$suffix" in
+    /*/*) ;;
+    /*)
+      if [ -L "$real$suffix" ] && [ "$depth" -lt 8 ] &&
+        command -v readlink > /dev/null 2>&1; then
+        target=$(readlink -- "$real$suffix" 2> /dev/null) || target=""
+        if [ -n "$target" ]; then
+          case "$target" in
+            /*) ;;
+            *) target="$real/$target" ;;
+          esac
+          resolved "$target" $((depth + 1))
+          return
+        fi
+      fi
+      ;;
+  esac
+  [ -n "$real$suffix" ] || suffix=/
+  printf '%s%s' "$real" "$suffix"
 }
 
 # Whether one path, in either of its two spellings, is a folder or sits in it,
