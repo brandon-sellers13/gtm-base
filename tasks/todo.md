@@ -1259,3 +1259,8 @@ line it follows already names the document.
 - [x] Plugin updated on Brandon's machine (0.2.6 to 0.3.0); atlas republished.
 - [ ] Brandon: restart, then the live check; fill in its results.
 - [ ] Release B: Unit 1.6 onward, plus the confirmation line format that allows names with a space.
+
+### 2026-09-25, revision 2.2: the CLASS context standard
+- [x] Plan revision 2.2: Unit 1.5b, P38, calls 9 to 11; roadmap kinds mapped to the standard; docs/ux-standard.md ties every step to CLASS.
+- [ ] Brandon: calls 9 to 11.
+- [ ] Unit 1.5b, after the live check and before Unit 1.6.

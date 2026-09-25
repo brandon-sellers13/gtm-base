@@ -612,19 +612,15 @@ class TestTheLintOverTheRealDocuments(unittest.TestCase):
         self.assertIn("reading the steps aloud", text)
         self.assertIn("context change", text)
 
-    def test_the_ux_standard_records_the_four_questions_as_a_draft(self):
+    def test_the_ux_standard_ties_every_step_to_class(self):
+        """The draft four questions of 2026-09-19 were replaced on 2026-09-25 by
+        Brandon's CLASS framework, so the plugin and the newsletter share one."""
         with open(UX_STANDARD, encoding="utf-8") as handle:
             text = handle.read()
-        self.assertIn("The four questions a base answers", text)
-        self.assertIn("DRAFT", text)
-        for question in (
-            "What's true?",
-            "Where's the rest?",
-            "What changed?",
-            "Who said yes?",
-        ):
-            self.assertIn(question, text)
-
+        self.assertIn("CLASS: the framework every step ties back to", text)
+        self.assertNotIn("The four questions a base answers", text)
+        for part in ("**Context**", "**Learning**", "**Access**", "**Skills**", "**Standard**"):
+            self.assertIn(part, text)
 
 if __name__ == "__main__":
     unittest.main()

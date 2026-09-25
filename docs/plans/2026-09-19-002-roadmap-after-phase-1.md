@@ -17,6 +17,8 @@ This file is not an implementation plan. Both reviews of the build plan (Astra a
 
 **What stays outside the base, set by Brandon on 2026-09-19.** Work in flight (the project board, the campaign calendar, meeting transcripts, decisions made in chat) and a person's own notes are not kinds a base holds. They stay where they are and are listed as sources in the sources-of-truth file, with where each lives, which connected tool reads it, and the fallback. What follows from that: the base never gains a `context/work/` folder; the inventory's list of kinds leaves both out; the empty `context/notes/` folder in the company template is removed when the inventory plan is written; and drift grade and the content brief lose the feature that compared a piece against other work in flight, unless a later plan reads that from a source at run time. This closes Fable M8.
 
+**The kinds a base holds, set by Brandon on 2026-09-25.** The CLASS context standard replaces the kinds listed in the units below: nine files flat in `context/` (goals, product, icps, buyer-personas, positioning, messaging, voice, design, metrics), segments under `context/icps/`, the source map `context/stack.md` in place of `sources-of-truth.md`, `competitors.md` folded into positioning, and a new Standard kind in `context/standards/<job>.md` holding each job's goal, what is unacceptable, what needs approval, and the checks, which is where the per-skill rubric files below now live. Unit 1.5b of the build plan makes the move. Read every path in the units below through this mapping.
+
 ## Review findings to fold in when each plan is written
 
 Nothing below is decided again here. These are the reviewers' findings about the moved units, kept beside them so the next planning session starts from them.

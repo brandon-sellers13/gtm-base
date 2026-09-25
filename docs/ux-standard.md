@@ -113,22 +113,19 @@ called by its first line and the day it happened, never by its identifier.
 name cannot drift between one step and the next. Paths and identifiers stay in
 the machine-readable lines, which nobody reads aloud.
 
-## The four questions a base answers
+## CLASS: the framework every step ties back to
 
-**DRAFT, awaiting Brandon's wording.** This section is recorded as a draft on
-2026-09-19 and nothing is built on it. No lint check reads it. It is here so
-that the idea is written down in the place the standard lives, and the wording
-is his to set.
+Adopted 2026-09-25 from Brandon's AI-native framework (MICW Issue #4, v10), replacing the draft four questions of 2026-09-19. The plugin and the newsletter use one framework, so a person who read the article recognises every part of the product. The name is subject to the trademark check the article lists as open.
 
-Every step should tie back to one of four questions a base answers.
+| Part | The question it answers | What GTM Base does about it |
+|---|---|---|
+| **Context** | What is true about the business? | Holds the core files in `context/`, each with an owner and a date it was last confirmed, and a source map in `context/stack.md` that says where the ongoing context lives. |
+| **Learning** | How do the other parts get better? | Records each context change, proposes the fix to what it overtook, and applies nothing without the owner's yes. The record says what changed, when, and why. |
+| **Access** | Can the AI reach the tools the job needs? | Nothing. Access belongs to the tools and their connections. The source map points at them. |
+| **Skills** | How does the work get done? | Later. A skill will point to the context and the standard and hold neither. |
+| **Standard** | What does good look like, and what needs approval? | The approval half now: the AI proposes and a person approves. Each job's goal and checks will live in `context/standards/`. |
 
-1. **What's true?** The documents the company has decided on.
-2. **Where's the rest?** The file that says where data, work in flight, and
-   notes live, which stay outside the base.
-3. **What changed?** The dated record of context changes, which is the only
-   thing that makes the base speak up.
-4. **Who said yes?** Owners, confirmations, and proposed changes with their
-   answers. The AI proposes and a person approves.
+Every step says which part it serves, in plain words, when that helps the person understand why they are being asked. No lint check reads this section; it governs wording, and Brandon's reading aloud is its test.
 
 ## The lint is a floor
 

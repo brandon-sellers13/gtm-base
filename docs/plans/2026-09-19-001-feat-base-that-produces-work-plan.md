@@ -10,7 +10,7 @@ origin:
 reviews:
   - docs/reviews/2026-09-19-plan-review-astra.md (Astra through Codex; verdict on revision 1: not ready)
   - docs/reviews/2026-09-19-plan-review-fable.md (Fable 5.1; verdict on revision 1: ready only with changes)
-revision: 2.1
+revision: 2.2
 ---
 
 # feat: A base that produces work
@@ -113,6 +113,7 @@ Each requirement is numbered P1 and upward, and names its source: a section lett
 | P35 | Nothing is written outside the base, the plugin's own records folder, and a configured hooks directory. No MCP servers are declared. The logic atlas is updated in the same change as the code and republished. No invented number or timing appears anywhere, in the product or in the records. | Standing rules, Brandon 2026-09-19 |
 | P36 | When a base has no shared copy, the owner can approve a proposed change inside Claude. The staged change is shown in the four-line form with the before and after, and on the owner's yes it is applied to the local base with the same screens, the same evidence, the same confirmation, and the same corrections record a merged proposal gets. A no discards or keeps the staged change. Nothing about what may leave the computer changes. | r2; Astra 2 and Fable B1, both blockers; the local half of the first plan's Unit 8 |
 | P37 (moved to the roadmap) | One output of a skill that uses the base is used in real work at Gridwise, and what happened is recorded from the real run. | r2; Fable H1 |
+| P38 | A base's context folder follows Brandon's published CLASS context standard: nine files flat in `context/` (goals, product, icps, buyer-personas, positioning, messaging, voice, design, metrics), segments under `context/icps/`, the source map in `context/stack.md`, and a `context/standards/` folder for the Standard part. Both layouts are read; one is written; the move is offered, recoverable, and never automatic. | Brandon 2026-09-25; MICW Issue #4 v10 and its context standard |
 
 ### Success criteria
 
@@ -260,6 +261,9 @@ Revision 2 is written to the recommended answer on each call, so the build can s
 | 6 | The bar for the moment-of-use trial, set before it runs | Ten real prompts that each use a flagged document, outside any skill. The flag must fire on at least nine. Below that, the read hook is built if Claude Code allows it, and if it does not, the CHANGELOG and the join guide say plainly that outside a skill the flag is best effort | Record the count and set no bar | 1.3's live check |
 | 7 | What "Sol" refers to in "Opus 5 high agents along with Sol agents" | Not guessed at. Units are built by Opus 5 agents at high effort until this is answered | None | Whenever it is answered |
 | 8 | Add `~/GTM Bases/` to the home-folder rule in the global CLAUDE.md | Add one line: "`~/GTM Bases/` (one folder per company base created by the GTM Base plugin; product data, not client work)" | Leave the rule alone and treat the folder as plugin-managed | Any time |
+| 9 | Exact file names for the context standard | Your standard's names exactly: `goals.md`, `product.md`, `icps.md`, `buyer-personas.md`, `positioning.md`, `messaging.md`, `voice.md`, `design.md`, `metrics.md`, flat in `context/`, plus `stack.md` for the source map | Keep the `strategy/`, `metrics/`, `plan/` subfolders and use the standard's names inside them | Unit 1.5b is briefed |
+| 10 | Competitors | Fold into `positioning.md`, which your standard says holds the alternatives buyers consider | Keep `competitors.md` as an optional tenth file | Unit 1.5b is briefed |
+| 11 | Where segments live | Under the ICPs: `context/icps.md` is the umbrella and `context/icps/<slug>.md` holds each segment, so a reader sees one idea in one place | Beside them: `context/segments/<slug>.md` | Unit 1.7a is briefed |
 
 ## High-Level Technical Design
 
@@ -564,6 +568,53 @@ The reader comes first. `base_reader.ledger` reads both folders and joins by id,
 
 **Atlas: figures 5 and 8.**
 
+- [ ] **Unit 1.5b: The base holds the CLASS context standard (added by r2.2)**
+
+**Goal:** A base's context folder is laid out exactly as Brandon's published context standard lays it out, so the article, the paid repository, and the plugin describe one structure, and the move happens while one real base exists.
+
+**Requirements:** P38, P14, P15, P28.
+
+**Dependencies:** 0.3.0 shipped, and the live check done, so any fix it finds lands first. Before 1.6, because Release B writes segments and adoption into these paths.
+
+**Source:** the CLASS framework in `~/Obsidian/Vault/Work/Newsletter/MICW-04-ai-native-definition-v10.md` (Context, Learning, Access, Skills, Standard) and its context standard in `MICW-04-marketing-context-standard.md`: nine Markdown files in `context/`, each with an owner, an approval status, a last verification date, and authoritative sources; a short source map in `context/stack.md`; stable meaning in the files and changing values in the tools that own them.
+
+**The layout, written to the recommended answers in calls 9 to 11 under "For Brandon" and marked as awaiting his yes:**
+
+| File | Holds | Today |
+|---|---|---|
+| `context/goals.md` | objectives, horizons, priorities, constraints, and where the targets live; never the targets | roadmap `context/plan/goals.md` |
+| `context/product.md` | what is sold, what it can deliver, limitations, shipped versus planned, where pricing lives | none |
+| `context/icps.md` | the umbrella: which companies fit and which do not, one short paragraph per segment | `context/strategy/icp.md` |
+| `context/icps/<slug>.md` | one segment at full depth (Release B, Unit 1.7) | planned `context/strategy/segments/<slug>.md` |
+| `context/buyer-personas.md` | the people in the purchase, their needs, objections, criteria, and roles | roadmap `context/strategy/personas/` |
+| `context/positioning.md` | category, alternatives buyers consider, differentiated value, evidence | `context/strategy/positioning.md`; roadmap `competitors.md` folds in here |
+| `context/messaging.md`, `voice.md`, `design.md` | as the standard says | roadmap, under `context/strategy/` |
+| `context/metrics.md` | funnel stages, qualified opportunity, attribution, formulas, caveats; never target values | roadmap `context/metrics/definitions.md` |
+| `context/stack.md` | the source map: where each kind of data, work in flight, and notes live, what reads it, where outputs belong | `context/map.md` (its "where things live" paragraph) plus roadmap `sources-of-truth.md` |
+| `context/map.md` | settings only, unchanged in meaning | unchanged |
+| `context/standards/<job>.md` | the Standard part: a job's goal, what is unacceptable, what needs approval, and the checks run before work is handed back | roadmap per-skill rubric files |
+
+**Files:**
+- Modify: `plugins/gtm-base/lib/gtmbase/constants.py` (the path constants and `REQUIRED_CONTEXT_FILES`, which becomes `context/icps.md` and `context/positioning.md`; old paths kept as read-only constants), `base_reader.py` and `names.py` (both layouts read; names for every new kind), `drafting.py` and the join skill and prompts (setup writes the new paths), `changes.py` (a second recoverable move, reusing the Unit 1.4 transaction pattern: offered, never automatic, read back before anything is written), `stale.py`, `stale_check.py`, `moment.py`, `read_hook.py`, `write_hook.py` (any path they name), both company-base templates, `docs/join-guide.md`, `docs/ux-standard.md` (the draft four questions replaced by CLASS, as the framework every step ties back to), the atlas figure 1.
+- Modify: `docs/plans/2026-09-19-002-roadmap-after-phase-1.md` (every kind renamed to the standard; `competitors.md` removed; Standard added as a kind; the inventory's list of kinds is the nine files plus `stack.md` and `standards/`).
+- Test: new `tests/test_context_standard.py`, plus the tests that name old paths.
+
+**Approach:** Read both layouts and write one, exactly as Unit 1.4 did for the change folder. The move is a pure rename in one saved change, then any front-matter the new kinds need in a second, with the note, recovery, and read-back rules Astra's reviews hardened. A base still on the old layout is read correctly and offered the move in "review my base". `product.md` and the other new kinds are not drafted at setup: setup stays at two documents, and the inventory in the next plan offers the rest.
+
+**Execution note:** Reuse `changes.py`'s transaction and recovery code rather than writing a second one; if it cannot be reused cleanly, extract it first as its own small change with its own tests. The live Gridwise base is moved only by Brandon, through the offer.
+
+**Test scenarios:**
+- Happy path: a base on the old layout reads identically before the move, is offered it, moves in two saved changes, and reads identically after; every confirmation still settles its file.
+- Happy path: setup on a fresh folder writes `context/icps.md` and `context/positioning.md`, and the closing, the review, and the moment-of-use check name them in plain words.
+- Error path: a stop injected after each step of the move finishes or puts back, with the same bytes, index, and flags as an uninterrupted run.
+- Edge case: a file already present at a new path with different content is a named refusal, never an overwrite.
+- Edge case: a hand edit, a local approval, and the read hook on a moved base all work; a staged change naming an old path is still accepted.
+- Lint: no text a person reads names an old path.
+
+**Verification:** The Gridwise base moves in a live run through the offer, and its next review reads identically to the one before.
+
+**Atlas: figures 1 and 7.**
+
 - [ ] **Unit 1.6: Selection fixes**
 
 **Goal:** The survey proposes the right places, an explicit choice is honored once, versions are ordered deterministically with conflicts said out loud, and the preview says why.
@@ -839,3 +890,4 @@ Later reads (Astra 7, Fable M5). Approval establishes which document was adopted
 - 2026-09-19 r1: written from Amendment r2.4 of the join plan, Amendment r2.5 of the first plan, the Codex setup-shape verdict, and the MKT1 comparison, grounded in the shipped code at 0.2.6. Four phases, twenty units. Nothing built.
 - 2026-09-19 r2: both plan reviews folded in (Astra through Codex: not ready; Fable 5.1: ready only with changes). Cut to Phase 1 plus the runner and the outbound sequence; Phases 2 to 4 moved unchanged to `2026-09-19-002-roadmap-after-phase-1.md`. Added Units 1.1b (UX standard and lint, second), 1.2b (approve a proposed change locally), 1.4b (runner), 1.4c (outbound sequence). Split 1.7 into 1.7a to 1.7d with the write order as numbered steps. Rewrote 1.3 with an action contract, a measured trial, and a read-hook evaluation, and 1.4 with both folders read and a recoverable migration. Made the fidelity gate unable to pass on missing cases. Added P36, P37, and SC-C. Two releases by default. Eight calls for Brandon, each with the default the plan is written to. Baseline before the build: 1127 tests passing, after `tests/run.sh` was given a fixed time zone (three tests in `tests/test_review.py` assumed a Pacific date and failed on a machine set to Hawaii time). Nothing built.
 - 2026-09-19 r2.1: Brandon's call, context first and skills after. Units 1.4b (runner) and 1.4c (outbound sequence), P33, P37, and SC-C moved to the roadmap, which now puts what a base holds ahead of any skill. Call 2 closed. Release A is Units 1.1 to 1.5.
+- 2026-09-25 r2.2: Brandon's CLASS framework (MICW Issue #4 v10: Context, Learning, Access, Skills, Standard) and its context standard adopted as the base's layout. Added Unit 1.5b before Release B, requirement P38, and calls 9 to 11. GTM Base supplies Context, Learning, and the approval half of Standard; Skills and the checks half of Standard follow in the roadmap; Access stays with the tools. The draft four questions in docs/ux-standard.md are replaced by CLASS. The base still refuses an `AGENTS.md` inside it; the plugin delivers the map through its hook and the base holds `context/stack.md`.
