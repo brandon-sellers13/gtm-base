@@ -12,7 +12,7 @@ from __future__ import annotations
 import os
 import subprocess
 import time
-from typing import Optional, Sequence
+from typing import List, Optional, Sequence, Tuple
 
 from .errors import GitError
 
@@ -150,6 +150,95 @@ class DeadlineRunner(object):
                 "git-timeout", code="git-timeout", result=GitResult(TIMEOUT_CODE, "", "deadline")
             )
         return self.inner.check(args, cwd=cwd, timeout=budget, input=input)
+
+
+# --- Reading names out of what git prints -------------------------------------
+#
+# Git writes a name holding an accent, a space, a quotation mark, or anything
+# else unusual inside quotation marks with escapes in its ordinary output, so a
+# name read from that output is not the name on the disk. Every call that reads
+# names asks for records ending in a NUL instead, where names come out exactly
+# as they are, and reads them with the two functions below. A patch has no such
+# form, so its headers are read back with `unquote_path`.
+
+
+def nul_fields(stdout: str) -> List[str]:
+    """Every field of output git wrote with `-z`, in order, empty ones left out."""
+    return [field for field in stdout.split("\0") if field]
+
+
+def status_entries(stdout: str) -> Optional[List[Tuple[str, List[str]]]]:
+    """Each entry of `git status --porcelain -z`, as (its two letters, its paths).
+
+    A rename or a copy names two paths, the new one first and then the one it
+    came from, and with `-z` the second is a field of its own rather than the
+    far side of an arrow. Output that does not have this shape gives back
+    nothing at all, which every caller treats as work it may not write over.
+    """
+    fields = stdout.split("\0")
+    entries: List[Tuple[str, List[str]]] = []
+    index = 0
+    while index < len(fields):
+        field = fields[index]
+        index += 1
+        if not field:
+            continue
+        if len(field) < 4 or field[2] != " ":
+            return None
+        letters, named = field[:2], [field[3:]]
+        if "R" in letters or "C" in letters:
+            if index >= len(fields) or not fields[index]:
+                return None
+            named.append(fields[index])
+            index += 1
+        entries.append((letters, named))
+    return entries
+
+
+_C_ESCAPES = {
+    "a": 7,
+    "b": 8,
+    "t": 9,
+    "n": 10,
+    "v": 11,
+    "f": 12,
+    "r": 13,
+    '"': 34,
+    "\\": 92,
+}
+
+
+def unquote_path(text: str) -> str:
+    """One name as git printed it, back to the name it really is.
+
+    A name git left alone comes back as it is. A quoted one has its quotation
+    marks taken off and every escape turned back into the bytes it stands for,
+    which is how an accent arrives. An escape this cannot read leaves the text
+    as git printed it, so nothing is guessed.
+    """
+    if len(text) < 2 or not (text.startswith('"') and text.endswith('"')):
+        return text
+    body = text[1:-1]
+    out = bytearray()
+    index = 0
+    while index < len(body):
+        char = body[index]
+        if char != "\\":
+            out.extend(char.encode("utf-8"))
+            index += 1
+            continue
+        after = body[index + 1 : index + 2]
+        if after in _C_ESCAPES:
+            out.append(_C_ESCAPES[after])
+            index += 2
+            continue
+        octal = body[index + 1 : index + 4]
+        if len(octal) == 3 and all(digit in "01234567" for digit in octal):
+            out.append(int(octal, 8) & 0xFF)
+            index += 4
+            continue
+        return text
+    return out.decode("utf-8", "replace")
 
 
 def with_deadline(runner: Optional["GitRunner"], seconds: float) -> "DeadlineRunner":

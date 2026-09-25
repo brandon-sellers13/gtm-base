@@ -68,7 +68,7 @@ from . import (
 )
 from . import gitcmd
 from .fsutil import read_text
-from .gitcmd import GitRunner, runner_or_default  # noqa: F401
+from .gitcmd import GitRunner, nul_fields, runner_or_default  # noqa: F401
 
 # The two sources that mean a person is starting work, not continuing a turn.
 WORKING_SOURCES = ("startup", "resume")
@@ -720,23 +720,34 @@ def _incoming_symlinks(root: str, target: str, git: GitRunner) -> List[str]:
     computer, so an update carrying one is refused the same way an update
     carrying an instruction file is.
     """
+    # Every field ends in a NUL and names come out as they are, so a link with
+    # an accent or a space in its name is recorded by its real name. A record
+    # is its settings as one field and then its path, or its two paths when
+    # the update moved or copied the file.
     listed = git.run(
-        ["diff", "--raw", "HEAD.." + target],
+        ["diff", "--raw", "-z", "HEAD.." + target],
         cwd=root,
         timeout=LOCAL_TIMEOUT_SECONDS,
     )
     if not listed.ok:
         return []
     found: List[str] = []
-    for line in listed.stdout.split("\n"):
-        if not line.startswith(":"):
+    fields = listed.stdout.split("\0")
+    index = 0
+    while index < len(fields):
+        head = fields[index]
+        index += 1
+        if not head.startswith(":"):
             continue
-        head, _, path = line.partition("\t")
-        fields = head[1:].split()
-        if len(fields) < 2:
+        settings = head[1:].split()
+        letter = settings[-1][:1] if settings else ""
+        count = 2 if letter in ("R", "C") else 1
+        named = fields[index : index + count]
+        index += count
+        if len(settings) < 2:
             continue
-        if fields[1] == "120000":
-            found.append(path.split("\t")[0].strip() or "a link")
+        if settings[1] == "120000":
+            found.append((named[0] if named else "") or "a link")
     return found
 
 
@@ -873,14 +884,18 @@ def _daily_work(
         if not fetched.ok:
             return _stalled(blocks, root, git, root_of_plugin, UNREACHABLE % _as_of(root, git), part)
         target = "origin/" + branch
+        # Names end in a NUL and come out as they are. Git quotes a name with
+        # an accent in it otherwise, and a quoted name no longer starts with
+        # the folder it is in, so an instruction file with an accent in its
+        # name would not have been recognised as one.
         incoming = git.run(
-            ["diff", "--name-only", "HEAD.." + target],
+            ["diff", "--name-only", "-z", "HEAD.." + target],
             cwd=root,
             timeout=LOCAL_TIMEOUT_SECONDS,
         )
         if not incoming.ok:
             return _stalled(blocks, root, git, root_of_plugin, UNREACHABLE % _as_of(root, git), part)
-        names = [line.strip() for line in incoming.stdout.split("\n") if line.strip()]
+        names = [name for name in nul_fields(incoming.stdout) if name.strip()]
         refused = [name for name in names if _is_refused_path(name)]
         refused.extend(
             name for name in _incoming_symlinks(root, target, git) if name not in refused

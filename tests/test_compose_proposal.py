@@ -1307,6 +1307,157 @@ class TestTheHandEditHabitThroughTheScript(unittest.TestCase):
             self.assertEqual([approve_local.CODE_UNSAVED_EDITS], applied.codes)
 
 
+class TestAHandEditToADocumentWithAnUnusualName(unittest.TestCase):
+    """A hand edit to a document whose name git would quote, both scripts.
+
+    Git writes a name holding an accent, a space, or both inside quotation
+    marks with escapes in its ordinary output, so every place that read names
+    out of that output compared the quoted form with the real name and refused
+    the edit. Each name here is prepared by the proposing script and approved
+    by the approving script, exactly as a person's session runs them.
+    """
+
+    APPROVE_SCRIPT = os.path.join(
+        support.PLUGIN_DIR, "skills", "propose-change", "scripts", "approve_local.py"
+    )
+
+    local_base = TestTheHandEditHabitThroughTheScript.local_base
+    words_file = TestTheHandEditHabitThroughTheScript.words_file
+    script = TestTheHandEditHabitThroughTheScript.script
+    SCRIPT = TestTheHandEditHabitThroughTheScript.SCRIPT
+    STRATEGIC = TestTheHandEditHabitThroughTheScript.STRATEGIC
+    root_of_the_moment = None
+
+    def approving(self, root, *arguments):
+        import sys
+
+        return subprocess.run(
+            [sys.executable, self.APPROVE_SCRIPT] + [str(item) for item in arguments],
+            cwd=root,
+            env=dict(os.environ),
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+        )
+
+    def _the_whole_habit(self, relative):
+        with support.Sandbox() as sandbox:
+            root, _base_id = self.local_base(sandbox)
+            document = os.path.join(root, relative.replace("/", os.sep))
+            support.write(document, support.ICP_TEXT)
+            support.git(["add", "-A"], cwd=root)
+            support.git(["commit", "-q", "-m", "a document"], cwd=root)
+            support.write(
+                document,
+                support.ICP_TEXT.replace(
+                    "Companies of any size.", NEW_SECTION.strip()
+                ),
+            )
+            source = self.words_file(sandbox, "source.txt", STATED_SOURCE)
+            what = self.words_file(sandbox, "what.txt", self.STRATEGIC)
+
+            raised = self.script(
+                root,
+                "--local-edit",
+                "--source-file",
+                source,
+                "--what-changed-file",
+                what,
+                "--records-a-change",
+            )
+            printed = raised.stdout.decode("utf-8")
+            self.assertIn(compose_proposal.APPROVE_HERE, printed, raised.stderr)
+
+            pending = os.path.join(root, constants.PROPOSALS_PENDING_DIR)
+            waiting = sorted(
+                name for name in os.listdir(pending) if name.endswith(".md")
+            )
+            self.assertEqual(1, len(waiting))
+            staged = os.path.join(pending, waiting[0])
+            staging = formats.ProposalStaging.parse(support.read(staged)).validate()
+            self.assertEqual([relative], staging.target_paths)
+
+            shown = self.approving(root, "--staging", staged)
+            showing = shown.stdout.decode("utf-8")
+            self.assertEqual(0, shown.returncode, showing + shown.stderr.decode())
+            value = ""
+            for line in showing.split("\n"):
+                if line.startswith("Shown value: "):
+                    value = line[len("Shown value: ") :].strip()
+            self.assertTrue(value, showing)
+
+            applied = self.approving(
+                root, "--staging", staged, "--approve", "--shown", value
+            )
+            answer = applied.stdout.decode("utf-8")
+            self.assertEqual(0, applied.returncode, answer + applied.stderr.decode())
+            self.assertNotIn("\\3", answer)
+            self.assertIn("one to five marketers", support.read(document))
+            self.assertEqual("", status_of(root))
+            folder = os.path.join(root, constants.CHANGES_DIR)
+            written = sorted(
+                name for name in os.listdir(folder) if name.endswith(".md")
+            )
+            self.assertEqual(1, len(written))
+
+    def test_an_ordinary_name_still_goes_the_whole_way(self):
+        self._the_whole_habit("context/strategy/strategy.md")
+
+    def test_a_name_with_an_accent_goes_the_whole_way(self):
+        self._the_whole_habit("context/strategy/stratégie.md")
+
+    # The two below get past every place git's quoting stopped them, and then
+    # stop at the line that records the owner confirming the document, which
+    # separates its values with spaces and so refuses a name holding one. That
+    # is a decision about the shape of a record other seats read, not a reading
+    # of git, so it is left open and these say so rather than passing.
+    @unittest.expectedFailure
+    def test_a_name_with_a_space_goes_the_whole_way(self):
+        self._the_whole_habit("context/strategy/our strategy.md")
+
+    @unittest.expectedFailure
+    def test_a_name_with_an_accent_and_a_space_goes_the_whole_way(self):
+        self._the_whole_habit("context/strategy/notre stratégie.md")
+
+    def test_a_name_with_a_space_is_prepared_and_shown(self):
+        """Everything up to the confirmation line, for both names with a space."""
+        for relative in (
+            "context/strategy/our strategy.md",
+            "context/strategy/notre stratégie.md",
+        ):
+            with support.Sandbox() as sandbox:
+                root, _base_id = self.local_base(sandbox)
+                document = os.path.join(root, relative.replace("/", os.sep))
+                support.write(document, support.ICP_TEXT)
+                support.git(["add", "-A"], cwd=root)
+                support.git(["commit", "-q", "-m", "a document"], cwd=root)
+                support.write(
+                    document,
+                    support.ICP_TEXT.replace(
+                        "Companies of any size.", NEW_SECTION.strip()
+                    ),
+                )
+                source = self.words_file(sandbox, "source.txt", STATED_SOURCE)
+
+                raised = self.script(root, "--local-edit", "--source-file", source)
+                self.assertIn(
+                    compose_proposal.APPROVE_HERE,
+                    raised.stdout.decode("utf-8"),
+                    raised.stderr,
+                )
+                pending = os.path.join(root, constants.PROPOSALS_PENDING_DIR)
+                staged = os.path.join(
+                    pending,
+                    sorted(n for n in os.listdir(pending) if n.endswith(".md"))[0],
+                )
+                staging = formats.ProposalStaging.parse(
+                    support.read(staged)
+                ).validate()
+                self.assertEqual([relative], staging.target_paths)
+                shown = self.approving(root, "--staging", staged)
+                self.assertEqual(0, shown.returncode, shown.stdout + shown.stderr)
+                self.assertIn("Shown value: ", shown.stdout.decode("utf-8"))
+
+
 # --- The whole way round ------------------------------------------------------
 
 

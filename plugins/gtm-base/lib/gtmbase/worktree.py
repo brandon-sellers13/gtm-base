@@ -19,7 +19,7 @@ from typing import List, Optional
 from . import constants, paths
 from .fsutil import ensure_dir
 from .errors import GitError
-from .gitcmd import GitRunner, runner_or_default
+from .gitcmd import GitRunner, runner_or_default, unquote_path
 
 # How long the update from the shared copy may take before we carry on without
 # it. A slow network must not stop a person from preparing a proposal.
@@ -89,13 +89,26 @@ def start_point_for(base_root: str, default_branch: str, git: GitRunner) -> "tup
 def list_worktrees(base_root: str, runner: Optional[GitRunner] = None) -> List[str]:
     """Every working folder git currently knows about for this base."""
     git = runner_or_default(runner)
-    result = git.run(["worktree", "list", "--porcelain"], cwd=base_root)
-    if not result.ok:
-        return []
+    # Lines end in a NUL where this git can say so, which it can from 2.36 on,
+    # so a folder name is read as it is whatever is in it. An older git gets
+    # the ordinary form, with any quoting read back.
+    result = git.run(["worktree", "list", "--porcelain", "-z"], cwd=base_root)
+    if result.ok:
+        lines = result.stdout.split("\0")
+    else:
+        result = git.run(["worktree", "list", "--porcelain"], cwd=base_root)
+        if not result.ok:
+            return []
+        lines = [
+            "worktree " + unquote_path(line[len("worktree ") :].strip())
+            if line.startswith("worktree ")
+            else line
+            for line in result.stdout.splitlines()
+        ]
     found = []
-    for line in result.stdout.splitlines():
+    for line in lines:
         if line.startswith("worktree "):
-            found.append(os.path.realpath(line[len("worktree ") :].strip()))
+            found.append(os.path.realpath(line[len("worktree ") :]))
     return found
 
 

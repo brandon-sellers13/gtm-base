@@ -48,7 +48,7 @@ from .fsutil import (
     read_text,
     remove,
 )
-from .gitcmd import GitRunner, runner_or_default
+from .gitcmd import GitRunner, nul_fields, runner_or_default
 from .validate import find_marker, marker_line
 
 # What a run can end as.
@@ -1191,10 +1191,14 @@ def propose(
 
 
 def _touched_from_saved(worktree_path: str, git: GitRunner) -> List[str]:
-    result = git.run(["show", "--name-only", "--format=", "HEAD"], cwd=worktree_path)
+    # Names end in a NUL and come out as they are, so a name with an accent or
+    # a space in it is the name on the disk rather than git's quoted form.
+    result = git.run(
+        ["show", "--name-only", "--format=", "-z", "HEAD"], cwd=worktree_path
+    )
     if not result.ok:
         return []
-    return [line.strip() for line in result.stdout.splitlines() if line.strip()]
+    return nul_fields(result.stdout)
 
 
 def _prepare(
@@ -1444,23 +1448,26 @@ CODE_LOCAL_NO_SECTION = "hand-edit-outside-any-heading"
 
 
 def _changed_files(base_root: str, git: GitRunner) -> Tuple[List[str], str]:
-    """Every file the person has changed and not yet saved, and the change itself."""
+    """Every file the person has changed and not yet saved, and the change itself.
+
+    The names come from a list of their own ending in NULs rather than from the
+    headers of the change, because git quotes a name with an accent or a space
+    in those headers and the quoted form is not a path in this base. A file
+    that was taken away is left out, as it always was.
+    """
+    named = git.run(
+        ["diff", "HEAD", "--name-only", "-z", "--diff-filter=d"], cwd=base_root
+    )
+    if not named.ok:
+        return [], ""
     result = git.run(["diff", "HEAD", "--unified=0"], cwd=base_root)
     if not result.ok:
         return [], ""
-    diff = result.stdout
-    changed = []
-    for line in diff.splitlines():
-        if line.startswith("+++ "):
-            target = line[4:].strip()
-            if target == "/dev/null":
-                continue
-            if target.startswith("b/"):
-                target = target[2:]
-            path = target.split("\t")[0]
-            if path not in changed:
-                changed.append(path)
-    return changed, diff
+    changed: List[str] = []
+    for path in nul_fields(named.stdout):
+        if path not in changed:
+            changed.append(path)
+    return changed, result.stdout
 
 
 def _added_characters(diff: str) -> int:

@@ -70,7 +70,7 @@ from .fsutil import (
     read_text_exactly,
     remove,
 )
-from .gitcmd import GitRunner, runner_or_default
+from .gitcmd import GitRunner, runner_or_default, status_entries
 from .validate import marker_line
 
 # The note this module leaves in the seat's own folder while it is working.
@@ -1021,14 +1021,17 @@ def _anything_left_over(base_root: str, journal: dict, git: GitRunner):
         touched.add(str(item.get("path")))
     for item in journal.get("removed") or []:
         touched.add(str(item))
-    status = git.run(["status", "--porcelain"], cwd=base_root)
+    # Names end in a NUL and come out exactly as they are, so a path with an
+    # accent or a space in it is compared as itself rather than as git's
+    # quoted form of it.
+    status = git.run(["status", "--porcelain", "-z"], cwd=base_root)
     if not status.ok:
         return COULD_NOT_SAVE
-    for line in status.stdout.split("\n"):
-        named = line[3:].strip() if len(line) > 3 else ""
-        if not named:
-            continue
-        for piece in [part.strip().strip('"') for part in named.split(" -> ")]:
+    entries = status_entries(status.stdout)
+    if entries is None:
+        return COULD_NOT_SAVE
+    for _letters, named in entries:
+        for piece in named:
             if piece in touched:
                 return COULD_NOT_SAVE
             for one in touched:
@@ -1370,18 +1373,18 @@ def _theirs_before_finishing(base_root, journal, git) -> Optional[str]:
         if ids.exact_hash(current) not in allowed:
             return THEIR_WORDS % relative
 
-    status = git.run(["status", "--porcelain"], cwd=base_root)
+    # Names end in a NUL and come out exactly as they are, so a path with an
+    # accent or a space in it is its own name here and not git's quoted form.
+    status = git.run(["status", "--porcelain", "-z"], cwd=base_root)
     if not status.ok:
         return COULD_NOT_SAVE
-    for line in status.stdout.split("\n"):
-        named = line[3:].strip() if len(line) > 3 else ""
-        if not named:
-            continue
-        # A rename is written as one arrow between two paths, and both halves
-        # belong to this run when this run is the thing that moved it.
-        parts = [piece.strip() for piece in named.split(" -> ")]
-        for piece in parts:
-            piece = piece.strip('"')
+    entries = status_entries(status.stdout)
+    if entries is None:
+        return COULD_NOT_SAVE
+    for _letters, named in entries:
+        # A rename names two paths, and both belong to this run when this run
+        # is the thing that moved it.
+        for piece in named:
             for unexplained in _what_is_really_there(base_root, piece, ours):
                 return THEIR_WORDS % unexplained
     return None

@@ -1201,3 +1201,26 @@ folder rule that differed between the listing and the narrowing, git's display
 quoting read as a name, and a check that asked about every known base except
 the one the session was standing in. Found in passing and left open: a hand
 edit to a document with an accent in its name is still refused.
+
+## Names git quotes, read as the names they are (2026-09-24)
+
+- [x] Every call that reads names out of git's output asks for records ending
+      in a NUL, read by `gitcmd.nul_fields` and `gitcmd.status_entries`
+      (a rename's old name is a field of its own); patch headers are read
+      back through `gitcmd.unquote_path`.
+- [x] Hand edit through both scripts on `stratégie.md`, and the ordinary name.
+- [x] One test per changed call site, in tests/test_quoted_names.py and
+      tests/test_session_start.py, each failing on the code as it was.
+- [x] CHANGELOG entry; the accent line taken off the still-open list.
+- [ ] Brandon: decide the shape of a confirmation line for a document whose
+      name holds a space. It separates its values with spaces, so such a
+      document can be prepared and shown but not approved or confirmed. The
+      two tests for it are marked as expected to fail until then.
+
+#### Review
+Git's quoting was read as a name in eight places, not two. Two of them were
+worse than a refusal: an update carrying a settings file with an accent in its
+name was taken, and a file with such a name in a folder that never leaves was
+not recognised by the check before sending. A name with a space turned out to
+be stopped a second time, by the confirmation line's own format, which is left
+open on purpose.

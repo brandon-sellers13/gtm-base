@@ -645,6 +645,37 @@ class SessionStartTest(support.PastTheFirstBackupReview, SessionStartHelpers):
         seat, _problems = state.load_seat(base_id)
         self.assertEqual(session_start.CODE_PULL_REFUSED, seat["last_pull_refusal_code"])
 
+    def test_an_incoming_settings_file_with_an_accent_in_its_name_is_not_taken(self):
+        """Git quoted the name, and the quoted name no longer began with the
+        settings folder, so the update carrying it was taken."""
+        path = ".claude/réglages.json"
+        root, base_id, before, result = self.refused_incoming(path)
+        self.assertEqual(session_start.PULL_REFUSED, result["systemMessage"])
+        self.assertEqual(before, support.head_of(root))
+        seat, _problems = state.load_seat(base_id)
+        self.assertEqual(
+            [ids.path_hash(path)], seat["last_pull_refusal_path_hashes"]
+        )
+
+    def test_an_incoming_link_with_an_unusual_name_is_recorded_by_that_name(self):
+        root, base_id = self.joined_base()
+        self.add_files(root)
+        other = self.working_copy(root)
+        name = "context/un lien étrange.md"
+        os.symlink("/etc/hosts", os.path.join(other, name))
+        support.git(["add", "-A"], cwd=other)
+        support.git(["commit", "-q", "-m", "an incoming link"], cwd=other)
+        support.git(["push", "-q", "origin", "main"], cwd=other)
+        before = support.head_of(root)
+
+        result = self.run_hook(root)
+        self.assertEqual(session_start.PULL_REFUSED, result["systemMessage"])
+        self.assertEqual(before, support.head_of(root))
+        seat, _problems = state.load_seat(base_id)
+        self.assertEqual(
+            [ids.path_hash(name)], seat["last_pull_refusal_path_hashes"]
+        )
+
     def test_the_shared_settings_file_is_never_taken_by_an_update(self):
         """Even the one name allowed under the settings folder at join time.
 

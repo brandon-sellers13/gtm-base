@@ -18,6 +18,7 @@ from typing import FrozenSet, List, Optional, Sequence, Tuple
 
 from . import constants, redaction_patterns
 from .fsutil import read_text
+from .gitcmd import unquote_path
 
 # How far into a file the frontmatter block can reach. An owner line below
 # this is a line in the body, and an address in the body is a hit.
@@ -234,15 +235,19 @@ def scan_diff_added_lines(
             new_line = 0
             continue
         if raw.startswith("+++ "):
-            target = raw[4:].strip()
+            # Git puts a name holding an accent or anything else unusual in
+            # quotation marks with escapes, around the "b/" as well, and ends a
+            # name holding a space with a tab. Both are read back to the real
+            # name, so a file in a folder that never leaves is still known to
+            # be in it whatever it is called.
+            target = unquote_path(raw[4:].split("\t")[0].strip())
             if target == "/dev/null":
                 path = None
                 transient = False
                 continue
             if target.startswith("b/"):
                 target = target[2:]
-            # git quotes a path holding unusual characters; keep it as given.
-            path = target.split("\t")[0]
+            path = target
             transient = is_transient(path)
             exempt = _exempt_classes_for(path)
             is_markdown = path.endswith(".md")

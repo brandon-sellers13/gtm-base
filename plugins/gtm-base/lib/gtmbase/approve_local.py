@@ -68,7 +68,7 @@ from .fsutil import (
     read_text_exactly,
     remove,
 )
-from .gitcmd import GitRunner, runner_or_default
+from .gitcmd import GitRunner, runner_or_default, status_entries
 from .validate import find_marker, validate_owner
 
 # How a run of this module can end.
@@ -2087,47 +2087,24 @@ def _ready_to_write_here(
     on_default, _code = paths.head_is_default_branch(base_root, runner=git)
     if not on_default:
         return CODE_NOT_DEFAULT_BRANCH, NOT_ON_MAIN
-    status = git.run(["status", "--porcelain"], cwd=base_root)
+    # Entries end in a NUL and names come out exactly as they are. Without it
+    # git quotes a name holding an accent or a space, the quoted form never
+    # matched the file the change is about, and every hand edit to such a
+    # document was refused as unsaved work.
+    status = git.run(["status", "--porcelain", "-z"], cwd=base_root)
     if not status.ok:
         return CODE_GIT_FAILED, COULD_NOT_SAVE
     allowed = set(changing) if by_hand else set()
-    # The whole output, not the trimmed form. The first two characters of a
-    # line say what state a path is in and the first of them is often a space,
-    # so trimming the output moves every path along by one character.
-    for line in status.stdout.split("\n"):
-        if not line.strip():
-            continue
-        named = _paths_on_a_status_line(line)
-        if not named or any(item not in allowed for item in named):
+    entries = status_entries(status.stdout)
+    if entries is None:
+        # Output nobody here can read is treated as unsaved work it may not
+        # write over. Guessing at it would be the one way this check could let
+        # something through.
+        return CODE_UNSAVED_EDITS, UNSAVED_EDITS
+    for _letters, named in entries:
+        if any(item not in allowed for item in named):
             return CODE_UNSAVED_EDITS, UNSAVED_EDITS
     return None
-
-
-def _paths_on_a_status_line(line: str) -> List[str]:
-    """Every path one line of the folder's state names, or nothing at all.
-
-    A line nobody here can read gives back nothing, which the caller treats as
-    unsaved work it may not write over. Guessing at a line would be the one
-    way this check could let something through.
-    """
-    body = line[3:] if len(line) > 3 else ""
-    if not body:
-        return []
-    if " -> " in body:
-        pieces = body.split(" -> ")
-    else:
-        pieces = [body]
-    named = []
-    for piece in pieces:
-        value = piece.strip()
-        if value.startswith('"') and value.endswith('"') and len(value) > 1:
-            # A quoted name holds characters git escapes, so it is not a plain
-            # path and this check will not read it.
-            return []
-        if not value:
-            return []
-        named.append(value)
-    return named
 
 
 def approve(

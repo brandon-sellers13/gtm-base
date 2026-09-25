@@ -24,7 +24,7 @@ import unicodedata
 from typing import Iterable, Optional, Sequence, Set
 
 from . import constants
-from .gitcmd import GitRunner, runner_or_default
+from .gitcmd import GitRunner, nul_fields, runner_or_default
 
 # How long any single git call inside the check may take.
 GIT_TIMEOUT_SECONDS = 5
@@ -222,17 +222,17 @@ def _tracked_symlinks(git: GitRunner, root: str) -> Set[str]:
 
 def _ignored_paths(git: GitRunner, root: str) -> Set[str]:
     """The paths the shared settings say are this seat's own business."""
+    # Names end in a NUL and come out as they are, so an ignored folder with an
+    # accent or a space in its name matches the folder the walk finds.
     listed = git.run(
-        ["ls-files", "-o", "-i", "--exclude-standard", "--directory"],
+        ["ls-files", "-o", "-i", "--exclude-standard", "--directory", "-z"],
         cwd=root,
         timeout=GIT_TIMEOUT_SECONDS,
     )
     if not listed.ok:
         return set()
     return set(
-        line.strip().rstrip("/")
-        for line in listed.stdout.split("\n")
-        if line.strip()
+        name.rstrip("/") for name in nul_fields(listed.stdout) if name.strip()
     )
 
 

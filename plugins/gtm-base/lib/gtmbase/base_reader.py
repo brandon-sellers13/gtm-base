@@ -22,7 +22,7 @@ from typing import Dict, List, Optional, Sequence
 from . import constants, formats, ids, paths, stale, state, validate
 from .errors import GtmBaseError, PathError, ValidationError
 from .fsutil import read_text
-from .gitcmd import GitRunner, runner_or_default
+from .gitcmd import GitRunner, nul_fields, runner_or_default
 
 # How long a local git call made while reading a base may take.
 LOCAL_TIMEOUT_SECONDS = 5
@@ -633,15 +633,15 @@ def corrections(
         co_modified: List[str] = []
         hashed = None
         if commit:
+            # Names end in a NUL and come out as they are, so a document with
+            # an accent or a space in its name is matched by its real name.
             shown = git.run(
-                ["show", "--name-only", "--format=", commit],
+                ["show", "--name-only", "--format=", "-z", commit],
                 cwd=root,
                 timeout=LOCAL_TIMEOUT_SECONDS,
             )
             if shown.ok:
-                co_modified = [
-                    line.strip() for line in shown.stdout.split("\n") if line.strip()
-                ]
+                co_modified = nul_fields(shown.stdout)
             hashed = hash_at_commit(root, commit, correction, git)
         merged_by, merged_on = accepted_by(root, relative, default_branch, git)
         records.append(
