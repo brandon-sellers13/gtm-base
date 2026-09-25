@@ -1251,3 +1251,11 @@ Full suite: 1987 tests, OK, no expected failures left. The rename sentence
 names no document, because names.py reads "our strategy.md" as "your our
 strategy" and an accented name as "one of your documents"; the flag or review
 line it follows already names the document.
+
+### 2026-09-24, release A shipped
+- [x] Astra's reviews at HEAD and their fixes (R1 to R11, N1 to N10, quoted names, names with a space refused up front).
+- [x] Astra's narrow final pass: ready to release.
+- [x] Version 0.3.0 in both manifests and the library; CHANGELOG section dated; 1987 tests; pushed as 45d4454.
+- [x] Plugin updated on Brandon's machine (0.2.6 to 0.3.0); atlas republished.
+- [ ] Brandon: restart, then the live check; fill in its results.
+- [ ] Release B: Unit 1.6 onward, plus the confirmation line format that allows names with a space.
