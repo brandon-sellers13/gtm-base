@@ -10,7 +10,7 @@ origin:
 reviews:
   - docs/reviews/2026-09-19-plan-review-astra.md (Astra through Codex; verdict on revision 1: not ready)
   - docs/reviews/2026-09-19-plan-review-fable.md (Fable 5.1; verdict on revision 1: ready only with changes)
-revision: 2.2
+revision: 2.3
 ---
 
 # feat: A base that produces work
@@ -113,7 +113,7 @@ Each requirement is numbered P1 and upward, and names its source: a section lett
 | P35 | Nothing is written outside the base, the plugin's own records folder, and a configured hooks directory. No MCP servers are declared. The logic atlas is updated in the same change as the code and republished. No invented number or timing appears anywhere, in the product or in the records. | Standing rules, Brandon 2026-09-19 |
 | P36 | When a base has no shared copy, the owner can approve a proposed change inside Claude. The staged change is shown in the four-line form with the before and after, and on the owner's yes it is applied to the local base with the same screens, the same evidence, the same confirmation, and the same corrections record a merged proposal gets. A no discards or keeps the staged change. Nothing about what may leave the computer changes. | r2; Astra 2 and Fable B1, both blockers; the local half of the first plan's Unit 8 |
 | P37 (moved to the roadmap) | One output of a skill that uses the base is used in real work at Gridwise, and what happened is recorded from the real run. | r2; Fable H1 |
-| P38 | A base's context folder follows Brandon's published CLASS context standard: nine files flat in `context/` (goals, product, icps, buyer-personas, positioning, messaging, voice, design, metrics), segments under `context/icps/`, the source map in `context/stack.md`, and a `context/standards/` folder for the Standard part. Both layouts are read; one is written; the move is offered, recoverable, and never automatic. | Brandon 2026-09-25; MICW Issue #4 v10 and its context standard |
+| P38 | A base has one top-level folder per CLASS part: `context/` (nine files flat, following Brandon's published context standard: goals, product, icps, buyer-personas, positioning, messaging, voice, design, metrics; segments under `context/icps/`), `learning/` (changes, corrections, lessons), `access/` (`stack.md`), `skills/` (refused until a trust model exists), and `standards/`, with `work/` holding the approval machinery. Both layouts are read; one is written; the move is offered, recoverable, and never automatic. | Brandon 2026-09-25 (calls 9 to 14); MICW Issue #4 v10 and its context standard |
 
 ### Success criteria
 
@@ -264,6 +264,9 @@ Revision 2 is written to the recommended answer on each call, so the build can s
 | 9 | Exact file names for the context standard | **Decided 2026-09-25: yes.** Your standard's names exactly: `goals.md`, `product.md`, `icps.md`, `buyer-personas.md`, `positioning.md`, `messaging.md`, `voice.md`, `design.md`, `metrics.md`, flat in `context/`, plus `stack.md` for the source map | Keep the `strategy/`, `metrics/`, `plan/` subfolders and use the standard's names inside them | Unit 1.5b is briefed |
 | 10 | Competitors | **Decided 2026-09-25: yes.** Fold into `positioning.md`, which your standard says holds the alternatives buyers consider | Keep `competitors.md` as an optional tenth file | Unit 1.5b is briefed |
 | 11 | Where segments live | **Decided 2026-09-25: yes.** Under the ICPs: `context/icps.md` is the umbrella and `context/icps/<slug>.md` holds each segment, so a reader sees one idea in one place | Beside them: `context/segments/<slug>.md` | Unit 1.7a is briefed |
+| 12 | Lay the base out by CLASS part | **Decided 2026-09-25: yes.** Top-level `context/`, `learning/`, `access/`, `skills/`, `standards/`, plus `work/` for approvals. `stack.md` moves to `access/`, and the change record moves a second time, in the same offered move | Keep `context/` and `work/`, and add only `skills/` and `standards/` | Unit 1.5b is briefed |
+| 13 | Skills in the base | **Decided 2026-09-25: yes.** Create `skills/` now and refuse anything in it until the company-skills brainstorm settles who may approve a skill change; that brainstorm runs before the first skill | Leave `skills/` out of the layout until then | Unit 1.5b is briefed |
+| 14 | Lessons from results | **Decided 2026-09-25: yes.** Reserve `learning/lessons/` now; the first reporting skill fills it with proposed changes that carry their evidence and need the same approval | Defer entirely | Unit 1.5b is briefed |
 
 ## High-Level Technical Design
 
@@ -568,9 +571,9 @@ The reader comes first. `base_reader.ledger` reads both folders and joins by id,
 
 **Atlas: figures 5 and 8.**
 
-- [ ] **Unit 1.5b: The base holds the CLASS context standard (added by r2.2)**
+- [ ] **Unit 1.5b: The base is laid out by the five CLASS parts (added by r2.2, widened by r2.3)**
 
-**Goal:** A base's context folder is laid out exactly as Brandon's published context standard lays it out, so the article, the paid repository, and the plugin describe one structure, and the move happens while one real base exists.
+**Goal:** A base has one top-level folder for each CLASS part, so anyone who read the article can open a base and see the framework in its folder names; its context folder follows Brandon's published context standard; and the move happens while one real base exists.
 
 **Requirements:** P38, P14, P15, P28.
 
@@ -578,25 +581,30 @@ The reader comes first. `base_reader.ledger` reads both folders and joins by id,
 
 **Source:** the CLASS framework in `~/Obsidian/Vault/Work/Newsletter/MICW-04-ai-native-definition-v10.md` (Context, Learning, Access, Skills, Standard) and its context standard in `MICW-04-marketing-context-standard.md`: nine Markdown files in `context/`, each with an owner, an approval status, a last verification date, and authoritative sources; a short source map in `context/stack.md`; stable meaning in the files and changing values in the tools that own them.
 
-**The layout, as Brandon decided it on 2026-09-25 (calls 9 to 11):**
+**The layout, as Brandon decided it on 2026-09-25 (calls 9 to 14):**
 
-| File | Holds | Today |
-|---|---|---|
-| `context/goals.md` | objectives, horizons, priorities, constraints, and where the targets live; never the targets | roadmap `context/plan/goals.md` |
-| `context/product.md` | what is sold, what it can deliver, limitations, shipped versus planned, where pricing lives | none |
-| `context/icps.md` | the umbrella: which companies fit and which do not, one short paragraph per segment | `context/strategy/icp.md` |
-| `context/icps/<slug>.md` | one segment at full depth (Release B, Unit 1.7) | planned `context/strategy/segments/<slug>.md` |
-| `context/buyer-personas.md` | the people in the purchase, their needs, objections, criteria, and roles | roadmap `context/strategy/personas/` |
-| `context/positioning.md` | category, alternatives buyers consider, differentiated value, evidence | `context/strategy/positioning.md`; roadmap `competitors.md` folds in here |
-| `context/messaging.md`, `voice.md`, `design.md` | as the standard says | roadmap, under `context/strategy/` |
-| `context/metrics.md` | funnel stages, qualified opportunity, attribution, formulas, caveats; never target values | roadmap `context/metrics/definitions.md` |
-| `context/stack.md` | the source map: where each kind of data, work in flight, and notes live, what reads it, where outputs belong | `context/map.md` (its "where things live" paragraph) plus roadmap `sources-of-truth.md` |
-| `context/map.md` | settings only, unchanged in meaning | unchanged |
-| `context/standards/<job>.md` | the Standard part: a job's goal, what is unacceptable, what needs approval, and the checks run before work is handed back | roadmap per-skill rubric files |
+| Part | Folder | Holds | Today |
+|---|---|---|---|
+| Context | `context/goals.md` | objectives, horizons, priorities, constraints, and where the targets live; never the targets | roadmap `context/plan/goals.md` |
+| Context | `context/product.md` | what is sold, what it can deliver, limitations, shipped versus planned, where pricing lives | none |
+| Context | `context/icps.md` | the umbrella: which companies fit and which do not, one short paragraph per segment | `context/strategy/icp.md` |
+| Context | `context/icps/<slug>.md` | one segment at full depth (Release B, Unit 1.7) | planned `context/strategy/segments/<slug>.md` |
+| Context | `context/buyer-personas.md` | the people in the purchase, their needs, objections, criteria, and roles | roadmap `context/strategy/personas/` |
+| Context | `context/positioning.md` | category, alternatives buyers consider, differentiated value, evidence | `context/strategy/positioning.md`; roadmap `competitors.md` folds in here |
+| Context | `context/messaging.md`, `voice.md`, `design.md` | as the standard says | roadmap, under `context/strategy/` |
+| Context | `context/metrics.md` | funnel stages, qualified opportunity, attribution, formulas, caveats; never target values | roadmap `context/metrics/definitions.md` |
+| Context | `context/map.md` | settings only, unchanged in meaning | unchanged |
+| Learning | `learning/changes/` | each recorded context change | `work/changes/` (and the older `work/decisions/`) |
+| Learning | `learning/corrections/` | what each approved fix changed, and why | `corrections/` |
+| Learning | `learning/lessons/` | lessons from results, proposed by a reporting skill with the evidence attached and accepted like any change; reserved now, empty until the first reporting skill (call 14) | none |
+| Access | `access/stack.md` | the source map: for each kind of data, work in flight, and notes, where it lives and which connected tool reads it; for each kind of output, where it is written; what is missing. Never a credential. | `context/map.md`'s "where things live" paragraph plus roadmap `sources-of-truth.md` |
+| Skills | `skills/<job>/` | one folder per recurring job: the procedure and its approved examples. Created empty; the plugin refuses any file in it until the company-skills brainstorm settles who may approve a skill change (call 13) | none |
+| Standard | `standards/<job>.md` | a job's goal, what is unacceptable, what needs approval, and the checks run before work is handed back | roadmap per-skill rubric files |
+| Approvals | `work/proposals/`, `work/confirmations/`, `work/inbox/` | the machinery behind the approval half of Standard: prepared changes, who said yes, and what never leaves the computer | unchanged |
 
 **Files:**
-- Modify: `plugins/gtm-base/lib/gtmbase/constants.py` (the path constants and `REQUIRED_CONTEXT_FILES`, which becomes `context/icps.md` and `context/positioning.md`; old paths kept as read-only constants), `base_reader.py` and `names.py` (both layouts read; names for every new kind), `drafting.py` and the join skill and prompts (setup writes the new paths), `changes.py` (a second recoverable move, reusing the Unit 1.4 transaction pattern: offered, never automatic, read back before anything is written), `stale.py`, `stale_check.py`, `moment.py`, `read_hook.py`, `write_hook.py` (any path they name), both company-base templates, `docs/join-guide.md`, `docs/ux-standard.md` (the draft four questions replaced by CLASS, as the framework every step ties back to), the atlas figure 1.
-- Modify: `docs/plans/2026-09-19-002-roadmap-after-phase-1.md` (every kind renamed to the standard; `competitors.md` removed; Standard added as a kind; the inventory's list of kinds is the nine files plus `stack.md` and `standards/`).
+- Modify: `plugins/gtm-base/lib/gtmbase/constants.py` (the path constants and `REQUIRED_CONTEXT_FILES`, which becomes `context/icps.md` and `context/positioning.md`; old paths kept as read-only constants), `base_reader.py` and `names.py` (both layouts read; names for every new kind), `drafting.py` and the join skill and prompts (setup writes the new paths), `changes.py` (a second recoverable move, reusing the Unit 1.4 transaction pattern: offered, never automatic, read back before anything is written; it moves the context files, `work/changes/` or `work/decisions/` into `learning/changes/`, and `corrections/` into `learning/corrections/`, in one offered move), `trust_surface.py`, `gate.py`, `write_hook.py`, and the session-start pull refusals (anything under `skills/` is refused, the same way `plugins/` is today, until the trust model exists), `report.py` (catches read from `learning/corrections/` and the old path), `stale.py`, `stale_check.py`, `moment.py`, `read_hook.py`, `write_hook.py` (any path they name), both company-base templates, `docs/join-guide.md`, `docs/ux-standard.md` (the draft four questions replaced by CLASS, as the framework every step ties back to), the atlas figure 1.
+- Modify: `docs/plans/2026-09-19-002-roadmap-after-phase-1.md` (every kind renamed to the standard; `competitors.md` removed; Standard added as a kind; the inventory's list of kinds is the nine files, `access/stack.md`, and `standards/`; the company-skills brainstorm is scheduled before the first skill and must settle who may approve a change under `skills/`).
 - Test: new `tests/test_context_standard.py`, plus the tests that name old paths.
 
 **Approach:** Read both layouts and write one, exactly as Unit 1.4 did for the change folder. The move is a pure rename in one saved change, then any front-matter the new kinds need in a second, with the note, recovery, and read-back rules Astra's reviews hardened. A base still on the old layout is read correctly and offered the move in "review my base". `product.md` and the other new kinds are not drafted at setup: setup stays at two documents, and the inventory in the next plan offers the rest.
@@ -608,6 +616,9 @@ The reader comes first. `base_reader.ledger` reads both folders and joins by id,
 - Happy path: setup on a fresh folder writes `context/icps.md` and `context/positioning.md`, and the closing, the review, and the moment-of-use check name them in plain words.
 - Error path: a stop injected after each step of the move finishes or puts back, with the same bytes, index, and flags as an uninterrupted run.
 - Edge case: a file already present at a new path with different content is a named refusal, never an overwrite.
+- Edge case (r2.3): the change record moves from `work/changes/` or `work/decisions/` into `learning/changes/` and keeps every entry id; the reader returns every entry from all three folders during and after the move; the report counts catches the same before and after.
+- Security (r2.3): any file under `skills/`, arriving by a pull, a local write, or the file-writing tools, is refused with one sentence, exactly as a file under `plugins/` is; the empty folder and its placeholder are allowed.
+- Happy path (r2.3): `access/stack.md` holds no credential, and a line shaped like a key or a token is refused by the same screens a proposal gets.
 - Edge case: a hand edit, a local approval, and the read hook on a moved base all work; a staged change naming an old path is still accepted.
 - Lint: no text a person reads names an old path.
 
@@ -892,3 +903,4 @@ Later reads (Astra 7, Fable M5). Approval establishes which document was adopted
 - 2026-09-19 r2.1: Brandon's call, context first and skills after. Units 1.4b (runner) and 1.4c (outbound sequence), P33, P37, and SC-C moved to the roadmap, which now puts what a base holds ahead of any skill. Call 2 closed. Release A is Units 1.1 to 1.5.
 - 2026-09-25 r2.2: Brandon's CLASS framework (MICW Issue #4 v10: Context, Learning, Access, Skills, Standard) and its context standard adopted as the base's layout. Added Unit 1.5b before Release B, requirement P38, and calls 9 to 11. GTM Base supplies Context, Learning, and the approval half of Standard; Skills and the checks half of Standard follow in the roadmap; Access stays with the tools. The draft four questions in docs/ux-standard.md are replaced by CLASS. The base still refuses an `AGENTS.md` inside it; the plugin delivers the map through its hook and the base holds `context/stack.md`.
 - 2026-09-25: calls 9 to 11 decided as recommended (the standard's names flat in `context/`, competitors folded into positioning, segments under `context/icps/`). The article's AGENTS.md note: GTM Base delivers the map through its hook, and the article says so.
+- 2026-09-25 r2.3: Brandon's calls 12 to 14. A base is laid out by the five CLASS parts (`context/`, `learning/`, `access/`, `skills/`, `standards/`, with `work/` for the approval machinery). `stack.md` moves to `access/`, which departs from the article's draft path `context/stack.md`. The change record moves from `work/changes/` to `learning/changes/` in the same offered move as the context files. `skills/` exists but is refused until the company-skills brainstorm settles the trust model, which runs before the first skill. `learning/lessons/` is reserved for lessons from results, the second input to Learning in the article, which no plan covered.

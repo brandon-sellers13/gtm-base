@@ -117,13 +117,13 @@ the machine-readable lines, which nobody reads aloud.
 
 Adopted 2026-09-25 from Brandon's AI-native framework (MICW Issue #4, v10), replacing the draft four questions of 2026-09-19. The plugin and the newsletter use one framework, so a person who read the article recognises every part of the product. The name is subject to the trademark check the article lists as open.
 
-| Part | The question it answers | What GTM Base does about it |
-|---|---|---|
-| **Context** | What is true about the business? | Holds the core files in `context/`, each with an owner and a date it was last confirmed, and a source map in `context/stack.md` that says where the ongoing context lives. |
-| **Learning** | How do the other parts get better? | Records each context change, proposes the fix to what it overtook, and applies nothing without the owner's yes. The record says what changed, when, and why. |
-| **Access** | Can the AI reach the tools the job needs? | Nothing. Access belongs to the tools and their connections. The source map points at them. |
-| **Skills** | How does the work get done? | Later. A skill will point to the context and the standard and hold neither. |
-| **Standard** | What does good look like, and what needs approval? | The approval half now: the AI proposes and a person approves. Each job's goal and checks will live in `context/standards/`. |
+| Part | The question it answers | Where it lives in a base | What GTM Base does about it |
+|---|---|---|---|
+| **Context** | What is true about the business? | `context/` | Holds the core files, each with an owner and a date it was last confirmed. |
+| **Learning** | How do the other parts get better? | `learning/` | Records each context change and each approved fix, proposes the fix to what a change overtook, and applies nothing without the owner's yes. Lessons from results arrive with the first reporting skill. |
+| **Access** | Can the AI reach the tools the job needs? | `access/stack.md` | Maps where each source lives, what reads it, and where each output is written. The connections themselves belong to the tools, and no credential ever sits in a base. |
+| **Skills** | How does the work get done? | `skills/` | Later. The folder exists and is refused until the team has settled who may approve a skill change. A skill points to the context and the standard and holds neither. |
+| **Standard** | What does good look like, and what needs approval? | `standards/` and `work/` | The approval half now: the AI proposes and a person approves, through `work/`. Each job's goal and checks live in `standards/`. |
 
 Every step says which part it serves, in plain words, when that helps the person understand why they are being asked. No lint check reads this section; it governs wording, and Brandon's reading aloud is its test.
 

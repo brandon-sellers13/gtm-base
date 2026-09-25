@@ -19,6 +19,8 @@ This file is not an implementation plan. Both reviews of the build plan (Astra a
 
 **The kinds a base holds, set by Brandon on 2026-09-25.** The CLASS context standard replaces the kinds listed in the units below: nine files flat in `context/` (goals, product, icps, buyer-personas, positioning, messaging, voice, design, metrics), segments under `context/icps/`, the source map `context/stack.md` in place of `sources-of-truth.md`, `competitors.md` folded into positioning, and a new Standard kind in `context/standards/<job>.md` holding each job's goal, what is unacceptable, what needs approval, and the checks, which is where the per-skill rubric files below now live. Unit 1.5b of the build plan makes the move. Read every path in the units below through this mapping.
 
+**The layout by CLASS part, set by Brandon on 2026-09-25 (revision 2.3).** A base has `context/`, `learning/` (changes, corrections, and `lessons/` for lessons from results), `access/stack.md` in place of `context/stack.md` and `sources-of-truth.md`, `skills/<job>/` (refused until the company-skills brainstorm settles who may approve a skill change; that brainstorm runs before the first skill), `standards/<job>.md`, and `work/` for approvals. The first reporting skill is where `learning/lessons/` first gets filled: it proposes changes to personas or messaging from results, with the evidence attached.
+
 ## Review findings to fold in when each plan is written
 
 Nothing below is decided again here. These are the reviewers' findings about the moved units, kept beside them so the next planning session starts from them.

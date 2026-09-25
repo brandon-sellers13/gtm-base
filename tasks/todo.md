@@ -1264,3 +1264,4 @@ line it follows already names the document.
 - [x] Plan revision 2.2: Unit 1.5b, P38, calls 9 to 11; roadmap kinds mapped to the standard; docs/ux-standard.md ties every step to CLASS.
 - [ ] Brandon: calls 9 to 11.
 - [ ] Unit 1.5b, after the live check and before Unit 1.6.
+- [x] 2026-09-25 revision 2.3: Unit 1.5b widened to lay a base out by the five CLASS parts (calls 12 to 14 decided).
