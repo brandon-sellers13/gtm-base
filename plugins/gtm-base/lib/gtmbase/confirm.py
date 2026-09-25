@@ -456,6 +456,12 @@ def answer(
         )
         return _refused(CODE_DROPPED_PATH, DROPPED_PATH)
 
+    # A yes is a confirmation line, and that line cannot carry a name with a
+    # space in it. Refused before the question is used up, so it is still
+    # there to answer once the document is renamed.
+    if answer == ANSWER_YES and formats.name_has_a_space(path):
+        return _refused(formats.CODE_NAME_WITH_A_SPACE, formats.NAME_WITH_A_SPACE)
+
     waiting = state.unprocessed_rows(base_id)
     if waiting:
         return _refused(CODE_INBOX_WAITING, INBOX_WAITING % len(waiting))
@@ -985,6 +991,8 @@ def drafted(
         relative_context = paths.canonical_context_path(base_root, path)
     except (PathError, ValidationError):
         return _refused(CODE_DROPPED_PATH, DROPPED_PATH)
+    if formats.name_has_a_space(relative_context):
+        return _refused(formats.CODE_NAME_WITH_A_SPACE, formats.NAME_WITH_A_SPACE)
 
     status = git.run(["status", "--porcelain", "--", relative_context], cwd=base_root)
     if not status.ok:
@@ -1061,6 +1069,8 @@ def against_change(
         relative_context = paths.canonical_context_path(base_root, path)
     except (PathError, ValidationError):
         return _refused(CODE_DROPPED_PATH, DROPPED_PATH)
+    if formats.name_has_a_space(relative_context):
+        return _refused(formats.CODE_NAME_WITH_A_SPACE, formats.NAME_WITH_A_SPACE)
     document = names.document_name(relative_context)
 
     if relative_context not in constants.REQUIRED_CONTEXT_FILES:

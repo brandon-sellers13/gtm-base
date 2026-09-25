@@ -49,7 +49,7 @@ if _lib not in sys.path:
 
 import argparse  # noqa: E402
 
-from gtmbase import confirm, machine, moment, paths, state  # noqa: E402
+from gtmbase import confirm, formats, machine, moment, paths, state  # noqa: E402
 from gtmbase.errors import GtmBaseError, PathError, ValidationError  # noqa: E402
 
 EXIT_DONE = 0
@@ -152,6 +152,9 @@ def _answer(options, resolution, session):
         return EXIT_REFUSED
     if not found.flagged:
         sys.stderr.write(NOTHING_FLAGGED_NOW + "\n")
+        return EXIT_REFUSED
+    if found.name_has_a_space and options.answer != ANSWER_AS_IS:
+        sys.stderr.write(formats.NAME_WITH_A_SPACE + "\n")
         return EXIT_REFUSED
     if not options.question:
         sys.stderr.write(NEEDS_A_QUESTION + "\n")

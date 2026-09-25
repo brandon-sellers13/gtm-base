@@ -1797,6 +1797,13 @@ def reconcile_yes(
     runner: Optional[GitRunner] = None,
 ) -> Reconciled:
     """The person says this document already says what the change says."""
+    if formats.name_has_a_space(path):
+        return Reconciled(
+            path,
+            False,
+            formats.NAME_WITH_A_SPACE,
+            codes=[formats.CODE_NAME_WITH_A_SPACE],
+        )
     result = confirm.against_change(
         base_root, base_id, path, entry_id, now=now, runner=runner
     )

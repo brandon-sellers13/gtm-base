@@ -132,7 +132,7 @@
 
 <div class="page">
   <div class="text">
-    <p class="meta">GTM Base <b>logic atlas</b> · plugin 0.2.6 · updated 2026-09-19</p>
+    <p class="meta">GTM Base <b>logic atlas</b> · plugin 0.3.0 · updated 2026-09-24</p>
     <h1>GTM Base Logic Atlas</h1>
     <p class="lede">Every call the plugin makes on your behalf, drawn once and kept current with the code. Each figure is one rule. The stamp under it says when the rule was decided and where it is written down.</p>
     <div class="key">
@@ -202,7 +202,7 @@
   </figure>
 
   <h2 id="start">2. What happens when a session opens</h2>
-  <div class="text"><p>The session-start hook runs before your first message, every time. It asks one question at a time about the folder you opened, in this order, and stops at the first yes. It asks <em>you</em> nothing at all: since plugin 0.2.7 a session opens quietly.</p></div>
+  <div class="text"><p>The session-start hook runs before your first message, every time. It asks one question at a time about the folder you opened, in this order, and stops at the first yes. It asks <em>you</em> nothing at all: since plugin 0.3.0 a session opens quietly.</p></div>
   <figure>
     <div class="frame">
     <svg viewBox="0 0 900 600" role="img" aria-label="Decision tree the session-start hook follows for the folder that was opened">
@@ -277,7 +277,7 @@
     </svg>
     </div>
     <figcaption>The order matters. A base you are standing in wins over everything, a folder that looks like a base is recognised as itself before any link is considered, and the offer is last. Two bases claiming one folder is a stop, not a guess. What a session start does not do is speak: the question it used to lead with was taken out, because the first real return session opened by asking whether the base's own map was still right. Two other checks are declared beside the one that reads every command. The one on the file-reading tool is the deterministic half of the moment of use: it leaves at once for any file outside a joined base's context folder, it never refuses a read and never decides a permission, and for a flagged file it hands back the same four lines figure 5 describes. The one on the file-writing tools closes the hole both reviewers of release A found: the check on commands reads commands, and a file-writing tool writes a file without a command, so one plain write over one record in the plugin's own folder used to turn a refused send into an allowed one. It refuses a write to the records folder, to the installed plugin's own code, to the settings that decide whether it loads, and to the repository and assistant folders of any folder shaped like a base, joined or not, and of any folder a base belongs with. It leaves a base's context files alone, because a person hand edits those and so may the assistant. The verification round of the same day added the middle two: an ordinary write over the check's own code made the next run fail, a failure used to be silence, and the write after it went wherever it liked. So the path is taken exactly as it was given, and the folder a base keeps its history in is protected as an entry rather than only as a folder. The third look then found the wrapper's smaller check reading the whole request as text, and the client puts the path of the session transcript on every request it sends, under the assistant's own folder, so every file write on the machine was refused the moment the real check could not run. It reads the file the tool was about to write and nothing else now, matches the folder names as whole pieces of a path, and allows anything it cannot read a path out of. The same look moved your own client settings off the refused list and onto an asked-about one, because those are your files and refusing them put your own settings out of reach of the assistant you were using.
-      <span class="meta"><span class="stamp">decided 2026-09-05, amended 2026-09-07 and twice on 2026-09-20</span> first plan Unit 3, join plan Unit 1, Amendments r2.1 and r2.3 · quiet by default, Amendment r2.5 and 2026-09-19 plan Unit 1.3, built in 0.2.7 · the check before a file write, release A review findings A1 and H1, verification findings V1, V2 and N6, third-look findings H1, F1, F2 and M4</span></figcaption>
+      <span class="meta"><span class="stamp">decided 2026-09-05, amended 2026-09-07 and twice on 2026-09-20</span> first plan Unit 3, join plan Unit 1, Amendments r2.1 and r2.3 · quiet by default, Amendment r2.5 and 2026-09-19 plan Unit 1.3, built in 0.3.0 · the check before a file write, release A review findings A1 and H1, verification findings V1, V2 and N6, third-look findings H1, F1, F2 and M4</span></figcaption>
   </figure>
 
   <h2 id="link">3. The link between your folder and the base</h2>
@@ -421,7 +421,7 @@
     </svg>
     </div>
     <figcaption>The base says nothing at the start of a session. Slices, never dumps: the map is the one file read every session; everything else is read on demand by path. Anything that could run code on your machine is refused rather than pulled. The base now says nothing until a document is about to be used, which is the one case where being interrupted is worth it. Inside a skill that check runs before the document is read. Outside one it rests on the injected rule, which is an instruction and not a guarantee, with the read hook behind it as the deterministic backstop. Silence from the check means one thing only, that nothing overtook the document: a path it will not answer about, and records it could not read, both say so and end badly rather than quietly. One answer settles one change, so a document behind two changes is still behind the second one afterwards.
-      <span class="meta"><span class="stamp">decided 2026-09-04, amended 2026-09-19 and 2026-09-20</span> first plan Unit 3 and Unit 10, origin R23 to R26 · the map left out of the question by its kind, 2026-09-19 plan Unit 1.2 · a no ending in a local approval, Unit 1.2b · quiet by default and the moment of use, Amendment r2.5 and Unit 1.3, built in 0.2.7 · the quiet record asked about inside the review only, at most once a session, Unit 1.5 and requirement P17</span></figcaption>
+      <span class="meta"><span class="stamp">decided 2026-09-04, amended 2026-09-19 and 2026-09-20</span> first plan Unit 3 and Unit 10, origin R23 to R26 · the map left out of the question by its kind, 2026-09-19 plan Unit 1.2 · a no ending in a local approval, Unit 1.2b · quiet by default and the moment of use, Amendment r2.5 and Unit 1.3, built in 0.3.0 · the quiet record asked about inside the review only, at most once a session, Unit 1.5 and requirement P17</span></figcaption>
   </figure>
 
   <h2 id="gate">6. What the safety check reads</h2>

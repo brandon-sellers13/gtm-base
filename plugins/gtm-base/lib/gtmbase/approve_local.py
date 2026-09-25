@@ -1003,6 +1003,21 @@ def _read_and_check(base_root, base_id, staging_path, git, today):
             None,
         )
 
+    # Approving writes a line recording the owner's yes about every document
+    # this change edits, and that line cannot carry a name with a space in it.
+    # Refused before it is shown, so nobody reads a change they cannot approve.
+    for relative in list(staging.target_paths) + [edit.path for edit in staging.edits]:
+        if formats.name_has_a_space(relative):
+            return (
+                _refused(
+                    STATUS_REFUSED,
+                    formats.CODE_NAME_WITH_A_SPACE,
+                    formats.NAME_WITH_A_SPACE,
+                    staging.staging_id,
+                ),
+                None,
+            )
+
     problems = path_problems(staging)
     if problems:
         return _many(STATUS_REFUSED, staging.staging_id, problems), None

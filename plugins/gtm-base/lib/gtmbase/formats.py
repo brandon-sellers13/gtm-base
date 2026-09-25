@@ -798,6 +798,24 @@ def rewritten_safely(text: str) -> str:
 
 CONFIRMATION_TOKENS = ("date", "time", "file", "trigger", "entry", "question", "run")
 
+# The line separates its values with spaces, so a document whose name holds any
+# whitespace can never be written onto one. Until the record changes shape in a
+# later release, every path that would end in writing such a line refuses that
+# document up front with this one sentence, before anything is written and
+# before any words somebody typed are read, rather than failing at the very
+# end and failing the same way every time it is asked again.
+NAME_WITH_A_SPACE = (
+    "GTM Base cannot keep a record for a document whose name has a space in it "
+    "yet. Rename it without spaces, for example with a hyphen, and ask again."
+)
+CODE_NAME_WITH_A_SPACE = "name-holds-a-space"
+_ANY_WHITESPACE_RE = re.compile(r"\s")
+
+
+def name_has_a_space(path) -> bool:
+    """Whether a document's path holds whitespace a confirmation line cannot carry."""
+    return bool(_ANY_WHITESPACE_RE.search(str(path or "")))
+
 
 class ConfirmationLine(object):
     """One line saying an owner confirmed one file on one day."""

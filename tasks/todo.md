@@ -1224,3 +1224,30 @@ name was taken, and a file with such a name in a folder that never leaves was
 not recognised by the check before sending. A name with a space turned out to
 be stopped a second time, by the confirmation line's own format, which is left
 open on purpose.
+
+## A name with a space, refused up front (2026-09-24)
+
+- [x] One shared sentence and check in formats.py (`NAME_WITH_A_SPACE`,
+      `name_has_a_space`), registered in tests/plain_language.py. The
+      confirmation line format is unchanged.
+- [x] Refused at the earliest point of every path that ends in a
+      confirmation line: the hand edit (library and script, before either
+      words file is read), local approval show and approve, a yes to a
+      question (before it is used up), the closing yes against a change, the
+      line written with a new document, moment "it already reflects this" and
+      "fix it first" (library and script), and the closing reconciliation yes.
+- [x] The review and the moment check still list or flag such a document,
+      offer only the rename, and issue no question for it.
+- [x] The two expected failures in tests/test_compose_proposal.py now assert
+      the refusal; tests/test_names_with_a_space.py covers the other entry
+      points.
+- [x] Join skill says a folder to add has to sit directly inside the one named.
+- [x] CHANGELOG entry, and the still-open line updated.
+- [ ] Brandon: the record format change that lets such a name be kept, in a
+      later release.
+
+#### Review
+Full suite: 1987 tests, OK, no expected failures left. The rename sentence
+names no document, because names.py reads "our strategy.md" as "your our
+strategy" and an accented name as "one of your documents"; the flag or review
+line it follows already names the document.

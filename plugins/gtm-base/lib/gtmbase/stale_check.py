@@ -1153,6 +1153,11 @@ def _review(
     for number, line in enumerate(lines, start=1):
         line.number = number
         line.sentence = line.sentence % number
+        # Still listed, because the person needs to know it is behind, and
+        # the one thing offered about it is renaming it. Every answer that
+        # records anything about it would be refused.
+        if formats.name_has_a_space(line.path):
+            line.sentence = "%s %s" % (line.sentence, formats.NAME_WITH_A_SPACE)
 
     if not lines:
         result.sentences.append(
@@ -1190,6 +1195,8 @@ def _review(
             if line.kind != "document":
                 continue
             if line.path in cannot_vouch:
+                continue
+            if formats.name_has_a_space(line.path):
                 continue
             line.question_id = _question_for_review(
                 base_id, line.path, line.trigger, line.entry_id, session_id, today

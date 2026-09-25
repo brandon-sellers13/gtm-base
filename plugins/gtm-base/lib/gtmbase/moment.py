@@ -45,6 +45,7 @@ from . import (
     compose_proposal,
     confirm,
     constants,
+    formats,
     names,
     paths,
     stale,
@@ -237,6 +238,18 @@ class Moment(object):
     def document_name(self) -> str:
         return names.document_name(self.path)
 
+    @property
+    def name_has_a_space(self) -> bool:
+        """Whether no answer that records anything can be given about it yet.
+
+        Fixing it first ends in approving a change, and saying it already
+        reflects the change is a confirmation, and both end in a line that
+        cannot carry a name with a space in it. Such a document is still
+        flagged, because the person needs to know it is behind, and the one
+        thing offered is renaming it.
+        """
+        return formats.name_has_a_space(self.path)
+
     def sentences(self) -> List[str]:
         """Every sentence this moment says, in the order it says them."""
         twice = [
@@ -246,6 +259,8 @@ class Moment(object):
         if not self.flagged:
             return twice
         said = [ABOUT_TO_USE % (self.document_name(), self.happened_on)]
+        if self.name_has_a_space:
+            return twice + said + [formats.NAME_WITH_A_SPACE]
         said.append(FIX_IS_READY if self.fix_ready else FIX_CAN_BE_PREPARED)
         said.append(THREE_ANSWERS if self.owned else TWO_ANSWERS)
         return twice + said
@@ -264,14 +279,12 @@ class Moment(object):
         if not self.flagged:
             return "\n".join(twice)
         said = self.sentences()[len(twice) :]
-        pieces = twice + [
-            said[0],
-            said[1],
+        pieces = twice + said[:-1] + [
             "",
             RELAY_ONLY,
             fenced(four_lines(self)),
             "",
-            said[2],
+            said[-1],
         ]
         return "\n".join(pieces)
 
@@ -650,7 +663,9 @@ def check(
         today=today,
         owned=_owned_here(inputs, relative, base_root, git),
     )
-    if session_id:
+    # No question about a document with a space in its name, because every
+    # answer that records anything about it would be refused.
+    if session_id and not moment.name_has_a_space:
         moment.question_id = _question_for(
             base_id, relative, entry_id, session_id, today
         )
@@ -809,6 +824,12 @@ def fix_it_first(
         return MomentAnswer(
             STATUS_REFUSED, codes=[CODE_NOTHING_FLAGGED], reasons=[NOTHING_TO_FIX]
         )
+    if moment.name_has_a_space:
+        return MomentAnswer(
+            STATUS_REFUSED,
+            codes=[formats.CODE_NAME_WITH_A_SPACE],
+            reasons=[formats.NAME_WITH_A_SPACE],
+        )
     _record_asking_for_a_fix(base_id, question_id or moment.question_id)
     if moment.staging_path:
         return MomentAnswer(
@@ -912,6 +933,12 @@ def already_reflects(
     confirmation is one person saying their own document is right, and a run
     that spent the question first would leave nobody able to say it.
     """
+    if moment.name_has_a_space:
+        return confirm.ConfirmResult(
+            confirm.STATUS_REFUSED,
+            codes=[formats.CODE_NAME_WITH_A_SPACE],
+            reasons=[formats.NAME_WITH_A_SPACE],
+        )
     if not moment.owned:
         return confirm.ConfirmResult(
             confirm.STATUS_REFUSED,

@@ -22,6 +22,7 @@ from gtmbase import (
     state,
     worktree,
 )
+from gtmbase.errors import ValidationError
 from gtmbase.gitcmd import GitRunner
 from gtmbase.validate import marker_line
 
@@ -1405,57 +1406,99 @@ class TestAHandEditToADocumentWithAnUnusualName(unittest.TestCase):
     def test_a_name_with_an_accent_goes_the_whole_way(self):
         self._the_whole_habit("context/strategy/stratégie.md")
 
-    # The two below get past every place git's quoting stopped them, and then
-    # stop at the line that records the owner confirming the document, which
-    # separates its values with spaces and so refuses a name holding one. That
-    # is a decision about the shape of a record other seats read, not a reading
-    # of git, so it is left open and these say so rather than passing.
-    @unittest.expectedFailure
-    def test_a_name_with_a_space_goes_the_whole_way(self):
-        self._the_whole_habit("context/strategy/our strategy.md")
+    # A name with a space gets past every place git's quoting stopped it, and
+    # the line that records the owner confirming the document separates its
+    # values with spaces, so it can never carry one. Until that record changes
+    # shape in a later release, the hand edit is refused up front with one
+    # sentence, rather than prepared, shown, and then refused at the very end
+    # the same way every time it was asked again.
+    def _refused_up_front(self, relative):
+        with support.Sandbox() as sandbox:
+            root, _base_id = self.local_base(sandbox)
+            document = os.path.join(root, relative.replace("/", os.sep))
+            support.write(document, support.ICP_TEXT)
+            support.git(["add", "-A"], cwd=root)
+            support.git(["commit", "-q", "-m", "a document"], cwd=root)
+            edited = support.ICP_TEXT.replace(
+                "Companies of any size.", NEW_SECTION.strip()
+            )
+            support.write(document, edited)
+            source = self.words_file(sandbox, "source.txt", STATED_SOURCE)
+            what = self.words_file(sandbox, "what.txt", self.STRATEGIC)
+            before = status_of(root)
 
-    @unittest.expectedFailure
-    def test_a_name_with_an_accent_and_a_space_goes_the_whole_way(self):
-        self._the_whole_habit("context/strategy/notre stratégie.md")
+            raised = self.script(
+                root,
+                "--local-edit",
+                "--source-file",
+                source,
+                "--what-changed-file",
+                what,
+                "--records-a-change",
+            )
 
-    def test_a_name_with_a_space_is_prepared_and_shown(self):
-        """Everything up to the confirmation line, for both names with a space."""
-        for relative in (
-            "context/strategy/our strategy.md",
-            "context/strategy/notre stratégie.md",
-        ):
-            with support.Sandbox() as sandbox:
-                root, _base_id = self.local_base(sandbox)
-                document = os.path.join(root, relative.replace("/", os.sep))
-                support.write(document, support.ICP_TEXT)
-                support.git(["add", "-A"], cwd=root)
-                support.git(["commit", "-q", "-m", "a document"], cwd=root)
-                support.write(
-                    document,
-                    support.ICP_TEXT.replace(
-                        "Companies of any size.", NEW_SECTION.strip()
-                    ),
+            # The one sentence, and the status every other refusal ends with.
+            self.assertEqual(1, raised.returncode, raised.stdout + raised.stderr)
+            said = raised.stderr.decode("utf-8")
+            self.assertIn(formats.NAME_WITH_A_SPACE, said)
+            self.assertNotIn("could not save", said + raised.stdout.decode())
+            # Nothing prepared, nothing recorded, nothing written.
+            pending = os.path.join(root, constants.PROPOSALS_PENDING_DIR)
+            if os.path.isdir(pending):
+                self.assertEqual(
+                    [], [n for n in os.listdir(pending) if n.endswith(".md")]
                 )
-                source = self.words_file(sandbox, "source.txt", STATED_SOURCE)
+            for folder in (constants.CHANGES_DIR, constants.CONFIRMATIONS_DIR):
+                full = os.path.join(root, folder)
+                if os.path.isdir(full):
+                    self.assertEqual(
+                        [], [n for n in os.listdir(full) if n.endswith(".md")]
+                    )
+            self.assertEqual(before, status_of(root))
+            self.assertEqual(edited, support.read(document))
+            # Neither words file was read, so both are still there for the
+            # next attempt once the document is renamed.
+            self.assertTrue(os.path.isfile(source))
+            self.assertTrue(os.path.isfile(what))
+            self.assertEqual(STATED_SOURCE, support.read(source))
+            self.assertEqual(self.STRATEGIC, support.read(what))
 
-                raised = self.script(root, "--local-edit", "--source-file", source)
-                self.assertIn(
-                    compose_proposal.APPROVE_HERE,
-                    raised.stdout.decode("utf-8"),
-                    raised.stderr,
+    def test_a_name_with_a_space_is_refused_up_front(self):
+        self._refused_up_front("context/strategy/our strategy.md")
+
+    def test_a_name_with_an_accent_and_a_space_is_refused_up_front(self):
+        self._refused_up_front("context/strategy/notre stratégie.md")
+
+    def test_the_library_refuses_it_before_preparing_anything(self):
+        """The same refusal from the library, for any caller but the script."""
+        relative = "context/strategy/our strategy.md"
+        with support.Sandbox() as sandbox:
+            root, base_id = self.local_base(sandbox)
+            document = os.path.join(root, relative.replace("/", os.sep))
+            support.write(document, support.ICP_TEXT)
+            support.git(["add", "-A"], cwd=root)
+            support.git(["commit", "-q", "-m", "a document"], cwd=root)
+            support.write(
+                document,
+                support.ICP_TEXT.replace("Companies of any size.", NEW_SECTION.strip()),
+            )
+
+            with self.assertRaises(ValidationError) as raised:
+                compose_proposal.stage_local_edit(
+                    root,
+                    base_id,
+                    STATED_SOURCE,
+                    what_changed=self.STRATEGIC,
+                    records_a_change=True,
                 )
-                pending = os.path.join(root, constants.PROPOSALS_PENDING_DIR)
-                staged = os.path.join(
-                    pending,
-                    sorted(n for n in os.listdir(pending) if n.endswith(".md"))[0],
-                )
-                staging = formats.ProposalStaging.parse(
-                    support.read(staged)
-                ).validate()
-                self.assertEqual([relative], staging.target_paths)
-                shown = self.approving(root, "--staging", staged)
-                self.assertEqual(0, shown.returncode, shown.stdout + shown.stderr)
-                self.assertIn("Shown value: ", shown.stdout.decode("utf-8"))
+
+            self.assertEqual(formats.CODE_NAME_WITH_A_SPACE, raised.exception.code)
+            self.assertEqual(formats.NAME_WITH_A_SPACE, str(raised.exception))
+            pending = os.path.join(root, constants.PROPOSALS_PENDING_DIR)
+            self.assertFalse(
+                os.path.isdir(pending)
+                and [n for n in os.listdir(pending) if n.endswith(".md")]
+            )
 
 
 # --- The whole way round ------------------------------------------------------

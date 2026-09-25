@@ -204,6 +204,9 @@ def main(argv=None):
 
     try:
         if options.local_edit:
+            # Before either words file is read, so a refusal leaves both where
+            # they are for the next attempt once the document is renamed.
+            compose_proposal.refuse_a_name_with_a_space(resolution.root)
             session = a_session(resolution.base_id)
             source = options.source
             if options.source_file:

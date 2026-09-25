@@ -733,6 +733,7 @@ PYTHON_SENTENCES = (
     ("constants", "SOURCES_READ_REFUSAL"),
     ("formats", "ABOUT_SENTENCE"),
     ("formats", "KEEP_THE_CHANGE_HINT"),
+    ("formats", "NAME_WITH_A_SPACE"),
     ("join_flow", "NOTE_NOT_WRITTEN"),
     ("join_flow", "NEEDS_THE_BASE"),
     ("join_flow", "WHY_FROM_THE_CLOSING"),

@@ -1455,19 +1455,46 @@ def _changed_files(base_root: str, git: GitRunner) -> Tuple[List[str], str]:
     in those headers and the quoted form is not a path in this base. A file
     that was taken away is left out, as it always was.
     """
-    named = git.run(
-        ["diff", "HEAD", "--name-only", "-z", "--diff-filter=d"], cwd=base_root
-    )
-    if not named.ok:
+    changed = _changed_names(base_root, git)
+    if changed is None:
         return [], ""
     result = git.run(["diff", "HEAD", "--unified=0"], cwd=base_root)
     if not result.ok:
         return [], ""
+    return changed, result.stdout
+
+
+def _changed_names(base_root: str, git: GitRunner) -> Optional[List[str]]:
+    """The names of every file changed and not yet saved, or None if unreadable."""
+    named = git.run(
+        ["diff", "HEAD", "--name-only", "-z", "--diff-filter=d"], cwd=base_root
+    )
+    if not named.ok:
+        return None
     changed: List[str] = []
     for path in nul_fields(named.stdout):
         if path not in changed:
             changed.append(path)
-    return changed, result.stdout
+    return changed
+
+
+def refuse_a_name_with_a_space(
+    base_root: str, runner: Optional[GitRunner] = None
+) -> None:
+    """Refuse a hand edit to a document whose name holds a space, up front.
+
+    Approving a hand edit ends in a line recording the owner's yes, and that
+    line cannot carry such a name. The change used to be prepared and shown and
+    then fail at the very end, the same way every time it was asked again, so
+    it is refused here instead, before anything is prepared and before the
+    words somebody typed about it are read.
+    """
+    git = runner_or_default(runner)
+    for path in _changed_names(base_root, git) or []:
+        if formats.name_has_a_space(path):
+            raise ValidationError(
+                formats.NAME_WITH_A_SPACE, code=formats.CODE_NAME_WITH_A_SPACE
+            )
 
 
 def _added_characters(diff: str) -> int:
@@ -1660,6 +1687,8 @@ def stage_local_edit(
     today = now or state.today()
     if isinstance(today, datetime.datetime):
         today = today.date()
+
+    refuse_a_name_with_a_space(base_root, git)
 
     if records_a_change and not str(what_changed or "").strip():
         raise ValidationError(

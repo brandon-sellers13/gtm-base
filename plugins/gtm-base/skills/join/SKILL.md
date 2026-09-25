@@ -200,9 +200,10 @@ place they named to drop, using the number the survey printed beside it. A
 place is never dropped by its name, and a name is refused. The files lying
 loose at the top of the folder they named are a place of their own, and its
 name on the `place=` line is a single full stop, so drop that place by its
-number when they say those files do not belong. A folder to add that is not a
-folder of the one they named comes back as `codes=no-such-folder` and nothing
-is shown, so ask them for a folder that is there. Dropping every place comes back as
+number when they say those files do not belong. A folder to add has to sit
+directly inside the one they named, not in a folder further down. One that
+does not comes back as `codes=no-such-folder` and nothing is shown, so ask them
+for a folder directly inside the one they named. Dropping every place comes back as
 `codes=no-folders-chosen`, and the answer to that is to ask which folder holds
 the material and list that one.
 
