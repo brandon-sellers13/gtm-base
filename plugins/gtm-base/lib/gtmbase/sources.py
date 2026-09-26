@@ -1015,14 +1015,21 @@ def date_for_file(path: str, today=None) -> FileDate:
 
 
 class Consent(object):
-    """The exact set of files a person agreed to have read, and when."""
+    """The exact set of files a person agreed to have read, and when.
 
-    __slots__ = ("paths", "session_id", "frozen_at", "_set")
+    `scope` is the part of the company the person said the base is for, when
+    they said one, kept beside the list because the places they dropped from
+    it were dropped for that reason (Unit 1.7a, requirement P23). It is empty
+    when the base is for the whole company or nobody was asked.
+    """
 
-    def __init__(self, paths_, session_id: str, frozen_at: str):
+    __slots__ = ("paths", "session_id", "frozen_at", "scope", "_set")
+
+    def __init__(self, paths_, session_id: str, frozen_at: str, scope: str = ""):
         self.paths = tuple(paths_)
         self.session_id = session_id
         self.frozen_at = frozen_at
+        self.scope = str(scope or "")
         self._set = frozenset(self.paths)
 
     def allows(self, path: str) -> bool:
@@ -1046,7 +1053,7 @@ class ConsentList(object):
         )
 
     @staticmethod
-    def freeze_paths(paths_, session_id: str) -> Consent:
+    def freeze_paths(paths_, session_id: str, scope: str = "") -> Consent:
         """Take the person's yes: fix the set, and say nothing may leave.
 
         This takes the paths rather than a listing, because the set a person
@@ -1076,7 +1083,7 @@ class ConsentList(object):
             .replace("+00:00", "Z")
         )
         marker.write_sources_read_marker(session_id)
-        return Consent(wanted, session_id.strip(), frozen_at)
+        return Consent(wanted, session_id.strip(), frozen_at, scope=scope)
 
 
 def read_allowed(consent: Optional[Consent], path: str) -> str:

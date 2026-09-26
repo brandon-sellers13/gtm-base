@@ -51,9 +51,11 @@ from . import (
     names,
     paths,
     review,
+    segments,
     sources as sources_module,
     stale_check,
     state,
+    validate,
     wordsfile,
 )
 from .errors import (
@@ -73,6 +75,9 @@ from .gitcmd import GitRunner, runner_or_default
 CONSENT_FILE = "consent.json"
 LISTING_FILE = "listing.json"
 SURVEY_FILE = "survey.json"
+# The part of the company the person said the base is for (Unit 1.7a). It is
+# held here because the profile that will carry it does not exist yet.
+SCOPE_FILE = "scope.json"
 PASTES_DIR = "pastes"
 
 # What the folder holding one run's drafts is called, under the folder this
@@ -876,6 +881,9 @@ def list_sources(
                 "from_survey": bool(from_survey),
                 "added": list(adjustments["added"]),
                 "dropped": list(adjustments["dropped"]),
+                # What the base is for, beside the places dropped for it
+                # (Unit 1.7a). Empty when nobody said it is for one part.
+                "scope": held_scope(run_id) or "",
                 # The folders the counts named, in the order they were printed,
                 # so the skill can name one by its number afterwards rather
                 # than by a name a folder's author chose (finding F6).
@@ -1008,6 +1016,7 @@ def load_listing(run_id: str):
         "from_survey": bool(payload.get("from_survey")),
         "added": names("added"),
         "dropped": names("dropped"),
+        "scope": _scope_value(payload.get("scope")),
         "paths": [str(item) for item in wanted],
     }
 
@@ -1048,7 +1057,13 @@ def freeze_sources(folder: str, session_id: str, run_id: str, today=None):
             "that list is too large to be agreed to whole",
             code=CODE_NARROW_FIRST,
         )
-    consent = sources_module.ConsentList.freeze_paths(shown["paths"], session_id)
+    # The scope is the one held now, which is the one the list was shown
+    # under, because nothing may change it once a list has been shown and a
+    # yes taken (Unit 1.7a). It sits beside the places dropped for it.
+    scope = held_scope(run_id) or ""
+    consent = sources_module.ConsentList.freeze_paths(
+        shown["paths"], session_id, scope=scope
+    )
     atomic_write_json(
         os.path.join(scratch_dir(run_id), CONSENT_FILE),
         {
@@ -1060,6 +1075,7 @@ def freeze_sources(folder: str, session_id: str, run_id: str, today=None):
             "from_survey": bool(shown["from_survey"]),
             "added": list(shown["added"]),
             "dropped": list(shown["dropped"]),
+            "scope": consent.scope,
             "session_id": consent.session_id,
             "frozen_at": consent.frozen_at,
             "paths": list(consent.paths),
@@ -1086,6 +1102,7 @@ def load_consent(run_id: str):
         [str(item) for item in wanted],
         str(payload.get("session_id") or ""),
         str(payload.get("frozen_at") or ""),
+        scope=_scope_value(payload.get("scope")),
     )
 
 
@@ -1127,6 +1144,228 @@ def consent_root(run_id: str) -> str:
     if payload is None:
         return ""
     return str(payload.get("root") or "")
+
+
+# --- What the base is for (Unit 1.7a) ----------------------------------------
+
+# Why the part of the company a base is for could not be held.
+CODE_BAD_SCOPE = "bad-scope"
+# The list was already agreed to, and the places on it were settled without
+# this answer, so it is too late in this run to say what the base is for.
+CODE_SCOPE_AFTER_THE_YES = "scope-after-the-yes"
+
+
+def _scope_value(value) -> str:
+    """A scope read back from a run's own file, or nothing when it is not one."""
+    if not value:
+        return ""
+    try:
+        return validate.validate_covers(value)
+    except ValidationError:
+        return ""
+
+
+def places_that_split(run_id: str) -> List[str]:
+    """The places that each keep their own copy of the same positioning document.
+
+    Material plainly covers more than one part of the company when two or more
+    places each hold a customer profile and a positioning document of the same
+    name, such as a `positioning.md` in a folder for each product line: the
+    same document written once per part. That is one of the two times the
+    scope question is asked; the other is the person saying so. A folder of
+    positioning and a folder holding a sales pitch are not that, because a
+    pitch and a positioning are two documents about one thing, so the rule
+    looks for the same name and not merely the same kind. It is worked out
+    from the file names and first headings the finding step already
+    recorded, so it reads nothing the finding step did not.
+    """
+    payload = read_json(os.path.join(scratch_dir(run_id), SURVEY_FILE))
+    if not isinstance(payload, dict) or not isinstance(payload.get("places"), list):
+        return []
+    places_by_stem = {}
+    for item in payload["places"]:
+        if not isinstance(item, dict):
+            continue
+        folder = str(item.get("folder") or "")
+        candidates = item.get("candidates")
+        if not folder or not isinstance(candidates, list):
+            continue
+        kinds = set()
+        stems = set()
+        for candidate in candidates:
+            if not isinstance(candidate, dict):
+                continue
+            kind = candidate.get("kind")
+            kinds.add(kind)
+            if kind == "positioning":
+                stems.add(sources_module.version_stem(str(candidate.get("path") or "")))
+        if "customer-profile" not in kinds:
+            continue
+        for stem in stems:
+            places_by_stem.setdefault(stem, [])
+            if folder not in places_by_stem[stem]:
+                places_by_stem[stem].append(folder)
+    found: List[str] = []
+    for stem in sorted(places_by_stem):
+        folders = places_by_stem[stem]
+        if len(folders) > 1:
+            found.extend(folder for folder in folders if folder not in found)
+    return found
+
+
+def scope_question_needed(run_id: str, raised: bool = False) -> bool:
+    """Whether to ask what part of the company the base is for.
+
+    Requirement P23: asked once, when the person says the base is for one
+    part of the company or the material plainly splits, and never otherwise.
+    """
+    return bool(raised) or bool(places_that_split(run_id))
+
+
+def hold_scope(run_id: str, covers: Optional[str] = None, whole: bool = False) -> str:
+    """Hold the answer in the run's own folder until the profile can carry it.
+
+    `covers` is the name of the part of the company the base is for, checked
+    as a short name. `whole` is the answer that it is for the whole company,
+    which is held too, so the question is not asked again in this run. An
+    answer given after the list was agreed to is refused, because the places
+    on that list were settled without it.
+    """
+    if _consent_payload(run_id) is not None:
+        raise ValidationError(
+            "the list was already agreed to", code=CODE_SCOPE_AFTER_THE_YES
+        )
+    if whole:
+        label = ""
+    else:
+        try:
+            label = validate.validate_covers(covers)
+        except ValidationError as refusal:
+            raise ValidationError(str(refusal), code=CODE_BAD_SCOPE)
+    atomic_write_json(
+        os.path.join(scratch_dir(run_id), SCOPE_FILE),
+        {"whole": not label, "covers": label},
+        inside=paths.seat_home(),
+    )
+    return label
+
+
+def held_scope(run_id: str) -> Optional[str]:
+    """What the base covers: a name, "" for the whole company, None if not asked.
+
+    Once the list is agreed to, the scope kept with that yes is the answer,
+    because it is the one the places were settled under.
+    """
+    payload = _consent_payload(run_id)
+    if payload is not None and "scope" in payload:
+        return _scope_value(payload.get("scope"))
+    held = read_json(os.path.join(scratch_dir(run_id), SCOPE_FILE))
+    if not isinstance(held, dict):
+        return None
+    if held.get("whole") is True:
+        return ""
+    return _scope_value(held.get("covers")) or None
+
+
+def with_scope(draft, covers: Optional[str]):
+    """The profile with the scope GTM Base holds on it, and no other.
+
+    Whatever the draft said about what it covers is taken off first, and the
+    held answer is written in its place, so the value in the base is always
+    the one the person gave. A base for the whole company carries none.
+    """
+    block, body = formats.split_document(draft.text)
+    fields = formats.parse_frontmatter(block)
+    fields.pop(constants.COVERS_FIELD, None)
+    if covers:
+        fields[constants.COVERS_FIELD] = validate.validate_covers(covers)
+    text = formats.render_document(fields, body)
+    return drafting.parse(draft.step, "```markdown\n" + text.rstrip("\n") + "\n```\n")
+
+
+# --- Which segments the base will hold (Unit 1.7a) ---------------------------
+
+# There is no agreed list of files yet, so there is nothing to find segments in.
+CODE_NO_CONSENT = "no-consent"
+
+
+def segment_candidates(run_id: str, today=None) -> List[segments.Candidate]:
+    """The documents on the agreed list that each look like one segment.
+
+    Only files the person agreed to are looked at, and each one only through
+    the check every read goes through. A document counts when its name or its
+    first heading says it is a customer profile, and it is not a template or a
+    read-me. Versions of one document, grouped by name the way the drafts
+    group them, count once, as the version a draft would read. The numbered
+    list is kept in the run's own folder, so a number the person names later
+    means the document shown beside it.
+    """
+    consent = load_consent(run_id)
+    if consent is None:
+        raise ConsentError("no list has been agreed to yet", code=CODE_NO_CONSENT)
+    root = consent_root(run_id)
+    day = today or state.today()
+
+    class _Found(object):
+        __slots__ = ("path",)
+
+        def __init__(self, path):
+            self.path = path
+
+    found = []
+    for path in consent.paths:
+        try:
+            real = sources_module.read_allowed(consent, path)
+        except ConsentError:
+            continue
+        if not os.path.isfile(real):
+            continue
+        name = os.path.basename(real)
+        heading = "" if name.casefold().endswith(".csv") else sources_module.first_heading(real)
+        if sources_module.kind_of(name, heading) != "customer-profile":
+            continue
+        words = ("%s %s" % (name, heading)).casefold()
+        stem = os.path.splitext(name)[0].casefold()
+        if any(word in words for word in constants.DRAFT_LAST_WORDS) or (
+            stem in constants.DRAFT_LAST_NAMES
+        ):
+            continue
+        found.append(_Found(real))
+    groups = sources_module.version_groups(
+        found, lambda item: sources_module.date_for_file(item.path, today=day).date
+    )
+    candidates = []
+    for number, group in enumerate(groups, start=1):
+        path = group[0].path
+        try:
+            label = os.path.relpath(path, root) if root else os.path.basename(path)
+        except ValueError:
+            label = os.path.basename(path)
+        candidates.append(
+            segments.Candidate(number, path, label.replace(os.sep, "/"))
+        )
+    segments.save_candidates(scratch_dir(run_id), candidates, paths.seat_home())
+    return candidates
+
+
+def settle_segments(run_id: str, text: str) -> segments.Inventory:
+    """Read the person's answers and keep the inventory, or refuse all of it.
+
+    The numbers are taken against the documents this run last showed, never
+    against a fresh look, so a number means the document the person saw
+    beside it. Nothing is kept unless every segment passes.
+    """
+    # A run that read only pasted text has no documents to number, and every
+    # segment it names is named with no document.
+    shown = segments.load_candidates(scratch_dir(run_id)) or []
+    inventory = segments.settle(segments.read_lines(text), shown)
+    segments.save(scratch_dir(run_id), inventory, paths.seat_home())
+    return inventory
+
+
+def load_inventory(run_id: str) -> Optional[segments.Inventory]:
+    """The inventory this run settled, exactly as it was kept, or None."""
+    return segments.load(scratch_dir(run_id))
 
 
 class SourcesRead(object):
@@ -1726,6 +1965,10 @@ def approve_step(
     reviewed = review_step(step, draft_file, base_root=base_root, email=email, runner=git)
     if not reviewed.ready:
         raise ReviewError(review.CODE_SCREENED, codes=reviewed.codes)
+    if reviewed.draft.step == drafting.STEP_ICP:
+        # What the base covers goes onto the profile from the answer this run
+        # holds, and from nothing a draft said (Unit 1.7a, requirement P23).
+        reviewed.draft = with_scope(reviewed.draft, held_scope(run_id))
 
     first_file = not base_root
     where = parent

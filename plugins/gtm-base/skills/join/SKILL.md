@@ -182,6 +182,10 @@ python3 scripts/join.py survey --folder-file <the path it printed> --run <run id
   positioning file beside it is not proposed, and leaves
   `note=plans-alone:<folder>`. A deploy plan among engineering notes is not
   marketing, and a folder like that can still be added by name.
+- A `splits=` line, with a sentence under it, means two or more places each
+  hold a customer profile and a positioning of their own. Go to step 5a before
+  saying anything about the places, and do the same when they have already
+  said the base is for one part of the company.
 
 Say the sentence word for word and nothing else about the places:
 
@@ -222,6 +226,39 @@ python3 scripts/join.py list-sources --folder-file <the path it printed> --run <
   choice, and the list prints `choice=explicit`. A plain yes, with or without
   a place dropped, prints `choice=plain-yes`, because the folders on it are
   still the ones GTM Base picked.
+
+### Step 5a. Which part of the company the base is for
+
+This step settles which part of the company the base is for, so that material
+about another part will stay out of it. It happens at most once, and only after a
+`splits=` line or when they have said the base is for one part of the company.
+Otherwise it is skipped and nothing about it is asked.
+
+- After a `splits=` line, say the sentence printed under it first.
+- When they have already named the part, do not ask. Hold what they said.
+
+<!-- ask -->
+Is this base for the whole company, or for one part of it? If it is for one part, name it.
+<!-- end ask -->
+
+Hold their answer with:
+
+```
+python3 scripts/join.py words-file --run <run identifier> --for scope
+python3 scripts/join.py scope --run <run identifier> --scope-file <the path it printed>
+```
+
+- Write the part they named into that path as a short name, such as the name
+  of a product line.
+- For the whole company, run `python3 scripts/join.py scope --run <run identifier> --whole`
+  instead.
+- It prints one sentence. Say it, then say the survey's own sentence from step
+  5 and wait for that answer. A place they drop now is recorded with what the
+  base is for, and the customer profile carries it once it is approved.
+- `codes=bad-scope` means what was written is not a short name. Write it
+  shorter and run it again.
+- `codes=scope-after-the-yes` means the list is already fixed, so it is too
+  late to change in this run. Carry on.
 
 ### Step 5b. A list too large to read through
 
@@ -324,6 +361,44 @@ python3 scripts/join.py add-paste --run <run identifier> --label-file <the path 
 - That folder is theirs alone, it is deleted at the closing, and nothing in it
   is ever written into the base. A run that stops part way is cleared away by
   the next run started on a later day.
+
+### Step 5d. The segments your base will hold
+
+This step settles which customer segments the base will hold, before anything
+is drafted, so a finished page about one segment will never be folded into a
+single profile. It runs once the list is fixed:
+
+```
+python3 scripts/join.py segments --run <run identifier>
+```
+
+- `codes=one-or-none` means the list holds at most one document describing
+  customers. Skip this step, unless they have said they sell to several
+  separate groups; then ask the question below anyway.
+- Otherwise it prints a sentence, a numbered list of documents, and the
+  question. Say all three as printed, and nothing else about them.
+
+<!-- ask -->
+For each one, say whether to use the finished document, draft that segment fresh, or leave it out for now, and name any segment that has no document yet.
+<!-- end ask -->
+
+Keep their answer with:
+
+```
+python3 scripts/join.py words-file --run <run identifier> --for segments
+python3 scripts/join.py segments-settle --run <run identifier> --segments-file <the path it printed>
+```
+
+- Write one line per segment: the answer, then the number printed beside its
+  document or a hyphen, then the segment's name as they would say it. For
+  example `adopt 3 Fintech lenders`, `draft - Regional banks`, or
+  `leave-out 7 Credit unions`.
+- A document they did not place is not a segment. It is still read for the
+  customer profile.
+- It prints one line per segment and then one sentence. Say them as printed.
+- A refusal is one sentence naming the segment to change. Say it, and ask
+  about that segment again.
+- Nothing is drafted or taken into the base in this step.
 
 ### Step 6. What each draft will read
 

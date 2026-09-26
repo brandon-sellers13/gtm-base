@@ -60,6 +60,10 @@ KINDS = (
     "reason",
     "source",
     "what-changed",
+    # Unit 1.7a: the part of the company the base is for, and the answers
+    # that settle which segments it holds.
+    "scope",
+    "segments",
 )
 
 # Most bytes one file of somebody's words may hold. A person answering a
