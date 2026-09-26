@@ -1374,3 +1374,19 @@ Plan: docs/plans/2026-09-19-001-feat-base-that-produces-work-plan.md, Unit 1.7b 
 - [ ] Prompts: `draft-icp.md` and `draft-positioning.md` reconciled with the rule; new `draft-umbrella.md` and `draft-segment.md` (depth, no compression) carry the segment names and what the base is for inside the data fence.
 - [ ] Tests for every plan scenario plus the collision checks; the join skill, the stale-check and confirm skills, the closing rules; atlas figures 7 and 8 (not republished); draft Unreleased CHANGELOG.
 - [ ] Full suite, both runs; one correctness review of the diff, fixes with tests, suite again.
+
+#### Progress and review, Unit 1.7b (2026-09-26)
+- [x] The marker as a state: `callmarkers.py` finds every `[your call: ...]` in a body; `ContextFileInfo.open_questions` and `complete`; `stale.compute` counts no owner line or acceptance for a file holding one; the first-run finding's second slot is filled (`FINDING_OPEN_QUESTION`).
+- [x] No confirmation path settles it: `confirm.answer` yes and `confirm.against_change` refuse with one sentence before the question is used up; the closing leaves such a document flagged and asks nothing; setup's own line is written and counts for nothing until the question is answered.
+- [x] The review lists each question first with the question held apart as data; `stale_check.py --answer-question <token> --document <path> --answer-file <words>` prepares a first-draft change to the part holding it; wording that still asks it is refused; local approval settles it and the file can be confirmed.
+- [x] `umbrella` and `segment` drafting steps, their prompts, the umbrella's parts and link check, and the check against the settled inventory; the single profile refused with several segments; each segment drafted into `context/icps/<name>.md` after the positioning and before the closing.
+- [x] A segment file is refused by name when either segment folder already holds a file whose name folds to the same one (letter case, encoding, a name a move kept, the older folder), and when the folder is a link.
+- [x] A draft's open questions are counted before it is shown and approved only with `--questions-open`, on the person's say.
+- [x] `draft-icp.md` and `draft-positioning.md` say what a mark costs; new `draft-umbrella.md` and `draft-segment.md`.
+- [x] Tests: tests/test_umbrella_and_segments.py and tests/test_open_questions.py (new), the slot test in tests/test_stale.py, the walk in tests/test_skills_and_scripts_agree.py, the lint registry, the run.sh linked-folder list.
+- [x] Atlas figures 7 and 8 (not republished), the join guide, the skills and closing rules, the stale-check rules, the draft Unreleased CHANGELOG.
+- [x] Correctness review of the diff (a subagent), nine findings, each fixed with a test: one prepared answer per part and the part's text in its name; a stable token for each question; a segment's own page pinned first after ordering; wrapped wording still refused; a set-aside document's questions still asked; refusals said in sentences; a segment's draft tied to its file; the collision refusal names nobody; no skipped single profile with several segments.
+- [ ] Brandon: the words listed in the hand-back report; then the live run where he reads an umbrella drafted from the Gridwise material.
+- [ ] Orchestrator: review, merge into release-b, then 1.7c and 1.7d before release B ships.
+
+Review: the plan's `tests/test_drafting.py`, `test_base_reader.py`, `test_confirm.py` and `test_prompt_guards_join.py` scenarios live in the two new test modules instead, because each crosses more than one of those modules; the existing prompt guards now cover the two new prompts through `drafting.STEPS`. The closing's finding names how many questions are open rather than the question itself, because the question comes out of the file and the closing sentence is said without a fence.

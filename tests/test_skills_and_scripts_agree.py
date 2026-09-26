@@ -742,11 +742,12 @@ class TestTheSkillsAsTheyAreWritten(unittest.TestCase):
 
     def an_open_question(self, state):
         """The token the review gives the question left open in the base."""
-        from gtmbase import callmarkers
+        from gtmbase import callmarkers, layout
 
-        text = support.read(
-            os.path.join(state["base"], state["open_question_document"])
-        )
+        # The walk may have moved the base to the current layout by now, so
+        # the document is looked for where it lives.
+        where = layout.where_it_lives(state["base"], state["open_question_document"])
+        text = support.read(os.path.join(state["base"], where))
         found = callmarkers.find(text)
         return found[0].token if found else None
 
