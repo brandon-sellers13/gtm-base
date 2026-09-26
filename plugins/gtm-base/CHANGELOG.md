@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased (draft, Unit 1.5b)
+## Unreleased (draft, Units 1.5b and 1.6)
 
 - A base is now laid out by the five parts of the CLASS framework, so anyone who has read about the framework can open a base and find each part by the name of its folder. `context` holds what is true about the business, one file for each subject: goals, product, ideal customer profiles, buyer personas, positioning, messaging, voice, design, and metric definitions, with each customer segment in a folder of its own beside the profile. `learning` holds the context changes, the record of what each approved fix changed, and a folder kept for lessons from results. `access` holds the source map, which says where the material lives, which tools read it, and where finished work is saved, and never holds a password, a key, or a token. `skills` is kept empty for now, `standards` holds what good work looks like for each job, and `work` holds the approvals. Brandon decided all of this on the twenty-fifth of September, in calls 9 to 14 of the build plan.
 
@@ -17,6 +17,26 @@
 - No sentence a person reads names a path the current layout does not have. The plain-language checks now include one that looks for the older paths in every registered sentence, every skill, both templates, and the join guide.
 
 - Not done here, and recorded. The move does not write a source map into a base that never had one; that starter arrives with the inventory. The source map cannot yet be edited through a prepared change, because a prepared change only reaches the context folder. A seat on an earlier version reads a moved base as holding nothing, exactly as a seat on 0.2.6 reads a base the rename moved, which is why the offer asks for everyone to be on this version first on a base others can reach. The one real base is moved only by its owner, through the offer, in a live run.
+
+- Setting a base up proposes the places a person would have picked. On the third real run, on the nineteenth of September, the finding step proposed ten places where two were right, because the words for plans and metrics in the names of engineering files looked like marketing. Plans and metrics now count only in a folder that also holds a customer profile, a persona, or a positioning file. A folder of plans on its own is left out with a note saying why, and naming it still adds it to the list.
+
+- Each folder the finding step or the narrowing question names now says what it mostly holds, worked out from the names of its files alone, so a person asked which folders hold their marketing can tell a folder of customer profiles from a folder of other files without anything in either having been opened.
+
+- Naming your folders is honored once. The same run named four folders and was then asked to narrow them again, because the files in those four folders looked like a whole working repository to the check that asks. The yes now records whether the list was folders the person named, as the places to use, as folders to add, or in answer to that one question, or a plain yes to what GTM Base proposed. Folders you named are confirmed with one sentence counting their files and are never narrowed again, before the yes or before either draft. A plain yes to a proposal too large to read through is still asked once which folders matter, because a yes nobody could read through is not a yes, and it used to slip past that question whenever the proposal had any folders on it at all.
+
+- A list shown after the yes is not covered by it. If the list changes after a yes, whether a folder was added or one was dropped, nothing on it is read until it has a yes of its own, and the drafting steps say so rather than drafting from the older list.
+
+- The consent step is three short lines and the question, where it was seven sentences. The lines keep what the real runs taught: only file names and first headings were looked at, the files are read and copied nowhere, not even into the base, and nothing leaves the computer once the list is fixed.
+
+- Before each draft the preview now says how many files the draft reads, which ones it leaves out, and, when it leaves any out for length, why a draft reads a limited amount at all. The third run was told files were left out and never told why. After a plain yes it then asks whether to narrow the draft; after folders you named, it asks nothing. The request built after the preview no longer repeats the question.
+
+- A document with several versions is read once, in one version. Files in one folder whose names differ only by a word such as final or draft, a version number, a copy number, or a date are grouped by their names during the finding step, which opens nothing. After the yes, the draft reads the version whose name says final, ahead of a newer date, or else the newest, and the preview names each version it left out and says so out loud when two versions say different things, because a date on a file says when it was last touched and not which version somebody signed off. The third run read an older file and left its final version out.
+
+- Templates and read-me files go last in every draft, so they are the first things the length limit leaves out. The third run spent room on templates while a finished document sat past the limit.
+
+- The finding step now reads no more than a fixed number of bytes from the start of any file to find its first heading, as well as no more than forty lines, so a document whose first line runs on for pages is never read past that point before anybody has said yes. A test holds every read the finding step makes to that limit.
+
+- Not done here, and recorded. The check for a list of people still reads up to sixteen kilobytes of a plain text file or a file of rows before any yes, in the finding step as in the list, because leaving a prospect list out needs its first rows; it only ever decides to leave a file out. Versions are grouped by a short, deliberately cautious list of words, so "ad copy" and "new customers" are never taken for versions of another document, and a version the rule misses is simply read as a document of its own. Whether the places proposed are the ones Brandon would have picked is for the live survey of his own folder to show, not for a test.
 
 ## 0.3.1 (2026-09-26)
 
