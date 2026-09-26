@@ -226,7 +226,15 @@ class TestManifests(unittest.TestCase):
 
 class TestTemplateTree(unittest.TestCase):
     def test_template_holds_every_required_folder(self):
+        # The inbox and the proposals folder are ignored by the template's own
+        # ignore file, so no checkout of this repository or of the installed
+        # plugin ever holds them. Setting a base up makes every folder in
+        # TEMPLATE_TREE_DIRS itself, which tests/test_create_base.py asserts
+        # from a plugin checkout that lacks them too, so only the
+        # folders a checkout can carry are asked of the template here.
         for relative in constants.TEMPLATE_TREE_DIRS:
+            if relative in constants.TRANSIENT_DIRS:
+                continue
             path = os.path.join(TEMPLATE_DIR, relative)
             self.assertTrue(os.path.isdir(path), "missing folder: %s" % relative)
 
