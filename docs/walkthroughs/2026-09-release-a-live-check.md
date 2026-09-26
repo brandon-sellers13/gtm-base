@@ -106,3 +106,11 @@ Root causes, verified by Claude the same day with read-only checks against the i
 
 Decision: the live check is paused at step 2 until finding 1 is fixed and released, because steps 3 to 7 all run in ~/Gridwise.
 
+
+### 0.3.1 released, 2026-09-26: resume at step 2
+
+All three root causes above are fixed in 0.3.1 (commit on main the same day, installed on Brandon's machine with `claude plugin update gtm-base@gtm-base`). The six scripts accept a folder linked to a base, the review makes the update offer when nothing is due, the look before the update counts changes in words rather than naming their identifiers, and the skills tell the assistant to run from the folder the person is in and to say the scripts' own sentences as they are. Every script-level test class and the skill walk now also run from a linked folder, and on the 0.3.0 code those new tests fail 18 times with one error. Suite: 2016 tests, plus 99 from a linked folder, all passing.
+
+Not verified by Claude: the release against the real Gridwise base, because a read-only run from ~/Gridwise was blocked by the session's permission mode. Step 2 of this check is that verification.
+
+To resume: quit Claude Code and open it again, open it in ~/Gridwise, and start again at step 2. Expected at step 2 now: no command fails before the answer, the answer is the review's own sentence ("Nothing in your base is due a look today, and no change is waiting for you to approve it."), followed (after the quiet-record question, if that is due) by the offer: "Your context changes are stored the old way. Updating them takes one step and changes nothing they say. Shall I do it?"
