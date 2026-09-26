@@ -110,7 +110,10 @@ def main(argv=None):
         return EXIT_ERROR
 
     resolution = paths.resolve_base(os.getcwd(), machine.load_machine_state())
-    if not resolution.joined or not resolution.base_id:
+    # These are settings for this seat and this base, so a folder linked to
+    # the base changes them as well as the base's own folder does (finding 1
+    # of the release A live check).
+    if not resolution.active or not resolution.base_id:
         sys.stderr.write(NOT_JOINED + "\n")
         return EXIT_ERROR
 

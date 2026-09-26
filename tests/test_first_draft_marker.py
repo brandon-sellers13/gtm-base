@@ -104,7 +104,7 @@ def a_first_draft(root, body="We stopped selling to small companies."):
 def run_script(root, arguments):
     return subprocess.run(
         [sys.executable, SCRIPT] + [str(item) for item in arguments],
-        cwd=root,
+        cwd=support.where_a_script_runs(root),
         env=dict(os.environ),
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,

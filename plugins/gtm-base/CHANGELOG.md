@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.3.1 (2026-09-26)
+
+- Every command a skill runs now works from the folder you actually work in. A folder linked to a base, such as the folder you keep your marketing material in, brought the base into the session but was refused by every script afterwards with "This folder is not a company base you have joined yet": the review, recording an answer, raising or approving a change, the check before a document is used, and the seat's own settings. Each of them asked for a base joined in that very folder, and a linked folder reaches its base a different way. They now accept either, and a folder that is neither a base nor linked to one is still refused with the same sentence. This was found on the twenty-sixth of September, at the second step of the live check of 0.3.0, and it paused that check, because every later step runs in the linked folder.
+
+- A path to a prepared change that names it from inside the base, such as the folder the skills say prepared changes wait in, is now read against the base rather than against the folder the command runs in. From a linked folder it used to point into that folder, where nothing is ever waiting. The whole path the scripts print works as it always did.
+
+- The review now makes the offer to update how your context changes are stored when nothing is due, too. It used to stop as soon as it found nothing due, one step before the offer, so a base with nothing due never heard it, while the read-only look at the same base said it would be offered. It is said once, after the sentence saying nothing is due, and a review that writes nothing says it as well, because working the offer out writes nothing either.
+
+- The read-only look at that update now says how many context changes it would update, in words, rather than listing their identifiers, and the sentence said after the update no longer names a folder.
+
+- The stale check, confirm and propose skills now say plainly that their commands run from the folder you are working in, whether that is the base or a folder linked to it, so the assistant never goes looking for the base or asks you where it is. They also tell it to say each sentence a script prints as it is, joined into one reply if it likes but never reworded, summed up or added to, never to read out a path, an identifier or a line marked for the assistant, and never to add advice about what to put in your base or how GTM Base works inside. In the live check the assistant said "Your base is up to date" in place of the review's own sentence, named file paths, and said the review only runs from inside the base, which the stale check skill's own "From inside the base" had invited.
+
+- The tests missed the first of these because every test ran every script from inside the base. Each test module that starts a script can now be run a second time with every script started from a folder linked to the base, made the way the join skill makes one, and the test run does that for those modules. The walk through every command the skills print is also run from a linked folder.
+
 ## 0.3.0 (2026-09-24)
 
 - A session now opens with nothing to answer. The base records the session, brings itself up to date with the shared copy, and hands over the map and what has changed since last time, and then it stops. No question leads the first reply and no question identifier is issued. The evidence for the change is the first real return session, on the nineteenth of September, which opened by asking whether the base's own map was still right; that is the worst possible first sentence for a working session, and the question was in the way of the work rather than part of it.

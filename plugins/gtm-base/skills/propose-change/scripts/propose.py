@@ -155,7 +155,7 @@ def main(argv=None):
     if options.show_document:
         here = os.getcwd()
         resolution = paths.resolve_base(here, machine.load_machine_state())
-        if not resolution.joined or not resolution.root or not resolution.base_id:
+        if not resolution.active or not resolution.root or not resolution.base_id:
             sys.stderr.write(NOT_JOINED + "\n")
             return EXIT_ERROR
         seat, _problems = state.load_seat(resolution.base_id)
@@ -175,7 +175,7 @@ def main(argv=None):
     if options.new_words_file:
         here = os.getcwd()
         resolution = paths.resolve_base(here, machine.load_machine_state())
-        if not resolution.joined or not resolution.base_id:
+        if not resolution.active or not resolution.base_id:
             sys.stderr.write(NOT_JOINED + "\n")
             return EXIT_ERROR
         if options.new_words_file not in wordsfile.KINDS:
@@ -198,7 +198,12 @@ def main(argv=None):
 
     here = os.getcwd()
     resolution = paths.resolve_base(here, machine.load_machine_state())
-    if not resolution.joined or not resolution.root or not resolution.base_id:
+    # A folder linked to a base is where the person works, and it answers for
+    # that base as fully as the base's own folder does. All three ways in
+    # above and below used to ask for the base's own folder and nothing else,
+    # so a change could not be raised from the folder people actually work in
+    # (finding 1 of the release A live check).
+    if not resolution.active or not resolution.root or not resolution.base_id:
         sys.stderr.write(NOT_JOINED + "\n")
         return EXIT_ERROR
 
@@ -244,9 +249,9 @@ def main(argv=None):
                 options.reopen, resolution.root, resolution.base_id
             )
         else:
-            staged = options.staging
-            if not os.path.isabs(staged):
-                staged = os.path.join(here, staged)
+            # Read against the base, so the same path works from the base's
+            # own folder and from a folder linked to it.
+            staged = paths.in_the_base(resolution.root, options.staging)
             result = compose_proposal.propose(
                 staged, resolution.root, resolution.base_id
             )

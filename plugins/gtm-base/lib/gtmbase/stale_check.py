@@ -1167,6 +1167,11 @@ def _review(
         # changes is most likely to be the thing that is quiet, so the ask
         # happens here too rather than only when something was listed.
         _quiet_record_ask(result, report, base_id, session_id, dry_run)
+        # The offer too. This branch used to return before it, so a base with
+        # nothing due never heard it, while a look at the same base said it
+        # would be offered (finding 2 of the release A live check). Working
+        # the offer out writes nothing, so a dry run says it as well.
+        _offer_the_update(result, base_root, base_id, today, git)
         return
 
     result.sentences.append(REVIEW_OPENING)
@@ -1552,8 +1557,10 @@ def _offer_the_update(result, base_root, base_id, today, git) -> None:
     """Offer to store this base's context changes the way they are stored now.
 
     It comes after the review's own list, because the person asked for the
-    review and this is an aside. Nothing is applied on the strength of it: the
-    move runs only on their yes.
+    review and this is an aside, and it comes after the sentence saying
+    nothing is due when nothing is. It is said once per review, from one of
+    the two places in `_review` that end it. Nothing is applied on the
+    strength of it: the move runs only on their yes.
 
     What to say is worked out rather than assumed. An offer somebody could say
     yes to and then have refused is not an offer, so the checks the move

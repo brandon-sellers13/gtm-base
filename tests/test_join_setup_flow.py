@@ -2975,7 +2975,7 @@ class TestTheSkillIsPlainAndSaysWhatWillHappen(unittest.TestCase):
 
         self.assertIn("contact lists left out;", atlas)
         self.assertIn("a sprawling folder is narrowed first", atlas)
-        self.assertIn("plugin 0.3.0", atlas)
+        self.assertIn("plugin 0.3.1", atlas)
 
     def test_the_atlas_draws_the_step_that_proposes_the_places(self):
         atlas = support.read(

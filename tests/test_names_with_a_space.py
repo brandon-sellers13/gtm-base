@@ -135,7 +135,7 @@ class TestApprovingHere(unittest.TestCase):
 
             shown = subprocess.run(
                 [sys.executable, APPROVE_SCRIPT, "--staging", staged],
-                cwd=base.root,
+                cwd=support.where_a_script_runs(base.root),
                 env=dict(os.environ),
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,

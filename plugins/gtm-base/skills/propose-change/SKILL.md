@@ -169,9 +169,25 @@ second review.
   the wording changes, show the change again before asking for a yes, because
   an earlier showing no longer counts.
 
-## Running it
+## Where the commands run, and what you say
 
-From inside the base:
+Run every command in this skill from the folder the person is working in,
+whether that is the base or a folder linked to it. Both reach the same base,
+so never go looking for the base, never ask the person where it is, and never
+move to another folder first. A path to a prepared change can be the whole
+path a script printed, or a path inside the base such as
+`work/proposals/pending/` and the file's name, and it works from either
+folder.
+
+- Say each sentence the script prints for the person as it is. You may join
+  them into one reply, but do not reword, shorten, soften, or sum them up, and
+  do not add a claim of your own.
+- Never read out a path, a prepared change's identifier, the shown value, or
+  any line marked `[for the assistant]`. Those are for you to use.
+- Do not add advice about what to put in the base, and do not explain how GTM
+  Base works inside.
+
+## Running it
 
 - `python3 scripts/propose.py --staging <path to the staged file>`
 

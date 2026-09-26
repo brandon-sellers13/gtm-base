@@ -653,6 +653,11 @@ prints one line per base with its name, its own folder, and the folder it belong
 with, or `none`. Run this whenever a name they gave was not found, and show them
 the list so they can name one from it.
 
+Once a folder is linked, every other GTM Base skill runs from that folder
+exactly as it runs from the base's own folder. So never run `links`, or
+anything else, to go looking for the base before another skill's command, and
+never tell the person a command only works from inside the base.
+
 ## What this release does not do yet
 
 Three things reach this skill and are answered with one sentence each, said

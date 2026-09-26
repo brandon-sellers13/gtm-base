@@ -33,7 +33,7 @@ PRIVATE = "The board pack says we are running out of money in March."
 def script(path, arguments, cwd):
     return subprocess.run(
         [sys.executable, path] + [str(item) for item in arguments],
-        cwd=cwd,
+        cwd=support.where_a_script_runs(cwd),
         env=dict(os.environ),
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,

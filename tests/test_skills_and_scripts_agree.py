@@ -581,12 +581,16 @@ class TestTheSkillsAsTheyAreWritten(unittest.TestCase):
         )
         return folder
 
+    def where(self, cwd):
+        """The folder a command is started in, which the linked walk changes."""
+        return support.where_a_script_runs(cwd)
+
     def run_line(self, command, cwd):
         words = shlex.split(command)
         script = SCRIPTS[os.path.basename(words[0])]
         return subprocess.run(
             [sys.executable, script] + words[1:],
-            cwd=cwd,
+            cwd=self.where(cwd),
             env=dict(os.environ),
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
@@ -1156,6 +1160,39 @@ class TestTheSkillsAsTheyAreWritten(unittest.TestCase):
             state["cwd"] = state["base"]
             if state["step"] == "icp":
                 state["step"] = "positioning"
+
+
+class TestTheSkillsFromALinkedFolder(TestTheSkillsAsTheyAreWritten):
+    """The same walk, with every command started in a folder linked to the base.
+
+    Finding 1 of the release A live check. People work in the folder their
+    base is linked to, not in the base's own folder, and every script a skill
+    runs refused that folder. The walk above started every command inside the
+    base, so it could not see it. This one starts every command that would
+    have run inside a base in a folder linked to it instead, made the way the
+    join skill makes one, and every documented command still has to run.
+    """
+
+    def where(self, cwd):
+        return support.linked_folder_for(cwd) or cwd
+
+    def test_a_command_really_ran_from_the_linked_folder(self):
+        """The walk above proves nothing unless its folder really is linked."""
+        from gtmbase import machine, paths
+
+        with support.Sandbox() as sandbox:
+            state = {}
+            self.a_base_already_set_up(sandbox, state)
+            folder = self.where(state["base"])
+
+            self.assertNotEqual(os.path.realpath(state["base"]), folder)
+            resolution = paths.resolve_base(folder, machine.load_machine_state())
+            self.assertEqual(paths.CODE_LINKED, resolution.code)
+            self.assertFalse(resolution.joined)
+            finished = self.run_line("stale_check.py --review", state["base"])
+            self.assertEqual(
+                0, finished.returncode, finished.stderr.decode("utf-8")
+            )
 
 
 

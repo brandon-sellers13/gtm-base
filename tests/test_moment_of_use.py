@@ -191,7 +191,7 @@ def run_plugin_script(name, argv, cwd):
     spec.loader.exec_module(module)
     here = os.getcwd()
     out, err = io.StringIO(), io.StringIO()
-    os.chdir(cwd)
+    os.chdir(support.where_a_script_runs(cwd))
     try:
         with redirect_stdout(out), redirect_stderr(err):
             code = module.main(argv)
@@ -221,7 +221,7 @@ def run_script(skill, name, argv, cwd):
     spec.loader.exec_module(module)
     here = os.getcwd()
     captured = io.StringIO()
-    os.chdir(cwd)
+    os.chdir(support.where_a_script_runs(cwd))
     try:
         with redirect_stdout(captured):
             code = module.main(argv)

@@ -174,7 +174,10 @@ def main(argv=None):
 
     here = os.getcwd()
     resolution = paths.resolve_base(here, machine.load_machine_state())
-    if not resolution.joined or not resolution.root or not resolution.base_id:
+    # A folder linked to a base is where the person works, and it answers for
+    # that base as fully as the base's own folder does (finding 1 of the
+    # release A live check). Every path below is read against the base.
+    if not resolution.active or not resolution.root or not resolution.base_id:
         sys.stderr.write(NOT_JOINED + "\n")
         return EXIT_ERROR
 

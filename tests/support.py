@@ -700,3 +700,69 @@ class IndexingGh(RecordingGh):
                 }
             )
         return code, output
+
+
+# --- Running a script from a folder linked to the base ------------------------
+#
+# Finding 1 of the release A live check. Every script a skill runs refused the
+# folder people actually work in, a folder linked to their base, and not one
+# test saw it, because every test ran every script from inside the base. The
+# runners that start a script from a base call `where_a_script_runs` for the
+# folder to start it in. Ordinarily that is the folder they asked for. With
+# this set in the environment it is a folder linked to that base, made the way
+# the product makes one, so the same tests prove the same things from the
+# other folder a person can be standing in. `tests/run.sh` runs the modules
+# that start scripts a second time this way.
+FROM_A_LINKED_FOLDER = "TESTS_FROM_A_LINKED_FOLDER"
+LINKED_SUFFIX = "-linked-folder"
+
+
+def from_a_linked_folder():
+    """Whether this run starts every script from a folder linked to the base."""
+    return bool(os.environ.get(FROM_A_LINKED_FOLDER))
+
+
+def linked_folder_for(root):
+    """A folder linked to the joined base at root, made and linked if need be.
+
+    The folder is linked the way the join skill links one, through
+    `machine.link_content`, which records where it is and what it is, so the
+    resolver reaches the base from it exactly as it does for a person. A folder
+    the base is already linked with is used as it is. Anything else is a
+    failure rather than a quiet run from inside the base, because a run that
+    quietly fell back would pass while proving nothing.
+    """
+    from gtmbase import machine, paths
+
+    resolution = paths.resolve_base(root, machine.load_machine_state())
+    if resolution.code != paths.CODE_JOINED:
+        return None
+    entry = resolution.entry or {}
+    recorded = entry.get("content_root")
+    if recorded and entry.get("content_identity") and os.path.isdir(recorded):
+        # Checked through the resolver once, when it was linked, below. Asking
+        # the resolver again here would ask the disk for its identifier on
+        # every command a test runs, which is most of the time the linked run
+        # adds, and the script asks it anyway.
+        return recorded
+    folder = os.path.realpath(resolution.root).rstrip(os.sep) + LINKED_SUFFIX
+    os.makedirs(folder, exist_ok=True)
+    machine.link_content(resolution.base_id, folder)
+    linked = paths.resolve_base(folder, machine.load_machine_state())
+    if linked.code != paths.CODE_LINKED or linked.base_id != resolution.base_id:
+        raise AssertionError(
+            "the folder made for %s did not resolve to it: %r" % (root, linked)
+        )
+    return folder
+
+
+def where_a_script_runs(cwd):
+    """The folder a test starts a script in: cwd, or a folder linked to it.
+
+    Only a folder that is itself a joined base is swapped for a linked one, so
+    a test that runs a script from somewhere that is not a base, to see it
+    refused, is left exactly as it wrote itself.
+    """
+    if not from_a_linked_folder():
+        return cwd
+    return linked_folder_for(cwd) or cwd

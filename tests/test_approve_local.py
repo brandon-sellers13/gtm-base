@@ -2240,7 +2240,7 @@ class TestTheScriptRunsEveryAnswer(unittest.TestCase):
 
         module = self.script()
         was = os.getcwd()
-        os.chdir(root)
+        os.chdir(support.where_a_script_runs(root))
         try:
             with contextlib.redirect_stdout(io.StringIO()):
                 with contextlib.redirect_stderr(io.StringIO()):

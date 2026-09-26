@@ -541,6 +541,24 @@ def resolve_base(cwd: str, machine_state, runner: Optional[GitRunner] = None):
     return Resolution(None, None, CODE_NONE, None)
 
 
+def in_the_base(base_root: str, named: str) -> str:
+    """A path a script was handed, read against the base rather than the folder.
+
+    The assistant is handed two shapes of path for a prepared change: the whole
+    path, which the scripts print, and a path inside the base, which is how the
+    skills describe where prepared changes wait. The second used to be joined
+    onto the folder the command ran in, which is the base only when somebody
+    works inside it. From a folder linked to a base it pointed into that folder
+    instead, where no prepared change ever is, so the same command worked in
+    one place and failed in the other (finding 1 of the release A live check).
+    A path inside the base is read against the base, wherever the command runs.
+    """
+    text = str(named or "")
+    if os.path.isabs(text):
+        return text
+    return os.path.join(base_root, text)
+
+
 def migrate(base_id: str, new_base_id: str, **unused):
     """Move a seat's folder to the identifier derived from a new remote.
 

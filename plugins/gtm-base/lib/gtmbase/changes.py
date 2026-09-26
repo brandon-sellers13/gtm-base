@@ -153,10 +153,28 @@ GAVE_UP_NOTE_UNREADABLE = (
     "has touched nothing and kept the note. Nothing of yours was changed."
 )
 # What a look only says. It says what a real run would do and stops there.
+# It says how many context changes, in words, and never which ones by their
+# identifiers: a person reads this, and an identifier is a name only GTM Base
+# uses (finding 4 of the release A live check).
 WOULD_MOVE = (
-    "This would update %d of your context changes, which are %s, and write "
-    "one dated record of it under today's date, %s. It would be saved as two "
-    "separate pieces of work. Nothing has been written."
+    "This would update %s of your context changes and write one dated record "
+    "of it under today's date, %s. It would be saved as two separate pieces "
+    "of work. Nothing has been written."
+)
+# How many, the way a person says it, up to the point a person would say the
+# number itself instead.
+COUNT_WORDS = (
+    "no",
+    "one",
+    "two",
+    "three",
+    "four",
+    "five",
+    "six",
+    "seven",
+    "eight",
+    "nine",
+    "ten",
 )
 WOULD_NOT = "This would not run right now. %s Nothing has been written."
 PUT_OFF = (
@@ -196,9 +214,11 @@ RECORD_WHY = (
     "the settings inside each file now say the same words the rest of GTM "
     "Base says."
 )
+# It names no folder, because the skills tell the assistant to say this back
+# as it is and never to read a path out to anybody.
 MIGRATED = (
-    "Your context changes now live in work/changes, and all %d of them say "
-    "exactly what they said before."
+    "Your context changes are now stored the way GTM Base stores them today, "
+    "and all %d of them say exactly what they said before."
 )
 NOTHING_TO_MOVE = "Your context changes are already where they belong."
 UNREADABLE_ENTRY = (
@@ -1800,12 +1820,14 @@ def what_would_happen(
         return WOULD_NOT % NOTHING_TO_MOVE
     if paths.remote_url(base_root, runner=runner) is not None:
         return WOULD_NOT % EVERY_SEAT_FIRST
-    named = ", ".join(entry_id for entry_id, _name, _entry in moved)
-    return WOULD_MOVE % (
-        len(moved) + len(dropped),
-        named or "none of them",
-        day.isoformat(),
-    )
+    return WOULD_MOVE % (counted(len(moved) + len(dropped)), day.isoformat())
+
+
+def counted(number: int) -> str:
+    """A count as a person says it: in words up to ten, as a number after."""
+    if 0 <= number < len(COUNT_WORDS):
+        return COUNT_WORDS[number]
+    return str(number)
 
 
 def resume(

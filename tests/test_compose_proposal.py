@@ -1124,7 +1124,7 @@ class TestTheHandEditHabitThroughTheScript(unittest.TestCase):
 
         return subprocess.run(
             [sys.executable, self.SCRIPT] + [str(item) for item in arguments],
-            cwd=root,
+            cwd=support.where_a_script_runs(root),
             env=dict(os.environ),
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
@@ -1334,7 +1334,7 @@ class TestAHandEditToADocumentWithAnUnusualName(unittest.TestCase):
 
         return subprocess.run(
             [sys.executable, self.APPROVE_SCRIPT] + [str(item) for item in arguments],
-            cwd=root,
+            cwd=support.where_a_script_runs(root),
             env=dict(os.environ),
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,

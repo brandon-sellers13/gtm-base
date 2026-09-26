@@ -12,6 +12,7 @@ import unittest
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
+import plain_language  # noqa: E402
 import support  # noqa: E402
 
 from gtmbase import base_reader, changes, constants, formats, report  # noqa: E402
@@ -1825,7 +1826,7 @@ class TestTheOlderNameOfTheDismissOption(MigrationCase):
         for option in ("--dismiss-quiet-record", "--dismiss-ledger-behind"):
             finished = subprocess.run(
                 [sys.executable, script, option],
-                cwd=self.root,
+                cwd=support.where_a_script_runs(self.root),
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
                 env=dict(os.environ, TZ="America/Los_Angeles"),
@@ -1865,7 +1866,7 @@ class TestTheMoveStepOfTheSkill(MigrationCase):
         )
         return subprocess.run(
             [sys.executable, script] + list(options),
-            cwd=self.root,
+            cwd=support.where_a_script_runs(self.root),
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             env=dict(os.environ, TZ="America/Los_Angeles"),
@@ -2822,7 +2823,7 @@ class TestTheDeclineCanActuallyBeGiven(MigrationCase):
         )
         return subprocess.run(
             [sys.executable, script] + list(options),
-            cwd=self.root,
+            cwd=support.where_a_script_runs(self.root),
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             env=dict(os.environ, TZ="America/Los_Angeles"),
@@ -2863,7 +2864,7 @@ class TestTheReadOnlyCheck(MigrationCase):
         )
         return subprocess.run(
             [sys.executable, script] + list(options),
-            cwd=self.root,
+            cwd=support.where_a_script_runs(self.root),
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             env=dict(os.environ, TZ="America/Los_Angeles"),
@@ -2881,7 +2882,28 @@ class TestTheReadOnlyCheck(MigrationCase):
             [ENTRY_ONE + ".md"], self.files_in(constants.LEGACY_CHANGES_DIR)
         )
         said = finished.stdout.decode("utf-8")
-        self.assertIn(ENTRY_ONE, said)
+        # How many, in words, and never which ones by identifier (finding 4
+        # of the release A live check: this used to print the change's id).
+        self.assertIn("update one of your context changes", said)
+        self.assertNotIn(ENTRY_ONE, said)
+
+    def test_it_counts_in_words_and_names_no_identifier(self):
+        """Finding 4 of the release A live check, with more than one change."""
+        self.old_layout((ENTRY_ONE, ENTRY_TWO))
+
+        said = self.run_script("--check-move").stdout.decode("utf-8")
+
+        self.assertIn("update two of your context changes", said)
+        for entry_id in (ENTRY_ONE, ENTRY_TWO):
+            self.assertNotIn(entry_id, said)
+        self.assertNotIn("stg-", said)
+        self.assertEqual([], plain_language.find_dashes(said))
+
+    def test_a_count_reads_as_a_person_says_it(self):
+        self.assertEqual("one", changes.counted(1))
+        self.assertEqual("three", changes.counted(3))
+        self.assertEqual("ten", changes.counted(10))
+        self.assertEqual("11", changes.counted(11))
 
     def test_it_names_the_document_that_would_stop_it(self):
         self.put(

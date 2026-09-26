@@ -1271,3 +1271,18 @@ line it follows already names the document.
 - [ ] The review never makes the update offer that --check-move says it would make.
 - [ ] The skills tell the assistant to relay the review's sentences, not summarize or advise.
 - [ ] Release as 0.3.1, then Brandon resumes the live check at step 2.
+
+### 2026-09-26, 0.3.1: the linked folder
+- [x] Finding 1: the six scripts (stale_check.py, confirm.py, propose.py, approve_local.py, moment.py, seat.py) accept `resolution.active`, so a folder linked to a base works exactly as the base's own folder does. The NOT_JOINED sentence stays for a folder that is neither. gate.py keeps `.joined` on purpose: a linked folder is the person's own repository, which the gate does not read.
+- [x] A `--staging` path inside the base is read against the base root (`paths.in_the_base`), not the folder the command runs in. Document paths already were (`moment.context_path_of`); no other script reads the current folder after resolving.
+- [x] Finding 2: the review makes the update offer when nothing is due, once, after the nothing-due sentence and the quiet record ask, in a dry run too.
+- [x] Finding 4: `--check-move` counts context changes in words (`changes.counted`) and names no identifier; the sentence after the move names no folder.
+- [x] Finding 3: stale-check, confirm and propose-change skills say commands run from the folder the person works in, base or linked, and that the assistant relays each sentence as it is, never reads out a path, an identifier or a `[for the assistant]` line, and adds no advice. "From inside the base" is gone; the join skill says not to go looking for the base.
+- [x] Tests: tests/test_linked_folder.py (each script from a linked folder, relative staging path, refusal kept, the offer when nothing is due in both modes, the skills' wording); the skill walk runs from a linked folder too (TestTheSkillsFromALinkedFolder); `support.where_a_script_runs` lets every script-running module run from a linked folder (the eight modules, with the skill walk and the new module, pass that way: 544 tests), and tests/run.sh runs the 22 classes in them that start a script a second time that way, with a test that fails when a class that starts a script is missing from that list.
+- [x] CHANGELOG: draft Unreleased (0.3.1) section. Version not bumped.
+- [ ] Orchestrator: review, commit, release as 0.3.1, update the installed plugin.
+- [ ] Brandon: resume the live check at step 2.
+
+#### Review
+The linked folder was refused in six places for one reason, a check for a base joined in that very folder, and the tests could not see it because they all ran inside the base. The same tests now run from a linked folder, made with `machine.link_content` as the join skill makes one. A path inside the base given to `--staging` had the same blind spot and is fixed with it. The review's early return skipped the offer; it now makes it once in both modes. Not fixed here: the review's line for a prepared change hands the assistant the change's identifier, not a path, so the assistant has to build the path itself from the folder the skills name.
+Full suite after the change: 2016 tests OK in 739 seconds, then the second run from a linked folder, 99 tests OK in 98 seconds (tests/run.sh exit 0).

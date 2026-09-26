@@ -110,7 +110,11 @@ def build_parser():
 def _base():
     """The base this folder belongs to, or nothing and one sentence."""
     resolution = paths.resolve_base(os.getcwd(), machine.load_machine_state())
-    if not resolution.joined or not resolution.root or not resolution.base_id:
+    # A folder linked to a base is where the person works, and the document
+    # they are about to use is named from there as often as from the base
+    # (finding 1 of the release A live check). The file is looked up against
+    # the base either way.
+    if not resolution.active or not resolution.root or not resolution.base_id:
         sys.stderr.write(NOT_JOINED + "\n")
         return None
     return resolution

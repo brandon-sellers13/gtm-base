@@ -239,7 +239,7 @@ class TestAWordsFileSurvivesASecondWindow(unittest.TestCase):
     def run_script(self, which, arguments, cwd):
         return subprocess.run(
             [sys.executable, self.SCRIPTS[which]] + [str(item) for item in arguments],
-            cwd=cwd,
+            cwd=support.where_a_script_runs(cwd),
             env=dict(os.environ),
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,

@@ -63,9 +63,22 @@ The three answers, said once:
 | No | Prepares a change to the document from what they say is wrong, for somebody to review. Nothing is changed straight away. |
 | Not now | Leaves the document alone for a while and writes nothing. |
 
-## Running it
+## Where the commands run, and what you say
 
-From inside the base:
+Run every command below from the folder the person is working in, whether that
+is the base or a folder linked to it. Both reach the same base, so never go
+looking for the base, never ask the person where it is, and never move to
+another folder first.
+
+- Say each sentence the script prints for the person as it is. You may join
+  them into one reply, but do not reword, shorten, soften, or sum them up, and
+  do not add a claim of your own.
+- Never read out a path, a question identifier, or any line marked
+  `[for the assistant]`. Those are for you to use.
+- Do not add advice about what to put in the base, and do not explain how GTM
+  Base works inside.
+
+## Running it
 
 - `python3 scripts/confirm.py --question <id> --answer yes`
 
@@ -114,10 +127,11 @@ is a thing nobody else can write for them.
 
 ## What it says back, and what to do about it
 
-- It recorded the answer: say so in one sentence and carry on.
+- It recorded the answer: say the sentence it gave and carry on.
 - It could not reach the shared copy: the answer is safe and will be added the
-  next time GTM Base can add it. Say that, and do not run it again.
-- It refused: say the sentence it gave, in your own words. A question from
+  next time GTM Base can add it. Say the sentence it gave, and do not run it
+  again.
+- It refused: say the sentence it gave, as it is. A question from
   another session, an answer given twice, or a question older than an hour all
   mean the same thing in practice, which is that the person should be asked
   again in this session.

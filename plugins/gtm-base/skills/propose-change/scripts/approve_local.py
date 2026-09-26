@@ -155,7 +155,10 @@ def main(argv=None):
 
     here = os.getcwd()
     resolution = paths.resolve_base(here, machine.load_machine_state())
-    if not resolution.joined or not resolution.root or not resolution.base_id:
+    # A folder linked to a base is where the person works, and it answers for
+    # that base as fully as the base's own folder does (finding 1 of the
+    # release A live check). Every path below is read against the base.
+    if not resolution.active or not resolution.root or not resolution.base_id:
         sys.stderr.write(NOT_JOINED + "\n")
         return EXIT_ERROR
 
@@ -188,9 +191,9 @@ def main(argv=None):
     if not options.staging:
         sys.stderr.write("Say which prepared change you mean.\n")
         return EXIT_ERROR
-    staged = options.staging
-    if not os.path.isabs(staged):
-        staged = os.path.join(here, staged)
+    # Read against the base, so the same path works from the base's own
+    # folder and from a folder linked to it.
+    staged = paths.in_the_base(resolution.root, options.staging)
 
     if options.sections:
         try:
