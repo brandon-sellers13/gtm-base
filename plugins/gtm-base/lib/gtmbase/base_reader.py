@@ -346,18 +346,23 @@ def ledger(
             # migrated copy and the one it was migrated from agree.
             said = _what_it_says(entry)
             held = kept_by_id.get(entry.id)
+            # Every document a copy names is followed to where it lives now,
+            # so a copy an older seat wrote naming the profile at its older
+            # path still protects the profile where it is (Astra's review of
+            # Unit 1.5b, finding 3).
+            where = layout.all_where_they_live(root, entry.affects)
             if held is None:
                 kept_by_id[entry.id] = {
                     "said": said,
                     "conflict": None,
                     "folder": folder_name,
-                    "affects": list(entry.affects),
+                    "affects": list(where),
                     "copies": [relative],
                 }
                 read.append(("entry", relative, None, entry))
                 continue
             held["copies"].append(relative)
-            for path in entry.affects:
+            for path in where:
                 if path not in held["affects"]:
                     held["affects"].append(path)
             if said == held["said"]:
@@ -594,9 +599,13 @@ def accepted_by(
         "log",
         "--first-parent",
         "-M",
-        # Every kind of change but a rename, spelled out: git 2.39 answers a
-        # filter that only names what to leave out with nothing at all.
-        "--diff-filter=ACDMTUXB",
+        # Every kind of change that leaves the record there, spelled out: git
+        # 2.39 answers a filter that only names what to leave out with nothing
+        # at all. A rename is the move carrying it, and a deletion is the move
+        # taking away an older copy of a record whose other copy stays, and
+        # neither is anybody accepting it (Astra's review of Unit 1.5b,
+        # finding 4).
+        "--diff-filter=ACMTUXB",
         "--format=%H%x1f%ae%x1f%ad",
         "--date=short",
     ]

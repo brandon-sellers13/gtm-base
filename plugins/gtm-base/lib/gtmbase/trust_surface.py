@@ -276,6 +276,12 @@ def _walk_codes(root: str, ignored: Set[str]) -> Set[str]:
                 codes.add(CODE_SYMLINK)
                 continue
             codes.update(_component_codes(relative.split("/"), False))
+            # The skills folder's placeholder is allowed by its name only
+            # while it holds nothing (Astra's review of Unit 1.5b, finding 8).
+            if layout.is_the_skills_placeholder(relative) and not (
+                layout.placeholder_is_empty(os.path.join(dirpath, name))
+            ):
+                codes.add(CODE_SKILLS_FILE)
     return codes
 
 

@@ -91,6 +91,10 @@ CODE_PLUGIN_CODE = "in-the-plugins-own-folder"
 # company-skills brainstorm settles who may approve a change to a skill
 # (Unit 1.5b, Brandon's call 13). Its placeholder is allowed.
 CODE_SKILLS_FILE = "in-a-bases-skills-folder"
+# A write that would put something the check before a send refuses, such as a
+# key or a token, into a base's source map (Astra's review of Unit 1.5b,
+# finding 10).
+CODE_STACK_SECRET = "a-secret-in-the-source-map"
 CODE_PLUGINS_FOLDER = "in-the-folder-plugins-are-kept-in"
 
 # What the client calls the folder it installed this plugin into.
@@ -149,6 +153,13 @@ COULD_NOT_RUN = 70
 SKILLS_REFUSED = (
     "A base keeps its skills folder empty until your team has settled who may "
     "approve a change to a skill, so nothing was written there."
+)
+# What a person reads when a write would put a key or a token in the source
+# map. It names no file and repeats nothing that was found.
+STACK_REFUSED = (
+    "The source map says where things live and never holds a password, a key, "
+    "or a token, and this would have written something shaped like one into "
+    "it, so nothing was written."
 )
 
 COULD_NOT_CHECK = (
@@ -537,30 +548,130 @@ def _into_the_sessions_own_history(
     return None
 
 
-def _into_a_bases_skills(named: str, real_file: str) -> Optional[str]:
-    """Whether a write lands in a base's own skills folder beyond its placeholder.
+def _base_holding(side: str) -> Optional[str]:
+    """The base a path is inside, however the base is known.
+
+    A base holding its map is found by walking up, as everywhere else here.
+    A base whose map is gone is still a base (Astra's review of Unit 1.5b,
+    finding 9): this account's own list of the bases it joined is read, and
+    then the nearest repository is asked the questions that start no program,
+    and last the one question about its saved history.
+    """
+    inside = _base_above(side)
+    if inside is not None:
+        return inside
+    joined = _joined_roots()
+    for root in joined:
+        if _reaches(side, side, root):
+            return root
+    above = _repository_above(side)
+    if above is not None and (
+        _cheaply_a_base(above, joined) or _a_base_by_its_history(above)
+    ):
+        return above
+    return None
+
+
+def _parts_inside(side: str, root: str) -> Optional[List[str]]:
+    """A path's names from the top of a base, folded, or None when it is not in it."""
+    for one, other in ((side, root), (os.path.realpath(side), os.path.realpath(root))):
+        try:
+            relative = os.path.relpath(one, other)
+        except ValueError:
+            continue
+        parts = [_folded(part) for part in relative.replace(os.sep, "/").split("/")]
+        if parts and parts[0] != "..":
+            return parts
+    return None
+
+
+def _in_a_base(named: str, real_file: str, folder: str):
+    """Each (base, the path's names inside it) for a path under one top folder.
 
     The cheap way out comes first, as it does for the other folders: almost no
-    write on this computer names a folder called skills, and only one that
-    does is walked upwards looking for the base it is in.
+    write on this computer names a folder called skills or access, and only
+    one that does is walked upwards looking for the base it is in.
     """
-    wanted = _folded(constants.SKILLS_DIR)
+    wanted = _folded(folder)
+    found = []
     for side in (named, real_file):
         text = str(side or "").replace("\\", "/").replace(os.sep, "/")
         if wanted not in [_folded(part) for part in text.split("/")]:
             continue
-        inside = _base_above(side)
-        if inside is None:
+        root = _base_holding(side)
+        if root is None:
             continue
-        try:
-            relative = os.path.relpath(side, inside)
-        except ValueError:
-            continue
-        parts = [_folded(part) for part in relative.replace(os.sep, "/").split("/")]
-        if parts and parts[0] == "..":
-            continue
+        parts = _parts_inside(side, root)
+        if parts and parts[0] == wanted:
+            found.append((side, parts))
+    return found
+
+
+def _into_a_bases_skills(named: str, real_file: str) -> Optional[str]:
+    """Whether a write lands in a base's own skills folder beyond its placeholder."""
+    for side, parts in _in_a_base(named, real_file, constants.SKILLS_DIR):
         if layout.is_refused_in_skills(parts, os.path.isdir(side)):
             return CODE_SKILLS_FILE
+    return None
+
+
+def _written_texts(payload: Dict[str, Any]) -> Optional[List[str]]:
+    """Every piece of text this call would put in a file, or None if unknown."""
+    tool = payload.get("tool_name")
+    tool_input = payload.get("tool_input")
+    if not isinstance(tool_input, dict):
+        return None
+    if tool == "Write":
+        content = tool_input.get("content")
+        return [content] if isinstance(content, str) else None
+    if tool == "Edit":
+        new = tool_input.get("new_string")
+        return [new] if isinstance(new, str) else None
+    if tool == "MultiEdit":
+        edits = tool_input.get("edits")
+        if not isinstance(edits, list):
+            return None
+        texts = []
+        for one in edits:
+            new = one.get("new_string") if isinstance(one, dict) else None
+            if not isinstance(new, str):
+                return None
+            texts.append(new)
+        return texts
+    return None
+
+
+def content_problem(
+    named: str, real_file: str, payload: Dict[str, Any]
+) -> Optional[str]:
+    """What is wrong with what this call would write, for the two files that care.
+
+    The skills folder's placeholder may only ever be written empty, by the
+    tool that writes a whole file, because an edit to it is by definition an
+    edit that puts something in it (finding 8). The source map may never be
+    given anything the check before a send refuses (finding 10). A call whose
+    text cannot be read is refused for either, because a check that cannot
+    see what is written cannot say it is clean.
+    """
+    for _side, parts in _in_a_base(named, real_file, constants.SKILLS_DIR):
+        if parts == [_folded(constants.SKILLS_DIR), _folded(constants.PLACEHOLDER_NAME)]:
+            texts = _written_texts(payload)
+            if payload.get("tool_name") != "Write" or texts != [""]:
+                return CODE_SKILLS_FILE
+    stack = [_folded(part) for part in constants.STACK_PATH.split("/")]
+    for side, parts in _in_a_base(named, real_file, constants.ACCESS_DIR):
+        if parts != stack:
+            continue
+        texts = _written_texts(payload)
+        if texts is None:
+            return CODE_STACK_SECRET
+        from . import scan
+
+        root = _base_holding(side)
+        allowlist, _code = scan.load_allowlist(root) if root else (None, None)
+        for text in texts:
+            if scan.scan_text(text, allowlist, "the source map"):
+                return CODE_STACK_SECRET
     return None
 
 
@@ -678,6 +789,11 @@ def run(payload: Dict[str, Any]) -> Optional[Dict[str, Any]]:
             return _answer("deny", SKILLS_REFUSED)
         if found is not None:
             return refusal()
+        written = content_problem(named, real_file, payload)
+        if written == CODE_SKILLS_FILE:
+            return _answer("deny", SKILLS_REFUSED)
+        if written == CODE_STACK_SECRET:
+            return _answer("deny", STACK_REFUSED)
     return question() if asking else None
 
 

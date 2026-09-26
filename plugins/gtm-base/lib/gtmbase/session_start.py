@@ -62,6 +62,8 @@ from . import (
     install_git_hook,
     machine,
     paths,
+    layout,
+    scan,
     stale,
     state,
     trust_surface,
@@ -713,6 +715,42 @@ def _is_refused_path(path: str) -> bool:
     return trust_surface.path_is_refused(parts)
 
 
+def _incoming_contents_refused(
+    root: str, target: str, names: Sequence[str], git: GitRunner
+) -> List[str]:
+    """The paths an update would bring in whose content it may not carry.
+
+    Two files are read rather than only named (Astra's review of Unit 1.5b,
+    findings 8 and 10). The skills folder's placeholder may arrive only
+    empty, because one holding a procedure is a skill by another name. The
+    source map may never arrive holding anything the check before a send
+    refuses, such as a key or a token, because it would be on this computer
+    and read by the assistant before anything else looked at it.
+    """
+    refused: List[str] = []
+    for name in names:
+        placeholder = layout.is_the_skills_placeholder(name)
+        stack = name == constants.STACK_PATH
+        if not placeholder and not stack:
+            continue
+        shown = git.run(
+            ["show", "%s:%s" % (target, name)],
+            cwd=root,
+            timeout=LOCAL_TIMEOUT_SECONDS,
+        )
+        if not shown.ok:
+            # Taken away by the update, which carries nothing into it.
+            continue
+        if placeholder and shown.stdout:
+            refused.append(name)
+            continue
+        if stack:
+            allowlist, _code = scan.load_allowlist(root)
+            if scan.scan_text(shown.stdout, allowlist, "the source map"):
+                refused.append(name)
+    return refused
+
+
 def _incoming_symlinks(root: str, target: str, git: GitRunner) -> List[str]:
     """The paths the shared copy would bring in as links rather than as files.
 
@@ -899,6 +937,11 @@ def _daily_work(
         refused = [name for name in names if _is_refused_path(name)]
         refused.extend(
             name for name in _incoming_symlinks(root, target, git) if name not in refused
+        )
+        refused.extend(
+            name
+            for name in _incoming_contents_refused(root, target, names, git)
+            if name not in refused
         )
         if refused:
             _record_pull_refusal(base_id, refused, now.date(), part, left_again)

@@ -1234,21 +1234,65 @@ def _diff_text(git: GitRunner, cwd: str, start: str, end: str) -> Optional[str]:
     return result.stdout if result.ok else None
 
 
-def _names_in_range(
+# The one blob an empty file is, which is the only thing the skills folder's
+# placeholder may hold.
+EMPTY_BLOB = "e69de29bb2d1d6434b8b29ae775ad8c2e48c5391"
+# The one mode an ordinary file is saved under.
+REGULAR_FILE_MODE = "100644"
+
+
+def _skills_in_every_piece_of_work(
     git: GitRunner, cwd: str, start: str, end: str
-) -> Optional[List[str]]:
-    """Every path one range would add or change, or None when git could not say.
+) -> Optional[bool]:
+    """Whether any piece of work in the range carries something in skills.
+
+    Every piece of work a send carries is read, merges included, and not only
+    the difference between the two ends: a file added in one piece and taken
+    away in the next still travels with the history (Astra's review of Unit
+    1.5b, finding 6). The placeholder is allowed only as an empty ordinary
+    file (finding 8). None comes back when git could not say.
 
     Names end in a NUL and come out exactly as they are, so a file with an
     accent or a space in its name is read as itself.
     """
+    span = end if start == EMPTY_TREE else "%s..%s" % (start, end)
     result = git.run(
-        ["diff", "--name-only", "-z", "--diff-filter=ACMR", start, end],
+        [
+            "log",
+            "--format=",
+            "--raw",
+            "-z",
+            "-m",
+            "--no-abbrev",
+            "--diff-filter=ACMRT",
+            span,
+        ],
         cwd=cwd,
     )
     if not result.ok:
         return None
-    return [name for name in (result.stdout or "").split("\0") if name]
+    fields = (result.stdout or "").split("\0")
+    index = 0
+    while index < len(fields):
+        head = fields[index].strip()
+        index += 1
+        if not head.startswith(":"):
+            continue
+        settings = head[1:].split()
+        letter = settings[-1][:1] if settings else ""
+        count = 2 if letter in ("R", "C") else 1
+        named = fields[index : index + count]
+        index += count
+        if not named or len(settings) < 4:
+            continue
+        path = named[-1]
+        if layout.names_a_skill_file(path):
+            return True
+        if layout.is_the_skills_placeholder(path) and (
+            settings[1] != REGULAR_FILE_MODE or settings[3] != EMPTY_BLOB
+        ):
+            return True
+    return False
 
 
 def _messages_text(git: GitRunner, cwd: str, start: str, end: str) -> Optional[str]:
@@ -1818,10 +1862,10 @@ def scan_range(
     diff = _diff_text(git, cwd, start, end)
     if diff is None:
         return sentence_for(REASON_UNREADABLE)
-    carried = _names_in_range(git, cwd, start, end)
+    carried = _skills_in_every_piece_of_work(git, cwd, start, end)
     if carried is None:
         return sentence_for(REASON_UNREADABLE)
-    if any(layout.names_a_skill_file(name) for name in carried):
+    if carried:
         return sentence_for(REASON_SKILLS_FILE)
     if len(diff.encode("utf-8", "replace")) > constants.MAX_DIFF_BYTES:
         return sentence_for(REASON_TOO_LARGE)

@@ -1312,3 +1312,19 @@ Plan: docs/plans/2026-09-19-001-feat-base-that-produces-work-plan.md, Unit 1.5b 
 - [ ] Orchestrator: review, merge after the live check, version bump, atlas republish.
 
 Review: 1.4's move was generalized rather than a second one written, so the recovery rules Astra hardened carry over unchanged and all 168 of 1.4's migration tests pass against it. The worktree needed its ignored `work/inbox` and `work/proposals` template folders created by hand for tests/test_scaffold.py, because the template's own ignore file keeps their placeholders out of the repository; a fresh clone fails that test on main too.
+
+#### Astra's review of Unit 1.5b (2026-09-26), all thirteen findings
+Review: docs/reviews/2026-09-26-unit-1-5b-astra.md in the main checkout. Every finding has a test in tests/test_unit_1_5b_review.py or tests/test_context_standard.py that fails on fb13268 and passes now.
+- [x] 1 Giving up never brings a copy back over words of theirs; every restore is checked again just before.
+- [x] 2 The dated record takes the next free name rather than writing over a file; the note records the name used.
+- [x] 3 A change written down twice names its documents where they live now.
+- [x] 4 Acceptance of a record ignores renames and deletions; confirmation dates are identical before and after the move.
+- [x] 5 The ownership list's rules follow the move with their owners, and the new parts get the records rule's owners.
+- [x] 6 The check before a send reads every outgoing piece of work, merges included. The gate had no refusal for a plugins folder, so there was no second hole of that shape to close.
+- [x] 7 No sentence the move says reads out a file name: documents by their plain name, context changes by a validated identifier, anything else "one of your records" or "one of your files".
+- [x] 8 The skills placeholder must be an empty ordinary file at the trust check, the file-writing check, an incoming update, and a send.
+- [x] 9 The skills refusal holds for a joined base whose map is gone, and in the smaller shell check.
+- [x] 10 The source map is screened for keys and tokens at the file-writing check and on an incoming update.
+- [x] 11 A prepared change is resolved again against the shared copy it is written into.
+- [x] 12 The move writes the starter source map with the map's owner, never over an existing one.
+- [x] 13 One stop test enumerates all 28 steps of a run (moves, removals, staging, saves, file writes, the note written and taken away) and stops before and after each, asserting each stop fired.

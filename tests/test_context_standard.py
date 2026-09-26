@@ -63,6 +63,8 @@ OLD_POSITIONING = "context/strategy/positioning.md"
 ICP = "context/icps.md"
 POSITIONING = "context/positioning.md"
 QUESTION = "q-" + "0" * 20
+# The day the owner accepted the fix for the positioning, well before any move.
+ACCEPTED_ON = "2026-08-01"
 
 
 def entry_text(entry_id, affects, older=False, origin="manual", body=None):
@@ -105,6 +107,31 @@ class LayoutCase(unittest.TestCase):
     def save(self, message="a change"):
         support.git(["add", "-A"], cwd=self.root)
         support.git(["commit", "-q", "-m", message], cwd=self.root)
+
+    def save_on(self, message, day):
+        """Save everything, dated as though it was saved on an earlier day.
+
+        A record's acceptance is read off the day its change was saved, and a
+        move made today must never be mistaken for it, which only shows when
+        the two days differ (Astra's review of Unit 1.5b, finding 4).
+        """
+        import subprocess
+
+        stamp = "%sT10:00:00" % day
+        environment = dict(os.environ)
+        environment.update(
+            {
+                "GIT_AUTHOR_NAME": "Test Owner",
+                "GIT_AUTHOR_EMAIL": OWNER,
+                "GIT_COMMITTER_NAME": "Test Owner",
+                "GIT_COMMITTER_EMAIL": OWNER,
+                "GIT_AUTHOR_DATE": stamp,
+                "GIT_COMMITTER_DATE": stamp,
+                "GIT_CONFIG_NOSYSTEM": "1",
+            }
+        )
+        for args in (["add", "-A"], ["commit", "-q", "-m", message]):
+            subprocess.run(["git"] + args, cwd=self.root, env=environment, check=True)
 
     def with_changes(self, folder, older=False):
         """Two context changes about the profile in one older folder."""
@@ -160,7 +187,7 @@ class LayoutCase(unittest.TestCase):
             constants.LEGACY_CORRECTIONS_DIR + "/%s-%s.md" % (TODAY.isoformat(), FIXED),
             record.validate().render(),
         )
-        self.save("Proposal %s applied" % FIXED)
+        self.save_on("Proposal %s applied" % FIXED, ACCEPTED_ON)
 
     def with_the_older_template_folders(self):
         """The placeholders the older template made, and its map paragraph."""
@@ -404,9 +431,13 @@ class TestOneOfferTakesABaseAllTheWay(LayoutCase):
         ]
 
     def assert_one_offer_then_none(self):
+        # Every day a document was last confirmed is the same afterwards, in
+        # every starting state (Astra's review of Unit 1.5b, finding 4).
+        confirmed = self.reading()["confirmed"]
         self.assertEqual([changes.OFFER], self.offers())
         moved = changes.migrate(self.root, self.base_id, today=TODAY)
         self.assertTrue(moved.ok, moved.sentence)
+        self.assertEqual(confirmed, self.reading()["confirmed"])
         self.assertFalse(changes.needed(self.root))
         self.assertEqual([], self.offers())
         again = changes.migrate(self.root, self.base_id, today=TODAY)
@@ -414,6 +445,8 @@ class TestOneOfferTakesABaseAllTheWay(LayoutCase):
 
     def test_a_base_still_on_work_decisions(self):
         self.with_changes(constants.LEGACY_CHANGES_DIR, older=True)
+        self.with_a_caught_change_fixed_by_a_record(constants.LEGACY_CHANGES_DIR)
+        self.assertEqual(ACCEPTED_ON, self.reading()["confirmed"]["your positioning"])
         self.assert_one_offer_then_none()
         for entry_id in (SETTLED, OPEN):
             text = support.read(
@@ -424,6 +457,8 @@ class TestOneOfferTakesABaseAllTheWay(LayoutCase):
 
     def test_a_base_on_work_changes(self):
         self.with_changes(constants.WORK_CHANGES_DIR)
+        self.with_a_caught_change_fixed_by_a_record()
+        self.assertEqual(ACCEPTED_ON, self.reading()["confirmed"]["your positioning"])
         self.assert_one_offer_then_none()
 
     def test_a_base_holding_both_older_folders(self):
@@ -441,7 +476,10 @@ class TestOneOfferTakesABaseAllTheWay(LayoutCase):
 
     def test_a_base_already_moved_is_never_offered_anything(self):
         self.with_changes(constants.WORK_CHANGES_DIR)
+        self.with_a_caught_change_fixed_by_a_record()
+        confirmed = self.reading()["confirmed"]
         changes.migrate(self.root, self.base_id, today=TODAY)
+        self.assertEqual(confirmed, self.reading()["confirmed"])
         head = support.head_of(self.root)
         self.assertEqual([], self.offers())
         self.assertEqual(
@@ -633,10 +671,104 @@ class TestSetupWritesTheCurrentLayout(unittest.TestCase):
         )
 
 
-# --- Error path: a stop after each step finishes or puts back ------------------
+# --- Error path: a stop at every boundary finishes or puts back ---------------
+
+# The ownership list a base set up by 0.3.1 holds, word for word, with an
+# owner of its own.
+OLDER_CODEOWNERS = """# Files listed here need the owner's review before a change to them is accepted.
+# Replace @owner-handle with the account that owns this base.
+# Nothing under work/changes or work/confirmations is listed, because those
+# folders are appended to by everyone on the team.
+
+context/** @acme-owner
+corrections/** @acme-owner
+plugins/** @acme-owner
+.claude/** @acme-owner
+CLAUDE.md @acme-owner
+AGENTS.md @acme-owner
+.gitignore @acme-owner
+gate-allowlist.txt @acme-owner
+CODEOWNERS @acme-owner
+"""
 
 
-class TestAStopAfterEachStep(LayoutCase):
+class Boundaries(object):
+    """Every step of a run that changes the base or its note, counted.
+
+    A step is one git command that changes the base (a move, a removal,
+    staging, putting a file back, or a save), one file written, the note
+    written, or a file or the note taken away. Asked to, it stops the run
+    just before or just after one numbered step, and it says whether it did,
+    so a test can never pass because the stop it asked for never came (Astra's
+    review of Unit 1.5b, finding 13).
+    """
+
+    CHANGING = ("mv", "rm", "add", "checkout")
+
+    def __init__(self, stop_before=None, stop_after=None):
+        self.stop_before = stop_before
+        self.stop_after = stop_after
+        self.count = 0
+        self.kinds = []
+        self.fired = False
+        self.inner = GitRunner()
+        self.saved = {}
+
+    def _step(self, kind, action):
+        self.count += 1
+        number = self.count
+        self.kinds.append(kind)
+        if number == self.stop_before:
+            self.fired = True
+            raise migration._Stopped()
+        result = action()
+        if number == self.stop_after:
+            self.fired = True
+            raise migration._Stopped()
+        return result
+
+    def run(self, args, cwd=None, timeout=20, input=None):
+        arguments = [str(item) for item in args]
+
+        def action():
+            return self.inner.run(arguments, cwd=cwd, timeout=timeout, input=input)
+
+        if "commit" in arguments:
+            return self._step("git commit", action)
+        if arguments and arguments[0] in self.CHANGING:
+            return self._step("git " + arguments[0], action)
+        return action()
+
+    def check(self, args, cwd=None, timeout=20, input=None):
+        from gtmbase.errors import GitError
+
+        result = self.run(args, cwd=cwd, timeout=timeout, input=input)
+        if not result.ok:
+            raise GitError("git-failed", code="git-failed", result=result)
+        return result
+
+    def __enter__(self):
+        for name, kind in (
+            ("atomic_write_text", "file written"),
+            ("atomic_write_json", "note written"),
+            ("remove", "file taken away"),
+        ):
+            real = getattr(changes, name)
+            self.saved[name] = real
+
+            def watched(*arguments, _real=real, _kind=kind, **options):
+                return self._step(_kind, lambda: _real(*arguments, **options))
+
+            setattr(changes, name, watched)
+        return self
+
+    def __exit__(self, kind, value, trace):
+        for name, real in self.saved.items():
+            setattr(changes, name, real)
+        return False
+
+
+class TestAStopAtEveryBoundary(LayoutCase):
     """Error path: the same bytes, index, and flags as an uninterrupted run."""
 
     def build(self):
@@ -647,7 +779,17 @@ class TestAStopAfterEachStep(LayoutCase):
             "---\nkind: segment\nowner: %s\nsources: []\nstatus: approved\n---\n\n"
             "# Mid market\n\nTeams of fifty.\n" % OWNER,
         )
-        self.save("a segment")
+        # The same change written in both older folders, so a copy is taken
+        # away as well as moved.
+        self.put(
+            constants.LEGACY_CHANGES_DIR + "/%s.md" % FIXED,
+            support.read(
+                os.path.join(self.root, constants.WORK_CHANGES_DIR, FIXED + ".md")
+            ),
+        )
+        # The ownership list 0.3.1 wrote, so its rules are brought along.
+        self.put(constants.CODEOWNERS_PATH, OLDER_CODEOWNERS)
+        self.save("a segment, a second copy, and the ownership list")
 
     def snapshot(self):
         """Every byte under the base but its history, the index, and the flags."""
@@ -662,77 +804,57 @@ class TestAStopAfterEachStep(LayoutCase):
         index = support.git(["ls-files", "-s"], cwd=self.root).stdout
         return files, index, self.reading(), support.status_of(self.root)
 
-    def uninterrupted(self):
-        sandbox = support.Sandbox()
-        sandbox.__enter__()
-        try:
-            other = TestAStopAfterEachStep("test_every_stop")
-            other.sandbox = sandbox
-            other.root, other.base_id = migration.build_base(sandbox)
-            other.build()
-            result = changes.migrate(other.root, other.base_id, today=TODAY)
-            self.assertEqual(changes.STATUS_MIGRATED, result.status, result.sentence)
-            files, index, reading, status = other.snapshot()
-            # The two bases were built in two folders, so the one thing that
-            # differs is the folder named in nothing but the note.
-            return files, index, reading, status
-        finally:
-            sandbox.__exit__(None, None, None)
-
-    def test_every_stop(self):
-        expected = None
-        stops = []
-        for number in range(1, 9):
-            stops.append({"stop_before_move": number})
-            stops.append({"stop_after_move": number})
-        for subject in changes.SUBJECTS:
-            stops.append({"stop_before_subject": subject})
-            stops.append({"stop_after_subject": subject})
-        for how in stops:
-            with self.subTest(**how):
-                self.tearDownBase()
-                self.build()
-                runner = migration._StopAfter(**how)
-                try:
-                    changes.migrate(self.root, self.base_id, today=TODAY, git=runner)
-                except migration._Stopped:
-                    pass
-                result = changes.migrate(self.root, self.base_id, today=TODAY)
-                self.assertTrue(result.ok, (how, result.sentence))
-                if expected is None:
-                    expected = self.uninterrupted()
-                files, index, reading, status = self.snapshot()
-                self.assertEqual(expected[0], files, how)
-                self.assertEqual(expected[1], index, how)
-                self.assertEqual(expected[2], reading, how)
-                self.assertEqual("", status, how)
-
-    def test_a_stop_part_way_through_writing(self):
-        expected = None
-        for after in range(1, 6):
-            with self.subTest(after=after):
-                self.tearDownBase()
-                self.build()
-                with migration._StopOnWrite(after=after):
-                    try:
-                        changes.migrate(self.root, self.base_id, today=TODAY)
-                    except migration._Stopped:
-                        pass
-                result = changes.migrate(self.root, self.base_id, today=TODAY)
-                self.assertTrue(result.ok, (after, result.sentence))
-                if expected is None:
-                    expected = self.uninterrupted()
-                files, index, reading, status = self.snapshot()
-                self.assertEqual(expected[0], files, after)
-                self.assertEqual(expected[1], index, after)
-                self.assertEqual(expected[2], reading, after)
-
-    def tearDownBase(self):
-        """A fresh base in a fresh sandbox, for the next stop."""
+    def fresh(self):
+        """A fresh base in a fresh sandbox, built the same way."""
         self.sandbox.__exit__(None, None, None)
         self.sandbox = support.Sandbox()
         self.sandbox.__enter__()
         self.root, self.base_id = migration.build_base(self.sandbox)
+        self.build()
+
+    def uninterrupted(self):
+        """What one run that nothing stopped leaves, and every step it took."""
+        self.fresh()
+        counted = Boundaries()
+        with counted:
+            result = changes.migrate(self.root, self.base_id, today=TODAY, git=counted)
+        self.assertEqual(changes.STATUS_MIGRATED, result.status, result.sentence)
+        self.assertFalse(counted.fired)
+        return self.snapshot(), counted
+
+    def test_every_boundary_before_and_after(self):
+        expected, counted = self.uninterrupted()
+        # The steps really are all of these kinds, so every kind is stopped at.
+        for kind in (
+            "note written",
+            "git mv",
+            "git rm",
+            "git add",
+            "git commit",
+            "file written",
+            "file taken away",
+        ):
+            self.assertIn(kind, counted.kinds)
+        self.assertGreaterEqual(counted.count, 20)
+        for number in range(1, counted.count + 1):
+            for when in ("before", "after"):
+                with self.subTest(step=number, kind=counted.kinds[number - 1], when=when):
+                    self.fresh()
+                    stopper = Boundaries(**{"stop_" + when: number})
+                    with stopper:
+                        with self.assertRaises(migration._Stopped):
+                            changes.migrate(
+                                self.root, self.base_id, today=TODAY, git=stopper
+                            )
+                    self.assertTrue(stopper.fired)
+                    result = changes.migrate(self.root, self.base_id, today=TODAY)
+                    self.assertTrue(result.ok, result.sentence)
+                    files, index, reading, status = self.snapshot()
+                    self.assertEqual(sorted(expected[0]), sorted(files))
+                    self.assertEqual(expected[0], files)
+                    self.assertEqual(expected[1], index)
+                    self.assertEqual(expected[2], reading)
+                    self.assertEqual("", status)
 
 
 # --- The note is never trusted with more than the move writes ----------------
@@ -1042,7 +1164,10 @@ class TestTheSkillsFolderIsRefused(unittest.TestCase):
             placeholder = os.path.join(base, "skills", constants.PLACEHOLDER_NAME)
             self.assertIsNone(
                 write_hook.run(
-                    {"tool_name": "Write", "tool_input": {"file_path": placeholder}}
+                    {
+                        "tool_name": "Write",
+                        "tool_input": {"file_path": placeholder, "content": ""},
+                    }
                 )
             )
             # A skills folder anywhere else on the computer is not ours.

@@ -225,6 +225,34 @@ is_protected() {
   return 1
 }
 
+# Whether one path is inside a base's own skills folder. Until the team has
+# settled who may approve a change to a skill that folder is kept empty, and
+# the real check refuses anything put there (Unit 1.5b). This refuses the
+# same writes when the real check cannot run, and its placeholder too,
+# because this cannot see what a write would put in it (Astra's review of
+# Unit 1.5b, finding 9). A folder is a base when it holds the map, or when
+# this account's own list of joined bases names it, so a base whose map is
+# gone is still one.
+is_in_skills() {
+  joined="${GTM_BASE_HOME:-$HOME/.gtm-base}/machine.json"
+  for spelled in "$(lexical "$1")" "$(resolved "$1")"; do
+    candidate=$(printf '%s' "$spelled" | tr '[:upper:]' '[:lower:]')
+    case "$candidate/" in
+      */skills/*)
+        folded=${candidate%%/skills/*}
+        before=$(printf '%s' "$spelled" | cut -c "1-${#folded}")
+        if [ -f "$before/context/map.md" ]; then
+          return 0
+        fi
+        if [ -f "$joined" ] && grep -F -q "\"$before\"" "$joined" 2> /dev/null; then
+          return 0
+        fi
+        ;;
+    esac
+  done
+  return 1
+}
+
 # The folder the session is open in, which a path written from where somebody
 # is standing is joined onto.
 here() {
@@ -249,7 +277,7 @@ fall_back() {
       /*) ;;
       *) [ -n "$cwd" ] && named="$cwd/$named" ;;
     esac
-    if is_protected "$named"; then
+    if is_protected "$named" || is_in_skills "$named"; then
       refuse_without_checking
       break
     fi

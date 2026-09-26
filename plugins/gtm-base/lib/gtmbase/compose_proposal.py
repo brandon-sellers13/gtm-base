@@ -1217,6 +1217,12 @@ def _prepare(
     codes: List[str],
 ) -> List[str]:
     """Apply the edits, write the context change and the record, and save it."""
+    # The paths are followed again, to where each document lives in the copy
+    # being written to, which is the shared copy and not the person's own. The
+    # person's own copy may have been moved to the current layout while the
+    # shared one still holds the older one (Astra's review of Unit 1.5b,
+    # finding 11).
+    layout.follow_the_move(worktree_path, staging)
     ordered = edited_paths(staging)
     for edit in in_original_positions(staging.edits):
         # Checked here and not only against the clone, because the same name

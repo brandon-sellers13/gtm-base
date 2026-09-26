@@ -221,7 +221,11 @@ class TestPuttingBackAndFinishingTheMove(unittest.TestCase):
                 root, {"paths": []}, GitRunner()
             )
 
-            self.assertEqual(changes.THEIR_WORDS % BOTH, found)
+            # Found by its real name, and said by the name a person calls it,
+            # never by the file's own name (Astra's review of Unit 1.5b,
+            # finding 7).
+            self.assertEqual(changes.THEIR_WORDS % changes._named(BOTH), found)
+            self.assertNotIn(BOTH, found)
 
 
 class TestWhatAnAcceptedRecordTouched(unittest.TestCase):

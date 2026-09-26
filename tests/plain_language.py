@@ -851,6 +851,7 @@ PYTHON_SENTENCES = (
     ("changes", "LAYOUT_RECORD_WHY"),
     ("changes", "MAP_WHERE_TODAY"),
     ("write_hook", "SKILLS_REFUSED"),
+    ("write_hook", "STACK_REFUSED"),
 )
 
 # Constants that read like a sentence but that no person ever reads. Each one

@@ -1808,7 +1808,11 @@ class TestAFileWhoseNameDisagreesWithWhatIsInIt(MigrationCase):
         result = changes.migrate(self.root, self.base_id, today=TODAY)
 
         self.assertEqual(changes.STATUS_REFUSED, result.status)
-        self.assertIn("some-note.md", result.sentence)
+        # The change is named by the identifier inside it, which is of the one
+        # shape GTM Base gives, and the file's own name is never read out
+        # (Astra's review of Unit 1.5b, finding 7).
+        self.assertIn(ENTRY_ONE, result.sentence)
+        self.assertNotIn("some-note", result.sentence)
 
 
 class TestAnEmptyOlderFolderFromAnEarlierRelease(MigrationCase):
@@ -3257,7 +3261,10 @@ class TestGivingUpTakesAwayItsOwnLeftovers(MigrationCase):
 
         result = changes.abandon(self.root, self.base_id, today=TODAY)
 
-        self.assertIn(written, result.sentence)
+        # Named plainly, never by its file name (finding 7 of Astra's review
+        # of Unit 1.5b).
+        self.assertIn(changes.NAMED_RECORD, result.sentence)
+        self.assertNotIn(written, result.sentence)
         self.assertEqual(
             "words of my own\n",
             support.read(

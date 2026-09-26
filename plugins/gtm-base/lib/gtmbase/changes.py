@@ -279,9 +279,9 @@ UNREADABLE_ENTRY = (
     "file and ask again."
 )
 NAME_IS_NOT_THE_ID = (
-    "The file %s says it is the context change %s, which is not what it is "
-    "called, so nothing was moved. Two files could end up with one identifier. "
-    "Rename it to match and ask again."
+    "One of your context changes says it is the context change %s, which is "
+    "not the name it is saved under, so nothing was moved. Two files could end "
+    "up with one identifier. Rename it to match and ask again."
 )
 SAME_CHANGE_TWICE = (
     "The context change %s is written in two folders and the two do not say "
@@ -289,13 +289,12 @@ SAME_CHANGE_TWICE = (
     "other one away, and ask again."
 )
 TWICE_IN_ONE_FOLDER = (
-    "Two files say they are the context change %s, %s and %s, and they do not "
-    "say the same thing, so nothing was moved. Decide which one is right, take "
-    "the other one away, and ask again."
+    "Two files say they are the context change %s, and they do not say the "
+    "same thing, so nothing was moved. Decide which one is right, take the "
+    "other one away, and ask again."
 )
 DESTINATION_TAKEN = (
-    "There is already a file called %s where the older one would go, so "
-    "nothing was moved."
+    "There is already a file where %s would go, so nothing was moved."
 )
 # A document is named the way a person calls it, never by its path.
 DOCUMENT_TAKEN = (
@@ -350,6 +349,51 @@ CANNOT_PUT_BACK = (
     "me to give up on the unfinished update and I will put back what I still "
     "recognise and leave the rest alone."
 )
+
+# How a file is named in a sentence a person reads. A file's own name comes
+# out of the base, and a sentence carrying it is handed to the assistant
+# outside any fence, so no name is ever read out as it is (Astra's review of
+# Unit 1.5b, finding 7). A document gets the name a person calls it by, from
+# `names`, and everything else gets one of these.
+NAMED_CONTEXT_CHANGE = "one of your context changes"
+# A context change whose file is named by an identifier of the one shape
+# GTM Base gives them is called by it, the way every other sentence here
+# calls a context change, because that shape can carry nothing else.
+NAMED_THE_CONTEXT_CHANGE = "the context change %s"
+NAMED_RECORD = "one of your records"
+NAMED_FILE = "one of your files"
+
+
+def _named(relative) -> str:
+    """What one path is called in a sentence, never the path itself."""
+    text = str(relative or "")
+    lowered = text.lower()
+    if _is_an_entry_path(text):
+        stem = text.split("/")[-1]
+        stem = stem[: -len(".md")] if stem.endswith(".md") else ""
+        if ids.is_staging_id(stem):
+            return NAMED_THE_CONTEXT_CHANGE % stem
+        return NAMED_CONTEXT_CHANGE
+    for folder in constants.ALL_CORRECTIONS_DIRS:
+        if lowered.startswith(folder + "/"):
+            return NAMED_RECORD
+    if lowered.startswith(constants.CONTEXT_DIR + "/") or text == constants.STACK_PATH:
+        try:
+            return names.document_name(text)
+        except ValueError:
+            return NAMED_FILE
+    return NAMED_FILE
+
+
+def _all_named(paths_found) -> str:
+    """Several paths named plainly, each name said once."""
+    said = []
+    for relative in sorted(paths_found):
+        name = _named(relative)
+        if name not in said:
+            said.append(name)
+    return ", ".join(said)
+
 
 # --- The map's paragraph about where things live ------------------------------
 
@@ -682,7 +726,18 @@ class _Move(object):
 class _Plan(object):
     """Everything one run will do, worked out before anything is written."""
 
-    __slots__ = ("moves", "drops", "gone", "rewrites", "map_texts", "added")
+    __slots__ = (
+        "moves",
+        "drops",
+        "gone",
+        "rewrites",
+        "map_texts",
+        "owner_texts",
+        "added",
+        "stack_text",
+        "record_path",
+        "record_text",
+    )
 
     def __init__(self):
         self.moves: List[_Move] = []
@@ -697,8 +752,16 @@ class _Plan(object):
         # The map before and after its paragraph is brought up to date, when
         # it is.
         self.map_texts: Optional[Tuple[str, str]] = None
+        # The ownership list before and after its rules follow the move.
+        self.owner_texts: Optional[Tuple[str, str]] = None
         # The placeholders of the folders the current layout adds.
         self.added: List[str] = []
+        # The starter source map, when the base has none (finding 12).
+        self.stack_text: Optional[str] = None
+        # Where the dated record goes, a name nothing already holds, and what
+        # it says (finding 2).
+        self.record_path: Optional[str] = None
+        self.record_text: Optional[str] = None
 
     @property
     def has_work(self) -> bool:
@@ -775,7 +838,9 @@ def _same_bytes(base_root: str, one: str, other: str) -> bool:
     return first is not None and second is not None and first == second
 
 
-def _prevalidate(base_root: str) -> Tuple[Optional["_Plan"], Optional[Result]]:
+def _prevalidate(
+    base_root: str, today: Optional[datetime.date] = None
+) -> Tuple[Optional["_Plan"], Optional[Result]]:
     """Read everything first, and refuse before a single file is touched.
 
     What stops a move: a file that cannot be read at all, because moving a
@@ -789,16 +854,18 @@ def _prevalidate(base_root: str) -> Tuple[Optional["_Plan"], Optional[Result]]:
     found = _survey(base_root)
     if found.problems:
         relative, _code = found.problems[0]
-        return None, _refused(CODE_UNREADABLE_ENTRY, UNREADABLE_ENTRY % relative)
-    if found.twice:
-        entry_id, one, other = sorted(found.twice)[0]
         return None, _refused(
-            CODE_TWICE_IN_ONE_FOLDER, TWICE_IN_ONE_FOLDER % (entry_id, one, other)
+            CODE_UNREADABLE_ENTRY, UNREADABLE_ENTRY % _named(relative)
+        )
+    if found.twice:
+        entry_id, _one, _other = sorted(found.twice)[0]
+        return None, _refused(
+            CODE_TWICE_IN_ONE_FOLDER, TWICE_IN_ONE_FOLDER % entry_id
         )
     if found.misnamed:
-        relative, entry_id = sorted(found.misnamed)[0]
+        _relative, entry_id = sorted(found.misnamed)[0]
         return None, _refused(
-            CODE_NAME_IS_NOT_THE_ID, NAME_IS_NOT_THE_ID % (relative, entry_id)
+            CODE_NAME_IS_NOT_THE_ID, NAME_IS_NOT_THE_ID % entry_id
         )
 
     plan = _Plan()
@@ -829,7 +896,7 @@ def _prevalidate(base_root: str) -> Tuple[Optional["_Plan"], Optional[Result]]:
         destination = constants.CHANGES_DIR + "/" + moving[0].split("/")[-1]
         if os.path.lexists(_full(base_root, destination)):
             return None, _refused(
-                CODE_DESTINATION_TAKEN, DESTINATION_TAKEN % destination
+                CODE_DESTINATION_TAKEN, DESTINATION_TAKEN % _named(destination)
             )
         plan.moves.append(_Move(moving[0], destination, KIND_ENTRY, entry_id))
         plan.drops.extend(copy[0] for copy in older[1:])
@@ -837,25 +904,25 @@ def _prevalidate(base_root: str) -> Tuple[Optional["_Plan"], Optional[Result]]:
     for source in _older_records(base_root):
         destination, _kind = destination_of(source)
         if read_text_exactly(_full(base_root, source)) is None:
-            return None, _refused(CODE_UNREADABLE_ENTRY, UNREADABLE_ENTRY % source)
+            return None, _refused(CODE_UNREADABLE_ENTRY, UNREADABLE_ENTRY % _named(source))
         if os.path.lexists(_full(base_root, destination)):
             if _same_bytes(base_root, source, destination):
                 plan.drops.append(source)
                 continue
             return None, _refused(
-                CODE_DESTINATION_TAKEN, DESTINATION_TAKEN % destination
+                CODE_DESTINATION_TAKEN, DESTINATION_TAKEN % _named(destination)
             )
         plan.moves.append(_Move(source, destination, KIND_RECORD))
 
     for source, destination in _older_documents(base_root):
         if read_text_exactly(_full(base_root, source)) is None:
-            return None, _refused(CODE_UNREADABLE_ENTRY, UNREADABLE_ENTRY % source)
+            return None, _refused(CODE_UNREADABLE_ENTRY, UNREADABLE_ENTRY % _named(source))
         if os.path.lexists(_full(base_root, destination)):
             if _same_bytes(base_root, source, destination):
                 plan.drops.append(source)
                 continue
             return None, _refused(
-                CODE_DOCUMENT_TAKEN, DOCUMENT_TAKEN % names.document_name(destination)
+                CODE_DOCUMENT_TAKEN, DOCUMENT_TAKEN % _named(destination)
             )
         plan.moves.append(_Move(source, destination, KIND_DOCUMENT))
 
@@ -864,7 +931,7 @@ def _prevalidate(base_root: str) -> Tuple[Optional["_Plan"], Optional[Result]]:
         folded = move.destination.lower()
         if folded in seen:
             return None, _refused(
-                CODE_DESTINATION_TAKEN, DESTINATION_TAKEN % move.destination
+                CODE_DESTINATION_TAKEN, DESTINATION_TAKEN % _named(move.destination)
             )
         seen[folded] = move
     leaving = set(move.source for move in plan.moves) | set(plan.drops)
@@ -883,12 +950,166 @@ def _prevalidate(base_root: str) -> Tuple[Optional["_Plan"], Optional[Result]]:
 
     if plan.has_work:
         plan.map_texts = _map_brought_up_to_date(base_root)
+        plan.owner_texts = _owners_brought_up_to_date(base_root)
         plan.added = [
             folder + "/" + constants.PLACEHOLDER_NAME
             for folder in constants.LAYOUT_EMPTY_FOLDERS
             if not _holds_anything(base_root, folder)
         ]
+        if not os.path.lexists(_full(base_root, constants.STACK_PATH)):
+            plan.stack_text = _stack_text(base_root)
+        day = today or state.today()
+        pairs = [(move.source, move.destination) for move in plan.moves]
+        plan.record_text = _record_for(pairs, plan.rewrites, plan.drops, day)
+        plan.record_path = _free_record_path(
+            base_root,
+            _record_name(day, pairs, plan.rewrites, plan.drops),
+            plan.record_text,
+        )
     return plan, None
+
+
+def _free_record_path(base_root: str, name: str, text: str) -> str:
+    """A path for the dated record that holds nothing, or holds exactly it.
+
+    The name is worked out from the day and from what moved, so the same
+    move on the same day works out the same name, and a file somebody put
+    there by hand, or an earlier record, may already sit at it. That file is
+    never written over: the next free name is used instead (Astra's review of
+    Unit 1.5b, finding 2), and the note records the one that was used.
+    """
+    stem = name[: -len(".md")]
+    for number in range(0, 1000):
+        candidate = constants.CORRECTIONS_DIR + "/" + (
+            name if number == 0 else "%s-%d.md" % (stem, number + 1)
+        )
+        full = _full(base_root, candidate)
+        if not os.path.lexists(full):
+            return candidate
+        if read_text_exactly(full) == text:
+            return candidate
+    raise ValidationError(
+        "there is no free name for the record of the move", code=CODE_DESTINATION_TAKEN
+    )
+
+
+def _stack_text(base_root: str) -> str:
+    """The starter source map a fresh base gets, with this base's owner on it.
+
+    It is the plugin's own template, so a moved base and a fresh one hold the
+    same file. The owner is the one the map names, which is the owner every
+    other document in the base was given when the base was made.
+    """
+    here = os.path.dirname(os.path.abspath(__file__))
+    template = os.path.join(
+        os.path.dirname(os.path.dirname(here)),
+        "templates",
+        "company-base",
+        "access",
+        "stack.md",
+    )
+    text = read_text_exactly(template) or ""
+    owner_line = None
+    map_text = read_text_exactly(_full(base_root, constants.MAP_PATH)) or ""
+    for line in map_text.split("\n")[1:40]:
+        if line.startswith("owner:"):
+            owner_line = line.rstrip("\r")
+            break
+        if line.strip() == "---":
+            break
+    placeholder = "owner: " + constants.OWNER_PLACEHOLDER_EMAIL
+    if owner_line and placeholder in text:
+        text = text.replace(placeholder, owner_line, 1)
+    return text
+
+
+# The ownership list's rules, followed from each older folder or document to
+# where the move puts it. A rule naming something the move does not touch is
+# left exactly as it is.
+_OWNED_FOLDER_MOVES = (
+    (constants.LEGACY_CORRECTIONS_DIR + "/", constants.CORRECTIONS_DIR + "/"),
+    (constants.WORK_CHANGES_DIR + "/", constants.CHANGES_DIR + "/"),
+    (constants.LEGACY_CHANGES_DIR + "/", constants.CHANGES_DIR + "/"),
+    (constants.LEGACY_SEGMENTS_DIR + "/", constants.SEGMENTS_DIR + "/"),
+)
+# The parts of the current layout the template has the owner review, which a
+# moved base gains with the owners its records rule already names.
+_OWNED_NEW_PARTS = (
+    constants.LESSONS_DIR + "/**",
+    constants.ACCESS_DIR + "/**",
+    constants.SKILLS_DIR + "/**",
+    constants.STANDARDS_DIR + "/**",
+)
+_OLDER_OWNERS_COMMENT = (
+    "# Nothing under work/changes or work/confirmations is listed, because those"
+)
+_CURRENT_OWNERS_COMMENT = (
+    "# Nothing under learning/changes or work/confirmations is listed, because those"
+)
+
+
+def _owner_rule_moved(pattern: str) -> str:
+    lead = "/" if pattern.startswith("/") else ""
+    bare = pattern[len(lead):]
+    for older, current in _OWNED_FOLDER_MOVES:
+        if bare.startswith(older):
+            return lead + current + bare[len(older):]
+        if bare == older.rstrip("/"):
+            return lead + current.rstrip("/")
+    for older, current in constants.LEGACY_DOCUMENT_PATHS:
+        if bare == older:
+            return lead + current
+    return pattern
+
+
+def _owners_moved(text: str) -> str:
+    """The ownership list with each rule following the move (finding 5).
+
+    Each rule naming an older folder or document names where it lives now,
+    with exactly the owners it had. Every other rule is left as it is. The
+    parts of the layout a fresh base has the owner review are added with the
+    owners the records rule names, unless a rule for them is already there.
+    """
+    lines = text.split("\n")
+    out = []
+    records_owners = None
+    records_index = None
+    patterns = set()
+    for line in lines:
+        stripped = line.strip()
+        if line.rstrip("\r") == _OLDER_OWNERS_COMMENT:
+            out.append(_CURRENT_OWNERS_COMMENT)
+            continue
+        if not stripped or stripped.startswith("#"):
+            out.append(line)
+            continue
+        parts = line.split()
+        moved = _owner_rule_moved(parts[0])
+        if moved != parts[0]:
+            line = line.replace(parts[0], moved, 1)
+        patterns.add(moved.lstrip("/"))
+        out.append(line)
+        if moved.lstrip("/").startswith(constants.CORRECTIONS_DIR + "/") and len(parts) > 1:
+            records_owners = parts[1:]
+            records_index = len(out)
+    if records_owners is not None:
+        extra = [
+            "%s %s" % (part, " ".join(records_owners))
+            for part in _OWNED_NEW_PARTS
+            if part not in patterns
+        ]
+        out[records_index:records_index] = extra
+    return "\n".join(out)
+
+
+def _owners_brought_up_to_date(base_root: str) -> Optional[Tuple[str, str]]:
+    text = read_text_exactly(_full(base_root, constants.CODEOWNERS_PATH))
+    if text is None:
+        return None
+    after = _owners_moved(text)
+    if after == text:
+        return None
+    return text, after
 
 
 def _holds_anything(base_root: str, folder: str) -> bool:
@@ -981,6 +1202,7 @@ NOTE_PATH_PREFIXES = (
     constants.CHANGES_DIR + "/",
     constants.CORRECTIONS_DIR + "/",
     constants.CONTEXT_DIR + "/",
+    constants.ACCESS_DIR + "/",
     constants.LESSONS_DIR + "/",
     constants.SKILLS_DIR + "/",
     constants.STANDARDS_DIR + "/",
@@ -1064,7 +1286,8 @@ def _checked_journal(base_id: str, base_root: str):
             return None, "the note holds something that is not a path"
         relative = str(item.get("path") or "")
         try:
-            paths.check_repo_path_syntax(relative, written_prefixes)
+            if legacy or relative != constants.CODEOWNERS_PATH:
+                paths.check_repo_path_syntax(relative, written_prefixes)
             ids.check_content_hash(str(item.get("hash") or ""))
         except (PathError, ValueError, TypeError):
             return None, "the note names a path or a value we never write"
@@ -1152,7 +1375,7 @@ def _checked_journal(base_id: str, base_root: str):
 # before this one. A record is the one kind of file a run writes that is not
 # a copy of something else, so it is recognised by its name.
 _RECORD_NAME_RE = re.compile(
-    r"^\d{4}-\d{2}-\d{2}-move-to-the-class-layout-[0-9a-f]{8}\.md$"
+    r"^\d{4}-\d{2}-\d{2}-move-to-the-class-layout-[0-9a-f]{8}(?:-[0-9]{1,3})?\.md$"
 )
 _LEGACY_RECORD_NAME_RE = re.compile(
     r"^\d{4}-\d{2}-\d{2}-move-to-work-changes-[0-9a-f]{8}\.md$"
@@ -1197,7 +1420,7 @@ def _a_path_we_write(relative: str, legacy: bool) -> bool:
         return True
     if _one_file_in(relative, constants.CORRECTIONS_DIR):
         return True
-    if relative == constants.MAP_PATH:
+    if relative in (constants.MAP_PATH, constants.CODEOWNERS_PATH, constants.STACK_PATH):
         return True
     if relative in [current for _older, current in constants.LEGACY_DOCUMENT_PATHS]:
         return True
@@ -1430,6 +1653,23 @@ def _sort_out(base_root: str, journal: dict, git: GitRunner) -> "_Sorted":
     return sorted_out
 
 
+def _still_as_saved_or_gone(base_root: str, relative: str, git: GitRunner) -> bool:
+    """Whether bringing this path back from what was saved loses nothing.
+
+    It is safe when nothing is on the disk there, or when what is there is
+    exactly what was saved. Anything else is somebody's own words.
+    """
+    current = read_text_exactly(_full(base_root, relative))
+    if current is None and not os.path.lexists(_full(base_root, relative)):
+        return True
+    saved_text = _head_text(base_root, relative, git)
+    return (
+        current is not None
+        and saved_text is not None
+        and ids.exact_hash(current) == ids.exact_hash(saved_text)
+    )
+
+
 def _is_an_entry_path(relative: str) -> bool:
     """Whether this path holds a context change rather than a record of one."""
     lowered = relative.lower()
@@ -1464,6 +1704,7 @@ def _another_copy_is_there(base_root, relative, journal, sorted_out, git) -> boo
     if source is None and (
         _is_the_record(relative, _is_legacy(journal))
         or _is_an_added_placeholder(relative)
+        or relative == constants.STACK_PATH
     ):
         return True
     places = []
@@ -1504,18 +1745,21 @@ def _put_back(base_root: str, journal: dict, git: GitRunner) -> Optional[str]:
     """
     sorted_out = _sort_out(base_root, journal, git)
     if sorted_out.theirs:
-        return THEIR_WORDS % sorted(sorted_out.theirs)[0]
+        return THEIR_WORDS % _named(sorted(sorted_out.theirs)[0])
     if sorted_out.unrecoverable:
-        return CANNOT_PUT_BACK % sorted(sorted_out.unrecoverable)[0]
+        return CANNOT_PUT_BACK % _named(sorted(sorted_out.unrecoverable)[0])
 
     # Restoring comes first. Undoing first leaves a moment in which a file is
     # in neither place, and a run killed in that moment leaves it there.
     # Whatever the run took away outright comes back in the same breath.
     bringing_back = list(sorted_out.restore) + [
-        relative
+        str(relative)
         for relative in (journal.get("removed") or [])
         if _in_head(base_root, str(relative), git)
     ]
+    for relative in bringing_back:
+        if not _still_as_saved_or_gone(base_root, relative, git):
+            return THEIR_WORDS % _named(relative)
     if bringing_back:
         result = git.run(
             ["checkout", "HEAD", "--"] + [str(one) for one in bringing_back],
@@ -1533,13 +1777,13 @@ def _put_back(base_root: str, journal: dict, git: GitRunner) -> Optional[str]:
         # the classification above and this moment, and their save must not
         # be undone by a decision made about what was there before it.
         if ids.exact_hash(current) != _what_this_run_wrote(journal, relative):
-            return THEIR_WORDS % relative
+            return THEIR_WORDS % _named(relative)
         try:
             if in_head:
                 git.check(["checkout", "HEAD", "--", relative], cwd=base_root)
                 continue
             if not _another_copy_is_there(base_root, relative, journal, sorted_out, git):
-                return CANNOT_PUT_BACK % relative
+                return CANNOT_PUT_BACK % _named(relative)
             git.check(
                 ["rm", "-q", "-f", "--cached", "--ignore-unmatch", "--", relative],
                 cwd=base_root,
@@ -1616,6 +1860,8 @@ def _rewritten(relative: str, text: str) -> str:
     wrote. This is the one place either happens, so what the note records and
     what the run writes can never say two different things.
     """
+    if relative == constants.CODEOWNERS_PATH:
+        return _owners_moved(text)
     if relative == constants.MAP_PATH:
         span = _where_section(text)
         if span is None:
@@ -1649,7 +1895,10 @@ def _what_moves(counts: Dict[str, int]) -> str:
 def _record_touches(moves: List[Tuple[str, str]], rewrites, drops) -> List[str]:
     touched = [went for _came, went in moves]
     for relative in list(rewrites) + list(drops):
-        if relative not in touched and relative != constants.MAP_PATH:
+        if relative not in touched and relative not in (
+            constants.MAP_PATH,
+            constants.CODEOWNERS_PATH,
+        ):
             touched.append(relative)
     return touched
 
@@ -1773,28 +2022,29 @@ def _plan_the_writes(base_root: str, plan: "_Plan", today: datetime.date) -> Lis
                 "after_move": ids.exact_hash(was),
             }
         )
-    if plan.map_texts is not None:
-        before, after = plan.map_texts
+    for relative, texts in (
+        (constants.MAP_PATH, plan.map_texts),
+        (constants.CODEOWNERS_PATH, plan.owner_texts),
+    ):
+        if texts is None:
+            continue
+        before, after = texts
         written.append(
             {
-                "path": constants.MAP_PATH,
+                "path": relative,
                 "hash": ids.exact_hash(after),
                 "after_move": ids.exact_hash(before),
             }
         )
-    pairs = [(move.source, move.destination) for move in plan.moves]
     written.append(
-        {
-            "path": constants.CORRECTIONS_DIR
-            + "/"
-            + _record_name(today, pairs, plan.rewrites, plan.drops),
-            "hash": ids.exact_hash(
-                _record_for(pairs, plan.rewrites, plan.drops, today)
-            ),
-        }
+        {"path": plan.record_path, "hash": ids.exact_hash(plan.record_text)}
     )
     for placeholder in plan.added:
         written.append({"path": placeholder, "hash": ids.exact_hash("")})
+    if plan.stack_text is not None:
+        written.append(
+            {"path": constants.STACK_PATH, "hash": ids.exact_hash(plan.stack_text)}
+        )
     return written
 
 
@@ -1935,22 +2185,28 @@ def _do_the_record(
     base_root: str,
     record_path: str,
     record_text: str,
-    added: List[str],
+    added: List[Tuple[str, str]],
     subject: str,
     git: GitRunner,
 ) -> None:
-    atomic_write_text(
-        _full(base_root, record_path), record_text, mode=0o644, inside=base_root
-    )
+    """Change three: the dated record, and the files the current layout adds.
+
+    Nothing is written over. The record's path was chosen to hold nothing
+    or exactly this record, and each added file is written only where
+    nothing is, which the check before finishing makes sure of.
+    """
+    full_record = _full(base_root, record_path)
+    if read_text_exactly(full_record) != record_text:
+        atomic_write_text(full_record, record_text, mode=0o644, inside=base_root)
     staged = [record_path]
-    for placeholder in added:
-        full = _full(base_root, placeholder)
+    for relative, text in added:
+        full = _full(base_root, relative)
         if not os.path.lexists(full):
-            atomic_write_text(full, "", mode=0o644, inside=base_root)
+            atomic_write_text(full, text, mode=0o644, inside=base_root)
         # Staged whether or not it was written just now, for the same reason
         # the rewrite stages every file it owns: a run that stopped after the
         # write and before the save left it on the disk and nowhere else.
-        staged.append(placeholder)
+        staged.append(relative)
     git.check(["add", "--"] + staged, cwd=base_root)
     _save(base_root, subject, git)
 
@@ -1975,6 +2231,8 @@ def _pieces_from_note(journal: dict):
         if after and str(after) != str(item.get("hash")):
             rewrites.append(relative)
         if _is_an_added_placeholder(relative) and str(item.get("hash")) == ids.exact_hash(""):
+            added.append(relative)
+        if relative == constants.STACK_PATH:
             added.append(relative)
     drops = [
         str(item)
@@ -2010,7 +2268,7 @@ def _theirs_before_finishing(base_root, journal, git) -> Optional[str]:
         if current is None:
             continue
         if ids.exact_hash(current) not in allowed:
-            return THEIR_WORDS % relative
+            return THEIR_WORDS % _named(relative)
 
     moved_away = set(str(item.get("path")) for item in journal.get("came_from") or [])
     moved_away.update(str(item) for item in journal.get("removed") or [])
@@ -2029,7 +2287,7 @@ def _theirs_before_finishing(base_root, journal, git) -> Optional[str]:
             if piece in moved_away:
                 continue
             for unexplained in _what_is_really_there(base_root, piece, ours):
-                return THEIR_WORDS % unexplained
+                return THEIR_WORDS % _named(unexplained)
     return None
 
 
@@ -2097,33 +2355,57 @@ def _finish_from_note(base_root, base_id, journal, saved, git) -> Result:
             # readable. It cannot be finished and it must not be guessed at,
             # so the document is named and the one way out is said in the same
             # breath.
-            return _refused(CODE_CANNOT_FINISH, CANNOT_FINISH % relative)
-        if relative == constants.MAP_PATH:
+            return _refused(CODE_CANNOT_FINISH, CANNOT_FINISH % _named(relative))
+        if relative in (constants.MAP_PATH, constants.CODEOWNERS_PATH):
             continue
         try:
             formats.ChangeEntry.parse(text)
         except (ValidationError, PathError):
-            return _refused(CODE_CANNOT_FINISH, CANNOT_FINISH % relative)
+            return _refused(CODE_CANNOT_FINISH, CANNOT_FINISH % _named(relative))
     if not moves and not rewrites and not drops:
         return _refused(CODE_CANNOT_FINISH, CANNOT_FINISH % "one of them")
     day = _as_date(str(journal.get("day") or "")) or state.today()
     subjects = list(journal.get("subjects") or SUBJECTS)
     if legacy:
         moved_names = [relative.split("/")[-1] for relative in rewrites]
-        record_path = constants.LEGACY_CORRECTIONS_DIR + "/" + _legacy_record_name(
-            day, moved_names
-        )
         record_text = _legacy_record_for(moved_names, day)
     else:
-        record_path = constants.CORRECTIONS_DIR + "/" + _record_name(
-            day, moves, rewrites, drops
-        )
         record_text = _record_for(moves, rewrites, drops, day)
+    # The record goes where the note says it goes, which is the name the run
+    # chose because nothing else held it.
+    went_to = set(went for _came, went in moves)
+    record_path = None
+    for item in journal.get("paths") or []:
+        relative = str(item.get("path"))
+        if relative in went_to or not _is_the_record(relative, legacy):
+            continue
+        record_path = relative
+        if str(item.get("hash")) != ids.exact_hash(record_text):
+            return _refused(CODE_CANNOT_FINISH, CANNOT_FINISH % NAMED_RECORD)
+        break
+    if record_path is None:
+        return _refused(CODE_CANNOT_FINISH, CANNOT_FINISH % NAMED_RECORD)
+    added_texts = []
+    for relative in added:
+        if relative == constants.STACK_PATH:
+            text = _stack_text(base_root)
+            planned = [
+                str(item.get("hash"))
+                for item in journal.get("paths") or []
+                if str(item.get("path")) == relative
+            ]
+            if planned and ids.exact_hash(text) != planned[0]:
+                return _refused(CODE_CANNOT_FINISH, CANNOT_FINISH % _named(relative))
+            added_texts.append((relative, text))
+        else:
+            added_texts.append((relative, ""))
     try:
         if subjects[1] not in saved:
             _do_the_rewrite(base_root, rewrites, subjects[1], git)
         if subjects[2] not in saved:
-            _do_the_record(base_root, record_path, record_text, added, subjects[2], git)
+            _do_the_record(
+                base_root, record_path, record_text, added_texts, subjects[2], git
+            )
     except GitError:
         return _refused(CODE_GIT_FAILED, COULD_NOT_SAVE)
     _tidy_empty_older_folders(base_root)
@@ -2192,11 +2474,17 @@ def abandon(
             keep_back.add(source)
 
     if not landed:
+        # Nothing that holds their words is brought back over, whether the
+        # move took it away outright or moved it, and every one is looked at
+        # again right before, because they may have written to it since.
         bringing_back = [
             relative
             for relative in list(sorted_out.restore)
             + [str(one) for one in (journal.get("removed") or [])]
-            if relative not in keep_back and _in_head(base_root, relative, runner)
+            if relative not in keep_back
+            and relative not in theirs
+            and _in_head(base_root, relative, runner)
+            and _still_as_saved_or_gone(base_root, relative, runner)
         ]
         if bringing_back:
             result = runner.run(
@@ -2247,7 +2535,7 @@ def abandon(
     if theirs:
         return Result(
             STATUS_UNDONE,
-            sentence=GAVE_UP_LEFT_ALONE % ", ".join(sorted(theirs)),
+            sentence=GAVE_UP_LEFT_ALONE % _all_named(theirs),
         )
     if landed:
         return Result(STATUS_UNDONE, sentence=GAVE_UP_HALF_DONE)
@@ -2330,7 +2618,7 @@ def _move(base_root, base_id, day, runner, every_seat_updated, put_back) -> Resu
         # above, so anything left here is the person's own.
         return refusal
 
-    plan, refused = _prevalidate(base_root)
+    plan, refused = _prevalidate(base_root, day)
     if refused is not None:
         return refused
     if (
@@ -2363,16 +2651,19 @@ def _move(base_root, base_id, day, runner, every_seat_updated, put_back) -> Resu
     rewrites = list(plan.rewrites)
     if plan.map_texts is not None:
         rewrites.append(constants.MAP_PATH)
+    if plan.owner_texts is not None:
+        rewrites.append(constants.CODEOWNERS_PATH)
+    added_texts = [(relative, "") for relative in plan.added]
+    if plan.stack_text is not None:
+        added_texts.append((constants.STACK_PATH, plan.stack_text))
     try:
         _do_the_move(base_root, pairs, list(plan.drops) + list(plan.gone), MOVE_SUBJECT, runner)
         _do_the_rewrite(base_root, rewrites, REWRITE_SUBJECT, runner)
         _do_the_record(
             base_root,
-            constants.CORRECTIONS_DIR
-            + "/"
-            + _record_name(day, pairs, plan.rewrites, plan.drops),
-            _record_for(pairs, plan.rewrites, plan.drops, day),
-            plan.added,
+            plan.record_path,
+            plan.record_text,
+            added_texts,
             RECORD_SUBJECT,
             runner,
         )
@@ -2441,7 +2732,7 @@ def what_would_happen(
     refusal = _ready_to_write(base_root, runner)
     if refusal is not None:
         return WOULD_NOT % refusal.sentence
-    plan, refused = _prevalidate(base_root)
+    plan, refused = _prevalidate(base_root, day)
     if refused is not None:
         return WOULD_NOT % refused.sentence
     if not plan.has_work:

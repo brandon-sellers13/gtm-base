@@ -193,6 +193,31 @@ def is_refused_in_skills(parts: Sequence[str], is_dir: bool = False) -> bool:
     return True
 
 
+def is_the_skills_placeholder(relative) -> bool:
+    """Whether a path relative to the base is the skills folder's placeholder.
+
+    The name alone is never enough: every check that allows it also requires
+    it to be an empty ordinary file, because a placeholder holding a whole
+    procedure is a skill by another name (Astra's review of Unit 1.5b,
+    finding 8).
+    """
+    text = _clean(relative)
+    parts = [part.casefold() for part in text.split("/") if part not in ("", ".")]
+    return parts == [constants.SKILLS_DIR, constants.PLACEHOLDER_NAME]
+
+
+def placeholder_is_empty(full_path: str) -> bool:
+    """Whether a file on the disk is an empty ordinary file, and nothing else."""
+    try:
+        return (
+            not os.path.islink(full_path)
+            and os.path.isfile(full_path)
+            and os.path.getsize(full_path) == 0
+        )
+    except OSError:
+        return False
+
+
 def names_a_skill_file(relative) -> bool:
     """Whether a path relative to the base names a refused file under skills."""
     text = _clean(relative)
