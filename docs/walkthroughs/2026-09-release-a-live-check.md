@@ -82,3 +82,16 @@ Any ordinary write or push refused in step 9. Any document other than the one ed
 ## Results
 
 [RESULTS TK — Brandon: fill in from the real run, step by step, with the date. No estimates.]
+
+### Step 2, run 2026-09-26 (from Brandon's screenshot of the session, and a read-only check of the base by Claude)
+
+What happened: before answering, the assistant ran four commands, three of which failed, and said it did not know where the base was and that the plugin's records folder "blocks direct commands", so it asked the plugin for the linked folders instead. It then said: "Your base is up to date. Nothing in it is due a look today, and no changes are waiting for your approval. It lives at ~/GTM Bases/Gridwise/gtm-base and is linked to ~/Gridwise, so it comes along whenever you work in this folder."
+
+Findings:
+1. The offer to update how context changes are stored did not appear. A read-only `--check-move` on the base the same day says the base holds one context change in the old folder and "As things stand, GTM Base would offer this." Not yet known: whether the review ran in review mode and the assistant left the offer out, or the review never ran. Needs the two commands the session ran.
+2. Three failed commands before the review, and internal plumbing narrated to the person. The assistant should not have to look for the base: the session's injected context should name it. Not yet known: whether the injected context arrived (was Claude Code restarted after the update?) and which commands failed.
+3. "Your base is up to date" is the assistant's own summary and claims more than the review can know. The product's sentence is "Nothing in your base is due a look today". The skill should tell the assistant to relay the review's sentences rather than summarize them.
+4. Found by the read-only check, not seen by Brandon: `--check-move` prints the raw change id to the person.
+
+What worked: plain words, the base's location and link stated correctly, nothing written.
+
