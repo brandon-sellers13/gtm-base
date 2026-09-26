@@ -21,9 +21,11 @@ this repository is ahead of what the base actually says.
    nothing there to keep current yet.
 2. **A file with a question still open in it.** An approved file still carries
    a question nobody has answered, written into the file as `[your call: ...]`.
-   The finding names the file and the question. (Added 2026-09-19, r2.4 section
-   F. The step that finds these markers is built later in the same phase, and
-   until then this place in the order is simply never reached.)
+   The finding names the file and says how many questions are open in it. The
+   questions themselves are not read out here, because they come out of the
+   file; the review shows each one, held apart as data. (Added 2026-09-19, r2.4
+   section F. Built by Unit 1.7b on 2026-09-26, which is when this place in the
+   order began to be reached.)
 3. **A document older than the context change it is meant to reflect.** The
    material a document was written from is dated before the day the change
    happened. The finding names the document, both dates, and says it is worth a

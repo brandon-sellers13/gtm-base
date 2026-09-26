@@ -981,3 +981,30 @@ SCOPE_WHOLE_SENTENCE = "This base will cover the whole company."
 # The template now holds an empty folder for the segments beside the profile,
 # kept by its placeholder and nothing else (Unit 1.7a, Brandon's call 11).
 TEMPLATE_TREE_DIRS = TEMPLATE_TREE_DIRS + (SEGMENTS_DIR,)
+
+# --- The unanswered marker, and the umbrella (added by Unit 1.7b) ------------
+
+# How a draft marks a call only the person can make: the words "your call" and
+# a colon inside square brackets, followed by the question, as in
+# `[your call: is it twenty people or fifty?]`. Letter case and the spaces
+# around the words do not matter, and a marker left without its closing
+# bracket still counts, because a question half written is still a question
+# nobody answered. A file holding one is neither confirmed nor complete,
+# whatever its status says (requirement P27).
+YOUR_CALL_PATTERN = r"\[\s*your\s+call\s*:([^\]\n]*)(?:\]|$)"
+# Longest a question is carried anywhere it is shown, in characters.
+YOUR_CALL_MAX_CHARS = 200
+
+# The three parts the umbrella over several segments always carries, in this
+# order: who the company sells to overall, one short paragraph for each
+# segment, and what the segments have in common (requirement P18).
+UMBRELLA_SECTIONS = ("Who we sell to", "Segments", "What they share")
+# The sentence the umbrella says about a segment the person left out for now.
+# It is written in the base, so it is fixed rather than left to a draft, and
+# it never says whether any file exists: that is worked out, never written.
+UMBRELLA_PENDING_SENTENCE = (
+    "This segment is left out for now, and its own document is still to come."
+)
+# The umbrella and a segment want what the profile wants first.
+DRAFT_RELEVANCE["umbrella"] = DRAFT_RELEVANCE["icp"]
+DRAFT_RELEVANCE["segment"] = DRAFT_RELEVANCE["icp"]

@@ -38,6 +38,7 @@ from . import (
     paths,
     redaction_patterns,
     scan,
+    segments,
     state,
 )
 from .errors import PathError, ReviewError
@@ -200,7 +201,11 @@ def _fenced(text: str) -> str:
 
 
 def _reparse(draft, fields, body):
-    return drafting.parse(draft.step, _fenced(formats.render_document(fields, body)))
+    fresh = drafting.parse(draft.step, _fenced(formats.render_document(fields, body)))
+    # Where a segment goes was worked out from the settled inventory, never
+    # read off the draft, so it is carried across rather than lost.
+    fresh.destination = getattr(draft, "destination", None)
+    return fresh
 
 
 def stamp_owner(draft, owner_email: str):
@@ -381,6 +386,29 @@ def _already_there(base_root: str, relative: str) -> bool:
     return False
 
 
+def _segment_file_is_free(base_root: str, relative: str) -> None:
+    """Refuse a segment's file when anything already stands in its way.
+
+    The folder has to be an ordinary folder inside the base, and no file in
+    either folder segments have been kept in may fold to the same name, which
+    is how a file a Unit 1.5b move left under its original name, or one that
+    differs only in letter case or in how a letter is encoded, is found
+    before it could be written over (Unit 1.7a's note to Unit 1.7b).
+    """
+    if not segments.folder_is_ordinary(base_root):
+        raise ReviewError(
+            segments.CODE_FOLDER_NOT_ORDINARY, code=segments.CODE_FOLDER_NOT_ORDINARY
+        )
+    name = relative.rsplit("/", 1)[-1]
+    slug = name[: -len(".md")] if name.endswith(".md") else name
+    if (
+        relative != segments.destination(slug)
+        or segments.slug_problem(slug) is not None
+        or segments.already_in_base(base_root, slug) is not None
+    ):
+        raise ReviewError(segments.CODE_FILE_TAKEN, code=segments.CODE_FILE_TAKEN)
+
+
 def path_for(draft, base_root: Optional[str] = None) -> str:
     """Where in the base a draft belongs, whichever step it came from."""
     if draft.step == drafting.STEP_CHANGE:
@@ -535,6 +563,8 @@ def approve(
         )
 
     ready_to_write(base_root, git)
+    if draft.step == drafting.STEP_SEGMENT:
+        _segment_file_is_free(base_root, relative)
     if _already_there(base_root, relative):
         raise ReviewError(CODE_FILE_EXISTS)
     return _write_and_save(
@@ -561,6 +591,10 @@ def skip(
     if not base_root:
         raise ReviewError(CODE_NO_BASE)
     address = owner_email or base_reader.repo_email(base_root, git) or ""
+    if step not in drafting.SKIPPED_HEADINGS:
+        # Only the two required documents are ever written down as skipped. A
+        # segment the person does not want is left out, which writes nothing.
+        raise ReviewError("cannot-skip", code="cannot-skip")
     relative = (
         drafting.ICP_PATH if step == drafting.STEP_ICP else drafting.POSITIONING_PATH
     )

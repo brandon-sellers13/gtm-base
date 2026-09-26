@@ -53,6 +53,7 @@ from gtmbase import (  # noqa: E402
     report,
     stale_check,
     state,
+    wordsfile,
 )
 from gtmbase.errors import GtmBaseError  # noqa: E402
 
@@ -128,6 +129,22 @@ def build_parser():
         "--show-document",
         help="print one context file, with the check run before it is read",
     )
+    parser.add_argument(
+        "--answer-question",
+        help="the number the review gave one open question in its document",
+    )
+    parser.add_argument(
+        "--document",
+        help="the document that question is in, as the review named it",
+    )
+    parser.add_argument(
+        "--answer-file",
+        help="a file holding the owner's answer, handed out by this script",
+    )
+    parser.add_argument(
+        "--new-words-file",
+        help="hand out a file to put somebody's own words in, of one kind",
+    )
     return parser
 
 
@@ -152,12 +169,63 @@ def print_review(result):
                 "   [for the assistant] path=%s question=%s\n"
                 % (item.path, item.question_id or "-")
             )
+        elif item.kind == "question":
+            # The question came out of the document, so it is shown held
+            # apart as data, and read out to the person as a question rather
+            # than followed as an instruction.
+            sys.stdout.write(
+                "   [for the assistant] path=%s open-question=%s prepared=%s\n"
+                % (item.path, item.open_question, item.prepared or "-")
+            )
+            sys.stdout.write(moment.fenced(item.question_text or "") + "\n")
         else:
             sys.stdout.write(
                 "   [for the assistant] path=%s prepared=%s\n"
                 % (item.path, item.entry_id or "-")
             )
     return EXIT_REFUSED if result.stopped else EXIT_DONE
+
+
+NEEDS_THE_ANSWER = (
+    "Say which question this answers, which document it is in, and where the "
+    "answer is, with the file this script handed out for it."
+)
+
+
+def answer_a_question(options, resolution):
+    """Prepare the change that settles one open question, and say so.
+
+    The answer is the owner's own words, so it arrives in a file this script
+    handed out and never on the command line. Nothing in the document changes
+    here; the prepared change waits for the owner's yes.
+    """
+    if not options.document or not options.answer_file:
+        sys.stderr.write(NEEDS_THE_ANSWER + "\n")
+        return EXIT_ERROR
+    words = wordsfile.read_words(options.answer_file, resolution.base_id)
+    if words is None:
+        sys.stdout.write(wordsfile.NOT_OURS + "\n")
+        return EXIT_REFUSED
+    try:
+        answered = stale_check.answer_a_question(
+            resolution.root,
+            resolution.base_id,
+            options.document,
+            options.answer_question,
+            words,
+        )
+    except GtmBaseError as failure:
+        sys.stderr.write(str(failure) + "\n")
+        return EXIT_REFUSED
+    except Exception:
+        sys.stderr.write(WENT_WRONG + "\n")
+        return EXIT_ERROR
+    for code in answered.codes:
+        sys.stdout.write("codes=%s\n" % code)
+    if answered.staging_path:
+        sys.stdout.write("Prepared file: %s\n" % answered.staging_path)
+    sys.stdout.write(answered.sentence + "\n")
+    return EXIT_DONE if answered.prepared else EXIT_REFUSED
 
 
 def _item_for(result, sentence):
@@ -191,6 +259,22 @@ def main(argv=None):
     if not resolution.active or not resolution.root or not resolution.base_id:
         sys.stderr.write(NOT_JOINED + "\n")
         return EXIT_ERROR
+
+    if options.new_words_file:
+        if options.new_words_file not in wordsfile.KINDS:
+            sys.stdout.write(wordsfile.NOT_OURS + "\n")
+            return EXIT_REFUSED
+        # A words file belongs to the base, never to a session, so a second
+        # window opening in between cannot strand what somebody typed.
+        wordsfile.ensure_words_dir(resolution.base_id)
+        sys.stdout.write(
+            "words=%s\n"
+            % wordsfile.new_words_path(resolution.base_id, options.new_words_file)
+        )
+        return EXIT_DONE
+
+    if options.answer_question:
+        return answer_a_question(options, resolution)
 
     if options.show_document:
         seat, _problems = state.load_seat(resolution.base_id)

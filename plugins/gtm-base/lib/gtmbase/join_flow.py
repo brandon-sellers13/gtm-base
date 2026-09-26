@@ -36,6 +36,7 @@ from typing import List, Optional, Sequence
 
 from . import (
     base_reader,
+    callmarkers,
     confirm,
     constants,
     create_base,
@@ -338,15 +339,20 @@ class Previewed(object):
 
 
 class Reviewed(object):
-    """What the checks made of one draft before anybody was asked about it."""
+    """What the checks made of one draft before anybody was asked about it.
 
-    __slots__ = ("step", "ready", "codes", "draft")
+    `questions` is how many `[your call: ...]` markers the draft carries, the
+    questions it leaves for the person (Unit 1.7b).
+    """
 
-    def __init__(self, step, ready, codes=None, draft=None):
+    __slots__ = ("step", "ready", "codes", "draft", "questions")
+
+    def __init__(self, step, ready, codes=None, draft=None, questions=0):
         self.step = step
         self.ready = bool(ready)
         self.codes = list(codes or [])
         self.draft = draft
+        self.questions = int(questions or 0)
 
     def __repr__(self) -> str:
         return "Reviewed(step=%r, ready=%r, codes=%r)" % (
@@ -1476,6 +1482,132 @@ def load_inventory(run_id: str) -> Optional[segments.Inventory]:
     return segments.load(scratch_dir(run_id))
 
 
+# --- The umbrella and the segment drafts (Unit 1.7b) ------------------------
+
+# The profile step asked for when the inventory holds several segments, which
+# is the umbrella's place, and the umbrella asked for when it does not.
+CODE_UMBRELLA_INSTEAD = "umbrella-instead"
+CODE_NO_SEVERAL_SEGMENTS = "no-several-segments"
+# A draft carrying questions for the person may only be written once they have
+# chosen to leave those questions open.
+CODE_QUESTIONS_OPEN = "questions-open"
+# Said when a draft carries questions only the person can answer. It is said
+# after the check says the draft is ready, and before it is shown.
+DRAFT_HAS_ONE_QUESTION = (
+    "This draft leaves one question for you to answer, marked where it comes "
+    "up. Answer it now and it is written in before anything is saved, or "
+    "approve the draft with it left open and your next review of your base "
+    "asks it again."
+)
+DRAFT_HAS_QUESTIONS = (
+    "This draft leaves %d questions for you to answer, each marked where it "
+    "comes up. Answer them now and they are written in before anything is "
+    "saved, or approve the draft with them left open and your next review of "
+    "your base asks them again."
+)
+
+
+def draft_questions_sentence(count: int) -> str:
+    """The sentence said about a draft's open questions, or nothing at all."""
+    if count <= 0:
+        return ""
+    if count == 1:
+        return DRAFT_HAS_ONE_QUESTION
+    return DRAFT_HAS_QUESTIONS % count
+
+
+def several_segments(run_id: str) -> Optional[segments.Inventory]:
+    """The inventory, when it holds more than one segment, and None otherwise.
+
+    One segment, or no inventory at all, is a company the customer profile
+    describes in full, and `draft-icp.md` stays its prompt.
+    """
+    inventory = load_inventory(run_id)
+    if inventory is None or inventory.is_single:
+        return None
+    return inventory
+
+
+def profile_step(run_id: str) -> str:
+    """Which step drafts the customer profile in this run."""
+    return drafting.STEP_UMBRELLA if several_segments(run_id) else drafting.STEP_ICP
+
+
+def segment_to_draft(run_id: str, slug: Optional[str]) -> segments.Segment:
+    """The one settled segment a segment draft is for, or a refusal.
+
+    It has to be a segment the person said to draft, in an inventory of more
+    than one. A segment taken from its finished document is the next part's,
+    and one left out is drafted by nobody.
+    """
+    inventory = several_segments(run_id)
+    if inventory is not None and slug:
+        for segment in inventory.segments:
+            if segment.slug == slug and segment.answer == constants.SEGMENT_DRAFT:
+                return segment
+    raise ReviewError(segments.CODE_NOT_TO_DRAFT, code=segments.CODE_NOT_TO_DRAFT)
+
+
+def _step_is_this_runs(run_id: str, step: str, segment: Optional[str] = None):
+    """Refuse a profile step the inventory rules out, and return the segment.
+
+    Several segments are drafted as an umbrella and never folded into one
+    profile, which is the defect the third real run found, so the profile
+    step is refused once the inventory holds several, and the umbrella step
+    is refused until it does.
+    """
+    if step == drafting.STEP_ICP and several_segments(run_id) is not None:
+        raise ReviewError(CODE_UMBRELLA_INSTEAD, code=CODE_UMBRELLA_INSTEAD)
+    if step == drafting.STEP_UMBRELLA and several_segments(run_id) is None:
+        raise ReviewError(CODE_NO_SEVERAL_SEGMENTS, code=CODE_NO_SEVERAL_SEGMENTS)
+    if step == drafting.STEP_SEGMENT:
+        return segment_to_draft(run_id, segment)
+    return None
+
+
+def _what_the_base_is_for(run_id: str) -> str:
+    held = held_scope(run_id)
+    return held if held else "the whole company"
+
+
+def _inventory_lines(inventory: segments.Inventory) -> str:
+    """The settled segments as plain lines, for the request to hold as data."""
+    said = {
+        constants.SEGMENT_ADOPT: "taken from its finished document",
+        constants.SEGMENT_DRAFT: "drafted from the material",
+        constants.SEGMENT_LEAVE_OUT: "left out for now",
+    }
+    return "\n".join(
+        "- %s (%s)" % (segment.name, said[segment.answer])
+        for segment in inventory.segments
+    )
+
+
+def _extra_for(run_id: str, step: str, segment) -> dict:
+    """What the umbrella and a segment request carry besides the material.
+
+    Every value is the person's own words, so each is held apart as data the
+    same way their documents are.
+    """
+    if step not in (drafting.STEP_UMBRELLA, drafting.STEP_SEGMENT):
+        return {}
+    inventory = several_segments(run_id)
+    try:
+        extra = {
+            "scope": drafting.said_as_data(
+                "what the base is for", _what_the_base_is_for(run_id)
+            ),
+            "inventory": drafting.said_as_data(
+                "the segments", _inventory_lines(inventory)
+            ),
+        }
+        if segment is not None:
+            extra["segment"] = drafting.said_as_data("the segment", segment.name)
+    except SourceRejected:
+        raise DraftError(step, "unusable-name")
+    return extra
+
+
 class SourcesRead(object):
     """The text this run may draft from, and what had to be left out of it."""
 
@@ -1697,6 +1829,7 @@ def preview_step(
     only=None,
     only_folder=None,
     only_index=None,
+    segment: Optional[str] = None,
 ) -> Previewed:
     """Say what one draft would read, and what it would leave out, writing nothing.
 
@@ -1707,8 +1840,9 @@ def preview_step(
     material.
     """
     day = today or state.today()
+    settled = _step_is_this_runs(run_id, step, segment)
     read, chosen, superseded = _sources_for_a_draft(
-        run_id, paste_files, day, only, only_folder, only_index
+        run_id, paste_files, day, only, only_folder, only_index, settled
     )
     plan = drafting.plan_sources(step, chosen)
     codes = list(plan.codes)
@@ -1739,6 +1873,7 @@ def assemble_step(
     only=None,
     only_folder=None,
     only_index=None,
+    segment: Optional[str] = None,
 ) -> Assembled:
     """Build the request for one step and write it into the run's own folder.
 
@@ -1747,8 +1882,9 @@ def assemble_step(
     when nothing was left to draft from.
     """
     day = today or state.today()
+    settled = _step_is_this_runs(run_id, step, segment)
     read, chosen, superseded = _sources_for_a_draft(
-        run_id, paste_files, day, only, only_folder, only_index
+        run_id, paste_files, day, only, only_folder, only_index, settled
     )
     try:
         assembly = drafting.assemble(
@@ -1758,11 +1894,14 @@ def assemble_step(
             day.isoformat() if hasattr(day, "isoformat") else str(day),
             owner_email,
             plugin_root=plugin_root,
+            extra=_extra_for(run_id, step, settled),
         )
     except DraftError as refusal:
         refusal.left_out = list(read.left_out)
         raise
-    path = os.path.join(scratch_dir(run_id), "%s-prompt.md" % step)
+    path = os.path.join(
+        scratch_dir(run_id), "%s-prompt.md" % _file_stem(step, settled)
+    )
     atomic_write_text(path, assembly.text, inside=paths.seat_home())
     return Assembled(
         path,
@@ -1887,11 +2026,15 @@ def choose_versions(found):
     return kept, left
 
 
-def _sources_for_a_draft(run_id, paste_files, day, only, only_folder, only_index):
+def _sources_for_a_draft(
+    run_id, paste_files, day, only, only_folder, only_index, segment=None
+):
     """What one draft reads: the agreed list, narrowed, one version of each.
 
     The preview and the request go through this one function, so the two can
-    never disagree about which files a draft reads.
+    never disagree about which files a draft reads. A segment's draft reads
+    the document the person named for that segment first, when they named
+    one, so the cap never leaves out the one page about it.
     """
     read = read_sources(
         run_id,
@@ -1902,7 +2045,24 @@ def _sources_for_a_draft(run_id, paste_files, day, only, only_folder, only_index
         only_index=only_index,
     )
     chosen, superseded = choose_versions(read.sources)
+    named = getattr(segment, "source", "") if segment is not None else ""
+    if named:
+        wanted = os.path.realpath(named)
+        first = [
+            source
+            for source in chosen
+            if getattr(source, "path", None)
+            and os.path.realpath(source.path) == wanted
+        ]
+        chosen = first + [source for source in chosen if source not in first]
     return read, chosen, superseded
+
+
+def _file_stem(step: str, segment=None) -> str:
+    """The start of the name of one step's request and draft in the run folder."""
+    if step == drafting.STEP_SEGMENT and segment is not None:
+        return "%s-%s" % (step, segment.slug)
+    return step
 
 
 def drafts_dir(run_id: str) -> str:
@@ -1959,9 +2119,9 @@ def sweep_drafts_without_a_run() -> List[str]:
     return removed
 
 
-def draft_path(run_id: str, step: str) -> str:
-    """Where the assistant writes the draft for one step."""
-    return os.path.join(drafts_dir(run_id), "%s-draft.md" % step)
+def draft_path(run_id: str, step: str, segment=None) -> str:
+    """Where the assistant writes the draft for one step, and one segment."""
+    return os.path.join(drafts_dir(run_id), "%s-draft.md" % _file_stem(step, segment))
 
 
 def clear_drafts(run_id: str) -> bool:
@@ -1996,19 +2156,36 @@ def review_step(
     base_root: Optional[str] = None,
     email: Optional[str] = None,
     runner: Optional[GitRunner] = None,
+    run_id: Optional[str] = None,
+    segment: Optional[str] = None,
 ) -> Reviewed:
     """Read one draft back and say whether it may be shown to the person.
 
     What comes back is either the word that it is ready or the classes of thing
-    that were found in it, never a line of the draft itself.
+    that were found in it, never a line of the draft itself. An umbrella is
+    also measured against the inventory this run settled, and a segment is
+    given the one place in the base it may be written to.
     """
     git = runner_or_default(runner)
+    settled = None
+    if run_id:
+        settled = _step_is_this_runs(run_id, step, segment)
+    elif step in (drafting.STEP_UMBRELLA, drafting.STEP_SEGMENT):
+        # Both are measured against the run's own inventory, so neither can
+        # be checked without the run.
+        raise ReviewError("no-run", code="no-run")
     text = read_text(draft_file)
     if text is None:
         return Reviewed(step, False, ["no-draft-file"])
     draft = _parse_draft(step, text)
+    if settled is not None:
+        draft.destination = settled.destination
     codes = review.screen(draft, _address_for(base_root, email, git))
-    return Reviewed(step, not codes, codes, draft)
+    if step == drafting.STEP_UMBRELLA:
+        codes.extend(drafting.check_umbrella(draft, several_segments(run_id)))
+    return Reviewed(
+        step, not codes, codes, draft, questions=callmarkers.count(draft.text)
+    )
 
 
 def _parse_draft(step: str, text: str):
@@ -2053,6 +2230,8 @@ def approve_step(
     confirmed_home: bool = False,
     content_folder: Optional[str] = None,
     beside: bool = False,
+    segment: Optional[str] = None,
+    questions_open: bool = False,
 ):
     """Write one approved draft down, building the base when it is the first.
 
@@ -2070,10 +2249,27 @@ def approve_step(
     rather than in a later step that a closed window could skip.
     """
     git = runner_or_default(runner)
-    reviewed = review_step(step, draft_file, base_root=base_root, email=email, runner=git)
+    reviewed = review_step(
+        step,
+        draft_file,
+        base_root=base_root,
+        email=email,
+        runner=git,
+        run_id=run_id,
+        segment=segment,
+    )
     if not reviewed.ready:
         raise ReviewError(review.CODE_SCREENED, codes=reviewed.codes)
-    profile = reviewed.draft.step == drafting.STEP_ICP
+    if reviewed.questions and not questions_open:
+        # A draft still asking the person something is written down only once
+        # they have been asked and chose to leave it open. The third real run
+        # saved one nobody had looked at twice (requirement P27).
+        raise ReviewError(CODE_QUESTIONS_OPEN, code=CODE_QUESTIONS_OPEN)
+    if reviewed.draft.step == drafting.STEP_SEGMENT and not base_root:
+        # A segment goes into a base the umbrella and the positioning already
+        # made, and never makes one.
+        raise ReviewError(review.CODE_NO_BASE, code=review.CODE_NO_BASE)
+    profile = reviewed.draft.step in drafting.PROFILE_STEPS
     if profile:
         # What the base covers goes onto the profile from the answer this run
         # holds, and from nothing a draft said (Unit 1.7a, requirement P23).
@@ -2139,6 +2335,12 @@ def skip_step(
     """
     git = runner_or_default(runner)
     resolution = paths.resolve_base(base_root, machine.load_machine_state(), git)
+    if step not in drafting.SKIPPED_HEADINGS and (
+        drafting.step_named(step) != drafting.STEP_CHANGE
+    ):
+        # Only the two required documents are written down as skipped. A
+        # segment nobody wants is left out, which writes nothing at all.
+        raise ReviewError("cannot-skip", code="cannot-skip")
     if drafting.step_named(step) == drafting.STEP_CHANGE:
         root = resolution.root or base_root
         if not resolution.base_id:
@@ -2431,6 +2633,12 @@ def reconcile_plan(
         if confirm.refusal_while_written_twice(
             base_root, base_id, path, day, git=git
         ) is not None:
+            left_flagged.append(path)
+            continue
+        if confirm.refusal_while_a_question_is_open(base_root, path) is not None:
+            # A document still asking a question nobody answered cannot be
+            # said to say anything yet, so it is left for the review, which
+            # asks the question first (Unit 1.7b).
             left_flagged.append(path)
             continue
         ask_about.append(path)

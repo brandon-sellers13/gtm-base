@@ -1351,6 +1351,12 @@ STILL_THE_NOTE = (
     "wording, so nothing was written. Say what the document should say now, "
     "in the document's own voice."
 )
+# Said when the wording for an answer to an open question still asks it.
+CODE_STILL_ASKS = "wording-still-asks-the-question"
+STILL_ASKS = (
+    "Those words still ask the question they were meant to answer, so nothing "
+    "was written. Write what that part should say with the question answered."
+)
 NEEDS_A_PART = (
     "That change does not say which part of the document it is about, so the "
     "wording has nowhere to go and would leave what it corrects standing. "
@@ -1427,6 +1433,14 @@ def write_the_wording(
 
     if stale_check.still_the_note(words):
         raise ValidationError(STILL_THE_NOTE, code=CODE_STILL_THE_NOTE)
+    # A prepared answer to a question a draft left open keeps that question as
+    # its excerpt. Wording that still asks it would leave the document as
+    # unfinished as it was, so it is refused (Unit 1.7b).
+    from . import callmarkers
+
+    for asked in callmarkers.markers_in(getattr(staging, "excerpt", "") or ""):
+        if callmarkers.holds(words, asked):
+            raise ValidationError(STILL_ASKS, code=CODE_STILL_ASKS)
     text = str(words).strip() + "\n"
     needs_a_part = any(edit.op == "add" for edit in staging.edits)
     if needs_a_part and part is None:
