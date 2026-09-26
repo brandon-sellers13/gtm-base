@@ -18,6 +18,8 @@ recompute them and check that they match.
 | `ledger-entry.md` | The same context change in the older layout, which a base set up before the rename still holds. It is kept so the tolerant reader always has something old to read. |
 | `drafts/change-entry.md` | A drafted context change in today's layout, as the model hands it back. |
 | `drafts/ledger-entry.md` | The same drafted change in the older layout, kept for the same reason. |
+| `drafts/umbrella.md` | A drafted customer profile across three segments, one short paragraph each, as the model hands it back. |
+| `drafts/segment.md` | One of those segments drafted at full depth, as the model hands it back. |
 | `confirmations.md` | Three confirmations for one context file: drafted, a context change, and the threshold. |
 | `corrections-file.md` | What the run found wrong and which rule changed as a result. |
 | `pending-item.json` | What the analysis step proposes, before any check has run on it. |

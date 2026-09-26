@@ -890,6 +890,26 @@ PYTHON_SENTENCES = (
     ("segments", "NAME_UNUSABLE"),
     ("segments", "TOO_MANY"),
     ("segments", "NONE_NAMED"),
+    # Unit 1.7b: the umbrella's words for a segment left out, a segment file
+    # that would collide, the questions a draft leaves open, the review line
+    # for each, answering one, and the refusals while one is open.
+    ("constants", "UMBRELLA_PENDING_SENTENCE"),
+    ("segments", "FILE_TAKEN"),
+    ("segments", "FOLDER_NOT_ORDINARY"),
+    ("join_flow", "DRAFT_HAS_ONE_QUESTION"),
+    ("join_flow", "DRAFT_HAS_QUESTIONS"),
+    ("confirm", "QUESTION_STILL_OPEN"),
+    ("compose_proposal", "STILL_ASKS"),
+    ("stale_check", "FINDING_OPEN_QUESTION_ONE"),
+    ("stale_check", "FINDING_OPEN_QUESTIONS"),
+    ("stale_check", "REVIEW_ITEM_QUESTION"),
+    ("stale_check", "REVIEW_ITEM_QUESTION_PREPARED"),
+    ("stale_check", "ANSWER_PREPARED"),
+    ("stale_check", "ANSWER_ALREADY_PREPARED"),
+    ("stale_check", "QUESTION_GONE"),
+    ("stale_check", "QUESTION_ABOVE_EVERY_PART"),
+    ("stale_check", "ANSWER_NEEDED"),
+    ("stale_check", "NOT_A_DOCUMENT"),
 )
 
 # Constants that read like a sentence but that no person ever reads. Each one
