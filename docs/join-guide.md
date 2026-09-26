@@ -99,6 +99,16 @@ part. Your customer profile records the answer once you approve it. If the
 list you agree to holds several documents that each describe one group of
 customers, you then say for each one whether to use the finished document,
 draft that segment fresh, or leave it out for now, before anything is drafted.
+With more than one segment, your customer profile is drafted across all of
+them, one short paragraph each, and every segment you said to draft gets a
+document of its own at full depth, which you read whole and approve like any
+other. A segment you left out is named in the profile as still to come.
+
+A draft sometimes leaves a question only you can answer, marked in it where it
+comes up. You are told how many there are before you read it, and you can
+answer them there or approve the draft with them left open. A document with a
+question still open in it is not counted as confirmed until you answer it, and
+your next review of your base asks each one.
 
 Answer in plain words in your next message. Say yes to set a base up, say that
 you have an invitation link if a teammate already made a base and sent you a
