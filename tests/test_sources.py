@@ -584,7 +584,7 @@ class TestVersionsOfOneDocumentAreGroupedByName(unittest.TestCase):
             "Positioning FINAL.md",
             "positioning-v2.md",
             "positioning (1).md",
-            "positioning-2026-09-01.md",
+            "positioning-old.md",
             "final-positioning.md",
             "positioning_draft.md",
         ):
@@ -595,7 +595,11 @@ class TestVersionsOfOneDocumentAreGroupedByName(unittest.TestCase):
             ("icp.md", "icp-fintech.md"),
             ("ad.md", "ad copy.md"),
             ("customers.md", "new-customers.md"),
+            ("customers.md", "old-customers.md"),
+            ("plan.md", "backup-plan.md"),
             ("q3-plan.md", "q4-plan.md"),
+            ("notes-2026-09-01.md", "notes-2026-09-08.md"),
+            ("plan 2025.md", "plan 2026.md"),
         ):
             self.assertNotEqual(
                 sources.version_stem(one), sources.version_stem(other), (one, other)
@@ -628,6 +632,57 @@ class TestVersionsOfOneDocumentAreGroupedByName(unittest.TestCase):
                 [["marketing/positioning-v2.md", "marketing/positioning-v1.md"]],
                 found.version_sets,
             )
+
+    def test_a_copy_put_aside_never_wins_a_tie_on_the_date(self):
+        """Finding 1 of the unit's correctness review.
+
+        Versions saved on the same day tie on their date, and the name used to
+        decide it, so `positioning-old.md` and `positioning v1.md` sorted
+        ahead of the current file.
+        """
+        with TempFolder() as temp:
+            for name in (
+                "positioning.md",
+                "positioning-old.md",
+                "positioning backup.md",
+                "positioning_draft.md",
+                "positioning (1).md",
+            ):
+                set_day(temp.file("m/" + name, "# P\n"), datetime.date(2026, 9, 1))
+
+            found = sources.survey(temp.folder, today=TODAY)
+
+            self.assertEqual("m/positioning.md", found.version_sets[0][0])
+
+    def test_a_later_version_number_wins_a_tie_on_the_date(self):
+        with TempFolder() as temp:
+            for name in ("positioning v1.md", "positioning v2.md"):
+                set_day(temp.file("m/" + name, "# P\n"), datetime.date(2026, 9, 1))
+
+            found = sources.survey(temp.folder, today=TODAY)
+
+            self.assertEqual(
+                [["m/positioning v2.md", "m/positioning v1.md"]], found.version_sets
+            )
+
+    def test_two_kinds_of_file_are_two_documents(self):
+        """A metrics document and a metrics sheet are read side by side."""
+        with TempFolder() as temp:
+            temp.file("m/metrics.md", "# Metrics\n")
+            temp.file("m/metrics.csv", "month,signups\n")
+
+            found = sources.survey(temp.folder, today=TODAY)
+
+            self.assertEqual([], found.version_sets)
+
+    def test_a_dated_series_is_not_taken_for_versions(self):
+        with TempFolder() as temp:
+            for day in ("08-12", "08-19", "08-26"):
+                temp.file("m/customer-interviews-2026-%s.md" % day, "# Interview\n")
+
+            found = sources.survey(temp.folder, today=TODAY)
+
+            self.assertEqual([], found.version_sets)
 
     def test_the_same_name_in_two_folders_is_two_documents(self):
         with TempFolder(copy_fixtures=True) as temp:

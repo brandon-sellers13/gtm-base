@@ -292,14 +292,28 @@ def order_sources(step: str, sources: Sequence["sources_module.Source"]):
     return wanted + rest + last
 
 
+def _words_in(text: str):
+    return [word for word in re.split(r"[^a-z0-9]+", str(text or "").casefold()) if word]
+
+
 def is_template_or_readme(source) -> bool:
-    """Whether a source is a template or a read-me, by its name or first heading."""
-    label = str(getattr(source, "label", "") or "").casefold()
-    stem = os.path.splitext(label)[0].strip()
-    if any(stem.startswith(name) for name in constants.DRAFT_LAST_NAMES):
+    """Whether a source is a template or a read-me, by its name or first heading.
+
+    The words are matched whole, so a file of email templates and a finished
+    positioning built on somebody's template are not taken for templates. A
+    heading counts only when it is short, as the title of a template is, such
+    as "Launch brief template" (finding 5 of the unit's correctness review).
+    """
+    label = str(getattr(source, "label", "") or "")
+    name_words = _words_in(os.path.splitext(label)[0])
+    if any(word in name_words for word in constants.DRAFT_LAST_NAMES):
         return True
-    where = label + " " + _first_heading(source).casefold()
-    return any(word in where for word in constants.DRAFT_LAST_WORDS)
+    if any(word in name_words for word in constants.DRAFT_LAST_WORDS):
+        return True
+    heading_words = _words_in(_first_heading(source))
+    return len(heading_words) <= 5 and any(
+        word in heading_words for word in constants.DRAFT_LAST_WORDS
+    )
 
 
 def plan_sources(step: str, sources: Sequence["sources_module.Source"]) -> SourcePlan:

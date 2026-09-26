@@ -2910,6 +2910,23 @@ class TestAnExplicitChoiceIsHonoredOnce(unittest.TestCase):
                 constants.CHOICE_EXPLICIT, join_flow.load_listing(run)["choice"]
             )
 
+    def test_adding_a_folder_that_was_proposed_leaves_a_plain_yes_plain(self):
+        """A proposed folder named again as an add is still a proposed folder."""
+        with support.Sandbox():
+            content = four_marketing_folders()
+            run = join_flow.new_run(TODAY)
+            join_flow.survey_sources(run, content, today=TODAY)
+
+            listing = join_flow.list_sources(
+                content, run, today=TODAY, from_survey=True,
+                added=join_flow.load_survey(run)["places"],
+            )
+
+            self.assertEqual(
+                constants.CHOICE_PLAIN_YES, join_flow.load_listing(run)["choice"]
+            )
+            self.assertIn(sources_module.CODE_NARROW_FIRST, listing.codes)
+
     def test_a_place_to_use_that_was_never_proposed_is_refused(self):
         with support.Sandbox():
             content = four_marketing_folders()
@@ -3060,6 +3077,22 @@ class TestThePreviewAsksToNarrowOnlyAfterAPlainYes(unittest.TestCase):
                 self.assertNotIn(constants.PREVIEW_NARROW_ASK_ALL, printed)
                 self.assertNotIn(constants.PREVIEW_NARROW_ASK_SOME, printed)
 
+    def test_a_preview_already_narrowed_asks_nothing_more(self):
+        """Finding 3 of the unit's correctness review: no second ask."""
+        with support.Sandbox() as sandbox:
+            setup = SetupRun(sandbox)
+            setup.agree_to_the_list()
+
+            printed = run_join(
+                "preview", "--step", "icp", "--run", setup.run, "--only", "1"
+            ).stdout.decode("utf-8")
+
+            self.assertIn("choice=plain-yes", printed)
+            self.assertIn(constants.PREVIEW_READS_THE_ONE_CHOSEN, printed)
+            self.assertNotIn(constants.PREVIEW_READS_THE_ONE + "\n", printed)
+            self.assertNotIn(constants.PREVIEW_NARROW_ASK_ALL, printed)
+            self.assertNotIn(constants.PREVIEW_NARROW_ASK_SOME, printed)
+
     def test_after_a_plain_yes_the_preview_still_asks(self):
         with support.Sandbox() as sandbox:
             setup = SetupRun(sandbox)
@@ -3147,6 +3180,51 @@ class TestVersionsOfOneDocumentInADraft(unittest.TestCase):
                 % {"older": "positioning.md", "winner": "positioning.final.md"},
                 printed,
             )
+
+    def test_two_undated_versions_are_never_said_to_share_a_day(self):
+        """Finding 4 of the unit's correctness review."""
+
+        class Undated(object):
+            def __init__(self, path):
+                self.path = path
+                self.date = None
+
+        reason = join_flow._why_this_version(
+            Undated("/m/positioning-v1.md"), Undated("/m/positioning-v1 (1).md")
+        )
+        self.assertEqual(join_flow.VersionLeftOut.SET_ASIDE, reason)
+        reason = join_flow._why_this_version(
+            Undated("/m/a/positioning.md"), Undated("/m/b/positioning.md")
+        )
+        self.assertEqual(join_flow.VersionLeftOut.SAME_DAY, reason)
+        self.assertNotIn("same day", constants.VERSION_NOT_USED_SAME_DAY)
+
+    def test_a_copy_saved_the_same_day_is_left_out_as_put_aside(self):
+        with support.Sandbox():
+            content = os.path.join(os.environ["HOME"], "company")
+            support.write(
+                os.path.join(content, "marketing", "icp.md"), "# Ideal customer\n"
+            )
+            for name in ("positioning.md", "positioning-old.md"):
+                set_day(
+                    support.write(
+                        os.path.join(content, "marketing", name),
+                        "# Positioning\n\n%s\n" % name,
+                    ),
+                    datetime.date(2026, 9, 1),
+                )
+            run = self.agreed(content)
+
+            printed = run_join(
+                "preview", "--step", "positioning", "--run", run
+            ).stdout.decode("utf-8")
+
+            self.assertIn(
+                constants.VERSION_NOT_USED_SET_ASIDE
+                % {"older": "positioning-old.md", "winner": "positioning.md"},
+                printed,
+            )
+            self.assertIn('included="positioning.md (2026-09-01)"', printed)
 
     def test_naming_only_the_older_version_uses_it(self):
         """Narrowing only takes part of the agreed list, and never widens it."""

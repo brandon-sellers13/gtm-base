@@ -346,7 +346,7 @@ python3 scripts/join.py preview --step <step> --run <run identifier>
   how much this draft reads and which files it leaves out; when the cap left
   anything out, why a draft reads a limited amount at all; for each older
   version of a document, why it was not used, and whether the versions say
-  different things; and, after a plain yes only, the question.
+  different things; and, after a plain yes not yet narrowed, the question.
 - After `choice=explicit` there is no question. They named their folders
   themselves and are not asked about them again, so go on to step 6b. They
   can still narrow a draft whenever they ask to.
@@ -370,6 +370,7 @@ widens it.
 - A number that is not on the list is refused with `codes=not-consented`. Read
   the list out again and ask which of those they mean.
 - Naming only the older version of a document uses that version.
+- A preview they narrowed asks nothing more, because they have answered.
 
 ### Step 6b. The draft, whole
 

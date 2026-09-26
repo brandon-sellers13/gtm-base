@@ -833,6 +833,15 @@ VERSION_MARKER_WORDS = (
 # The one word that makes a version outrank a newer one. A date on a file says
 # when it was last touched, not which version somebody signed off.
 VERSION_FINAL_WORD = "final"
+# The words that say a version was put aside. A name carrying one of them
+# ranks below a sibling that carries none, whatever the dates say, because a
+# copy saved the same day as the current one ties on its date, and the name
+# was then all that decided it (finding 1 of the unit's correctness review).
+VERSION_SET_ASIDE_WORDS = ("old", "backup", "draft", "wip")
+# The words that may also open a name and still mark it as a version, as in
+# "final positioning". The others are left off, because "old customers" and
+# "backup plan" are documents of their own.
+VERSION_HEAD_WORDS = ("final", "draft")
 # Why a version was left out of a draft, as a short code on the preview's
 # lines for the assistant.
 REASON_OLDER_VERSION = "older-version"
@@ -862,6 +871,13 @@ PREVIEW_READS_SOME = (
     "This draft will read %(read)d of the %(total)d files on your list and "
     "leave out %(left)d: %(labels)s."
 )
+# The same three, once the person has narrowed the draft to part of the list.
+PREVIEW_READS_ALL_CHOSEN = "This draft will read all %(read)d files you chose."
+PREVIEW_READS_THE_ONE_CHOSEN = "This draft will read the one file you chose."
+PREVIEW_READS_SOME_CHOSEN = (
+    "This draft will read %(read)d of the %(total)d files you chose and leave "
+    "out %(left)d: %(labels)s."
+)
 # Why a draft reads a limited amount at all, said whenever the cap left
 # anything out.
 PREVIEW_WHY_LIMITED = (
@@ -882,9 +898,17 @@ VERSION_NOT_USED_NEWER = (
     "%(older)s was not used, because %(winner)s is the newer version of the "
     "same document."
 )
+VERSION_NOT_USED_SET_ASIDE = (
+    "%(older)s was not used, because its name marks it as an older copy of "
+    "%(winner)s."
+)
+VERSION_NOT_USED_LATER_NUMBER = (
+    "%(older)s was not used, because %(winner)s carries a later version number "
+    "in its name."
+)
 VERSION_NOT_USED_SAME_DAY = (
     "%(older)s was not used, because %(winner)s is another version of the same "
-    "document from the same day."
+    "document, and neither one is newer."
 )
 # Said when two versions of one document say different things.
 VERSION_CONFLICT = (

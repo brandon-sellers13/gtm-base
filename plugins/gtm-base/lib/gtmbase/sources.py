@@ -858,20 +858,27 @@ def folder_mostly(root: str, readable: Sequence[Entry]) -> Dict[str, str]:
 # --- Versions of one document -------------------------------------------------
 
 # One piece off the end of a name that says which version it is: a version
-# word, a version number, a copy number a download adds, or a date.
+# word, a version number, or a copy number a download adds. A date is not on
+# it, because notes from three weeks, each named by its date, are three
+# documents and not one (finding 2 of the unit's correctness review).
 _VERSION_WORDS = "|".join(
     re.escape(word) for word in constants.VERSION_MARKER_WORDS
 )
 _VERSION_TAIL = re.compile(
     r"(?:[ ._-]+(?:" + _VERSION_WORDS + r"|v\d+(?:[._]\d+)*)"
-    r"|[ ._-]*\(\d+\)"
-    r"|[ ._-]+\d{4}(?:[-_.]?\d{2}(?:[-_.]?\d{2})?)?)$",
+    r"|[ ._-]*\(\d+\))$",
     re.IGNORECASE,
 )
-# The same words at the start of a name, as in "final positioning".
+# The few words that also mark a version at the start of a name, as in
+# "final positioning".
 _VERSION_HEAD = re.compile(
-    r"^(?:" + _VERSION_WORDS + r"|copy of)[ ._-]+", re.IGNORECASE
+    r"^(?:"
+    + "|".join(re.escape(word) for word in constants.VERSION_HEAD_WORDS)
+    + r"|copy of)[ ._-]+",
+    re.IGNORECASE,
 )
+_VERSION_NUMBER = re.compile(r"(?:^|[ ._-])v(\d+)", re.IGNORECASE)
+_COPY_NUMBER = re.compile(r"\(\d+\)")
 _FINAL = re.compile(
     r"(?:^|[^a-z])" + re.escape(constants.VERSION_FINAL_WORD) + r"(?:[^a-z]|$)",
     re.IGNORECASE,
@@ -904,23 +911,50 @@ def is_final(name: str) -> bool:
     return bool(_FINAL.search(base))
 
 
+def is_set_aside(name: str) -> bool:
+    """Whether a file name says it is a copy put aside: old, a backup, a draft.
+
+    A copy number a download adds, as in `positioning (1).md`, says the same.
+    """
+    base = os.path.splitext(os.path.basename(str(name or "")))[0]
+    words = set(re.split(r"[^a-z0-9]+", base.casefold()))
+    if words & set(constants.VERSION_SET_ASIDE_WORDS):
+        return True
+    return bool(_COPY_NUMBER.search(base))
+
+
+def version_number(name: str) -> int:
+    """The version number a file name carries, as in `positioning v2.md`, or 0."""
+    base = os.path.splitext(os.path.basename(str(name or "")))[0]
+    found = _VERSION_NUMBER.findall(base)
+    return int(found[-1]) if found else 0
+
+
 def version_groups(items, date_of) -> List[list]:
     """Files that are versions of one document, grouped, each group best first.
 
-    Two files are versions of one document when they sit in the same folder
-    and their names share a stem. Within a group a name carrying "final" comes
-    first whatever its date, because a date says when a file was last touched
-    and not which version somebody signed off; then the newest; then the name,
-    so the order never depends on how the folder happened to be walked. Every
-    item comes back in exactly one group, in the order its group was first
-    met, and an item with no path is a group of its own.
+    Two files are versions of one document when they sit in the same folder,
+    are the same kind of file, and their names share a stem. Within a group a
+    name carrying "final" comes first whatever its date, because a date says
+    when a file was last touched and not which version somebody signed off.
+    Then a name that does not say it was put aside comes ahead of one that
+    does, then the higher version number in the name, then the newest, and
+    only then the name, so the order never depends on how the folder happened
+    to be walked, and a copy marked old never wins by sorting first (finding 1
+    of the unit's correctness review). Every item comes back in exactly one
+    group, in the order its group was first met, and an item with no path is a
+    group of its own.
     """
     groups: Dict[tuple, list] = {}
     order: List[tuple] = []
     for index, item in enumerate(items):
         path = getattr(item, "path", None)
         if path:
-            key = (os.path.dirname(os.path.realpath(path)), version_stem(path))
+            key = (
+                os.path.dirname(os.path.realpath(path)),
+                version_stem(path),
+                os.path.splitext(path)[1].casefold(),
+            )
         else:
             key = ("", "#%d" % index)
         if key not in groups:
@@ -934,6 +968,8 @@ def version_groups(items, date_of) -> List[list]:
         newest_first = -when.toordinal() if hasattr(when, "toordinal") else 0
         return (
             0 if is_final(path) else 1,
+            1 if is_set_aside(path) else 0,
+            -version_number(path),
             newest_first,
             os.path.basename(path).casefold(),
         )

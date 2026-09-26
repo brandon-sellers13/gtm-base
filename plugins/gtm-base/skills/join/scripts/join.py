@@ -767,7 +767,8 @@ def run_list_sources(options, out):
     if choice == constants.CHOICE_EXPLICIT:
         out.write(
             explicit_count(
-                len(join_flow.files_in_order(listing)), len(listing.by_folder)
+                len(join_flow.files_in_order(listing)),
+                len(shown.get("folders") or listing.by_folder),
             )
             + "\n"
         )
@@ -882,6 +883,8 @@ def explicit_count(files, folders):
 VERSION_SENTENCES = {
     join_flow.VersionLeftOut.FINAL: constants.VERSION_NOT_USED_FINAL,
     join_flow.VersionLeftOut.FINAL_OVER_NEWER: constants.VERSION_NOT_USED_FINAL_OVER_NEWER,
+    join_flow.VersionLeftOut.SET_ASIDE: constants.VERSION_NOT_USED_SET_ASIDE,
+    join_flow.VersionLeftOut.LATER_NUMBER: constants.VERSION_NOT_USED_LATER_NUMBER,
     join_flow.VersionLeftOut.NEWER: constants.VERSION_NOT_USED_NEWER,
     join_flow.VersionLeftOut.SAME_DAY: constants.VERSION_NOT_USED_SAME_DAY,
 }
@@ -917,9 +920,10 @@ def say_how_much(out, previewed):
         + [label for label, _reason in previewed.left_out]
         + [version.older_line for version in previewed.superseded]
     )
+    chosen = previewed.narrowed
     if left:
         out.write(
-            constants.PREVIEW_READS_SOME
+            (constants.PREVIEW_READS_SOME_CHOSEN if chosen else constants.PREVIEW_READS_SOME)
             % {
                 "read": read,
                 "total": previewed.total,
@@ -933,13 +937,22 @@ def say_how_much(out, previewed):
         # say, and the step after this says there is nothing to draft from.
         return
     elif read == 1:
-        out.write(constants.PREVIEW_READS_THE_ONE + "\n")
+        out.write(
+            (constants.PREVIEW_READS_THE_ONE_CHOSEN if chosen else constants.PREVIEW_READS_THE_ONE)
+            + "\n"
+        )
     else:
-        out.write(constants.PREVIEW_READS_ALL % {"read": read} + "\n")
+        out.write(
+            (constants.PREVIEW_READS_ALL_CHOSEN if chosen else constants.PREVIEW_READS_ALL)
+            % {"read": read}
+            + "\n"
+        )
     if previewed.dropped_labels:
         out.write(constants.PREVIEW_WHY_LIMITED + "\n")
     say_versions(out, previewed.superseded)
-    if previewed.choice != constants.CHOICE_EXPLICIT:
+    # Only a plain yes is asked, and only before it has been narrowed: a
+    # draft the person narrowed has had its question answered.
+    if previewed.choice != constants.CHOICE_EXPLICIT and not chosen:
         if previewed.dropped_labels:
             out.write(constants.PREVIEW_NARROW_ASK_SOME + "\n")
         else:

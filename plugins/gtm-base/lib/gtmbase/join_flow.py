@@ -282,6 +282,7 @@ class Previewed(object):
         "total",
         "superseded",
         "choice",
+        "narrowed",
     )
 
     def __init__(
@@ -295,6 +296,7 @@ class Previewed(object):
         removed=None,
         superseded=None,
         choice=None,
+        narrowed=False,
     ):
         self.step = step
         self.included_labels = list(included_labels)
@@ -310,6 +312,10 @@ class Previewed(object):
         # or a plain yes to a proposal. Only a plain yes is asked, before a
         # draft, whether to narrow it (ruling 2 of the acceptance matrix).
         self.choice = choice or constants.CHOICE_PLAIN_YES
+        # Whether the person narrowed this draft to part of the list. A draft
+        # they narrowed has had its question answered, so it is not asked
+        # again (finding 3 of the unit's correctness review).
+        self.narrowed = bool(narrowed)
         # Every document named for this step, including the ones that could
         # not be used at all and the versions another version stood in for,
         # which is the number the person recognises as the size of their own
@@ -767,7 +773,10 @@ def settle_places(run_id: str, added=None, dropped=None, kept=None):
             )
         if wanted not in chosen:
             chosen.append(wanted)
-        if wanted not in named:
+        # A folder named to add that GTM Base had already proposed is still a
+        # proposed folder, so adding it cannot turn a plain yes into a choice
+        # that skips the narrowing question.
+        if wanted not in proposed and wanted not in named:
             named.append(wanted)
     if not chosen:
         raise ConsentError(
@@ -1368,6 +1377,7 @@ def preview_step(
         read.removed,
         superseded=superseded,
         choice=consent_choice(run_id),
+        narrowed=bool(only or only_folder or only_index),
     )
 
 
@@ -1422,7 +1432,7 @@ def assemble_step(
 class VersionLeftOut(object):
     """One version of a document a draft does not use, and why.
 
-    `reason` is one of the four cases the preview has a sentence for, and
+    `reason` is one of the cases the preview has a sentence for, and
     `differs` says whether its words differ from the version that was used,
     which is a conflict the person is told about rather than one settled for
     them in silence.
@@ -1432,6 +1442,8 @@ class VersionLeftOut(object):
 
     FINAL = "final"
     FINAL_OVER_NEWER = "final-over-newer"
+    SET_ASIDE = "set-aside"
+    LATER_NUMBER = "later-number"
     NEWER = "newer"
     SAME_DAY = "same-day"
 
@@ -1456,17 +1468,27 @@ def _day_of(source):
 
 
 def _why_this_version(winner, older) -> str:
-    """Which of the four reasons put one version ahead of another."""
-    winner_final = sources_module.is_final(getattr(winner, "path", "") or "")
-    older_final = sources_module.is_final(getattr(older, "path", "") or "")
+    """Which reason put one version ahead of another, in the order they rank."""
+    winner_path = getattr(winner, "path", "") or ""
+    older_path = getattr(older, "path", "") or ""
     winner_day = _day_of(winner)
     older_day = _day_of(older)
-    if winner_final and not older_final:
+    if sources_module.is_final(winner_path) and not sources_module.is_final(
+        older_path
+    ):
         if older_day and winner_day and older_day > winner_day:
             return VersionLeftOut.FINAL_OVER_NEWER
         if older_day and not winner_day:
             return VersionLeftOut.FINAL_OVER_NEWER
         return VersionLeftOut.FINAL
+    if sources_module.is_set_aside(older_path) and not sources_module.is_set_aside(
+        winner_path
+    ):
+        return VersionLeftOut.SET_ASIDE
+    if sources_module.version_number(winner_path) > sources_module.version_number(
+        older_path
+    ):
+        return VersionLeftOut.LATER_NUMBER
     if winner_day and (older_day is None or winner_day > older_day):
         return VersionLeftOut.NEWER
     return VersionLeftOut.SAME_DAY

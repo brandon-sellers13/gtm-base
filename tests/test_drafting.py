@@ -450,6 +450,17 @@ class TestTemplatesAndReadMesGoLast(unittest.TestCase):
 
         self.assertFalse(drafting.is_template_or_readme(notes))
 
+    def test_a_finished_document_that_mentions_a_template_is_not_one(self):
+        """Finding 5 of the unit's correctness review: whole words, short titles."""
+        for label, text in (
+            ("positioning.md", "# Positioning, built on the April Dunford template\n"),
+            ("email-templates-results.md", "# What our emails did\n"),
+            ("notes.md", "# We contemplate a second segment\n"),
+        ):
+            self.assertFalse(
+                drafting.is_template_or_readme(source(label, text)), label
+            )
+
 
 class TestTheCompanyNameIsCheckedBeforeItReachesARequest(unittest.TestCase):
     """join-08: the name went into the request exactly as it was typed.

@@ -34,13 +34,14 @@ holds and fewer than three. A folder left out either way can still be added by
 name. Each place says what it mostly holds, worked out from the paths of its
 files alone.
 
-Files in one folder whose names differ only by a version word, a version
-number, a copy number, or a date, such as `positioning.md` and
-`positioning.final.md`, are versions of one document. The finding step groups
-them by name and nothing else. Only after the yes are their words compared: a
-draft reads one version, the one whose name says final or else the newest, and
-the preview says which versions it left out and whether they say different
-things.
+Files of one kind in one folder whose names differ only by a version word, a
+version number, or a copy number, such as `positioning.md` and
+`positioning.final.md`, are versions of one document. Notes named by their
+dates are a series and not versions. The finding step groups versions by name
+and nothing else. Only after the yes are their words compared: a draft reads
+one version, the one whose name says final, else one not marked old, backup,
+draft, or copy, else the higher version number, else the newest, and the
+preview says which versions it left out and whether they say different things.
 
 ## Show the list first, and freeze it on the yes
 
