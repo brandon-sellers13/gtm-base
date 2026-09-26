@@ -22,7 +22,7 @@ import os
 import re
 from typing import Dict, List, Optional, Sequence
 
-from . import constants, formats, location, sources as sources_module
+from . import constants, formats, location, sources as sources_module, validate
 from .errors import DraftError, LocationError, PathError, ValidationError
 from .fsutil import read_text
 
@@ -124,6 +124,9 @@ CODE_BAD_COMPANY = "bad-company"
 # At least one source carried a date that was in the future and was pulled
 # back to today, so the date on it is not the date the file claims.
 CODE_DATE_CLAMPED = "date-clamped"
+# The profile says which part of the company it covers in a way that is not a
+# short name (Unit 1.7a).
+CODE_BAD_COVERS = "bad-covers"
 
 # The long dashes, written as escapes so this file holds neither of them.
 EM_DASH = "\u2014"
@@ -597,6 +600,16 @@ def parse(step: str, model_text: str) -> Draft:
         # the base, because a setting nothing here checks would sit in the file
         # unread, and a line nobody reads is a line anything could be put on.
         for name in sorted(fields):
+            if name == constants.COVERS_FIELD and step == STEP_ICP:
+                # Which part of the company the base is for (Unit 1.7a). It is
+                # read here only so a profile carrying it can be read back;
+                # what it says is always written by GTM Base from the answer
+                # the person gave, never taken from a draft.
+                try:
+                    validate.validate_covers(fields[name])
+                except ValidationError:
+                    raise DraftError(step, CODE_BAD_COVERS)
+                continue
             if name not in CONTEXT_FIELDS:
                 raise DraftError(step, CODE_UNKNOWN_FIELD % name)
     said_kind = str(fields.get("kind", "")).strip()

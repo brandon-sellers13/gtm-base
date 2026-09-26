@@ -92,6 +92,14 @@ then are you shown the list of files and asked whether they may be read. Before
 any of that, to find those places, GTM Base looks at the name of each file and
 the first heading inside each document, and at nothing else.
 
+If you say the base is for one part of the company, such as one product line,
+or if your material plainly covers more than one part, you are asked once
+which part the base is for, and you drop the places that are about another
+part. Your customer profile records the answer once you approve it. If the
+list you agree to holds several documents that each describe one group of
+customers, you then say for each one whether to use the finished document,
+draft that segment fresh, or leave it out for now, before anything is drafted.
+
 Answer in plain words in your next message. Say yes to set a base up, say that
 you have an invitation link if a teammate already made a base and sent you a
 link to it, or say not now if this is a bad moment.

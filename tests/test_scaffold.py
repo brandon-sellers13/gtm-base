@@ -458,5 +458,26 @@ class TestConstants(unittest.TestCase):
                 )
 
 
+class TestTheSegmentsFolder(unittest.TestCase):
+    """Unit 1.7a: both templates hold an empty segments folder beside the profile."""
+
+    def test_both_copies_hold_the_folder_with_its_placeholder_and_nothing_else(self):
+        for folder in (TEMPLATE_DIR, PLUGIN_TEMPLATE_DIR):
+            where = os.path.join(folder, constants.SEGMENTS_DIR)
+            self.assertTrue(os.path.isdir(where), folder)
+            self.assertEqual([constants.PLACEHOLDER_NAME], os.listdir(where), folder)
+            self.assertEqual(
+                0, os.path.getsize(os.path.join(where, constants.PLACEHOLDER_NAME))
+            )
+
+    def test_the_folder_is_under_the_profile_and_is_one_every_base_gets(self):
+        self.assertEqual("context/icps", constants.SEGMENTS_DIR)
+        self.assertIn(constants.SEGMENTS_DIR, constants.TEMPLATE_TREE_DIRS)
+        self.assertEqual(
+            os.path.splitext(constants.REQUIRED_CONTEXT_FILES[0])[0],
+            constants.SEGMENTS_DIR,
+        )
+
+
 if __name__ == "__main__":
     unittest.main()

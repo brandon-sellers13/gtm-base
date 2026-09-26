@@ -65,6 +65,7 @@ from gtmbase import (  # noqa: E402
     machine,
     offer_answer,
     paths,
+    segments,
     sources,
     wordsfile,
 )
@@ -76,6 +77,7 @@ from gtmbase.errors import (  # noqa: E402
     LocationError,
     ReviewError,
     StateError,
+    ValidationError,
 )
 
 EXIT_DONE = 0
@@ -123,6 +125,10 @@ NARROW_FIRST = (
     "That folder is large enough that nobody could read the list through, so "
     "the yes was not taken. Ask which of its folders hold the marketing "
     "material, then show the list for those folders and ask again."
+)
+SCOPE_CHANGED = (
+    "What the base is for changed after the list was shown, so the yes was "
+    "not taken. Run list-sources again, show the new list, and ask again."
 )
 NO_SUCH_FOLDER = (
     "That is not one of the folders in the list, so nothing was shown. Name "
@@ -388,6 +394,19 @@ def build_parser():
         "--beside",
         action="store_true",
         help="they asked for the base to sit inside the folder they named",
+    )
+    parser.add_argument(
+        "--scope-file",
+        help="a file holding the part of the company the base is for",
+    )
+    parser.add_argument(
+        "--whole",
+        action="store_true",
+        help="they said the base is for the whole company",
+    )
+    parser.add_argument(
+        "--segments-file",
+        help="a file holding one line per segment: the answer, a number, a name",
     )
     return parser
 
@@ -691,6 +710,173 @@ def run_survey(options, out):
             )
     for note in found.notes:
         line(out, "note", note)
+    # Two or more places that each hold a customer profile and a positioning
+    # of their own: the material plainly splits, so the scope question is
+    # asked before the places are settled (Unit 1.7a).
+    split = join_flow.places_that_split(run_id)
+    if split:
+        numbers = [
+            str(number)
+            for number, place in enumerate(found.places, start=1)
+            if place.relative_folder in split
+        ]
+        line(out, "splits", ",".join(numbers))
+        out.write(
+            constants.SCOPE_SPLITS_SENTENCE
+            % {
+                "places": plain_value(
+                    and_list([sources.place_label(place) for place in split])
+                )
+            }
+            + "\n"
+        )
+    return EXIT_DONE
+
+
+def and_list(names):
+    """Names joined the way a sentence joins them."""
+    names = list(names)
+    if len(names) <= 1:
+        return "".join(names)
+    return ", ".join(names[:-1]) + " and " + names[-1]
+
+
+SCOPE_NOT_A_NAME = (
+    "That is not a short name for part of the company, so nothing was held. "
+    "Write it as a short name, such as the name of a product line, and run "
+    "this again."
+)
+SCOPE_AFTER_THE_YES = (
+    "The list of files was already agreed to, or the customer profile already "
+    "approved, so what the base is for cannot change in this run. Carry on."
+)
+SCOPE_NEEDS_AN_ANSWER = (
+    "This step needs either --scope-file with the part of the company, or "
+    "--whole, so nothing was held."
+)
+
+
+def run_scope(options, out):
+    """Hold what the base is for, and say it back in one sentence."""
+    run_id = need(options, "run", out)
+    if not run_id:
+        return EXIT_ERROR
+    covers = None
+    if options.scope_file:
+        covers = words_from(options.scope_file, options, out)
+        if covers is None:
+            return EXIT_REFUSED
+    if (covers is None) == (not options.whole):
+        out.write(SCOPE_NEEDS_AN_ANSWER + "\n")
+        return EXIT_ERROR
+    try:
+        label = join_flow.hold_scope(run_id, covers=covers, whole=options.whole)
+    except ValidationError as refusal:
+        line(out, "codes", refusal.code)
+        if refusal.code == join_flow.CODE_SCOPE_AFTER_THE_YES:
+            out.write(SCOPE_AFTER_THE_YES + "\n")
+        else:
+            out.write(SCOPE_NOT_A_NAME + "\n")
+        return EXIT_REFUSED
+    if label:
+        line(out, "covers", label)
+        out.write(
+            constants.SCOPE_HELD_SENTENCE % {"covers": plain_value(label)} + "\n"
+        )
+    else:
+        line(out, "covers", "whole")
+        out.write(constants.SCOPE_WHOLE_SENTENCE + "\n")
+    return EXIT_DONE
+
+
+NO_YES_YET = (
+    "There is no agreed list of files for this run yet, so there are no "
+    "documents to ask about. Take the yes first."
+)
+SEGMENTS_UNREADABLE = (
+    "That list of segments could not be read, so nothing was kept. Write one "
+    "line per segment: adopt, draft, or leave-out, then the number of its "
+    "document or a hyphen, then its name."
+)
+SEGMENTS_NO_SUCH_DOCUMENT = (
+    "One of those numbers is not beside any document on the list, so nothing "
+    "was kept. Read the list out again and ask which document they meant."
+)
+SEGMENTS_ADOPT_NEEDS_A_DOCUMENT = (
+    "A segment can be taken from a finished document only when the number of "
+    "that document is given, so nothing was kept. Give its number, or draft it."
+)
+
+
+def run_segments(options, out):
+    """Show the documents that each describe one segment, numbered, and ask."""
+    run_id = need(options, "run", out)
+    if not run_id:
+        return EXIT_ERROR
+    try:
+        found = join_flow.segment_candidates(run_id)
+    except ConsentError as refusal:
+        if refusal.code != join_flow.CODE_NO_CONSENT:
+            raise
+        line(out, "codes", refusal.code)
+        out.write(NO_YES_YET + "\n")
+        return EXIT_REFUSED
+    line(out, "documents", len(found))
+    if len(found) < 2:
+        # One document, or none, is one segment or none: the profile covers it
+        # in full and there is nothing to ask, unless the person has said they
+        # sell to several groups, which the next step still takes.
+        line(out, "codes", "one-or-none")
+        return EXIT_DONE
+    for candidate in found:
+        out.write(
+            "candidate=%s number=%d\n" % (safe_value(candidate.path), candidate.number)
+        )
+    out.write(segments.FOUND_SENTENCE % {"count": len(found)} + "\n")
+    for candidate in found:
+        out.write("%d. %s\n" % (candidate.number, plain_value(candidate.label)))
+    out.write(segments.ASK_SENTENCE + "\n")
+    return EXIT_DONE
+
+
+SEGMENT_REFUSALS = {
+    segments.CODE_UNREADABLE: SEGMENTS_UNREADABLE,
+    segments.CODE_NO_SUCH_DOCUMENT: SEGMENTS_NO_SUCH_DOCUMENT,
+    segments.CODE_ADOPT_NEEDS_A_DOCUMENT: SEGMENTS_ADOPT_NEEDS_A_DOCUMENT,
+}
+
+
+def run_segments_settle(options, out):
+    """Keep the inventory the person gave, and read it back to them."""
+    run_id = need(options, "run", out)
+    path = need(options, "segments-file", out)
+    if not run_id or not path:
+        return EXIT_ERROR
+    text = words_from(path, options, out)
+    if text is None:
+        return EXIT_REFUSED
+    try:
+        inventory = join_flow.settle_segments(run_id, text)
+    except segments.InventoryRefused as refusal:
+        line(out, "codes", refusal.code)
+        sentence = refusal.sentence or SEGMENT_REFUSALS.get(
+            refusal.code, SEGMENTS_UNREADABLE
+        )
+        out.write(sentence + "\n")
+        return EXIT_REFUSED
+    for segment in inventory.segments:
+        out.write(
+            "segment=%s answer=%s number=%s\n"
+            % (
+                safe_value(segment.slug),
+                safe_value(segment.answer),
+                safe_value("-" if segment.number is None else segment.number),
+            )
+        )
+    # Every name in these was checked as it was settled: one line, no
+    # control character, and no longer than the cap.
+    for sentence in segments.readback(inventory):
+        out.write(sentence + "\n")
     return EXIT_DONE
 
 
@@ -823,6 +1009,10 @@ def run_freeze_sources(options, out):
         if refusal.code == join_flow.CODE_NARROW_FIRST:
             line(out, "codes", refusal.code)
             out.write(NARROW_FIRST + "\n")
+            return EXIT_REFUSED
+        if refusal.code == join_flow.CODE_SCOPE_CHANGED:
+            line(out, "codes", refusal.code)
+            out.write(SCOPE_CHANGED + "\n")
             return EXIT_REFUSED
         raise
     out.write(
@@ -1446,6 +1636,9 @@ MODES = {
     "survey": run_survey,
     "list-sources": run_list_sources,
     "freeze-sources": run_freeze_sources,
+    "scope": run_scope,
+    "segments": run_segments,
+    "segments-settle": run_segments_settle,
     "add-paste": run_add_paste,
     "preview": run_preview,
     "assemble": run_assemble,

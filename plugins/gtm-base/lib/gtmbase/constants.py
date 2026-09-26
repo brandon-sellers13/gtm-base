@@ -925,3 +925,59 @@ PREVIEW_NARROW_ASK_SOME = (
     "Tell me which files or which folder matter most for this document and I "
     "will draft from those instead."
 )
+
+# --- Scope and the segment inventory (added by Unit 1.7a) --------------------
+
+# The setting on the customer profile that says which part of the company the
+# base is for. GTM Base writes it from the answer the person gave, never from
+# anything a draft said, and leaves it off when the base is for the whole
+# company. It lives on the profile rather than in the map because the map is
+# settings only, and the profile is owned and confirmed, so what the base
+# covers gets an owner and a review date with it (Codex condition E).
+COVERS_FIELD = "covers"
+# Longest a scope may be. It is the name of one part of a company, such as a
+# product line, and never a description of it.
+COVERS_MAX_CHARS = 80
+
+# The three things a person can say about one segment when the inventory is
+# settled: take this finished document as the authoritative version of the
+# segment, draft the segment, or leave it out for now.
+SEGMENT_ADOPT = "adopt"
+SEGMENT_DRAFT = "draft"
+SEGMENT_LEAVE_OUT = "leave-out"
+SEGMENT_ANSWERS = (SEGMENT_ADOPT, SEGMENT_DRAFT, SEGMENT_LEAVE_OUT)
+# What a file holding one segment calls itself.
+SEGMENT_KIND = "segment"
+# Longest a segment's name may be, as the person said it.
+SEGMENT_NAME_MAX_CHARS = 80
+# Longest the file name made from it may be, without the ending.
+SEGMENT_SLUG_MAX_CHARS = 60
+# Most segments one inventory may hold.
+SEGMENT_INVENTORY_MAX = 50
+# Names some computers will not give a file, whatever ending follows. A
+# segment is never saved under one, because a base is meant to open anywhere.
+SEGMENT_RESERVED_SLUGS = (
+    ("con", "prn", "aux", "nul")
+    + tuple("com%d" % number for number in range(0, 10))
+    + tuple("lpt%d" % number for number in range(0, 10))
+)
+
+# Said before the scope question, when two or more of the places found each
+# hold a customer profile and their own copy of a positioning document of the
+# same name, which is what material that plainly covers more than one part of
+# a company looks like (`join_flow.places_that_split`).
+SCOPE_SPLITS_SENTENCE = (
+    "Your material looks like it covers more than one part of the company, "
+    "because %(places)s each hold a customer profile and a positioning of "
+    "their own."
+)
+# Said once the answer is held, before the places are settled.
+SCOPE_HELD_SENTENCE = (
+    "This base will cover %(covers)s, and any place above that holds material "
+    "about another part can be dropped now."
+)
+SCOPE_WHOLE_SENTENCE = "This base will cover the whole company."
+
+# The template now holds an empty folder for the segments beside the profile,
+# kept by its placeholder and nothing else (Unit 1.7a, Brandon's call 11).
+TEMPLATE_TREE_DIRS = TEMPLATE_TREE_DIRS + (SEGMENTS_DIR,)
