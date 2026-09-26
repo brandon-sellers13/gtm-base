@@ -641,6 +641,65 @@ def _written_texts(payload: Dict[str, Any]) -> Optional[List[str]]:
     return None
 
 
+def _replaced(text: str, old, new, every) -> Optional[str]:
+    """One replacement made the way the editing tool makes it, or None."""
+    if not isinstance(old, str) or not isinstance(new, str):
+        return None
+    if old == "":
+        return new + text if text == "" else None
+    if old not in text:
+        return None
+    return text.replace(old, new) if every else text.replace(old, new, 1)
+
+
+def _file_after(side: str, payload: Dict[str, Any]) -> Optional[str]:
+    """The whole file as this call would leave it, worked out in memory.
+
+    A piece of an edit can finish something the file already starts, so a
+    file is judged by what it would say afterwards and never by the piece
+    alone (the confirmation pass on Unit 1.5b, finding 3). When the edit
+    cannot be worked out, the file as it stands is read with every new piece
+    after it, which can only find more, never less.
+    """
+    tool = payload.get("tool_name")
+    tool_input = payload.get("tool_input")
+    if not isinstance(tool_input, dict):
+        return None
+    if tool == "Write":
+        content = tool_input.get("content")
+        return content if isinstance(content, str) else None
+    try:
+        with open(side, "r", encoding="utf-8", newline="") as handle:
+            current = handle.read()
+    except (OSError, UnicodeDecodeError):
+        current = ""
+    if tool == "Edit":
+        steps = [tool_input]
+    elif tool == "MultiEdit":
+        steps = tool_input.get("edits")
+        if not isinstance(steps, list):
+            return None
+    else:
+        return None
+    text = current
+    for step in steps:
+        if not isinstance(step, dict):
+            return None
+        after = _replaced(
+            text,
+            step.get("old_string"),
+            step.get("new_string"),
+            bool(step.get("replace_all")),
+        )
+        if after is None:
+            pieces = _written_texts(payload)
+            if pieces is None:
+                return None
+            return "\n".join([current] + pieces)
+        text = after
+    return text
+
+
 def content_problem(
     named: str, real_file: str, payload: Dict[str, Any]
 ) -> Optional[str]:
@@ -662,16 +721,15 @@ def content_problem(
     for side, parts in _in_a_base(named, real_file, constants.ACCESS_DIR):
         if parts != stack:
             continue
-        texts = _written_texts(payload)
-        if texts is None:
+        whole = _file_after(side, payload)
+        if whole is None:
             return CODE_STACK_SECRET
         from . import scan
 
         root = _base_holding(side)
         allowlist, _code = scan.load_allowlist(root) if root else (None, None)
-        for text in texts:
-            if scan.scan_text(text, allowlist, "the source map"):
-                return CODE_STACK_SECRET
+        if scan.scan_source_map(whole, allowlist):
+            return CODE_STACK_SECRET
     return None
 
 

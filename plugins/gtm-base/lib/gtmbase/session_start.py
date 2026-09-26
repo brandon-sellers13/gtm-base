@@ -746,7 +746,7 @@ def _incoming_contents_refused(
             continue
         if stack:
             allowlist, _code = scan.load_allowlist(root)
-            if scan.scan_text(shown.stdout, allowlist, "the source map"):
+            if scan.scan_source_map(shown.stdout, allowlist):
                 refused.append(name)
     return refused
 

@@ -1062,19 +1062,47 @@ def _owner_rule_moved(pattern: str) -> str:
     return pattern
 
 
+# The only shapes of rule that cover the whole older folder of records. A rule
+# for one record, or for some of them, is an exception somebody wrote, and it
+# never decides who owns anything else.
+_BROAD_RECORDS_RULES = (
+    constants.LEGACY_CORRECTIONS_DIR,
+    constants.LEGACY_CORRECTIONS_DIR + "/",
+    constants.LEGACY_CORRECTIONS_DIR + "/*",
+    constants.LEGACY_CORRECTIONS_DIR + "/**",
+)
+
+
 def _owners_moved(text: str) -> str:
     """The ownership list with each rule following the move (finding 5).
 
     Each rule naming an older folder or document names where it lives now,
-    with exactly the owners it had. Every other rule is left as it is. The
-    parts of the layout a fresh base has the owner review are added with the
-    owners the records rule names, unless a rule for them is already there.
+    with exactly the owners it had, in the place it had. Every other rule is
+    left as it is.
+
+    The parts of the layout a fresh base has the owner review are added with
+    the owners of the broad rule for the older folder of records, and only
+    that rule: a rule for one record is an exception, and there are no
+    defaults at all when there is no broad rule. They go in before every rule
+    already there, because in this list the last rule that matches a file
+    wins, and a rule somebody wrote by hand, such as one giving the source
+    map to a security reviewer, has to keep winning (the confirmation pass
+    on Unit 1.5b, finding 2).
     """
     lines = text.split("\n")
-    out = []
-    records_owners = None
-    records_index = None
+    broad_owners = None
     patterns = set()
+    for line in lines:
+        stripped = line.strip()
+        if not stripped or stripped.startswith("#"):
+            continue
+        parts = stripped.split()
+        bare = parts[0].lstrip("/")
+        patterns.add(_owner_rule_moved(parts[0]).lstrip("/"))
+        if bare in _BROAD_RECORDS_RULES and len(parts) > 1:
+            broad_owners = parts[1:]
+    out = []
+    first_rule = None
     for line in lines:
         stripped = line.strip()
         if line.rstrip("\r") == _OLDER_OWNERS_COMMENT:
@@ -1083,22 +1111,20 @@ def _owners_moved(text: str) -> str:
         if not stripped or stripped.startswith("#"):
             out.append(line)
             continue
+        if first_rule is None:
+            first_rule = len(out)
         parts = line.split()
         moved = _owner_rule_moved(parts[0])
         if moved != parts[0]:
             line = line.replace(parts[0], moved, 1)
-        patterns.add(moved.lstrip("/"))
         out.append(line)
-        if moved.lstrip("/").startswith(constants.CORRECTIONS_DIR + "/") and len(parts) > 1:
-            records_owners = parts[1:]
-            records_index = len(out)
-    if records_owners is not None:
+    if broad_owners is not None and first_rule is not None:
         extra = [
-            "%s %s" % (part, " ".join(records_owners))
+            "%s %s" % (part, " ".join(broad_owners))
             for part in _OWNED_NEW_PARTS
             if part not in patterns
         ]
-        out[records_index:records_index] = extra
+        out[first_rule:first_rule] = extra
     return "\n".join(out)
 
 
@@ -1788,6 +1814,8 @@ def _put_back(base_root: str, journal: dict, git: GitRunner) -> Optional[str]:
                 ["rm", "-q", "-f", "--cached", "--ignore-unmatch", "--", relative],
                 cwd=base_root,
             )
+            if not _still_what_this_run_wrote(base_root, journal, relative):
+                return THEIR_WORDS % _named(relative)
             remove(full)
         except GitError:
             return COULD_NOT_SAVE
@@ -1825,6 +1853,14 @@ def _anything_left_over(base_root: str, journal: dict, git: GitRunner):
                 if piece.endswith("/") and one.startswith(piece):
                     return COULD_NOT_SAVE
     return None
+
+
+def _still_what_this_run_wrote(base_root: str, journal: dict, relative: str) -> bool:
+    """Whether a path holds, right now, exactly what this run wrote there."""
+    current = read_text_exactly(_full(base_root, relative))
+    if current is None:
+        return False
+    return ids.exact_hash(current) == _what_this_run_wrote(journal, relative)
 
 
 def _what_this_run_wrote(journal: dict, relative: str):
@@ -2503,7 +2539,13 @@ def abandon(
         if relative in theirs:
             continue
         full = _full(base_root, relative)
-        if read_text_exactly(full) is None:
+        # Looked at again right before anything is done to it, because words
+        # of theirs can arrive after everything was sorted, and a file holding
+        # anything but what this run wrote is theirs and is named (the
+        # confirmation pass on Unit 1.5b, finding 1).
+        if not _still_what_this_run_wrote(base_root, journal, relative):
+            if read_text_exactly(full) is not None or os.path.lexists(full):
+                theirs.add(relative)
             continue
         try:
             if in_head:
@@ -2517,6 +2559,9 @@ def abandon(
                 ["rm", "-q", "-f", "--cached", "--ignore-unmatch", "--", relative],
                 cwd=base_root,
             )
+            if not _still_what_this_run_wrote(base_root, journal, relative):
+                theirs.add(relative)
+                continue
             remove(full)
         except GitError:
             # Nothing is claimed that was not done. The note stays so this can

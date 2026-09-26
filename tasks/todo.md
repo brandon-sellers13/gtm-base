@@ -1328,3 +1328,13 @@ Review: docs/reviews/2026-09-26-unit-1-5b-astra.md in the main checkout. Every f
 - [x] 11 A prepared change is resolved again against the shared copy it is written into.
 - [x] 12 The move writes the starter source map with the map's owner, never over an existing one.
 - [x] 13 One stop test enumerates all 28 steps of a run (moves, removals, staging, saves, file writes, the note written and taken away) and stops before and after each, asserting each stop fired.
+
+#### Astra's confirmation pass on Unit 1.5b (2026-09-26), five findings
+Pass: docs/reviews/2026-09-26-unit-1-5b-verify-astra.md in the main checkout. Tests in tests/test_unit_1_5b_verify.py, each failing on 2a6fd91 before its fix.
+- [x] 1 Giving up looks at each file again right before a put-back or a removal, in the undo loop and in putting back, and names what holds their words.
+- [x] 2 Ownership defaults go before every existing rule, with owners only from the broad records rule, and none without one.
+- [x] 3 An edit to the source map is judged by the whole file it would leave.
+- [x] 4 The source map is screened for credentials only; ordinary lines pass at Write, Edit, MultiEdit and a real incoming update.
+- [x] 5 The shell fallback needs the map and a history, or a registered root, before it calls a folder a base.
+- [x] The merge regression from finding 6 of the first review: a merge that adds a skill neither side had, taken away after; it fails on fb13268.
+- [ ] Open: the check before a send still refuses a source map holding a link in angle brackets, because every outgoing file is held to the hidden-content rule.

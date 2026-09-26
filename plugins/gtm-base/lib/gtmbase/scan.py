@@ -163,6 +163,41 @@ def _scan_line(
     return hits
 
 
+# What the source map is screened for. It is a file whose whole job is to say
+# where things live, so web addresses, links written in angle brackets, tool
+# names, and the address of a shared inbox are its ordinary content, and the
+# rules a send is held to would refuse them (the confirmation pass on Unit
+# 1.5b, finding 4). What it may never hold is a credential: something shaped
+# like a key or a token, a password or a secret given a value, or a web
+# address carrying one.
+SOURCE_MAP_CLASSES = (redaction_patterns.KEY_SHAPE, redaction_patterns.VENDOR_URL_TOKEN)
+# A web address with a name and a password written into it.
+_ADDRESS_WITH_A_PASSWORD = re.compile(
+    r"[A-Za-z][A-Za-z0-9+.-]*://[^/\s:@<>\[\]()]+:[^/\s@<>\[\]()]+@"
+)
+
+
+def scan_source_map(
+    text: Optional[str], allowlist: Optional[FrozenSet[str]] = None
+) -> List[Hit]:
+    """Every credential in a source map's text, and nothing else."""
+    if not text:
+        return []
+    hits: List[Hit] = []
+    for line_number, line in enumerate(text.splitlines(), start=1):
+        for pattern_class, value in redaction_patterns.find_in_line(
+            line, SOURCE_MAP_CLASSES
+        ):
+            if _allowed(pattern_class, value, allowlist):
+                continue
+            hits.append(Hit(pattern_class, line_number, "the source map"))
+        if _ADDRESS_WITH_A_PASSWORD.search(line):
+            hits.append(
+                Hit(redaction_patterns.VENDOR_URL_TOKEN, line_number, "the source map")
+            )
+    return hits
+
+
 def scan_text(
     text: Optional[str],
     allowlist: Optional[FrozenSet[str]] = None,

@@ -230,21 +230,31 @@ is_protected() {
 # the real check refuses anything put there (Unit 1.5b). This refuses the
 # same writes when the real check cannot run, and its placeholder too,
 # because this cannot see what a write would put in it (Astra's review of
-# Unit 1.5b, finding 9). A folder is a base when it holds the map, or when
-# this account's own list of joined bases names it, so a base whose map is
-# gone is still one.
-is_in_skills() {
+# Unit 1.5b, finding 9).
+#
+# A folder is a base when it holds the map and keeps its own history, which
+# a copied template does not, or when this account's own list names it as
+# the root of a base it joined. The folder a base merely belongs with, which
+# is somebody's own project, is recorded in the same list under another name
+# and is never a base (the confirmation pass on Unit 1.5b, finding 5).
+registered_roots() {
   joined="${GTM_BASE_HOME:-$HOME/.gtm-base}/machine.json"
+  [ -f "$joined" ] || return 0
+  grep -o '"root"[[:space:]]*:[[:space:]]*"[^"]*"' "$joined" 2> /dev/null |
+    sed 's/^"root"[[:space:]]*:[[:space:]]*"//; s/"$//'
+}
+
+is_in_skills() {
   for spelled in "$(lexical "$1")" "$(resolved "$1")"; do
     candidate=$(printf '%s' "$spelled" | tr '[:upper:]' '[:lower:]')
     case "$candidate/" in
       */skills/*)
         folded=${candidate%%/skills/*}
         before=$(printf '%s' "$spelled" | cut -c "1-${#folded}")
-        if [ -f "$before/context/map.md" ]; then
+        if [ -f "$before/context/map.md" ] && [ -e "$before/.git" ]; then
           return 0
         fi
-        if [ -f "$joined" ] && grep -F -q "\"$before\"" "$joined" 2> /dev/null; then
+        if registered_roots | grep -F -x -q -- "$before"; then
           return 0
         fi
         ;;
