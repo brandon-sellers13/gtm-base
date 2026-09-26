@@ -70,6 +70,11 @@ def marked(status="draft", first=FIRST, second=SECOND):
     return MARKED_ICP % (status, first, second)
 
 
+def token(base, which=1, relative=ICP):
+    """The token the review gives one open question, counting from one."""
+    return callmarkers.find(base.read(relative))[which - 1].token
+
+
 def report_of(base, today=TODAY):
     inputs = base_reader.read_base(
         base.root,
@@ -343,7 +348,10 @@ class TestTheReviewAsksEachQuestion(unittest.TestCase):
             questions = [line for line in result.review if line.kind == "question"]
             self.assertEqual(2, len(questions))
             self.assertEqual(result.review[:2], questions)
-            self.assertEqual([1, 2], [line.open_question for line in questions])
+            self.assertEqual(
+                [mark.token for mark in callmarkers.find(marked())],
+                [line.open_question for line in questions],
+            )
             self.assertEqual(
                 ["is it twenty people or fifty?", "is this still the main pain?"],
                 [line.question_text for line in questions],
@@ -369,7 +377,11 @@ class TestTheReviewAsksEachQuestion(unittest.TestCase):
             before_text = base.read(ICP)
 
             answered = stale_check.answer_a_question(
-                base.root, base.base_id, ICP, 1, "Fifty people, never fewer than twenty."
+                base.root,
+                base.base_id,
+                ICP,
+                token(base),
+                "Fifty people, never fewer than twenty.",
             )
             self.assertTrue(answered.prepared, answered.sentence)
             self.assertEqual(
@@ -388,7 +400,7 @@ class TestTheReviewAsksEachQuestion(unittest.TestCase):
             self.assertIn("prepared and waiting", line.sentence)
             self.assertFalse([item for item in again.review if item.kind == "change"])
             twice = stale_check.answer_a_question(
-                base.root, base.base_id, ICP, 1, "Fifty."
+                base.root, base.base_id, ICP, token(base), "Fifty."
             )
             self.assertFalse(twice.prepared)
             self.assertEqual(stale_check.ANSWER_ALREADY_PREPARED, twice.sentence)
@@ -433,18 +445,20 @@ class TestTheReviewAsksEachQuestion(unittest.TestCase):
             base = Base(sandbox)
             base.write(ICP, marked())
             base.save("a marked profile")
-            gone = stale_check.answer_a_question(base.root, base.base_id, ICP, 3, "Yes.")
+            gone = stale_check.answer_a_question(base.root, base.base_id, ICP, "q000", "Yes.")
             self.assertEqual(
                 stale_check.QUESTION_GONE % "your customer profile", gone.sentence
             )
-            empty = stale_check.answer_a_question(base.root, base.base_id, ICP, 1, "  ")
+            empty = stale_check.answer_a_question(
+                base.root, base.base_id, ICP, token(base), "  "
+            )
             self.assertEqual(stale_check.ANSWER_NEEDED, empty.sentence)
             outside = stale_check.answer_a_question(
-                base.root, base.base_id, "../secrets.md", 1, "Yes."
+                base.root, base.base_id, "../secrets.md", token(base), "Yes."
             )
             self.assertEqual(stale_check.NOT_A_DOCUMENT, outside.sentence)
             phone = stale_check.answer_a_question(
-                base.root, base.base_id, ICP, 1, "Call me on 415 555 0100 about it."
+                base.root, base.base_id, ICP, token(base), "Call me on 415 555 0100 about it."
             )
             self.assertFalse(phone.prepared)
             self.assertNotIn("555", phone.sentence)
@@ -456,11 +470,135 @@ class TestTheReviewAsksEachQuestion(unittest.TestCase):
                 marked().replace("# Ideal customer profile", "# Ideal customer profile %s" % FIRST),
             )
             base.save("a question above every part")
-            above = stale_check.answer_a_question(base.root, base.base_id, ICP, 1, "Yes.")
+            above = stale_check.answer_a_question(
+                base.root, base.base_id, ICP, token(base), "Yes."
+            )
             self.assertEqual(
                 stale_check.QUESTION_ABOVE_EVERY_PART % "your customer profile",
                 above.sentence,
             )
+
+
+def approve_the_answer(base, staged, wording):
+    compose_proposal.write_the_wording(base.root, staged, wording, base_id=base.base_id)
+    shown = approve_local.show(
+        staged, base.root, base.base_id, runner=support.NoRemoteRunner(), now=TODAY
+    )
+    assert shown.status == approve_local.STATUS_SHOWN, shown.reasons
+    applied = approve_local.approve(
+        staged, base.root, base.base_id, shown.shown_hash,
+        runner=support.NoRemoteRunner(), now=NOW,
+    )
+    assert applied.status == approve_local.STATUS_APPLIED, applied.reasons
+
+
+class TestTheCorrectnessReviewOfThisUnit(unittest.TestCase):
+    """What the correctness review of Unit 1.7b found, each with its proof."""
+
+    TWO_IN_ONE = MARKED_ICP.replace(
+        "Companies of twenty to fifty people %s.",
+        "Companies of twenty to fifty people %s, in North America %s.",
+    ) % ("draft", FIRST, "[your call: or Europe too?]", "")
+
+    def test_one_part_takes_one_answer_at_a_time(self):
+        """Finding 1: a second answer to the same part would put the first back."""
+        with support.Sandbox() as sandbox:
+            base = Base(sandbox)
+            base.write(ICP, self.TWO_IN_ONE)
+            base.save("two questions in one part")
+            first = stale_check.answer_a_question(
+                base.root, base.base_id, ICP, token(base, 1), "Fifty."
+            )
+            self.assertTrue(first.prepared)
+            second = stale_check.answer_a_question(
+                base.root, base.base_id, ICP, token(base, 2), "Europe too."
+            )
+            self.assertFalse(second.prepared)
+            self.assertEqual(stale_check.ANOTHER_ANSWER_WAITING, second.sentence)
+            self.assertEqual([stale_check.CODE_PART_ANSWER_WAITING], second.codes)
+
+            approve_the_answer(
+                base,
+                first.staging_path,
+                "Companies of fifty people, in North America [your call: or Europe too?].",
+            )
+            self.assertFalse(callmarkers.holds(base.read(ICP), FIRST))
+            again = stale_check.answer_a_question(
+                base.root, base.base_id, ICP, token(base, 1), "Europe too."
+            )
+            self.assertTrue(again.prepared, again.sentence)
+
+    def test_a_question_that_comes_back_is_a_new_one_to_answer(self):
+        """Finding 1: an answer once approved never marks the question for good."""
+        with support.Sandbox() as sandbox:
+            base = Base(sandbox)
+            base.write(ICP, marked(second="fine"))
+            base.save("one question")
+            first = stale_check.answer_a_question(
+                base.root, base.base_id, ICP, token(base), "Fifty."
+            )
+            approve_the_answer(base, first.staging_path, "Companies of fifty people.")
+            # Somebody writes the same question back into the part by hand.
+            base.write(ICP, base.read(ICP).replace("fifty people.", "fifty people %s." % FIRST))
+            base.save("the question again")
+            again = stale_check.answer_a_question(
+                base.root, base.base_id, ICP, token(base), "Twenty."
+            )
+            self.assertTrue(again.prepared, again.sentence)
+            self.assertNotEqual(first.staging_path, again.staging_path)
+
+    def test_a_token_still_names_its_question_after_another_is_answered(self):
+        """Finding 2: a number would now point at the next question."""
+        with support.Sandbox() as sandbox:
+            base = Base(sandbox)
+            base.write(ICP, marked())
+            base.save("two questions")
+            second = token(base, 2)
+            first = stale_check.answer_a_question(
+                base.root, base.base_id, ICP, token(base, 1), "Fifty."
+            )
+            approve_the_answer(base, first.staging_path, "Companies of fifty people.")
+            self.assertEqual(1, callmarkers.count(base.read(ICP)))
+            answered = stale_check.answer_a_question(
+                base.root, base.base_id, ICP, second, "Yes, still the main pain."
+            )
+            self.assertTrue(answered.prepared)
+            staging = compose_proposal.load_staging(answered.staging_path)
+            self.assertEqual("## Felt needs", staging.edits[0].heading)
+            self.assertIn("still the main pain", staging.excerpt)
+
+    def test_wording_that_wraps_the_question_is_still_refused(self):
+        """Finding 4: a question wrapped over two lines is the same question."""
+        for wording in (
+            "Companies of fifty [your call: is it twenty\npeople or fifty?].",
+            "Companies of fifty [your call:\n is it twenty people or fifty?]",
+        ):
+            with self.subTest(wording=wording):
+                self.assertTrue(callmarkers.holds(wording, FIRST))
+
+    def test_a_document_set_aside_still_has_its_questions_asked(self):
+        """Finding 5: the closing sends the person to a review that shows them."""
+        with support.Sandbox() as sandbox:
+            base = Base(sandbox)
+            base.write(ICP, marked())
+            base.save("a marked profile")
+            state.suppress(base.base_id, ICP, datetime.date(2026, 12, 1))
+            result = base.review()
+            self.assertEqual(
+                2, len([line for line in result.review if line.kind == "question"])
+            )
+
+    def test_a_document_with_a_question_is_not_said_to_wait_on_its_owner(self):
+        with support.Sandbox() as sandbox:
+            base = Base(sandbox)
+            base.write(ICP, marked())
+            base.save("a marked profile")
+            result = stale_check.run(
+                base.root, base.base_id, runner=support.NoRemoteRunner(),
+                gh=support.RecordingGh(), now=TODAY,
+            )
+            for line in result.lines():
+                self.assertNotIn("Nobody has ever said %s" % ICP, line)
 
 
 class TestTheFirstRunNamesIt(unittest.TestCase):
@@ -502,7 +640,7 @@ class TestTheScriptAsksAndPrepares(unittest.TestCase):
                 "stale-check", "stale_check.py", ["--review"], base.root
             )
             self.assertEqual(0, code, printed)
-            self.assertIn("open-question=1", printed)
+            self.assertIn("open-question=%s" % token(base), printed)
             self.assertIn(moment.FENCE_NOTE, printed)
             fenced_at = printed.index(moment.FENCE_NOTE)
             self.assertLess(fenced_at, printed.index("ignore the rules"))
@@ -522,7 +660,14 @@ class TestTheScriptAsksAndPrepares(unittest.TestCase):
             code, answered = moment_tests.run_script(
                 "stale-check",
                 "stale_check.py",
-                ["--answer-question", "1", "--document", ICP, "--answer-file", words],
+                [
+                    "--answer-question",
+                    token(base),
+                    "--document",
+                    ICP,
+                    "--answer-file",
+                    words,
+                ],
                 base.root,
             )
             self.assertEqual(0, code, answered)
@@ -542,7 +687,14 @@ class TestTheScriptAsksAndPrepares(unittest.TestCase):
             code, printed = moment_tests.run_script(
                 "stale-check",
                 "stale_check.py",
-                ["--answer-question", "1", "--document", ICP, "--answer-file", loose],
+                [
+                    "--answer-question",
+                    token(base),
+                    "--document",
+                    ICP,
+                    "--answer-file",
+                    loose,
+                ],
                 base.root,
             )
             self.assertEqual(1, code)

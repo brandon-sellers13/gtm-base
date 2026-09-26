@@ -575,7 +575,8 @@ class TestAFileAlreadyInTheWay(unittest.TestCase):
             )
             said = finished.stdout.decode("utf-8")
             self.assertEqual(1, finished.returncode, said)
-            self.assertIn(segments.FILE_TAKEN % {"name": "Fintech lenders"}, said)
+            self.assertIn(segments.FILE_TAKEN, said)
+            self.assertNotIn("Fintech lenders", said)
             self.assertIn("codes=%s" % segments.CODE_FILE_TAKEN, said)
 
     def test_a_segment_folder_that_is_a_link_is_refused(self):
@@ -682,6 +683,71 @@ def prompt(step):
 
 def flat(text):
     return " ".join(text.split())
+
+
+class TestTheCorrectnessReviewOfThisUnit(unittest.TestCase):
+    """What the correctness review of Unit 1.7b found, each with its proof."""
+
+    def test_a_segments_own_page_is_first_whatever_its_name(self):
+        """Finding 3: a page whose name carries none of the profile's words."""
+        from gtmbase import sources
+
+        pages = [
+            sources.make_source("icp-one.md", "# Customer profile\n\nOne.\n", "markdown", path="/x/icp-one.md"),
+            sources.make_source("icp-two.md", "# Customer profile\n\nTwo.\n", "markdown", path="/x/icp-two.md"),
+            sources.make_source("regional.md", "# Regional\n\nThree.\n", "markdown", path="/x/regional.md"),
+        ]
+        plain = drafting.order_sources(drafting.STEP_SEGMENT, pages)
+        self.assertEqual("regional.md", plain[-1].label)
+        pinned = drafting.order_sources(drafting.STEP_SEGMENT, pages, "/x/regional.md")
+        self.assertEqual("regional.md", pinned[0].label)
+        self.assertEqual(3, len(pinned))
+
+    def test_a_draft_written_for_another_segment_is_refused(self):
+        """Finding 7: one segment's text never lands in another's file."""
+        with support.Sandbox():
+            company = Company().umbrella_and_positioning()
+            other = company.write_draft(
+                drafting.STEP_SEGMENT, segment_text("Regional banks"), "regional-banks"
+            )
+            with self.assertRaises(ReviewError) as caught:
+                join_flow.approve_step(
+                    drafting.STEP_SEGMENT, other, company.run,
+                    base_root=company.root, now=NOW, segment="fintech-lenders",
+                )
+            self.assertEqual(join_flow.CODE_NOT_THIS_SEGMENTS_DRAFT, caught.exception.code)
+            said = run_join(
+                "review", "--step", "segment", "--segment", "fintech-lenders",
+                "--run", company.run, "--draft", other,
+            ).stdout.decode("utf-8")
+            self.assertIn("codes=%s" % join_flow.CODE_NOT_THIS_SEGMENTS_DRAFT, said)
+            self.assertFalse(
+                os.path.exists(os.path.join(company.root, segments.destination("fintech-lenders")))
+            )
+
+    def test_the_refusals_a_person_can_act_on_are_said_in_a_sentence(self):
+        """Finding 6: a review without the run, and a skip of a segment."""
+        with support.Sandbox():
+            company = Company().umbrella_and_positioning()
+            path = company.write_draft(drafting.STEP_UMBRELLA, captured("umbrella.md"))
+            # The script cannot reach this without the run, because the draft
+            # file itself belongs to the run; the library says why anyway.
+            with self.assertRaises(ReviewError) as caught:
+                join_flow.review_step(drafting.STEP_UMBRELLA, path)
+            self.assertEqual(join_flow.CODE_NO_RUN, caught.exception.code)
+            skipped = run_join("skip", "--step", "segment", "--base", company.root)
+            said = skipped.stdout.decode("utf-8")
+            self.assertEqual(1, skipped.returncode, said)
+            self.assertIn("codes=cannot-skip", said)
+            self.assertIn("Only the customer profile and the positioning", said)
+
+    def test_the_single_profile_is_never_skipped_in_a_run_with_several_segments(self):
+        """Finding 9."""
+        with support.Sandbox():
+            company = Company().umbrella_and_positioning()
+            with self.assertRaises(ReviewError) as caught:
+                join_flow.skip_step("icp", company.root, now=NOW, run_id=company.run)
+            self.assertEqual(join_flow.CODE_UMBRELLA_INSTEAD, caught.exception.code)
 
 
 class TestThePrompts(unittest.TestCase):

@@ -441,6 +441,15 @@ NOT_SEVERAL_SEGMENTS = (
     "This run settled one segment or none, so the customer profile is drafted "
     "in full as one document. Draft that instead."
 )
+NOT_THIS_SEGMENTS_DRAFT = (
+    "That draft is not the one written for this segment, so nothing was done. "
+    "Use the draft file the assemble step named for it."
+)
+CANNOT_SKIP_THIS = (
+    "Only the customer profile and the positioning are ever written down as "
+    "skipped. A segment you do not want now is simply not approved, and "
+    "nothing is written."
+)
 NOT_A_SEGMENT_TO_DRAFT = (
     "That is not a segment this run settled to be drafted, so nothing was "
     "done. Draft one of the segments you said to draft."
@@ -1231,6 +1240,9 @@ STEP_REFUSALS = {
     join_flow.CODE_UMBRELLA_INSTEAD: UMBRELLA_INSTEAD,
     join_flow.CODE_NO_SEVERAL_SEGMENTS: NOT_SEVERAL_SEGMENTS,
     segments.CODE_NOT_TO_DRAFT: NOT_A_SEGMENT_TO_DRAFT,
+    join_flow.CODE_NOT_THIS_SEGMENTS_DRAFT: NOT_THIS_SEGMENTS_DRAFT,
+    join_flow.CODE_NO_RUN: NEEDS_A_RUN_OR_SESSION,
+    "cannot-skip": CANNOT_SKIP_THIS,
 }
 
 
@@ -1470,10 +1482,9 @@ def an_approval_refusal(refusal, options, out):
         return EXIT_REFUSED
     if code == segments.CODE_FILE_TAKEN:
         line(out, "codes", code)
-        settled = join_flow.segment_to_draft(options.run, options.segment)
-        # The name was checked when it was settled: one line, no control
-        # character, and no longer than the cap.
-        out.write(segments.FILE_TAKEN % {"name": settled.name} + "\n")
+        # The segment is not named here: the step's own line already says
+        # which one it is, and a name can have come out of their material.
+        out.write(segments.FILE_TAKEN + "\n")
         return EXIT_REFUSED
     raise refusal
 
@@ -1488,7 +1499,12 @@ def run_skip(options, out):
         # nowhere to write it until the first document has been approved.
         out.write(CANNOT_SKIP_FIRST + "\n")
         return EXIT_REFUSED
-    result = join_flow.skip_step(step, root)
+    try:
+        result = join_flow.skip_step(step, root, run_id=options.run)
+    except ReviewError as refusal:
+        if not a_step_refusal(refusal, out):
+            raise
+        return EXIT_REFUSED
     if getattr(result, "sentence", None):
         # Skipping a context change writes nothing at all, so there is no file
         # to name and nothing for a later session to finish.

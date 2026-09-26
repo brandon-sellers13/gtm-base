@@ -302,7 +302,9 @@ def _is_wanted_first(source, words) -> bool:
     return any(word in where for word in words)
 
 
-def order_sources(step: str, sources: Sequence["sources_module.Source"]):
+def order_sources(
+    step: str, sources: Sequence["sources_module.Source"], first_path=None
+):
     """Put the sources this step most wants first, and keep the rest in order.
 
     Nothing is dropped here. The cap is what drops things, and it drops from
@@ -319,6 +321,23 @@ def order_sources(step: str, sources: Sequence["sources_module.Source"]):
     template is the shape of a document with nothing of the business in it,
     so it is the first thing the cap should reach.
     """
+    ordered = _ordered(step, sources)
+    if first_path:
+        # A segment's own page goes first whatever its name says, so the cap
+        # never leaves out the one document about it (finding 3 of Unit
+        # 1.7b's correctness review).
+        wanted = os.path.realpath(first_path)
+        pinned = [
+            source
+            for source in ordered
+            if getattr(source, "path", None)
+            and os.path.realpath(source.path) == wanted
+        ]
+        ordered = pinned + [source for source in ordered if source not in pinned]
+    return ordered
+
+
+def _ordered(step: str, sources):
     listed = [source for source in sources if not is_template_or_readme(source)]
     last = [source for source in sources if is_template_or_readme(source)]
     if step == STEP_CHANGE:
@@ -361,14 +380,16 @@ def is_template_or_readme(source) -> bool:
     )
 
 
-def plan_sources(step: str, sources: Sequence["sources_module.Source"]) -> SourcePlan:
+def plan_sources(
+    step: str, sources: Sequence["sources_module.Source"], first_path=None
+) -> SourcePlan:
     """Order the sources for one step and say which of them fit in a request.
 
     Whole sources are dropped from the end of the ordered list, never the
     middle of one, because half a document read is worse than a document not
     read at all.
     """
-    ordered = order_sources(step, sources)
+    ordered = order_sources(step, sources, first_path)
     included: List["sources_module.Source"] = []
     dropped: List["sources_module.Source"] = []
     fences: List[str] = []
@@ -435,6 +456,7 @@ def assemble(
     icp_path: Optional[str] = None,
     plugin_root: Optional[str] = None,
     extra: Optional[Dict[str, str]] = None,
+    first_path: Optional[str] = None,
 ) -> Assembly:
     """Build the request for one step out of the prompt file and the sources.
 
@@ -457,7 +479,7 @@ def assemble(
     template = prompt_text(step, plugin_root)
     name = _checked_company(step, company)
 
-    plan = plan_sources(step, sources)
+    plan = plan_sources(step, sources, first_path)
     included = plan.included_labels
 
     if sources and not plan.fences:

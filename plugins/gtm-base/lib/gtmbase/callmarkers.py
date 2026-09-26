@@ -21,6 +21,7 @@ question to the assistant holds it apart as data first.
 
 from __future__ import annotations
 
+import hashlib
 import re
 from typing import List, Optional
 
@@ -51,6 +52,19 @@ class Mark(object):
         self.heading = heading
         self.occurrence = occurrence
         self.line = line
+
+    @property
+    def token(self) -> str:
+        """A short name for this question that does not move when another goes.
+
+        A number counts the questions in the document, so it points at a
+        different one the moment an earlier one is answered. This is worked
+        out from the part the question sits in and the question itself, so a
+        review's token still names the same question later, or none at all
+        (finding 2 of the unit's correctness review).
+        """
+        seed = "\n".join([str(self.heading), str(self.occurrence), self.question])
+        return "q" + hashlib.sha256(seed.encode("utf-8")).hexdigest()[:12]
 
     def __repr__(self) -> str:
         return "Mark(number=%r, heading=%r)" % (self.number, self.heading)
@@ -140,10 +154,22 @@ def holds(text, marker) -> bool:
     wanted = clean(_question_of(marker)).casefold()
     if not wanted and not str(marker or "").strip():
         return False
-    for mark in find(" ".join(str(text or "").split())):
-        if mark.question.casefold() == wanted:
-            return True
+    # Read as written, line by line, the way the document itself is read, and
+    # read again with the lines closed up, so a question wrapped over two
+    # lines is found either way (finding 4 of the unit's correctness review).
+    for version in (str(text or ""), " ".join(str(text or "").split())):
+        for mark in find(version):
+            if mark.question.casefold() == wanted:
+                return True
     return False
+
+
+def by_token(text, token) -> Optional[Mark]:
+    """The open question in some text that a review's token names, or None."""
+    for mark in find(text):
+        if mark.token == str(token or ""):
+            return mark
+    return None
 
 
 def _question_of(marker) -> str:

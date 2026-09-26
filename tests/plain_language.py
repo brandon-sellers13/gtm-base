@@ -906,6 +906,7 @@ PYTHON_SENTENCES = (
     ("stale_check", "REVIEW_ITEM_QUESTION_PREPARED"),
     ("stale_check", "ANSWER_PREPARED"),
     ("stale_check", "ANSWER_ALREADY_PREPARED"),
+    ("stale_check", "ANOTHER_ANSWER_WAITING"),
     ("stale_check", "QUESTION_GONE"),
     ("stale_check", "QUESTION_ABOVE_EVERY_PART"),
     ("stale_check", "ANSWER_NEEDED"),

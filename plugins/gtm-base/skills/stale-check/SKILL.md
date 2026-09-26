@@ -144,8 +144,9 @@ it says after it, such as the offer to move the base to the current layout.
 - Ask for somewhere to put the answer with
   `python3 scripts/stale_check.py --new-words-file answer`, write their words
   to the path it prints, and run
-  `python3 scripts/stale_check.py --answer-question <number> --document '<path>' --answer-file <the path it printed>`
-  with the number and the path from that line.
+  `python3 scripts/stale_check.py --answer-question <question> --document '<path>' --answer-file <the path it printed>`
+  with the `open-question=` value and the path from that line, never the
+  number the item was read out under.
 - That prepares a change and changes nothing in the document. Improve it as
   the next part says, writing the whole part of the document with their answer
   in place of the question, and wording that still asks it is refused.

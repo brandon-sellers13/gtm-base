@@ -1488,6 +1488,10 @@ def load_inventory(run_id: str) -> Optional[segments.Inventory]:
 # is the umbrella's place, and the umbrella asked for when it does not.
 CODE_UMBRELLA_INSTEAD = "umbrella-instead"
 CODE_NO_SEVERAL_SEGMENTS = "no-several-segments"
+# A segment's draft handed in under another segment's name.
+CODE_NOT_THIS_SEGMENTS_DRAFT = "not-this-segments-draft"
+# A step that needs the run, asked for without it.
+CODE_NO_RUN = "no-run"
 # A draft carrying questions for the person may only be written once they have
 # chosen to leave those questions open.
 CODE_QUESTIONS_OPEN = "questions-open"
@@ -1844,7 +1848,7 @@ def preview_step(
     read, chosen, superseded = _sources_for_a_draft(
         run_id, paste_files, day, only, only_folder, only_index, settled
     )
-    plan = drafting.plan_sources(step, chosen)
+    plan = drafting.plan_sources(step, chosen, _own_page(settled))
     codes = list(plan.codes)
     if chosen and not plan.included:
         codes.append(drafting.CODE_NO_SOURCES)
@@ -1895,6 +1899,7 @@ def assemble_step(
             owner_email,
             plugin_root=plugin_root,
             extra=_extra_for(run_id, step, settled),
+            first_path=_own_page(settled),
         )
     except DraftError as refusal:
         refusal.left_out = list(read.left_out)
@@ -2058,6 +2063,11 @@ def _sources_for_a_draft(
     return read, chosen, superseded
 
 
+def _own_page(segment) -> Optional[str]:
+    """The document the person named for a segment, which its draft reads first."""
+    return getattr(segment, "source", "") or None if segment is not None else None
+
+
 def _file_stem(step: str, segment=None) -> str:
     """The start of the name of one step's request and draft in the run folder."""
     if step == drafting.STEP_SEGMENT and segment is not None:
@@ -2173,7 +2183,14 @@ def review_step(
     elif step in (drafting.STEP_UMBRELLA, drafting.STEP_SEGMENT):
         # Both are measured against the run's own inventory, so neither can
         # be checked without the run.
-        raise ReviewError("no-run", code="no-run")
+        raise ReviewError(CODE_NO_RUN, code=CODE_NO_RUN)
+    if settled is not None and os.path.basename(draft_file) != os.path.basename(
+        draft_path(run_id, step, settled)
+    ):
+        # A segment's text is written only into that segment's own file, so
+        # the draft has to be the one named for it (finding 7 of the unit's
+        # correctness review).
+        raise ReviewError(CODE_NOT_THIS_SEGMENTS_DRAFT, code=CODE_NOT_THIS_SEGMENTS_DRAFT)
     text = read_text(draft_file)
     if text is None:
         return Reviewed(step, False, ["no-draft-file"])
@@ -2321,6 +2338,7 @@ def skip_step(
     email: Optional[str] = None,
     runner: Optional[GitRunner] = None,
     now: Optional[datetime.datetime] = None,
+    run_id: Optional[str] = None,
 ):
     """Write the file a skipped step leaves behind, saying it was skipped.
 
@@ -2334,6 +2352,10 @@ def skip_step(
     A11 of the release review).
     """
     git = runner_or_default(runner)
+    if run_id and step == drafting.STEP_ICP:
+        # A run that settled several segments never writes the single
+        # profile, skipped or not (finding 9 of the unit's correctness review).
+        _step_is_this_runs(run_id, step)
     resolution = paths.resolve_base(base_root, machine.load_machine_state(), git)
     if step not in drafting.SKIPPED_HEADINGS and (
         drafting.step_named(step) != drafting.STEP_CHANGE

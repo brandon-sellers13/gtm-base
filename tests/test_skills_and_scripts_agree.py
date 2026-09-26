@@ -740,6 +740,16 @@ class TestTheSkillsAsTheyAreWritten(unittest.TestCase):
             state["kept_id"] = kept
         return kept
 
+    def an_open_question(self, state):
+        """The token the review gives the question left open in the base."""
+        from gtmbase import callmarkers
+
+        text = support.read(
+            os.path.join(state["base"], state["open_question_document"])
+        )
+        found = callmarkers.find(text)
+        return found[0].token if found else None
+
     def a_document_to_ask_about(self, state):
         """The next document the reconcile step said to ask about."""
         waiting = state.get("ask_about") or []
@@ -774,6 +784,7 @@ class TestTheSkillsAsTheyAreWritten(unittest.TestCase):
             else state.get("staged")
         ),
         "<segment>": lambda self, state, command: state.get("segment"),
+        "<question>": lambda self, state, command: self.an_open_question(state),
         "<a short label>": lambda self, state, command: "a note from the call",
         "<file you wrote it to>": lambda self, state, command: state.get("paste"),
         "<the path from step 4>": lambda self, state, command: state.get("words"),

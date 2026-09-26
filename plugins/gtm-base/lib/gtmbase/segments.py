@@ -549,9 +549,9 @@ CODE_NOT_TO_DRAFT = "not-a-segment-to-draft"
 # one this segment would be saved under, in either folder segments have been
 # kept in. Nothing is ever written over it.
 FILE_TAKEN = (
-    "Your base already holds a document saved under the name %(name)s would "
-    "get, so nothing was written over it. Give that segment a different name, "
-    "or leave it out."
+    "Your base already holds a document under the name this segment would be "
+    "saved under, so nothing was written over it. Give that segment a "
+    "different name, or leave it out."
 )
 # Said when the folder segments are kept in is a link, or leads outside the
 # base, which is never somewhere a document is written.

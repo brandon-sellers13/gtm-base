@@ -84,6 +84,7 @@ CODE_QUESTION_GONE = "question-not-there"
 CODE_QUESTION_ABOVE_EVERY_PART = "question-above-every-part"
 CODE_ANSWER_NEEDED = "answer-needed"
 CODE_NOT_A_DOCUMENT = "not-a-document"
+CODE_PART_ANSWER_WAITING = "another-answer-waiting-for-that-part"
 
 # What the run writes for the hook to pick up later.
 REVIEW_BY_FILE = "review_by_items.json"
@@ -346,6 +347,11 @@ ANSWER_PREPARED = (
 ANSWER_ALREADY_PREPARED = (
     "Your answer to that question is already prepared and waiting for you to "
     "approve it, so nothing new was prepared."
+)
+ANOTHER_ANSWER_WAITING = (
+    "An answer to another question in the same part of that document is "
+    "already waiting for you to approve it, so nothing new was prepared. "
+    "Approve or drop that one first, then answer this."
 )
 QUESTION_GONE = (
     "That question is not in %s any more, so nothing was prepared. Ask for a "
@@ -1406,19 +1412,20 @@ def _review_documents(
 def _review_open_questions(report, base_root, base_id, email, today) -> List["ReviewLine"]:
     """One line for each question a draft left open, document by document.
 
-    The same filters the documents use: one this seat's address owns, not set
-    aside for now, and never the map. The question itself rides on the line as
-    data, for the script to show held apart, and it is never put into the
-    sentence a person is read.
+    One this seat's address owns, and never the map. The question itself rides
+    on the line as data, for the script to show held apart, and it is never put
+    into the sentence a person is read.
     """
     lines: List[ReviewLine] = []
     for path in report.open_question_paths():
         info = report.files.get(path)
         if email is not None and email not in (info.owners or []):
             continue
-        if report.suppressions and path in report.suppressions:
-            if state.is_suppressed(base_id, path, today):
-                continue
+        # A document set aside for now is still asked its open questions,
+        # because the closing sends the person to the review to answer them
+        # and a review that then hid them would contradict it (finding 5 of
+        # the unit's correctness review). Setting a question about a change
+        # aside is not setting these aside.
         try:
             path = paths.canonical_context_path(base_root, path)
         except (PathError, ValidationError):
@@ -1426,7 +1433,7 @@ def _review_open_questions(report, base_root, base_id, email, today) -> List["Re
         text = read_text(os.path.join(base_root, path.replace("/", os.sep))) or ""
         for mark in callmarkers.find(text):
             prepared = None
-            staging = _answer_staging_for(path, mark, "-")
+            staging = _answer_staging_for(path, mark, "-", text)
             if staging is not None and _staging_exists(base_root, staging.staging_id):
                 prepared = staging_path_for(base_root, staging.staging_id)
             form = REVIEW_ITEM_QUESTION_PREPARED if prepared else REVIEW_ITEM_QUESTION
@@ -1439,7 +1446,7 @@ def _review_open_questions(report, base_root, base_id, email, today) -> List["Re
                     None,
                     None,
                     form % ("%s", names.document_name(path)),
-                    open_question=mark.number,
+                    open_question=mark.token,
                     question_text=mark.question,
                     prepared=prepared,
                 )
@@ -1447,20 +1454,70 @@ def _review_open_questions(report, base_root, base_id, email, today) -> List["Re
     return lines
 
 
-def _answer_staging_id(path: str, mark) -> str:
-    """The name of the prepared answer to one open question, the same every run.
+def _part_text(text: str, mark) -> str:
+    """What the part holding one question says right now."""
+    lines = str(text or "").split("\n")
+    index = compose_proposal.find_heading(
+        lines,
+        mark.heading or "",
+        compose_proposal.frontmatter_end(lines),
+        mark.occurrence or 1,
+    )
+    if index < 0:
+        return ""
+    return "\n".join(lines[index : compose_proposal.section_end(lines, index)])
 
-    It is worked out from the document, the part the question sits in, and
-    the question, so answering the same question twice finds the change
-    already prepared rather than preparing a second one.
+
+def _answer_staging_id(path: str, mark, text: str) -> str:
+    """The name of the prepared answer to one open question.
+
+    It is worked out from the document, the part the question sits in, what
+    that part says now, and the question, so answering the same question twice
+    finds the change already prepared, and a question that comes back after
+    its part was rewritten is a new question to answer rather than one taken
+    for answered for ever (finding 1 of the unit's correctness review).
     """
-    seed = "\n".join([path, str(mark.heading), str(mark.occurrence), mark.question])
+    seed = "\n".join(
+        [
+            path,
+            str(mark.heading),
+            str(mark.occurrence),
+            mark.question,
+            ids.content_hash(_part_text(text, mark)),
+        ]
+    )
     return ids.staging_id(
         "your-call-" + ids.content_hash(seed)[:16], path, "ledger", 0
     )
 
 
-def _answer_staging_for(path: str, mark, answer: str):
+def _answer_waiting_for_the_part(base_root: str, path: str, mark):
+    """The prepared answer already waiting for this part, if there is one.
+
+    Each answer rewrites the whole part it is in, so two answers waiting for
+    one part would each be written against the part as it was, and approving
+    the second would put the first question back. So one part takes one
+    answer at a time (finding 1 of the unit's correctness review).
+    """
+    pending = os.path.join(base_root, constants.PROPOSALS_PENDING_DIR)
+    for staged in sorted(glob.glob(os.path.join(pending, "*.md"))):
+        try:
+            staging = compose_proposal.load_staging(staged)
+        except Exception:
+            continue
+        if not callmarkers.markers_in(getattr(staging, "excerpt", "") or ""):
+            continue
+        for edit in staging.edits or []:
+            if (
+                edit.path == path
+                and edit.heading == mark.heading
+                and int(getattr(edit, "occurrence", 1) or 1) == int(mark.occurrence or 1)
+            ):
+                return staged
+    return None
+
+
+def _answer_staging_for(path: str, mark, answer: str, text: str = ""):
     """The prepared change that writes one answer into its part of the document.
 
     It holds GTM Base's first draft note, like every prepared change does, so
@@ -1472,7 +1529,7 @@ def _answer_staging_for(path: str, mark, answer: str):
     """
     if not mark.heading:
         return None
-    staging_id = _answer_staging_id(path, mark)
+    staging_id = _answer_staging_id(path, mark, text)
     drafted = PLACEHOLDER_SHAPE % "the question marked in this part is answered"
     words = " ".join(str(answer or "").split())[: constants.MAX_EXCERPT_CHARS]
     body = formats.render_pr_body(
@@ -1515,18 +1572,6 @@ def _answer_staging_for(path: str, mark, answer: str):
     return staging.validate()
 
 
-def _answer_already_prepared(base_root: str, base_id: str, staging_id: str):
-    """Whether this very answer is already waiting, or was already approved."""
-    if _staging_exists(base_root, staging_id):
-        return CODE_ALREADY_STAGED
-    if _recorded_in_index(base_id, staging_id):
-        return CODE_ALREADY_RECORDED
-    for correction in _corrections_citing(base_root):
-        if correction.staging_id == staging_id:
-            return CODE_ALREADY_ACCEPTED
-    return None
-
-
 class Answered(object):
     """What answering one open question led to, and the sentence to say."""
 
@@ -1543,7 +1588,7 @@ class Answered(object):
 
 
 def answer_a_question(
-    base_root: str, base_id: str, path: str, number, answer: str
+    base_root: str, base_id: str, path: str, token, answer: str
 ) -> Answered:
     """Prepare the change that settles one open question, from the owner's answer.
 
@@ -1573,31 +1618,30 @@ def answer_a_question(
             hits[0].sentence(),
             codes=[hit.pattern_class for hit in hits],
         )
-    text = read_text(os.path.join(base_root, relative.replace("/", os.sep)))
-    marks = callmarkers.find(text or "")
-    try:
-        which = int(number)
-    except (TypeError, ValueError):
-        which = 0
-    if which < 1 or which > len(marks):
+    text = read_text(os.path.join(base_root, relative.replace("/", os.sep))) or ""
+    # The review names each question by a token that does not move when an
+    # earlier question is answered (finding 2 of the unit's correctness
+    # review), so an answer is never written against another question.
+    mark = callmarkers.by_token(text, token)
+    if mark is None:
         return Answered(
             False, QUESTION_GONE % document, codes=[CODE_QUESTION_GONE]
         )
-    mark = marks[which - 1]
-    staging = _answer_staging_for(relative, mark, words)
+    staging = _answer_staging_for(relative, mark, words, text)
     if staging is None:
         return Answered(
             False,
             QUESTION_ABOVE_EVERY_PART % document,
             codes=[CODE_QUESTION_ABOVE_EVERY_PART],
         )
-    reason = _answer_already_prepared(base_root, base_id, staging.staging_id)
-    if reason is not None:
+    waiting = _answer_waiting_for_the_part(base_root, relative, mark)
+    if waiting is not None:
+        same = os.path.basename(waiting) == staging.staging_id + ".md"
         return Answered(
             False,
-            ANSWER_ALREADY_PREPARED,
-            staging_path=staging_path_for(base_root, staging.staging_id),
-            codes=[reason],
+            ANSWER_ALREADY_PREPARED if same else ANOTHER_ANSWER_WAITING,
+            staging_path=waiting,
+            codes=[CODE_ALREADY_STAGED if same else CODE_PART_ANSWER_WAITING],
         )
     written = save_staging(base_root, staging)
     state.note_first_draft(base_id, staging.staging_id)
@@ -1709,6 +1753,11 @@ def _list_waiting_on_the_owner(result, report) -> None:
     """The documents nobody has said are still right, which nothing can fix."""
     for flag in report.file_flags:
         if flag.trigger == stale.TRIGGER_LEDGER:
+            continue
+        info = report.files.get(flag.path)
+        if getattr(info, "has_open_question", False):
+            # It is not waiting on anybody to say it is right. It is waiting
+            # on a question to be answered, which the review asks.
             continue
         if flag.newest_confirmation is None:
             result.sentences.append(

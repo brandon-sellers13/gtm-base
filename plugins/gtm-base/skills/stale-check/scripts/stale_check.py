@@ -131,7 +131,7 @@ def build_parser():
     )
     parser.add_argument(
         "--answer-question",
-        help="the number the review gave one open question in its document",
+        help="the open-question value the review printed for one question",
     )
     parser.add_argument(
         "--document",
