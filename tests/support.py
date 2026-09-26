@@ -217,6 +217,18 @@ Companies of any size.
 """
 
 
+def staging_template():
+    """The prepared-change template, naming the profile the way test bases hold it.
+
+    The template names the profile where the current layout keeps it. Most
+    test bases are built the way the one real base was, with the profile at
+    its older path, so a prepared change handed to one of them names it there,
+    which is exactly the prepared change a base laid out the older way holds.
+    """
+    text = read(os.path.join(TEMPLATES_DIR, "proposal-staging.md"))
+    return text.replace("context/icps.md", "context/strategy/icp.md")
+
+
 def write(path, text):
     folder = os.path.dirname(path)
     if folder and not os.path.isdir(folder):

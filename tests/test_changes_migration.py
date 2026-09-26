@@ -1,8 +1,14 @@
-"""Moving a base from `work/decisions` to `work/changes`, and picking it up again.
+"""Moving a base to the current layout, and picking it up again.
+
+Unit 1.4 wrote this file for the move from `work/decisions` to `work/changes`.
+Unit 1.5b widened that move to take a base all the way to the CLASS layout, so
+every test here now moves the documents, the context changes, and the records
+together, and the folder a test calls new is `learning/changes`.
 
 Every test here builds a base the shape the one real base is: a repository with
-the map, the two required documents, and entries in the older folder. Nothing
-here reaches the person's own home folder, their git settings, or a real base.
+the map, the two required documents at their older paths, and entries in the
+older folder. Nothing here reaches the person's own home folder, their git
+settings, or a real base.
 """
 
 import datetime
@@ -353,6 +359,20 @@ class MigrationCase(unittest.TestCase):
             self.put(constants.LEGACY_CHANGES_DIR, entry_id, old_entry(entry_id))
         self.save()
 
+    def documents_on_the_current_layout(self):
+        """Move the two documents to where the current layout keeps them.
+
+        A test about a base with nothing left to move needs its documents
+        where they belong as well as its context changes, because since Unit
+        1.5b the move carries both.
+        """
+        for older, current in (
+            ("context/strategy/icp.md", "context/icps.md"),
+            ("context/strategy/positioning.md", "context/positioning.md"),
+        ):
+            support.git(["mv", older, current], cwd=self.root)
+        self.save("documents where they belong")
+
     def entries_now(self):
         """Every context change the base reads, by identifier."""
         rows = base_reader.ledger(self.root, self.base_id, TODAY, collect=[])
@@ -513,6 +533,7 @@ class TestMigrating(MigrationCase):
         self.assertEqual(after, support.head_of(self.root))
 
     def test_a_base_already_in_the_new_layout_is_left_alone(self):
+        self.documents_on_the_current_layout()
         self.put(constants.CHANGES_DIR, ENTRY_ONE, new_entry(ENTRY_ONE))
         self.save()
         before = support.head_of(self.root)
@@ -2255,7 +2276,14 @@ class TestNothingIsDeletedUnlessAnotherCopyIsThere(MigrationCase):
                 encoding="utf-8",
             )
         )
-        came_from = [str(item.get("path")) for item in note["came_from"]]
+        # The documents move too since Unit 1.5b, so only the context changes
+        # are asked about here: each is recorded under the spelling git holds.
+        came_from = [
+            str(item.get("path"))
+            for item in note["came_from"]
+            if str(item.get("path")).lower().startswith(constants.LEGACY_CHANGES_DIR)
+        ]
+        self.assertTrue(came_from)
         self.assertTrue(
             all(path.startswith(self.CAPITAL + "/") for path in came_from),
             came_from,
@@ -2884,7 +2912,7 @@ class TestTheReadOnlyCheck(MigrationCase):
         said = finished.stdout.decode("utf-8")
         # How many, in words, and never which ones by identifier (finding 4
         # of the release A live check: this used to print the change's id).
-        self.assertIn("update one of your context changes", said)
+        self.assertIn("two documents and one context change", said)
         self.assertNotIn(ENTRY_ONE, said)
 
     def test_it_counts_in_words_and_names_no_identifier(self):
@@ -2893,7 +2921,7 @@ class TestTheReadOnlyCheck(MigrationCase):
 
         said = self.run_script("--check-move").stdout.decode("utf-8")
 
-        self.assertIn("update two of your context changes", said)
+        self.assertIn("two documents and two context changes", said)
         for entry_id in (ENTRY_ONE, ENTRY_TWO):
             self.assertNotIn(entry_id, said)
         self.assertNotIn("stg-", said)
@@ -3388,6 +3416,7 @@ class TestTheOfferAndTheYes(MigrationCase):
     def test_a_base_with_nothing_to_move_is_never_offered_it(self):
         from gtmbase import stale_check
 
+        self.documents_on_the_current_layout()
         self.put(constants.CHANGES_DIR, ENTRY_ONE, new_entry(ENTRY_ONE))
         self.save()
 
@@ -3453,8 +3482,9 @@ class TestTheWholeWayThroughOnAMigratedBase(MigrationCase):
             session_id="sess-1",
             mode="review",
         )
+        # The profile is listed where it lives now.
         self.assertIn(
-            "context/strategy/icp.md",
+            "context/icps.md",
             " ".join(review.sentences) + " ".join(line.path for line in review.review),
         )
         # The offer to move is gone, because there is nothing left to move.

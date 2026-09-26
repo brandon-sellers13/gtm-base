@@ -247,10 +247,10 @@ class TestTemplateTree(unittest.TestCase):
             self.assertEqual(["@owner-handle"], owners)
 
         for open_path in (
-            "work/confirmations/context--strategy--icp.md",
+            "work/confirmations/context--icps.md",
             "work/confirmations/.gitkeep",
-            "work/changes/2026-01-01-a-change.md",
-            "work/changes/.gitkeep",
+            "learning/changes/2026-01-01-a-change.md",
+            "learning/changes/.gitkeep",
         ):
             self.assertFalse(
                 any_rule_matches(rules, open_path),
@@ -258,8 +258,12 @@ class TestTemplateTree(unittest.TestCase):
             )
 
         for gated_path in (
-            "corrections/2026-01-01.md",
-            "context/strategy/icp.md",
+            "learning/corrections/2026-01-01.md",
+            "learning/lessons/2026-01-01.md",
+            "context/icps.md",
+            "access/stack.md",
+            "skills/outbound/SKILL.md",
+            "standards/outbound.md",
             "plugins/gtm-base/README.md",
             ".claude/settings.json",
             "CLAUDE.md",

@@ -481,7 +481,7 @@ class TestTheOfferWhenNothingIsDue(unittest.TestCase):
 
         self.assertEqual(0, code)
         self.assertIn(changes.OFFER_STATE_NOW, out)
-        self.assertIn("update one of your context changes", out)
+        self.assertIn("one context change", out)
         self.assertNotIn(migration.ENTRY_ONE, out)
         self.assertEqual([], plain_language.find_dashes(out))
 

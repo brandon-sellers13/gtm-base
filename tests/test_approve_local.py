@@ -75,7 +75,7 @@ def local_base(sandbox, name="local"):
 def stage(root, text=None, staging_id=STAGING):
     """Put a prepared change where the stale check would have left it."""
     if text is None:
-        text = support.read(os.path.join(support.TEMPLATES_DIR, "proposal-staging.md"))
+        text = support.staging_template()
     path = os.path.join(root, constants.PROPOSALS_PENDING_DIR, staging_id + ".md")
     support.write(path, text)
     return path
@@ -534,9 +534,7 @@ class TestWhatItRefusesToTouch(unittest.TestCase):
     def test_a_path_in_the_assistants_own_folder_is_refused(self):
         with support.Sandbox() as sandbox:
             root, base_id = local_base(sandbox)
-            text = support.read(
-                os.path.join(support.TEMPLATES_DIR, "proposal-staging.md")
-            ).replace(
+            text = support.staging_template().replace(
                 "path: context/strategy/icp.md",
                 "path: context/.claude/settings.md",
             )
@@ -553,9 +551,7 @@ class TestWhatItRefusesToTouch(unittest.TestCase):
     def test_a_path_outside_the_folders_a_change_may_touch_is_refused(self):
         with support.Sandbox() as sandbox:
             root, base_id = local_base(sandbox)
-            text = support.read(
-                os.path.join(support.TEMPLATES_DIR, "proposal-staging.md")
-            ).replace(
+            text = support.staging_template().replace(
                 "affects: [context/strategy/icp.md]\nreview_by",
                 "affects: [CODEOWNERS]\nreview_by",
             )
@@ -573,9 +569,7 @@ class TestWhatItRefusesToTouch(unittest.TestCase):
     def test_a_change_to_the_map_is_refused(self):
         with support.Sandbox() as sandbox:
             root, base_id = local_base(sandbox)
-            text = support.read(
-                os.path.join(support.TEMPLATES_DIR, "proposal-staging.md")
-            ).replace("context/strategy/icp.md", constants.MAP_PATH)
+            text = support.staging_template().replace("context/strategy/icp.md", constants.MAP_PATH)
             staged = stage(root, text=text)
 
             shown = approve_local.show(
@@ -588,9 +582,7 @@ class TestWhatItRefusesToTouch(unittest.TestCase):
     def test_a_contact_detail_is_refused_by_class_and_never_by_value(self):
         with support.Sandbox() as sandbox:
             root, base_id = local_base(sandbox)
-            text = support.read(
-                os.path.join(support.TEMPLATES_DIR, "proposal-staging.md")
-            ).replace(
+            text = support.staging_template().replace(
                 "Companies of twenty to two hundred people, with a marketing "
                 "team of one to five.",
                 "Companies like the one run by prospect@example.test.",
@@ -610,9 +602,7 @@ class TestWhatItRefusesToTouch(unittest.TestCase):
         with support.Sandbox() as sandbox:
             root, base_id = local_base(sandbox)
             secret = "sk-" + "a1b2c3d4e5" * 4
-            text = support.read(
-                os.path.join(support.TEMPLATES_DIR, "proposal-staging.md")
-            ).replace(
+            text = support.staging_template().replace(
                 "Companies of twenty to two hundred people, with a marketing "
                 "team of one to five.",
                 "The reporting key is %s." % secret,
@@ -979,6 +969,9 @@ section is the one that has to change.
 """ % HAND_ENTERED
 
 
+ICP_HERE = constants.REQUIRED_CONTEXT_FILES[0]
+
+
 class TestTheWholeWayThroughOnARealBase(unittest.TestCase):
     """Built by the code that really builds a base, with nothing standing in.
 
@@ -986,6 +979,8 @@ class TestTheWholeWayThroughOnARealBase(unittest.TestCase):
     be one, because that is the base this whole path exists for.
     """
 
+    # Built by the code that really builds a base, so the profile is where
+    # setup writes it today.
     def build(self):
         from gtmbase import create_base
 
@@ -997,7 +992,7 @@ class TestTheWholeWayThroughOnARealBase(unittest.TestCase):
         support.write(os.path.join(parent, "positioning.md"), "# Positioning\n")
         result = create_base.create(
             parent,
-            create_base.ApprovedFile(ICP, ICP_DRAFT),
+            create_base.ApprovedFile(ICP_HERE, ICP_DRAFT),
             ids.run_id(TODAY),
             support.PLUGIN_DIR,
             runner=NoRemoteRunner(),
@@ -1029,11 +1024,11 @@ class TestTheWholeWayThroughOnARealBase(unittest.TestCase):
             self.assertEqual(1, len(flagged.staged), flagged.lines())
             staged = flagged.staged[0].path
             self.assertIn(
-                stale_check.AWAITING_LOCAL_APPROVAL % names.document_name(ICP),
+                stale_check.AWAITING_LOCAL_APPROVAL % names.document_name(ICP_HERE),
                 flagged.lines(),
             )
             self.assertEqual(
-                [ICP], [flag.path for flag in flagged.report.file_flags]
+                [ICP_HERE], [flag.path for flag in flagged.report.file_flags]
             )
 
             # The assistant writes the real wording into the prepared change
@@ -1056,9 +1051,9 @@ class TestTheWholeWayThroughOnARealBase(unittest.TestCase):
 
             # The file changed, and one line records the yes against the change.
             self.assertNotIn(
-                "Companies of any size.", support.read(os.path.join(root, ICP))
+                "Companies of any size.", support.read(os.path.join(root, ICP_HERE))
             )
-            line = confirmations_of(root)[-1]
+            line = confirmations_of(root, ICP_HERE)[-1]
             self.assertEqual("ledger", line.trigger)
             self.assertEqual(HAND_ENTERED, line.entry)
             self.assertEqual(LATER.isoformat(), line.date)
@@ -1202,7 +1197,7 @@ class TestWhereAPreparedChangeMayBeReadFrom(unittest.TestCase):
         path = os.path.join(sandbox.path, "somewhere", "else.md")
         support.write(
             path,
-            support.read(os.path.join(support.TEMPLATES_DIR, "proposal-staging.md")),
+            support.staging_template(),
         )
         del root
         return path
@@ -1263,9 +1258,7 @@ class TestWhereAPreparedChangeMayBeReadFrom(unittest.TestCase):
             path = os.path.join(root, constants.PROPOSALS_PENDING_DIR, "notes.md")
             support.write(
                 path,
-                support.read(
-                    os.path.join(support.TEMPLATES_DIR, "proposal-staging.md")
-                ),
+                support.staging_template(),
             )
 
             result = approve_local.drop(path, root, base_id)

@@ -45,7 +45,7 @@ base_with_a_shared_copy = support.base_with_a_shared_copy
 def stage(root, text=None, staging_id=STAGING):
     """Put a staged proposal where a producer would have left it."""
     if text is None:
-        text = support.read(os.path.join(support.TEMPLATES_DIR, "proposal-staging.md"))
+        text = support.staging_template()
     path = os.path.join(
         root, constants.PROPOSALS_PENDING_DIR, staging_id + ".md"
     )
@@ -54,7 +54,7 @@ def stage(root, text=None, staging_id=STAGING):
 
 
 def template_text():
-    return support.read(os.path.join(support.TEMPLATES_DIR, "proposal-staging.md"))
+    return support.staging_template()
 
 
 show = support.show

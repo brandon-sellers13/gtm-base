@@ -259,7 +259,7 @@ class TestTheFilesADecisionSaysItAffects(unittest.TestCase):
 
     def test_a_path_climbing_out_of_the_base_is_refused(self):
         hostile = captured("change-entry.md").replace(
-            "affects: [context/strategy/icp.md]", "affects: [../secrets.md]"
+            "affects: [context/icps.md]", "affects: [../secrets.md]"
         )
         entry = drafting.parse(drafting.STEP_CHANGE, hostile)
         with self.assertRaises(PathError):
@@ -267,7 +267,7 @@ class TestTheFilesADecisionSaysItAffects(unittest.TestCase):
 
     def test_a_path_from_the_root_of_the_machine_is_refused(self):
         hostile = captured("change-entry.md").replace(
-            "affects: [context/strategy/icp.md]", "affects: [/etc/passwd]"
+            "affects: [context/icps.md]", "affects: [/etc/passwd]"
         )
         entry = drafting.parse(drafting.STEP_CHANGE, hostile)
         with self.assertRaises(PathError):
@@ -709,7 +709,7 @@ class TestNothingScreenedOutIsEverWritten(unittest.TestCase):
             hostile = drafting.parse(
                 drafting.STEP_CHANGE,
                 captured("change-entry.md").replace(
-                    "affects: [context/strategy/icp.md]", "affects: [../secrets.md]"
+                    "affects: [context/icps.md]", "affects: [../secrets.md]"
                 ),
             )
 
@@ -741,7 +741,7 @@ class TestNothingScreenedOutIsEverWritten(unittest.TestCase):
             hostile = drafting.parse(
                 drafting.STEP_CHANGE,
                 captured("change-entry.md").replace(
-                    "affects: [context/strategy/icp.md]", "affects: [../secrets.md]"
+                    "affects: [context/icps.md]", "affects: [../secrets.md]"
                 ),
             )
 

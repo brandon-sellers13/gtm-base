@@ -16,8 +16,8 @@ OWNER = "owner@example.com"
 OTHER_OWNER = "second@example.com"
 STRANGER = "stranger@example.com"
 
-ICP = "context/strategy/icp.md"
-POSITIONING = "context/strategy/positioning.md"
+ICP = "context/icps.md"
+POSITIONING = "context/positioning.md"
 PRICING = "context/plan/pricing.md"
 
 STG = "stg-" + "a" * 16
@@ -1076,7 +1076,7 @@ class TestTheMapIsLeftOutByItsKind(unittest.TestCase):
         report = self._report(kind="notes")
 
         self.assertEqual(
-            [self.MAP, ICP], sorted(set(flag.path for flag in report.file_flags))
+            sorted([self.MAP, ICP]), sorted(set(flag.path for flag in report.file_flags))
         )
 
 

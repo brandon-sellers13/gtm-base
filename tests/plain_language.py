@@ -249,6 +249,31 @@ def find_short_form_first(text):
     return text.count("\n", 0, short.start()) + 1
 
 
+# --- The paths the move to the CLASS layout left behind (Unit 1.5b) ---------
+
+# A base is laid out by the five CLASS parts, and a person is never told to
+# look in a folder the current layout does not have. Each pattern is one older
+# path. The records folder is only older on its own: `learning/corrections`
+# is the current one, and "corrections" as a plain word is not a path.
+_OLD_PATH_PATTERNS = (
+    re.compile(r"(?<![\w/.-])context/(?:strategy|plan|metrics|notes)\b"),
+    re.compile(r"(?<![\w/.-])work/(?:changes|decisions)\b"),
+    re.compile(r"(?<![\w/.-])corrections/"),
+    re.compile(r"`corrections`"),
+)
+
+
+def find_old_paths(text):
+    """Return (path, line_number) for every older path a person would read."""
+    found = []
+    for line_number, line in enumerate(str(text or "").splitlines(), start=1):
+        for pattern in _OLD_PATH_PATTERNS:
+            match = pattern.search(line)
+            if match:
+                found.append((match.group(0), line_number))
+    return found
+
+
 # --- The markers a document uses to say what a piece of it is ----------------
 
 # A section nobody named "Step something" opts itself in with this line.
@@ -821,6 +846,11 @@ PYTHON_SENTENCES = (
     ("stale_check", "REVIEW_ITEM_WAITING_THERE"),
     ("stale_check", "REVIEW_INBOX_WAITING"),
     ("stale_check", "REVIEW_SPEAKING_AGAIN"),
+    ("changes", "DOCUMENT_TAKEN"),
+    ("changes", "LAYOUT_RECORD_WHAT_CHANGED"),
+    ("changes", "LAYOUT_RECORD_WHY"),
+    ("changes", "MAP_WHERE_TODAY"),
+    ("write_hook", "SKILLS_REFUSED"),
 )
 
 # Constants that read like a sentence but that no person ever reads. Each one

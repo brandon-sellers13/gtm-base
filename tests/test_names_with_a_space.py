@@ -85,9 +85,7 @@ class TestApprovingHere(unittest.TestCase):
     """Local approval refuses the change before it is shown, and again at the yes."""
 
     def staged(self, base):
-        text = support.read(
-            os.path.join(support.TEMPLATES_DIR, "proposal-staging.md")
-        ).replace("context/strategy/icp.md", SPACED)
+        text = support.staging_template().replace("context/strategy/icp.md", SPACED)
         path = os.path.join(
             base.root,
             constants.PROPOSALS_PENDING_DIR,

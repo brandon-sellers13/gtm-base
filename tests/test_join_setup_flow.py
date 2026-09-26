@@ -34,8 +34,8 @@ TODAY = datetime.date(2026, 9, 6)
 REAL_TODAY = datetime.date.today().isoformat()
 NOW = datetime.datetime(2026, 9, 6, 9, 15, 0)
 EMAIL = "dana@acme.test"
-ICP = "context/strategy/icp.md"
-POSITIONING = "context/strategy/positioning.md"
+ICP = "context/icps.md"
+POSITIONING = "context/positioning.md"
 SESSION = "s-first-run"
 
 # What the fixtures say, so a scenario can move one date and leave the rest.
@@ -280,7 +280,7 @@ class TestOneWholeSetupRun(unittest.TestCase):
             )
 
             self.assertEqual(
-                "corrections/2026-09-06-onboarding-note.md", closed.note_path
+                "learning/corrections/2026-09-06-onboarding-note.md", closed.note_path
             )
             written = support.read(os.path.join(setup.root, closed.note_path))
             self.assertIn("kind: onboarding-note", written)

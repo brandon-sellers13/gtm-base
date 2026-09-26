@@ -86,7 +86,7 @@ class TestTheCapturedDecisionReadsBackTheWayItWasWritten(unittest.TestCase):
             self.assertIn(name, draft.fields, name)
         self.assertEqual("change", draft.fields["kind"])
         self.assertEqual("2026-08-04", draft.fields["happened_on"])
-        self.assertEqual(["context/strategy/icp.md"], draft.fields["affects"])
+        self.assertEqual(["context/icps.md"], draft.fields["affects"])
         self.assertEqual("open", draft.fields["status"])
 
     def test_the_answer_says_the_date_out_loud_before_the_fence(self):

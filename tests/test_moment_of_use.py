@@ -22,6 +22,7 @@ import support
 
 from gtmbase import (
     approve_local,
+    changes,
     report,
     compose_proposal,
     confirm,
@@ -641,8 +642,15 @@ class TestTheReview(unittest.TestCase):
             # is where that is said: requirement P17 moved it out of the run
             # that prepares changes and into the review, so a review listing
             # nothing still mentions it once.
+            # This base is laid out the way the one real base was before Unit
+            # 1.5b, so after saying nothing is due the review offers, once,
+            # to move it to the current layout.
             self.assertEqual(
-                [stale_check.REVIEW_NOTHING, stale_check.LEDGER_BEHIND_EMPTY % 30],
+                [
+                    stale_check.REVIEW_NOTHING,
+                    stale_check.LEDGER_BEHIND_EMPTY % 30,
+                    changes.OFFER,
+                ],
                 result.lines(),
             )
             self.assertEqual([], result.review)
