@@ -330,15 +330,41 @@ class TestFindingTheLikelyMarketingMaterial(unittest.TestCase):
                 first.sample_labels,
             )
 
-    def test_a_folder_of_code_with_one_plan_in_it_is_dropped_as_thin(self):
-        """One plan-shaped name among five files is not a marketing folder."""
+    def test_a_folder_of_code_with_one_plan_in_it_is_not_proposed(self):
+        """Unit 1.6: a plan and a schema are not a marketing folder.
+
+        The fixture's engineering folder holds a deploy plan among four other
+        notes. A plan counts only beside a profile, a persona, or a
+        positioning file, so the folder is left out with a note saying why,
+        and the marketing folder is proposed first with its counts.
+        """
         with TempFolder(copy_fixtures=True) as temp:
             found = sources.survey(temp.folder, today=TODAY)
 
             self.assertNotIn(
                 "engineering", [place.relative_folder for place in found.places]
             )
-            self.assertIn("thin:engineering", found.notes)
+            self.assertIn("plans-alone:engineering", found.notes)
+            self.assertEqual("marketing", found.places[0].relative_folder)
+            self.assertEqual(
+                {"customer-profile": 1, "persona": 1, "positioning": 2},
+                found.places[0].counts_by_kind,
+            )
+
+    def test_a_few_marketing_files_among_many_others_are_dropped_as_thin(self):
+        """The thin rule still holds for a place a profile does anchor."""
+        with TempFolder() as temp:
+            temp.file("ops/persona-ops.md", "# The operations lead\n")
+            for number in range(9):
+                temp.file("ops/runbook-%d.md" % number, "# What to do\n")
+            temp.file("marketing/icp.md", "# Ideal customer profile\n")
+
+            found = sources.survey(temp.folder, today=TODAY)
+
+            self.assertEqual(
+                ["marketing"], [place.relative_folder for place in found.places]
+            )
+            self.assertIn("thin:ops", found.notes)
 
     def test_the_places_are_ordered_by_what_they_hold(self):
         with TempFolder(copy_fixtures=True) as temp:
@@ -443,7 +469,301 @@ class TestFindingTheLikelyMarketingMaterial(unittest.TestCase):
             self.assertNotIn(constants.SOURCE_FENCE_FOOTER, found.sentence())
 
 
-# --- Consent ----------------------------------------------------------------
+# --- Unit 1.6: selection fixes -----------------------------------------------
+
+
+def set_day(path, day):
+    """Give a file a modification date, the way a person's editor would."""
+    stamp = datetime.datetime(day.year, day.month, day.day, 12, 0).timestamp()
+    os.utime(path, (stamp, stamp))
+
+
+class TestPlansAndMetricsCountOnlyBesideAProfile(unittest.TestCase):
+    """Requirement P24: plans and metrics are marketing only beside a profile."""
+
+    def test_a_folder_of_plans_with_no_profile_beside_it_is_not_proposed(self):
+        with TempFolder() as temp:
+            temp.file("Plans/q3-plan.md", "# Third quarter plan\n")
+            temp.file("Plans/q4-plan.md", "# Fourth quarter plan\n")
+            temp.file("Plans/okrs.md", "# Goals for the year\n")
+            temp.file("marketing/icp.md", "# Ideal customer profile\n")
+
+            found = sources.survey(temp.folder, today=TODAY)
+
+            self.assertEqual(
+                ["marketing"], [place.relative_folder for place in found.places]
+            )
+            self.assertIn("plans-alone:Plans", found.notes)
+
+    def test_a_folder_of_metrics_alone_is_not_proposed_either(self):
+        with TempFolder() as temp:
+            temp.file("finance/funnel.md", "# Funnel\n")
+            temp.file("finance/kpi-definitions.md", "# What each number means\n")
+
+            found = sources.survey(temp.folder, today=TODAY)
+
+            self.assertEqual([], found.places)
+            self.assertIn("plans-alone:finance", found.notes)
+
+    def test_a_plan_beside_a_positioning_file_still_counts(self):
+        with TempFolder() as temp:
+            temp.file("marketing/positioning.md", "# How we describe it\n")
+            temp.file("marketing/launch-plan.md", "# Launch plan\n")
+            temp.file("marketing/funnel.md", "# Funnel\n")
+
+            found = sources.survey(temp.folder, today=TODAY)
+
+            self.assertEqual(
+                {"positioning": 1, "plan": 1, "metrics": 1},
+                found.places[0].counts_by_kind,
+            )
+
+    def test_other_kinds_on_their_own_are_still_proposed(self):
+        """Only plans and metrics need a profile beside them."""
+        with TempFolder() as temp:
+            temp.file("brand/voice.md", "# How we sound\n")
+            temp.file("brand/style-guide.md", "# Style guide\n")
+
+            found = sources.survey(temp.folder, today=TODAY)
+
+            self.assertEqual(["brand"], [p.relative_folder for p in found.places])
+
+
+class TestWhatAFolderMostlyHolds(unittest.TestCase):
+    """P26: the folder table says what each folder mostly holds, from paths only."""
+
+    def test_the_marketing_folder_mostly_holds_positioning_files(self):
+        with TempFolder(copy_fixtures=True) as temp:
+            found = sources.survey(temp.folder, today=TODAY)
+
+            self.assertEqual("positioning files", found.places[0].mostly)
+
+    def test_a_folder_of_engineering_notes_mostly_holds_other_files(self):
+        with TempFolder(copy_fixtures=True) as temp:
+            listing = sources.list_folder(temp.folder, today=TODAY)
+
+            mostly = sources.folder_mostly(listing.root, listing.readable)
+
+            self.assertEqual("other files", mostly["engineering"])
+            self.assertEqual("positioning files", mostly["marketing"])
+
+    def test_what_a_folder_mostly_holds_is_worked_out_without_opening_a_file(self):
+        with TempFolder() as temp:
+            temp.file("notes/tuesday.md", "# Our positioning\n")
+            temp.file("notes/wednesday.md", "# Our positioning\n")
+            listing = sources.list_folder(temp.folder, today=TODAY)
+
+            with RecordingOpen() as recorded:
+                mostly = sources.folder_mostly(listing.root, listing.readable)
+
+            self.assertEqual([], recorded.opened)
+            self.assertEqual("other files", mostly["notes"])
+
+    def test_each_file_a_place_was_proposed_for_is_named_with_its_kind(self):
+        with TempFolder(copy_fixtures=True) as temp:
+            found = sources.survey(temp.folder, today=TODAY)
+
+            self.assertEqual(
+                [
+                    ("marketing/_spine.md", "positioning"),
+                    ("marketing/icp-fintech.md", "customer-profile"),
+                    ("marketing/persona-ops-lead.md", "persona"),
+                    ("marketing/positioning.md", "positioning"),
+                ],
+                found.places[0].candidates,
+            )
+
+
+class TestVersionsOfOneDocumentAreGroupedByName(unittest.TestCase):
+    """P26: same-stem files are versions, and a name saying final outranks a date."""
+
+    def test_the_names_versions_share(self):
+        for name in (
+            "positioning.md",
+            "positioning.final.md",
+            "Positioning FINAL.md",
+            "positioning-v2.md",
+            "positioning (1).md",
+            "positioning-2026-09-01.md",
+            "final-positioning.md",
+            "positioning_draft.md",
+        ):
+            self.assertEqual("positioning", sources.version_stem(name), name)
+
+    def test_different_documents_are_not_taken_for_versions(self):
+        for one, other in (
+            ("icp.md", "icp-fintech.md"),
+            ("ad.md", "ad copy.md"),
+            ("customers.md", "new-customers.md"),
+            ("q3-plan.md", "q4-plan.md"),
+        ):
+            self.assertNotEqual(
+                sources.version_stem(one), sources.version_stem(other), (one, other)
+            )
+
+    def test_final_is_used_even_when_a_sibling_is_newer(self):
+        with TempFolder() as temp:
+            older = temp.file("marketing/positioning.final.md", "# Positioning\n")
+            newer = temp.file("marketing/positioning.md", "# Positioning\n")
+            set_day(older, datetime.date(2026, 8, 1))
+            set_day(newer, datetime.date(2026, 9, 1))
+
+            found = sources.survey(temp.folder, today=TODAY)
+
+            self.assertEqual(
+                [["marketing/positioning.final.md", "marketing/positioning.md"]],
+                found.version_sets,
+            )
+
+    def test_without_a_final_the_newest_is_used(self):
+        with TempFolder() as temp:
+            older = temp.file("marketing/positioning-v1.md", "# Positioning\n")
+            newer = temp.file("marketing/positioning-v2.md", "# Positioning\n")
+            set_day(older, datetime.date(2026, 8, 1))
+            set_day(newer, datetime.date(2026, 9, 1))
+
+            found = sources.survey(temp.folder, today=TODAY)
+
+            self.assertEqual(
+                [["marketing/positioning-v2.md", "marketing/positioning-v1.md"]],
+                found.version_sets,
+            )
+
+    def test_the_same_name_in_two_folders_is_two_documents(self):
+        with TempFolder(copy_fixtures=True) as temp:
+            found = sources.survey(temp.folder, today=TODAY)
+
+            self.assertEqual([], found.version_sets)
+
+
+class GuardedOpen(object):
+    """Every file opened under one folder, read no further than a cap.
+
+    A read that asks for the whole file, a read of a line with no limit, and a
+    read that takes the total past the cap for that kind of file are all
+    written down as failures rather than raised, so a caller that catches an
+    error cannot hide one.
+    """
+
+    def __init__(self, root, caps):
+        self.root = os.path.realpath(root)
+        self.caps = caps
+        self.failures = []
+        self.opened = []
+
+    def __enter__(self):
+        self._real = builtins.open
+        guard = self
+
+        def opener(file, *args, **keywords):
+            handle = guard._real(file, *args, **keywords)
+            try:
+                real = os.path.realpath(str(file))
+            except TypeError:
+                return handle
+            if not real.startswith(guard.root + os.sep):
+                return handle
+            guard.opened.append(real)
+            cap = guard.caps.get(os.path.splitext(real)[1].lower(), 0)
+            return Bounded(handle, real, cap, guard.failures)
+
+        builtins.open = opener
+        return self
+
+    def __exit__(self, kind, value, trace):
+        builtins.open = self._real
+        return False
+
+
+class Bounded(object):
+    def __init__(self, handle, path, cap, failures):
+        self.handle = handle
+        self.path = path
+        self.cap = cap
+        self.failures = failures
+        self.taken = 0
+
+    def read(self, size=-1):
+        if size is None or size < 0:
+            self.failures.append("%s was read whole" % self.path)
+        data = self.handle.read(size)
+        self.taken += len(data if isinstance(data, bytes) else data.encode("utf-8"))
+        if self.taken > self.cap:
+            self.failures.append(
+                "%s was read to %d bytes, past %d" % (self.path, self.taken, self.cap)
+            )
+        return data
+
+    def readline(self, *args):
+        self.failures.append("%s was read a line at a time" % self.path)
+        return self.handle.readline(*args)
+
+    def __iter__(self):
+        self.failures.append("%s was read a line at a time" % self.path)
+        return iter(self.handle)
+
+    def close(self):
+        self.handle.close()
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, kind, value, trace):
+        self.handle.close()
+        return False
+
+
+class TestTheSurveyOpensNoBody(unittest.TestCase):
+    """Security (r2, Astra 9): the survey runs before consent and reads no body.
+
+    What the survey may read is bounded in bytes. A document is read no
+    further than the capped first heading, which also covers the few bytes the
+    listing's own walk looks at to see whether a file holds a key. A file of
+    rows, and a plain text file, may also be read as far as the check for a
+    list of people, which only ever decides to leave a file out and never
+    says anything about what the file holds; that check is the listing's own,
+    older than this unit, and runs before any yes in the listing as well.
+    """
+
+    CAPS = {
+        ".md": constants.SURVEY_HEADING_BYTES,
+        ".markdown": constants.SURVEY_HEADING_BYTES,
+        ".txt": constants.CONTACT_SNIFF_BYTES,
+        ".csv": constants.CONTACT_SNIFF_BYTES,
+    }
+
+    def test_no_read_goes_past_the_capped_first_heading(self):
+        with TempFolder() as temp:
+            long_line = "word " * 100
+            temp.file(
+                "notes.md",
+                "# Notes\n" + (long_line + "\n") * 10 + "# Positioning\n"
+                + ("body text\n" * 5000),
+            )
+            temp.file("marketing/icp.md", "# Ideal customer profile\n" + "x\n" * 20000)
+            temp.file("one-line.md", "#" + "a" * 50000 + "\n")
+            temp.file("figures.csv", "a,b\n" + "1,2\n" * 20000)
+            temp.file("pricing.txt", "Pricing\n" + "y\n" * 20000)
+
+            with GuardedOpen(temp.folder, self.CAPS) as guard:
+                found = sources.survey(temp.folder, today=TODAY)
+
+            self.assertEqual([], guard.failures)
+            self.assertTrue(guard.opened)
+            self.assertEqual(
+                [("marketing", {"customer-profile": 1})],
+                [(p.relative_folder, p.counts_by_kind) for p in found.places],
+            )
+
+    def test_a_heading_past_the_bytes_read_is_never_seen(self):
+        """Line eleven is inside the forty lines and still past the byte cap."""
+        with TempFolder() as temp:
+            path = temp.file(
+                "notes.md",
+                ("word " * 100 + "\n") * 10 + "# Positioning\n",
+            )
+
+            self.assertEqual("", sources.first_heading(path))
 
 
 class TestFreezingTheList(unittest.TestCase):

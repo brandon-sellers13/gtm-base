@@ -2012,8 +2012,13 @@ class TestThePreviewBeforeEachDraft(unittest.TestCase):
             )
             self.assertIn("note=sources-capped", printed)
 
-    def test_the_sentence_asks_them_which_files_matter_for_this_document(self):
-        """The wording a person reads when their folder holds too much."""
+    def test_the_preview_says_how_much_it_reads_which_it_leaves_and_why(self):
+        """Unit 1.6, P26: the count, the files left out, and why at all.
+
+        The third real run said files were left out without saying why a
+        draft reads a limited amount, so the person could not tell a cap from
+        a mistake.
+        """
         with support.Sandbox() as sandbox:
             setup = SetupRun(sandbox)
             support.write(
@@ -2029,21 +2034,32 @@ class TestThePreviewBeforeEachDraft(unittest.TestCase):
             printed = self.preview(setup.run).stdout.decode("utf-8")
 
             self.assertIn(
-                "Your folder holds more than one draft can read at once.", printed
-            )
-            self.assertIn("will read 2 of the 4 files and leave out 2", printed)
-            self.assertIn(
-                "The ones left out are: b-also-huge.md (%s), "
-                "pricing-notes.txt (%s)." % (REAL_TODAY, REAL_TODAY),
+                "This draft will read 2 of the 4 files on your list and leave "
+                "out 2: b-also-huge.md (%s), pricing-notes.txt (%s)."
+                % (REAL_TODAY, REAL_TODAY),
                 printed,
             )
-            self.assertIn(
-                "Tell me which files or which folder matter most for this "
-                "document and I will draft from those instead.",
-                printed,
-            )
+            self.assertIn(constants.PREVIEW_WHY_LIMITED, printed)
+            # A plain yes is still asked whether to narrow it (ruling 2).
+            self.assertIn("choice=plain-yes", printed)
+            self.assertIn(constants.PREVIEW_NARROW_ASK_SOME, printed)
+            self.assertNotIn("Your folder holds more than one draft", printed)
 
-    def test_the_same_sentence_is_what_assemble_prints(self):
+    def test_nothing_left_out_says_so_and_gives_no_reason(self):
+        with support.Sandbox() as sandbox:
+            setup = SetupRun(sandbox)
+            setup.agree_to_the_list()
+
+            printed = self.preview(setup.run).stdout.decode("utf-8")
+
+            self.assertIn(
+                constants.PREVIEW_READS_ALL % {"read": 2}, printed
+            )
+            self.assertNotIn(constants.PREVIEW_WHY_LIMITED, printed)
+            self.assertIn(constants.PREVIEW_NARROW_ASK_ALL, printed)
+
+    def test_assemble_asks_nothing_the_preview_already_asked(self):
+        """The preview asks; the request that follows it says nothing again."""
         with support.Sandbox() as sandbox:
             import sys
 
@@ -2079,10 +2095,9 @@ class TestThePreviewBeforeEachDraft(unittest.TestCase):
             printed = finished.stdout.decode("utf-8")
 
             self.assertEqual(0, finished.returncode, finished.stderr)
-            self.assertIn(
-                "Your folder holds more than one draft can read at once.", printed
-            )
             self.assertIn('dropped="b-also-huge.md (%s)"' % REAL_TODAY, printed)
+            self.assertNotIn(constants.PREVIEW_NARROW_ASK_SOME, printed)
+            self.assertNotIn(constants.PREVIEW_WHY_LIMITED, printed)
 
     def test_the_old_sentence_about_dropped_sources_is_gone_from_the_tree(self):
         """It said what happened and never said what to do about it."""
@@ -2463,7 +2478,9 @@ class TestThePlacesAreProposedBeforeTheList(unittest.TestCase):
             self.assertEqual(
                 ["marketing", ".", "other-co"], join_flow.load_survey(run)["places"]
             )
-            self.assertIn("thin:engineering", join_flow.load_survey(run)["notes"])
+            self.assertIn(
+                "plans-alone:engineering", join_flow.load_survey(run)["notes"]
+            )
 
     def test_the_list_covers_only_the_places_that_were_proposed(self):
         with support.Sandbox():
@@ -2578,7 +2595,7 @@ class TestThePlacesAreProposedBeforeTheList(unittest.TestCase):
                 "persona=1 positioning=2",
                 printed,
             )
-            self.assertIn("note=thin:engineering", printed)
+            self.assertIn("note=plans-alone:engineering", printed)
 
     def test_the_script_lists_the_places_with_the_changes_and_takes_the_yes(self):
         with support.Sandbox():
@@ -2653,6 +2670,598 @@ class TestThePlacesAreProposedBeforeTheList(unittest.TestCase):
                 {"customer-profile": 1}, found.places[0].counts_by_kind
             )
             self.assertNotIn(constants.SOURCE_FENCE_FOOTER, found.sentence())
+
+
+# --- Unit 1.6: selection fixes ------------------------------------------------
+
+
+def set_day(path, day):
+    """Give a file a modification date, the way a person's editor would."""
+    stamp = datetime.datetime(day.year, day.month, day.day, 12, 0).timestamp()
+    os.utime(path, (stamp, stamp))
+
+
+def run_join(*arguments):
+    """Run the join script the way the assistant runs it."""
+    import sys
+
+    return subprocess.run(
+        [sys.executable, SHIM] + list(arguments),
+        env=dict(os.environ),
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+    )
+
+
+def four_marketing_folders():
+    """A company folder like the third real run's: four marketing places.
+
+    Each of the four holds a profile, a persona, or a positioning file among
+    a dozen documents, so the four together are more files, across more
+    folders, than a list anybody reads through, and an engineering folder
+    holding a plan sits beside them.
+    """
+    content = os.path.join(os.environ["HOME"], "company")
+    for folder, anchor in (
+        ("brand", "positioning.md"),
+        ("customers", "icp.md"),
+        ("personas", "persona-ops.md"),
+        ("sales", "pitch.md"),
+    ):
+        support.write(
+            os.path.join(content, folder, anchor), "# %s\n\nWritten down.\n" % anchor
+        )
+        for number in range(11):
+            support.write(
+                os.path.join(content, folder, "%s-segment-%d.md" % (folder, number)),
+                "# Segment %d\n\nWho this is for.\n" % number,
+            )
+    support.write(
+        os.path.join(content, "engineering", "deploy-plan.md"), "# Deploy plan\n"
+    )
+    support.write(os.path.join(content, "engineering", "schema.md"), "# Tables\n")
+    return content
+
+
+class TestAnExplicitChoiceIsHonoredOnce(unittest.TestCase):
+    """Requirement P25: a plain yes and an explicit choice are told apart.
+
+    The third real run named four folders and was asked to narrow them again,
+    because a list of forty-eight files across four folders looked like a
+    whole working repository to the backstop. Folders somebody named are not
+    asked about again; a plain yes to the same proposal still is.
+    """
+
+    def places(self, run):
+        return join_flow.load_survey(run)["places"]
+
+    def test_four_named_folders_are_not_narrowed_again(self):
+        with support.Sandbox():
+            content = four_marketing_folders()
+            run = join_flow.new_run(TODAY)
+            join_flow.survey_sources(run, content, today=TODAY)
+            four = self.places(run)
+            self.assertEqual(4, len(four))
+            self.assertNotIn("engineering", four)
+
+            listing = join_flow.list_sources(
+                content, run, today=TODAY, from_survey=True, kept=four
+            )
+            consent = join_flow.freeze_sources(content, SESSION, run, today=TODAY)
+
+            self.assertNotIn(sources_module.CODE_NARROW_FIRST, listing.codes)
+            self.assertEqual(48, len(consent.paths))
+            shown = join_flow.load_listing(run)
+            self.assertEqual(constants.CHOICE_EXPLICIT, shown["choice"])
+            self.assertFalse(shown["narrow_first"])
+            self.assertEqual(sorted(four), shown["named"])
+            self.assertEqual(
+                constants.CHOICE_EXPLICIT, join_flow.consent_choice(run)
+            )
+
+    def test_the_script_confirms_a_named_list_with_a_plain_count(self):
+        with support.Sandbox():
+            content = four_marketing_folders()
+            run = join_flow.new_run(TODAY)
+            surveyed = run_join("survey", "--folder", content, "--run", run)
+            self.assertEqual(0, surveyed.returncode, surveyed.stderr)
+
+            listed = run_join(
+                "list-sources", "--folder", content, "--run", run,
+                "--from-survey", "--keep", "1", "--keep", "2",
+                "--keep", "3", "--keep", "4",
+            )
+            printed = listed.stdout.decode("utf-8")
+
+            self.assertEqual(0, listed.returncode, listed.stderr)
+            self.assertIn("choice=explicit", printed)
+            self.assertIn("That is 48 files in the 4 folders you named.", printed)
+            self.assertNotIn("That folder holds", printed)
+            self.assertNotIn("note=narrow-first", printed)
+            frozen = run_join(
+                "freeze-sources", "--folder", content, "--session", SESSION,
+                "--run", run,
+            )
+            self.assertEqual(0, frozen.returncode, frozen.stderr)
+            self.assertIn("frozen=48", frozen.stdout.decode("utf-8"))
+
+    def test_a_plain_yes_to_the_same_four_is_a_plain_yes_and_is_narrowed(self):
+        """The backstop still applies to a plain yes, and asks exactly once."""
+        with support.Sandbox():
+            content = four_marketing_folders()
+            run = join_flow.new_run(TODAY)
+            join_flow.survey_sources(run, content, today=TODAY)
+
+            listing = join_flow.list_sources(
+                content, run, today=TODAY, from_survey=True
+            )
+
+            self.assertIn(sources_module.CODE_NARROW_FIRST, listing.codes)
+            self.assertEqual(
+                constants.CHOICE_PLAIN_YES, join_flow.load_listing(run)["choice"]
+            )
+            with self.assertRaises(ConsentError) as caught:
+                join_flow.freeze_sources(content, SESSION, run, today=TODAY)
+            self.assertEqual(join_flow.CODE_NARROW_FIRST, caught.exception.code)
+
+            # The one narrowing question is answered by naming folders, and
+            # the list that comes back is theirs, so it is not asked again.
+            narrowed = join_flow.list_sources(
+                content, run, today=TODAY, only_folders=["brand", "customers",
+                                                        "personas", "sales"]
+            )
+            consent = join_flow.freeze_sources(content, SESSION, run, today=TODAY)
+
+            self.assertNotIn(sources_module.CODE_NARROW_FIRST, narrowed.codes)
+            self.assertEqual(48, len(consent.paths))
+            self.assertEqual(
+                constants.CHOICE_EXPLICIT, join_flow.consent_choice(run)
+            )
+
+    def test_the_script_asks_the_narrowing_question_after_a_plain_yes(self):
+        with support.Sandbox():
+            content = four_marketing_folders()
+            run = join_flow.new_run(TODAY)
+            run_join("survey", "--folder", content, "--run", run)
+
+            listed = run_join(
+                "list-sources", "--folder", content, "--run", run, "--from-survey"
+            )
+            printed = listed.stdout.decode("utf-8")
+
+            self.assertEqual(0, listed.returncode, listed.stderr)
+            self.assertIn("choice=plain-yes", printed)
+            self.assertIn(
+                constants.CONSENT_NARROW_SENTENCE % {"files": 48, "folders": 4},
+                printed,
+            )
+            self.assertNotIn("you named", printed)
+            self.assertIn(
+                "folder=brand number=1 count=12 mostly=\"customer profiles\"",
+                printed,
+            )
+
+    def test_a_drop_alone_is_still_a_plain_yes(self):
+        """Dropping one of the proposed places leaves the rest as proposed."""
+        with support.Sandbox():
+            content = four_marketing_folders()
+            run = join_flow.new_run(TODAY)
+            join_flow.survey_sources(run, content, today=TODAY)
+
+            join_flow.list_sources(
+                content, run, today=TODAY, from_survey=True, dropped=["sales"]
+            )
+
+            self.assertEqual(
+                constants.CHOICE_PLAIN_YES, join_flow.load_listing(run)["choice"]
+            )
+
+    def test_a_standalone_plans_folder_added_by_name_is_an_explicit_inclusion(self):
+        with support.Sandbox():
+            content = os.path.join(os.environ["HOME"], "company")
+            support.write(
+                os.path.join(content, "marketing", "icp.md"), "# Ideal customer\n"
+            )
+            support.write(
+                os.path.join(content, "Plans", "q3-plan.md"), "# Third quarter plan\n"
+            )
+            support.write(
+                os.path.join(content, "Plans", "okrs.md"), "# Goals for the year\n"
+            )
+            run = join_flow.new_run(TODAY)
+            found = join_flow.survey_sources(run, content, today=TODAY)
+            self.assertEqual(["marketing"], [p.relative_folder for p in found.places])
+
+            listing = join_flow.list_sources(
+                content, run, today=TODAY, from_survey=True, added=["Plans"]
+            )
+            join_flow.freeze_sources(content, SESSION, run, today=TODAY)
+
+            self.assertEqual(2, listing.by_folder["Plans"])
+            written = join_flow._consent_payload(run)
+            self.assertEqual(["Plans"], written["named"])
+            self.assertEqual(["Plans"], written["added"])
+            # The proposed marketing folder was only let stand, so the list
+            # as a whole is still a plain yes.
+            self.assertEqual(constants.CHOICE_PLAIN_YES, written["choice"])
+
+    def test_the_places_to_use_and_the_ones_to_add_together_are_explicit(self):
+        with support.Sandbox():
+            content = os.path.join(os.environ["HOME"], "company")
+            support.write(
+                os.path.join(content, "marketing", "icp.md"), "# Ideal customer\n"
+            )
+            support.write(
+                os.path.join(content, "brand", "voice.md"), "# How we sound\n"
+            )
+            support.write(
+                os.path.join(content, "Plans", "q3-plan.md"), "# Third quarter plan\n"
+            )
+            run = join_flow.new_run(TODAY)
+            join_flow.survey_sources(run, content, today=TODAY)
+
+            listing = join_flow.list_sources(
+                content, run, today=TODAY, from_survey=True,
+                kept=["marketing"], added=["Plans"],
+            )
+
+            self.assertEqual({"marketing": 1, "Plans": 1}, listing.by_folder)
+            self.assertEqual(
+                constants.CHOICE_EXPLICIT, join_flow.load_listing(run)["choice"]
+            )
+
+    def test_a_place_to_use_that_was_never_proposed_is_refused(self):
+        with support.Sandbox():
+            content = four_marketing_folders()
+            run = join_flow.new_run(TODAY)
+            join_flow.survey_sources(run, content, today=TODAY)
+
+            with self.assertRaises(ConsentError) as caught:
+                join_flow.list_sources(
+                    content, run, today=TODAY, from_survey=True,
+                    kept=["engineering"],
+                )
+
+            self.assertEqual(join_flow.CODE_NO_SUCH_FOLDER, caught.exception.code)
+
+    def test_a_place_number_past_the_end_is_refused_by_the_script(self):
+        with support.Sandbox():
+            content = four_marketing_folders()
+            run = join_flow.new_run(TODAY)
+            run_join("survey", "--folder", content, "--run", run)
+
+            listed = run_join(
+                "list-sources", "--folder", content, "--run", run,
+                "--from-survey", "--keep", "9",
+            )
+
+            self.assertEqual(1, listed.returncode)
+            self.assertIn(
+                "not one of the numbers beside the folders",
+                listed.stdout.decode("utf-8"),
+            )
+
+
+class TestAChangedListAsksAgain(unittest.TestCase):
+    """P25: a changed list is asked about again, and an old yes is not reused."""
+
+    def company(self):
+        content = os.path.join(os.environ["HOME"], "company")
+        support.write(
+            os.path.join(content, "marketing", "icp.md"),
+            "# Ideal customer profile\n\nSmall teams.\n",
+        )
+        support.write(
+            os.path.join(content, "brand", "positioning.md"),
+            "# Positioning\n\nWe win on setup time.\n",
+        )
+        return content
+
+    def test_a_list_changed_between_the_survey_and_the_yes_is_the_one_frozen(self):
+        with support.Sandbox():
+            content = self.company()
+            run = join_flow.new_run(TODAY)
+            join_flow.survey_sources(run, content, today=TODAY)
+            first = join_flow.list_sources(content, run, today=TODAY, from_survey=True)
+            self.assertEqual(2, len(first.readable))
+
+            join_flow.list_sources(
+                content, run, today=TODAY, from_survey=True, dropped=["brand"]
+            )
+            consent = join_flow.freeze_sources(content, SESSION, run, today=TODAY)
+
+            self.assertEqual(
+                ["icp.md"], [os.path.basename(path) for path in consent.paths]
+            )
+
+    def test_a_list_shown_after_the_yes_stops_the_reading_until_asked_again(self):
+        with support.Sandbox():
+            content = self.company()
+            run = join_flow.new_run(TODAY)
+            join_flow.survey_sources(run, content, today=TODAY)
+            join_flow.list_sources(
+                content, run, today=TODAY, from_survey=True, dropped=["brand"]
+            )
+            join_flow.freeze_sources(content, SESSION, run, today=TODAY)
+            self.assertEqual(
+                1, len(join_flow.preview_step(run, "icp", today=TODAY).included_labels)
+            )
+
+            join_flow.list_sources(content, run, today=TODAY, from_survey=True)
+
+            with self.assertRaises(ConsentError) as caught:
+                join_flow.preview_step(run, "icp", today=TODAY)
+            self.assertEqual(join_flow.CODE_ASK_AGAIN, caught.exception.code)
+            with self.assertRaises(ConsentError):
+                join_flow.assemble_step("icp", run, "Acme", EMAIL, today=TODAY)
+
+            join_flow.freeze_sources(content, SESSION, run, today=TODAY)
+            self.assertEqual(
+                2, len(join_flow.preview_step(run, "icp", today=TODAY).included_labels)
+            )
+
+    def test_the_same_list_shown_again_keeps_its_yes(self):
+        with support.Sandbox():
+            content = self.company()
+            run = join_flow.new_run(TODAY)
+            join_flow.survey_sources(run, content, today=TODAY)
+            join_flow.list_sources(content, run, today=TODAY, from_survey=True)
+            join_flow.freeze_sources(content, SESSION, run, today=TODAY)
+
+            join_flow.list_sources(content, run, today=TODAY, from_survey=True)
+
+            self.assertEqual(
+                2, len(join_flow.preview_step(run, "icp", today=TODAY).included_labels)
+            )
+
+    def test_the_script_says_to_ask_again(self):
+        with support.Sandbox():
+            content = self.company()
+            run = join_flow.new_run(TODAY)
+            join_flow.survey_sources(run, content, today=TODAY)
+            join_flow.list_sources(
+                content, run, today=TODAY, from_survey=True, dropped=["brand"]
+            )
+            join_flow.freeze_sources(content, SESSION, run, today=TODAY)
+            join_flow.list_sources(content, run, today=TODAY, from_survey=True)
+
+            previewed = run_join("preview", "--step", "icp", "--run", run)
+            printed = previewed.stdout.decode("utf-8")
+
+            self.assertEqual(1, previewed.returncode)
+            self.assertIn("codes=asks-again", printed)
+            self.assertIn("A different list was shown after the yes", printed)
+            self.assertNotIn("going-in=", printed)
+
+
+class TestThePreviewAsksToNarrowOnlyAfterAPlainYes(unittest.TestCase):
+    """Ruling 2: after an explicit choice no draft is preceded by a narrowing ask."""
+
+    def test_after_named_folders_the_preview_asks_nothing(self):
+        with support.Sandbox():
+            content = four_marketing_folders()
+            run = join_flow.new_run(TODAY)
+            join_flow.survey_sources(run, content, today=TODAY)
+            join_flow.list_sources(
+                content, run, today=TODAY, from_survey=True,
+                kept=join_flow.load_survey(run)["places"],
+            )
+            join_flow.freeze_sources(content, SESSION, run, today=TODAY)
+
+            for step in ("icp", "positioning"):
+                printed = run_join(
+                    "preview", "--step", step, "--run", run
+                ).stdout.decode("utf-8")
+
+                self.assertIn("choice=explicit", printed)
+                self.assertIn(
+                    constants.PREVIEW_READS_ALL % {"read": 48}, printed
+                )
+                self.assertNotIn(constants.PREVIEW_NARROW_ASK_ALL, printed)
+                self.assertNotIn(constants.PREVIEW_NARROW_ASK_SOME, printed)
+
+    def test_after_a_plain_yes_the_preview_still_asks(self):
+        with support.Sandbox() as sandbox:
+            setup = SetupRun(sandbox)
+            setup.agree_to_the_list()
+
+            for step in ("icp", "positioning"):
+                printed = run_join(
+                    "preview", "--step", step, "--run", setup.run
+                ).stdout.decode("utf-8")
+
+                self.assertIn("choice=plain-yes", printed)
+                self.assertIn(constants.PREVIEW_NARROW_ASK_ALL, printed)
+
+
+class TestVersionsOfOneDocumentInADraft(unittest.TestCase):
+    """P26: one version of a document is read, and the others are said aloud."""
+
+    def material(self, older_body, final_body):
+        content = os.path.join(os.environ["HOME"], "company")
+        support.write(
+            os.path.join(content, "marketing", "icp.md"), "# Ideal customer\n\nTeams.\n"
+        )
+        newer = support.write(
+            os.path.join(content, "marketing", "positioning.md"), older_body
+        )
+        final = support.write(
+            os.path.join(content, "marketing", "positioning.final.md"), final_body
+        )
+        set_day(final, datetime.date(2026, 8, 1))
+        set_day(newer, datetime.date(2026, 9, 1))
+        return content
+
+    def agreed(self, content):
+        run = join_flow.new_run(TODAY)
+        join_flow.survey_sources(run, content, today=TODAY)
+        join_flow.list_sources(content, run, today=TODAY, from_survey=True)
+        join_flow.freeze_sources(content, SESSION, run, today=TODAY)
+        return run
+
+    def test_the_final_version_is_read_and_the_newer_sibling_is_said_aloud(self):
+        with support.Sandbox():
+            same = "# Positioning\n\nWe win on setup time.\n"
+            run = self.agreed(self.material(same, same))
+
+            previewed = join_flow.preview_step(run, "positioning", today=TODAY)
+            printed = run_join(
+                "preview", "--step", "positioning", "--run", run
+            ).stdout.decode("utf-8")
+
+            self.assertEqual(
+                ["positioning.final.md (2026-08-01)", "icp.md (%s)" % TODAY.isoformat()],
+                previewed.included_labels,
+            )
+            self.assertEqual(1, len(previewed.superseded))
+            self.assertEqual(3, previewed.total)
+            self.assertIn(
+                'left-out="positioning.md (2026-09-01)" reason=older-version',
+                printed,
+            )
+            self.assertIn(
+                constants.VERSION_NOT_USED_FINAL_OVER_NEWER
+                % {"older": "positioning.md", "winner": "positioning.final.md"},
+                printed,
+            )
+            # The two say the same thing, so there is no conflict to report.
+            self.assertNotIn("say different things", printed)
+
+    def test_two_versions_that_disagree_are_reported_as_a_conflict(self):
+        with support.Sandbox():
+            run = self.agreed(
+                self.material(
+                    "# Positioning\n\nWe win on price.\n",
+                    "# Positioning\n\nWe win on setup time.\n",
+                )
+            )
+
+            previewed = join_flow.preview_step(run, "positioning", today=TODAY)
+            printed = run_join(
+                "preview", "--step", "positioning", "--run", run
+            ).stdout.decode("utf-8")
+
+            self.assertTrue(previewed.superseded[0].differs)
+            self.assertIn(
+                constants.VERSION_CONFLICT
+                % {"older": "positioning.md", "winner": "positioning.final.md"},
+                printed,
+            )
+
+    def test_naming_only_the_older_version_uses_it(self):
+        """Narrowing only takes part of the agreed list, and never widens it."""
+        with support.Sandbox():
+            run = self.agreed(
+                self.material(
+                    "# Positioning\n\nWe win on price.\n",
+                    "# Positioning\n\nWe win on setup time.\n",
+                )
+            )
+            numbers = [
+                index
+                for index, path in enumerate(
+                    join_flow.load_consent(run).paths, start=1
+                )
+                if os.path.basename(path) == "positioning.md"
+            ]
+
+            previewed = join_flow.preview_step(
+                run, "positioning", today=TODAY, only_index=numbers
+            )
+
+            self.assertEqual(
+                ["positioning.md (2026-09-01)"], previewed.included_labels
+            )
+            self.assertEqual([], previewed.superseded)
+
+    def test_the_survey_only_groups_and_the_bodies_are_compared_after_the_yes(self):
+        with support.Sandbox():
+            content = self.material(
+                "# Positioning\n\nWe win on price.\n",
+                "# Positioning\n\nWe win on setup time.\n",
+            )
+            run = join_flow.new_run(TODAY)
+
+            found = join_flow.survey_sources(run, content, today=TODAY)
+
+            self.assertEqual(
+                [["marketing/positioning.final.md", "marketing/positioning.md"]],
+                found.version_sets,
+            )
+            printed = run_join(
+                "survey", "--folder", content, "--run", join_flow.new_run(TODAY)
+            ).stdout.decode("utf-8")
+            self.assertIn(
+                "version-set=marketing/positioning.final.md "
+                "other=marketing/positioning.md",
+                printed,
+            )
+            self.assertNotIn("say different things", printed)
+
+
+class TestThePreviewAndTheRequestReadTheSameFiles(unittest.TestCase):
+    """Integration: the preview says exactly what the request then reads."""
+
+    def test_the_labels_agree_for_every_narrowing(self):
+        with support.Sandbox():
+            content = os.path.join(os.environ["HOME"], "company")
+            support.write(
+                os.path.join(content, "marketing", "icp.md"), "# Ideal customer\n"
+            )
+            support.write(
+                os.path.join(content, "marketing", "icp-template.md"),
+                "# Ideal customer profile template\n",
+            )
+            support.write(
+                os.path.join(content, "marketing", "README.md"), "# This folder\n"
+            )
+            final = support.write(
+                os.path.join(content, "marketing", "positioning-final.md"),
+                "# Positioning\n\nSetup time.\n",
+            )
+            newer = support.write(
+                os.path.join(content, "marketing", "positioning.md"),
+                "# Positioning\n\nPrice.\n",
+            )
+            set_day(final, datetime.date(2026, 8, 1))
+            set_day(newer, datetime.date(2026, 9, 1))
+            support.write(
+                os.path.join(content, "brand", "voice.md"), "# How we sound\n"
+            )
+            run = join_flow.new_run(TODAY)
+            join_flow.survey_sources(run, content, today=TODAY)
+            join_flow.list_sources(content, run, today=TODAY, from_survey=True)
+            join_flow.freeze_sources(content, SESSION, run, today=TODAY)
+
+            for step in ("icp", "positioning"):
+                for narrowing in (
+                    {},
+                    {"only_folder": "marketing"},
+                    {"only_index": [1, 2, 3]},
+                ):
+                    with self.subTest(step=step, narrowing=narrowing):
+                        previewed = join_flow.preview_step(
+                            run, step, today=TODAY, **narrowing
+                        )
+                        assembled = join_flow.assemble_step(
+                            step, run, "Acme", EMAIL, today=TODAY, **narrowing
+                        )
+
+                        self.assertEqual(
+                            previewed.included_labels, assembled.included_labels
+                        )
+                        self.assertEqual(
+                            previewed.dropped_labels, assembled.dropped_labels
+                        )
+                        self.assertEqual(
+                            [item.older for item in previewed.superseded],
+                            [item.older for item in assembled.superseded],
+                        )
+            previewed = join_flow.preview_step(run, "icp", today=TODAY)
+            self.assertEqual(
+                ["README.md", "icp-template.md"],
+                [label.split(" (")[0] for label in previewed.included_labels][-2:],
+            )
 
 
 class TestAContactListIsNeverPartOfTheYes(unittest.TestCase):
@@ -2898,20 +3507,79 @@ class TestTheSkillIsPlainAndSaysWhatWillHappen(unittest.TestCase):
             step_five.index("scripts/join.py list-sources"),
         )
 
-    def test_the_consent_sentence_says_what_the_finding_step_looked_at(self):
+    def test_the_consent_is_three_short_lines_and_the_question(self):
+        """Ruling 1: the seven sentences become three lines and the question.
+
+        The three lines keep what the real runs taught. Only names and first
+        headings were looked at. The files are read and copied nowhere, not
+        into the base and not anywhere else, which is the 0.2.2 lesson: a
+        list offered for one yes reads as files about to be copied. And the
+        list is fixed on the yes, with nothing leaving the computer after it.
+        """
         text = support.read(os.path.join(SKILL_DIR, "SKILL.md"))
         step_five = text.split("### Step 5.")[1].split("### Step 6.")[0]
-        clause = (
-            "To find these places I looked only at file names and the first "
-            "heading of each document, and nothing else has been opened."
+        asks = re.findall(
+            r"<!-- ask -->\n(.*?)\n<!-- end ask -->", step_five, flags=re.DOTALL
         )
+        consent = [ask for ask in asks if "May I read these?" in ask]
+        self.assertEqual(1, len(consent), asks)
+        lines = consent[0].split("\n")
 
-        self.assertIn(clause, step_five)
-        self.assertLess(
-            step_five.index(clause),
-            step_five.index("May I read these?"),
+        self.assertEqual(
+            [
+                "To find these, I looked only at file names and first headings.",
+                "I will read these files, and I will not copy them anywhere, "
+                "not even into your base, or change them.",
+                "Once you say yes, this list is fixed, and nothing leaves this "
+                "computer for the rest of this session.",
+                "May I read these?",
+            ],
+            lines,
         )
-        self.assertEqual([], plain_language.find_banned(clause))
+        for line in lines:
+            self.assertLess(len(line.split()), 25, line)
+            self.assertEqual([], plain_language.find_banned(line))
+            self.assertEqual([], plain_language.find_dashes(line))
+        self.assertIn("read these files", lines[1])
+        self.assertIn("not copy them anywhere", lines[1])
+
+    def test_each_part_of_setting_up_asks_one_thing_and_says_what_it_is_for(self):
+        """Unit 1.6 clears its own entries on the exemption list.
+
+        Steps 5 and 6 were on it for opening with an order, for prose over the
+        cap, and for asking more than one thing. They are rewritten, split so
+        each part asks one thing, and held to all four checks with no excuse.
+        """
+        path = os.path.join(SKILL_DIR, "SKILL.md")
+        text = support.read(path)
+        titles = [step.title for step in plain_language.find_steps(text)]
+
+        for title in (
+            "Step 5. Where the material sits",
+            "Step 5b. A list too large to read through",
+            "Step 5c. The yes that fixes the list",
+            "Step 6. What each draft will read",
+            "Step 6b. The draft, whole",
+        ):
+            self.assertIn(title, titles)
+            for check in plain_language.CHECK_NAMES:
+                self.assertFalse(
+                    plain_language.is_exempt(path, check, title), (title, check)
+                )
+        self.assertEqual(
+            [],
+            [entry for entry in plain_language.EXEMPTIONS if entry.removed_by == "1.6"],
+        )
+        plain_language.assert_standard(self, path)
+
+    def test_after_an_explicit_choice_no_draft_is_preceded_by_a_narrowing_ask(self):
+        """Ruling 2: the per-draft narrowing ask is only for a plain yes."""
+        text = support.read(os.path.join(SKILL_DIR, "SKILL.md"))
+        step_six = text.split("### Step 6.")[1].split("### Step 6b.")[0]
+
+        self.assertIn("After `choice=explicit` there is no question.", step_six)
+        self.assertIn(constants.PREVIEW_NARROW_ASK_ALL, step_six)
+        self.assertIn(constants.PREVIEW_NARROW_ASK_SOME, " ".join(step_six.split()))
 
     def test_the_wording_about_the_narrowest_folder_is_gone(self):
         for path in (

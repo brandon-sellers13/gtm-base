@@ -750,7 +750,6 @@ PYTHON_SENTENCES = (
     ("constants", "SURVEY_SENTENCE"),
     ("constants", "SURVEY_ONE_PLACE_SENTENCE"),
     ("constants", "SURVEY_NOTHING_SENTENCE"),
-    ("constants", "DRAFT_TOO_MUCH_MATERIAL"),
     ("constants", "SHARING_NOTICE"),
     ("constants", "BACKUP_NOT_IN_THIS_RELEASE"),
     ("constants", "INVITE_NOT_IN_THIS_RELEASE"),
@@ -851,6 +850,21 @@ PYTHON_SENTENCES = (
     ("changes", "LAYOUT_RECORD_WHY"),
     ("changes", "MAP_WHERE_TODAY"),
     ("write_hook", "SKILLS_REFUSED"),
+    # Unit 1.6: the count after an explicit choice, the preview's count and
+    # the reason a draft reads a limited amount, the versions of a document,
+    # and the narrowing question asked only after a plain yes.
+    ("constants", "EXPLICIT_COUNT_SENTENCE"),
+    ("constants", "PREVIEW_READS_ALL"),
+    ("constants", "PREVIEW_READS_THE_ONE"),
+    ("constants", "PREVIEW_READS_SOME"),
+    ("constants", "PREVIEW_WHY_LIMITED"),
+    ("constants", "VERSION_NOT_USED_FINAL"),
+    ("constants", "VERSION_NOT_USED_FINAL_OVER_NEWER"),
+    ("constants", "VERSION_NOT_USED_NEWER"),
+    ("constants", "VERSION_NOT_USED_SAME_DAY"),
+    ("constants", "VERSION_CONFLICT"),
+    ("constants", "PREVIEW_NARROW_ASK_ALL"),
+    ("constants", "PREVIEW_NARROW_ASK_SOME"),
 )
 
 # Constants that read like a sentence but that no person ever reads. Each one
@@ -948,39 +962,6 @@ EXEMPTIONS = (
         "The step runs six plain prose lines before anything a person can "
         "read at a glance. No behavior unit of Phase 1 owns this step.",
         "1.8",
-    ),
-    Exemption(
-        _JOIN_SKILL,
-        "purpose",
-        "Step 5. What will be read, and the yes that fixes the list",
-        "The consent step opens with an order to run the survey. Unit 1.6 "
-        "rewrites this step under ruling 1 of the acceptance matrix.",
-        "1.6",
-    ),
-    Exemption(
-        _JOIN_SKILL,
-        "prose",
-        "Step 5. What will be read, and the yes that fixes the list",
-        "The consent paragraph runs to seven sentences before the question "
-        "arrives. Ruling 1 of the acceptance matrix cuts it to three short "
-        "lines and the question, in Unit 1.6.",
-        "1.6",
-    ),
-    Exemption(
-        _JOIN_SKILL,
-        "purpose",
-        "Step 6. The two drafts, one at a time",
-        "The drafting step opens with an order rather than with what the "
-        "step is for. Unit 1.6 rewrites this step under ruling 2.",
-        "1.6",
-    ),
-    Exemption(
-        _JOIN_SKILL,
-        "prose",
-        "Step 6. The two drafts, one at a time",
-        "The step carries several prose runs over the cap, including the "
-        "per-draft narrowing ask ruling 2 removes. Unit 1.6 owns it.",
-        "1.6",
     ),
 )
 

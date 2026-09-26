@@ -394,6 +394,63 @@ class TestEachStepReadsWhatItWantsFirst(unittest.TestCase):
         self.assertEqual(240000, constants.DRAFT_SOURCES_MAX_CHARS)
 
 
+class TestTemplatesAndReadMesGoLast(unittest.TestCase):
+    """Unit 1.6, P26: a template and a read-me are the first things the cap drops.
+
+    The third real run spent room on templates while a finished document sat
+    past the cap. A template carries the shape of a document and nothing of
+    the business, so it goes last whatever its name says it is about.
+    """
+
+    def test_a_template_and_a_readme_rank_last_for_every_step(self):
+        template = source("icp-template.md", "# Ideal customer profile\n")
+        readme = source("README.md", "# About this folder\n")
+        heading = source("brief.md", "# Launch brief template\n\nFill this in.\n")
+        profile = source("icp.md", "# Ideal customer profile\n")
+        other = source("office.md", "# Office move\n")
+
+        for step in (drafting.STEP_ICP, drafting.STEP_POSITIONING, drafting.STEP_CHANGE):
+            ordered = drafting.order_sources(
+                step, [template, readme, heading, profile, other]
+            )
+            self.assertEqual(
+                ["icp-template.md", "README.md", "brief.md"],
+                [item.label for item in ordered][-3:],
+                step,
+            )
+
+    def test_the_cap_drops_the_template_and_the_readme_first(self):
+        body = "Something the company wrote down.\n" * 8
+        named = [
+            source("README.md", body),
+            source("icp-template.md", body),
+            source("icp.md", body),
+            source("segments.md", body),
+        ]
+        one = len(sources.fence(named[0]))
+
+        with SmallCap(one * 2 + 10):
+            assembly = drafting.assemble(
+                drafting.STEP_ICP,
+                named,
+                "Acme",
+                TODAY.isoformat(),
+                EMAIL,
+                plugin_root=support.PLUGIN_DIR,
+            )
+
+        self.assertEqual(["icp.md", "segments.md"], labels_of(assembly))
+        self.assertEqual(
+            ["README.md", "icp-template.md"],
+            [label.split(" (")[0] for label in assembly.dropped_labels],
+        )
+
+    def test_a_file_that_only_mentions_a_readme_is_not_one(self):
+        notes = source("notes.md", "# How we onboard\n\nSee the readme.\n")
+
+        self.assertFalse(drafting.is_template_or_readme(notes))
+
+
 class TestTheCompanyNameIsCheckedBeforeItReachesARequest(unittest.TestCase):
     """join-08: the name went into the request exactly as it was typed.
 
