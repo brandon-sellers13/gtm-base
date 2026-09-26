@@ -95,3 +95,14 @@ Findings:
 
 What worked: plain words, the base's location and link stated correctly, nothing written.
 
+### Step 2 again, 2026-09-26, after Brandon confirmed he had quit and reopened Claude Code
+
+Brandon reran "review my base" in ~/Gridwise and expanded the commands. The session ran the stale-check skill, failed to run the review from ~/Gridwise with "This folder is not a company base you have joined yet", then went looking for the base (read how the base is resolved, listed and showed the linked folders), ran the review from inside the base, and ran a dry-run stale check. Its answer summarized rather than relayed, named raw file paths, and told Brandon the review "only runs from inside the base folder".
+
+Root causes, verified by Claude the same day with read-only checks against the installed 0.3.0:
+1. **Every skill script refuses the folder the person actually works in (blocking).** From ~/Gridwise, `paths.resolve_base` returns code `linked` with the base's root and id, but `joined` is False, and six scripts refuse unless `resolution.joined` is true: skills/stale-check/scripts/stale_check.py (line 185), skills/confirm/scripts/confirm.py, skills/propose-change/scripts/propose.py and approve_local.py, scripts/moment.py, and scripts/seat.py. Session start resolves the same folder correctly, which is why the base "wakes" but no command works. This also explains the first run's three failed commands. Every later step of this check that runs in ~/Gridwise (moment of use, hand edit, confirm) would hit it. The tests missed it because every script-level test and the skill walk run from inside the base, never from a linked folder.
+2. **The review never makes the update offer.** From inside the base, `stale_check.py --review --dry-run` printed only "Nothing in your base is due a look today, and no change is waiting for you to approve it.", while `--check-move` on the same base says "As things stand, GTM Base would offer this." Not yet known whether the review returns before reaching the offer when nothing is due, or whether a dry run skips it.
+3. The skills let the assistant summarize and add advice (raw paths, "the review only runs from inside the base folder", adding Q4 targets to the base, which contradicts targets staying in their tools). The skills should tell the assistant to relay the review's own sentences.
+
+Decision: the live check is paused at step 2 until finding 1 is fixed and released, because steps 3 to 7 all run in ~/Gridwise.
+

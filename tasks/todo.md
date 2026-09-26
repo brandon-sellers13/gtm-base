@@ -1265,3 +1265,9 @@ line it follows already names the document.
 - [ ] Brandon: calls 9 to 11.
 - [ ] Unit 1.5b, after the live check and before Unit 1.6.
 - [x] 2026-09-25 revision 2.3: Unit 1.5b widened to lay a base out by the five CLASS parts (calls 12 to 14 decided).
+
+### 2026-09-26, live check paused at step 2
+- [ ] Fix first: every skill script refuses a linked folder (`resolution.joined` required; a linked resolution carries root and id but joined False). Accept a linked resolution in all six scripts, and run every script-level test and the skill walk from a linked folder as well as from inside the base.
+- [ ] The review never makes the update offer that --check-move says it would make.
+- [ ] The skills tell the assistant to relay the review's sentences, not summarize or advise.
+- [ ] Release as 0.3.1, then Brandon resumes the live check at step 2.
