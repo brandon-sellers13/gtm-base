@@ -29,12 +29,14 @@ both later, and nothing asks you for them until the moment you want to back up
 or invite.
 
 Before you invite a second person, everybody who will open that base has to be
-on the current version of GTM Base. A base set up before the word for what it
-tracks was settled stores its context changes the older way, and GTM Base
-offers once to update them. Somebody running an older version reads an updated
-base as though it held nothing, so it would tell them nothing in their base is
-out of date at a moment when things really are. Updating everybody first costs
-nothing and avoids that entirely.
+on the current version of GTM Base. A base set up by an earlier version is laid
+out the older way, and when you ask GTM Base to review your base it offers once
+to move it to the current layout, which is described under "What your base
+holds" below. That one move takes the base all the way, whichever earlier
+version set it up. Somebody running an older version reads a moved base as
+though it held nothing, so it would tell them nothing in their base is out of
+date at a moment when things really are. Updating everybody first costs nothing
+and avoids that entirely.
 
 On a base nobody else can reach, GTM Base simply offers. On a base that has a
 copy other people could reach, it does not offer at all: it tells you the
@@ -43,11 +45,14 @@ version. Either way nothing is touched until you say so, and if you say not
 now it stops asking for a month.
 
 You can see exactly where you stand before deciding anything. Ask for a check
-of the update and GTM Base says what it would do, which of your context
-changes it would touch, and whether it would offer it at all. That reads your
-base and writes nothing, so it is safe to run whenever you like. If anything
-in your base would stop the update, it names the file rather than the problem
-in general, so you know where to look.
+of the move and GTM Base says what it would do, how many of your documents,
+context changes, and records it would move, and whether it would offer it at
+all. That reads your base and writes nothing, so it is safe to run whenever you
+like. If anything in your base would stop the move, it names the file rather
+than the problem in general, so you know where to look. The move never
+overwrites anything: if a second copy of a document already sits where the
+move would put it, and the two say different things, it stops and asks you
+which one is right.
 
 If an update ever stops partway, nothing is lost and nothing is left in a
 state only GTM Base understands. It either finishes where it stopped or puts
@@ -168,6 +173,20 @@ that finding is three short lines: what you confirmed and when, that nothing is
 recorded yet to check either document against, and when the base will ask you
 about them again. Once you have recorded something that changed, the finding
 tells you instead whether a document is now behind it.
+
+## What your base holds
+
+Your base is laid out by the five parts of the CLASS framework, so anyone who
+knows the framework can open it and find each part by the name of its folder.
+
+| Folder | What it holds |
+|---|---|
+| `context` | What is true about the business, one file for each subject: your goals, your product, your ideal customer profiles, your buyer personas, your positioning, your messaging, your voice, your design, and your metric definitions. Each customer segment gets its own file in `context/icps`. Setting a base up writes the first two of those, the ideal customer profile and the positioning, and the rest arrive later when you ask for them. |
+| `learning` | How the base gets better: one dated entry for each context change, and a record of what each approved fix changed and why. A third folder is kept for lessons from results, which arrive later. |
+| `access` | The source map, which says where your material lives, which tools read it, and where finished work is saved. It never holds a password, a key, or a token. |
+| `skills` | Kept empty for now. Until your team has settled who may approve a change to a skill, GTM Base refuses any file put there, however it arrives. |
+| `standards` | What good work looks like for each job, and what needs approval before it is used. |
+| `work` | The approvals: your confirmations that a document is still right, the notes you drop in for the assistant to read, and the changes being prepared for you. |
 
 ## Where the base lives
 

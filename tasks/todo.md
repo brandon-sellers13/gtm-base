@@ -1286,3 +1286,29 @@ line it follows already names the document.
 #### Review
 The linked folder was refused in six places for one reason, a check for a base joined in that very folder, and the tests could not see it because they all ran inside the base. The same tests now run from a linked folder, made with `machine.link_content` as the join skill makes one. A path inside the base given to `--staging` had the same blind spot and is fixed with it. The review's early return skipped the offer; it now makes it once in both modes. Not fixed here: the review's line for a prepared change hands the assistant the change's identifier, not a path, so the assistant has to build the path itself from the folder the skills name.
 Full suite after the change: 2016 tests OK in 739 seconds, then the second run from a linked folder, 99 tests OK in 98 seconds (tests/run.sh exit 0).
+
+### 2026-09-26, Unit 1.5b: the base laid out by the five CLASS parts
+Plan: docs/plans/2026-09-19-001-feat-base-that-produces-work-plan.md, Unit 1.5b (revision 2.3). Built on its own branch; not merged, not released.
+- [ ] Constants and one layout module: the new paths (`context/icps.md`, `context/positioning.md`, `learning/changes`, `learning/corrections`, `learning/lessons`, `access/stack.md`, `skills/`, `standards/`), the older ones kept read-only, and the one table from each older document path to its new one.
+- [ ] Read both layouts: entries from three folders, records from two, every path a change, a confirmation line, a record, a seat setting or a staged change names followed to where the document lives now; the two required documents found in either place.
+- [ ] Write one: setup, entries, records and the onboarding note go to the new paths; the change identifier setup works out stays the same.
+- [ ] `skills/` refused by the trust check (so by every pull), by the file-writing hook and by the check before a send; the empty folder and its placeholder allowed.
+- [ ] One offered move in "review my base" that takes a base on `work/decisions`, on `work/changes`, or half moved all the way to the current layout: `changes.py` generalized, not duplicated (a pure rename saved first, the settings rewrite second, the dated record third), with its recovery and read-back rules.
+- [ ] Both company-base templates, the skills and prompts, names for every new kind.
+- [ ] Tests: tests/test_context_standard.py for every scenario in the plan; tests naming old paths updated; the old-path lint.
+- [ ] Atlas figures 1 and 7, the roadmap, the join guide, the UX standard, a draft Unreleased CHANGELOG section.
+- [ ] Full suite, both runs.
+
+#### Progress and review, Unit 1.5b (2026-09-26)
+- [x] Constants and `layout.py`: the current paths, the older ones read only, and one table from each older document path to its new one.
+- [x] Both layouts read: entries from three folders, records from two (found where first added, across both names, and accepted by the change that last added or edited them, never by a rename), every path followed to where the document lives, both required documents found in either place, and a prepared change naming an older path followed in memory with the prepared file untouched.
+- [x] One layout written: setup, entries, records, the onboarding note; setup's change identifier seeded from the older profile path so a resumed run agrees; setup refuses to write a document already present at its other path.
+- [x] `skills/` refused by the trust check (so every pull and every open), the file-writing hook and the check before a send; the folder and its placeholder allowed.
+- [x] `changes.py` generalized: one offer, one move from `work/decisions`, `work/changes`, both, or a half-finished 0.3.x run; rename, then settings and the map paragraph (only when still the one GTM Base wrote), then the record; schema 2 note, schema 1 notes finished as 0.3.x would and carried on.
+- [x] Correctness review of the move (a subagent): note paths now limited to exactly what a run writes, older copies to take away that somebody edited are theirs, a 0.3.x rewrite-only note finishes, a failed save after something landed keeps its note, same-name-different-case destinations refused, acceptance query keeps every change but a rename. Each has a test.
+- [x] Templates, skills, prompts, names; atlas figures 1 and 7 (not republished); roadmap; join guide; UX standard; draft Unreleased CHANGELOG section.
+- [x] tests/test_context_standard.py (every plan scenario) and the old-path lint; tests naming old paths updated; a support helper names the profile in a prepared change the way the test bases hold it.
+- [ ] Brandon: the words listed in the hand-back report; then the live move of the Gridwise base through the offer.
+- [ ] Orchestrator: review, merge after the live check, version bump, atlas republish.
+
+Review: 1.4's move was generalized rather than a second one written, so the recovery rules Astra hardened carry over unchanged and all 168 of 1.4's migration tests pass against it. The worktree needed its ignored `work/inbox` and `work/proposals` template folders created by hand for tests/test_scaffold.py, because the template's own ignore file keeps their placeholders out of the repository; a fresh clone fails that test on main too.
