@@ -140,6 +140,10 @@ NOT_ON_THE_LIST = (
     "That is not on the list you agreed to, so nothing was read. Name one of "
     "the files or folders from that list instead."
 )
+ASK_AGAIN = (
+    "A different list was shown after the yes, so nothing was read. Ask for a "
+    "yes to the list as it is now before anything is drafted."
+)
 WILL_BE_LINKED = (
     "Your base will be linked to %s, so opening Claude Code in that folder "
     "brings the base with it."
@@ -345,6 +349,14 @@ def build_parser():
         help="the number of one place proposed to leave out, once per place",
     )
     parser.add_argument(
+        "--keep",
+        action="append",
+        default=[],
+        dest="kept",
+        help="the number of one place proposed that the person named to use, "
+        "once per place; every place not named is left out",
+    )
+    parser.add_argument(
         "--only-folder",
         action="append",
         default=[],
@@ -434,7 +446,21 @@ def dropped_places(options, out):
     for the same reason every other folder is (finding R9 of Astra's third
     look, which found the places still named by name).
     """
-    asked = [str(item).strip() for item in (options.dropped or []) if str(item).strip()]
+    return places_by_number(options.dropped, options, out)
+
+
+def kept_places(options, out):
+    """Which of the places the finding step proposed the person named to use.
+
+    Named by number, like a place dropped. Naming the places to use is an
+    explicit choice, which is not asked to be narrowed again (Unit 1.6).
+    """
+    return places_by_number(options.kept, options, out)
+
+
+def places_by_number(numbers, options, out):
+    """The proposed places a list of numbers means, or a refusal said once."""
+    asked = [str(item).strip() for item in (numbers or []) if str(item).strip()]
     if not asked:
         return [], True
     if not all(item.isdigit() for item in asked):
@@ -640,14 +666,29 @@ def run_survey(options, out):
             if place.counts_by_kind.get(kind)
         )
         out.write(
-            "place=%s number=%d score=%d%s\n"
+            "place=%s number=%d score=%d%s mostly=%s\n"
             % (
                 safe_value(place.relative_folder),
                 number,
                 place.score,
                 " " + counts if counts else "",
+                safe_value(place.mostly),
             )
         )
+    # Each file a place was proposed for, and each set of files whose names
+    # say they are versions of one document, for the assistant only. Nothing
+    # here was read past a name and a first heading (Unit 1.6).
+    for number, place in enumerate(found.places, start=1):
+        for relative, kind in place.candidates:
+            out.write(
+                "candidate=%s place=%d kind=%s\n"
+                % (safe_value(relative), number, safe_value(kind))
+            )
+    for group in found.version_sets:
+        for other in group[1:]:
+            out.write(
+                "version-set=%s other=%s\n" % (safe_value(group[0]), safe_value(other))
+            )
     for note in found.notes:
         line(out, "note", note)
     return EXIT_DONE
@@ -675,6 +716,9 @@ def run_list_sources(options, out):
     added, read = added_places(options, out)
     if not read:
         return EXIT_REFUSED
+    kept, read = kept_places(options, out)
+    if not read:
+        return EXIT_REFUSED
     try:
         listing = join_flow.list_sources(
             folder,
@@ -683,6 +727,7 @@ def run_list_sources(options, out):
             from_survey=options.from_survey,
             added=added,
             dropped=dropped,
+            kept=kept,
         )
     except ConsentError as refusal:
         sentence = LIST_REFUSALS.get(refusal.code)
@@ -703,11 +748,28 @@ def run_list_sources(options, out):
     # Every listing prints the folder numbers, in the order they are written
     # down, and so the order a number is taken back against. A small listing
     # printed none, and a narrowed one printed numbers that chose a folder it
-    # had just left out (finding R9 of Astra's third look).
+    # had just left out (finding R9 of Astra's third look). Each folder says
+    # what it mostly holds, from the paths of its files alone (Unit 1.6).
+    mostly = sources.folder_mostly(listing.root, listing.readable)
     for number, name in enumerate(join_flow.folders_in_order(listing), start=1):
         out.write(
-            "folder=%s number=%d count=%d\n"
-            % (safe_value(name), number, listing.by_folder[name])
+            "folder=%s number=%d count=%d mostly=%s\n"
+            % (
+                safe_value(name),
+                number,
+                listing.by_folder[name],
+                safe_value(mostly.get(name, constants.MOSTLY_OTHER_LABEL)),
+            )
+        )
+    shown = join_flow.load_listing(run_id) or {}
+    choice = shown.get("choice", constants.CHOICE_PLAIN_YES)
+    line(out, "choice", choice)
+    if choice == constants.CHOICE_EXPLICIT:
+        out.write(
+            explicit_count(
+                len(join_flow.files_in_order(listing)), len(listing.by_folder)
+            )
+            + "\n"
         )
     out.write("These are the files GTM Base would read.\n")
     # The number is what the skill names a file by later, because a file name
@@ -808,21 +870,80 @@ def say_removed(out, removed):
             out.write(sentence + "\n")
 
 
-def say_too_much(out, included_labels, dropped_labels, left_out):
-    """Say plainly that the folder holds more than one draft can read."""
-    if not dropped_labels:
-        return
-    total = len(included_labels) + len(dropped_labels) + len(left_out or [])
-    out.write(
-        constants.DRAFT_TOO_MUCH_MATERIAL
-        % {
-            "read": len(included_labels),
-            "total": total,
-            "left": len(dropped_labels),
-            "labels": ", ".join(plain_value(label) for label in dropped_labels),
+def explicit_count(files, folders):
+    """The count a person confirms after naming their folders themselves."""
+    return constants.EXPLICIT_COUNT_SENTENCE % {
+        "files": "1 file" if files == 1 else "%d files" % files,
+        "folders": "folder" if folders == 1 else "%d folders" % folders,
+    }
+
+
+# Which sentence says why one version of a document was not used.
+VERSION_SENTENCES = {
+    join_flow.VersionLeftOut.FINAL: constants.VERSION_NOT_USED_FINAL,
+    join_flow.VersionLeftOut.FINAL_OVER_NEWER: constants.VERSION_NOT_USED_FINAL_OVER_NEWER,
+    join_flow.VersionLeftOut.NEWER: constants.VERSION_NOT_USED_NEWER,
+    join_flow.VersionLeftOut.SAME_DAY: constants.VERSION_NOT_USED_SAME_DAY,
+}
+
+
+def say_versions(out, superseded):
+    """Say which version of each document was left out and why, and any conflict.
+
+    Unit 1.6: a version is never left out in silence, and two versions that
+    say different things are said to, rather than one quietly chosen.
+    """
+    for version in superseded or ():
+        names = {
+            "older": plain_value(version.older),
+            "winner": plain_value(version.winner),
         }
-        + "\n"
+        out.write(VERSION_SENTENCES[version.reason] % names + "\n")
+        if version.differs:
+            out.write(constants.VERSION_CONFLICT % names + "\n")
+
+
+def say_how_much(out, previewed):
+    """Say how much this draft reads, what it leaves out, and why at all.
+
+    The person hears the count every time. When the cap left anything out,
+    they hear why a draft reads a limited amount at all, which the preview
+    never used to say. Only a plain yes is then asked whether to narrow it;
+    folders the person named are not asked about again (ruling 2).
+    """
+    read = len(previewed.included_labels)
+    left = (
+        list(previewed.dropped_labels)
+        + [label for label, _reason in previewed.left_out]
+        + [version.older_line for version in previewed.superseded]
     )
+    if left:
+        out.write(
+            constants.PREVIEW_READS_SOME
+            % {
+                "read": read,
+                "total": previewed.total,
+                "left": len(left),
+                "labels": ", ".join(plain_value(label) for label in left),
+            }
+            + "\n"
+        )
+    elif read == 0:
+        # Nothing was named for this draft at all, so there is no count to
+        # say, and the step after this says there is nothing to draft from.
+        return
+    elif read == 1:
+        out.write(constants.PREVIEW_READS_THE_ONE + "\n")
+    else:
+        out.write(constants.PREVIEW_READS_ALL % {"read": read} + "\n")
+    if previewed.dropped_labels:
+        out.write(constants.PREVIEW_WHY_LIMITED + "\n")
+    say_versions(out, previewed.superseded)
+    if previewed.choice != constants.CHOICE_EXPLICIT:
+        if previewed.dropped_labels:
+            out.write(constants.PREVIEW_NARROW_ASK_SOME + "\n")
+        else:
+            out.write(constants.PREVIEW_NARROW_ASK_ALL + "\n")
 
 
 def narrowing(options, out):
@@ -846,6 +967,33 @@ def narrowing(options, out):
     return numbers, folders or None, True
 
 
+def a_reading_refusal(refusal, out):
+    """Say one of the two refusals a draft's reading can meet, or say nothing.
+
+    Returns whether it said one. A number or folder that is not on the agreed
+    list is one; a different list shown after the yes is the other, and it
+    stops everything until that list has a yes of its own (Unit 1.6).
+    """
+    sentence = {
+        join_flow.CODE_NOT_CONSENTED: NOT_ON_THE_LIST,
+        join_flow.CODE_ASK_AGAIN: ASK_AGAIN,
+    }.get(refusal.code)
+    if sentence is None:
+        return False
+    line(out, "codes", refusal.code)
+    out.write(sentence + "\n")
+    return True
+
+
+def say_older_versions(out, superseded):
+    """One line for the assistant for each version a draft leaves out."""
+    for version in superseded or ():
+        out.write(
+            "left-out=%s reason=%s\n"
+            % (safe_value(version.older_line), safe_value(constants.REASON_OLDER_VERSION))
+        )
+
+
 def run_preview(options, out):
     step = need(options, "step", out)
     run_id = need(options, "run", out)
@@ -863,17 +1011,18 @@ def run_preview(options, out):
             only_folder=only_folder,
         )
     except ConsentError as refusal:
-        if refusal.code != join_flow.CODE_NOT_CONSENTED:
+        if not a_reading_refusal(refusal, out):
             raise
-        line(out, "codes", refusal.code)
-        out.write(NOT_ON_THE_LIST + "\n")
         return EXIT_REFUSED
     line(out, "step", previewed.step)
+    line(out, "choice", previewed.choice)
     line(out, "going-in", len(previewed.included_labels))
     line(
         out,
         "left-out-count",
-        len(previewed.dropped_labels) + len(previewed.left_out),
+        len(previewed.dropped_labels)
+        + len(previewed.left_out)
+        + len(previewed.superseded),
     )
     line(out, "total", previewed.total)
     for label in previewed.included_labels[:PREVIEW_LABELS_SHOWN]:
@@ -888,15 +1037,11 @@ def run_preview(options, out):
             "left-out=%s reason=%s\n"
             % (safe_value(label), safe_value(REASON_UNUSABLE % reason))
         )
+    say_older_versions(out, previewed.superseded)
     for code in previewed.codes:
         line(out, "note", code)
     say_removed(out, previewed.removed)
-    say_too_much(
-        out,
-        previewed.included_labels,
-        previewed.dropped_labels,
-        previewed.left_out,
-    )
+    say_how_much(out, previewed)
     return EXIT_DONE
 
 
@@ -920,10 +1065,8 @@ def run_assemble(options, out):
             only_folder=only_folder,
         )
     except ConsentError as refusal:
-        if refusal.code != join_flow.CODE_NOT_CONSENTED:
+        if not a_reading_refusal(refusal, out):
             raise
-        line(out, "codes", refusal.code)
-        out.write(NOT_ON_THE_LIST + "\n")
         return EXIT_REFUSED
     except DraftError as refusal:
         if refusal.code != drafting.CODE_NO_SOURCES:
@@ -938,16 +1081,14 @@ def run_assemble(options, out):
         line(out, "included", label)
     for label in assembled.dropped_labels:
         line(out, "dropped", label)
+    say_older_versions(out, assembled.superseded)
     for code in assembled.codes:
         line(out, "note", code)
     say_left_out(out, assembled.left_out)
     say_removed(out, assembled.removed)
-    say_too_much(
-        out,
-        assembled.included_labels,
-        assembled.dropped_labels,
-        assembled.left_out,
-    )
+    # The count, the reason, and any narrowing question were said at the
+    # preview, and the person has answered them by now. Saying them again here
+    # asked a second time what had just been settled (Unit 1.6).
     return EXIT_DONE
 
 

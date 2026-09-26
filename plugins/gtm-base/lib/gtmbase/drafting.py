@@ -267,8 +267,15 @@ def order_sources(step: str, sources: Sequence["sources_module.Source"]):
     was reached, and every one of the fourteen files describing who the company
     sells to sat past it while the profile was drafted from one file about
     messaging.
+
+    Templates and read-me files go last of all, whatever step it is and
+    whatever their names say they are about (Unit 1.6). The third real run
+    spent room on templates while a finished document sat past the cap, and a
+    template is the shape of a document with nothing of the business in it,
+    so it is the first thing the cap should reach.
     """
-    listed = list(sources)
+    listed = [source for source in sources if not is_template_or_readme(source)]
+    last = [source for source in sources if is_template_or_readme(source)]
     if step == STEP_CHANGE:
         # What a context change wants first is the most recent material, so
         # the dated sources lead, newest first, and the undated follow in the
@@ -276,13 +283,23 @@ def order_sources(step: str, sources: Sequence["sources_module.Source"]):
         dated = [source for source in listed if getattr(source, "date", None)]
         undated = [source for source in listed if not getattr(source, "date", None)]
         dated.sort(key=lambda source: str(source.date), reverse=True)
-        return dated + undated
+        return dated + undated + last
     words = constants.DRAFT_RELEVANCE.get(step, ())
     if not words:
-        return listed
+        return listed + last
     wanted = [source for source in listed if _is_wanted_first(source, words)]
     rest = [source for source in listed if not _is_wanted_first(source, words)]
-    return wanted + rest
+    return wanted + rest + last
+
+
+def is_template_or_readme(source) -> bool:
+    """Whether a source is a template or a read-me, by its name or first heading."""
+    label = str(getattr(source, "label", "") or "").casefold()
+    stem = os.path.splitext(label)[0].strip()
+    if any(stem.startswith(name) for name in constants.DRAFT_LAST_NAMES):
+        return True
+    where = label + " " + _first_heading(source).casefold()
+    return any(word in where for word in constants.DRAFT_LAST_WORDS)
 
 
 def plan_sources(step: str, sources: Sequence["sources_module.Source"]) -> SourcePlan:

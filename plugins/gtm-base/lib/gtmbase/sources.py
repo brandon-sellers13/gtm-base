@@ -573,15 +573,39 @@ def _company_reading(readable: Sequence[Entry], root: str):
 
 
 class Place(object):
-    """One folder that looks like it holds marketing material, and why."""
+    """One folder that looks like it holds marketing material, and why.
 
-    __slots__ = ("relative_folder", "counts_by_kind", "sample_labels", "score")
+    `mostly` is what most of its files are, judged by their paths alone and in
+    the words a person uses, so the folder table can say what a folder mostly
+    holds without anything in it having been read. `candidates` is each file
+    the place was proposed for, as its path inside the folder that was named
+    and the kind its name or heading gave it (Unit 1.6).
+    """
 
-    def __init__(self, relative_folder, counts_by_kind, sample_labels, score):
+    __slots__ = (
+        "relative_folder",
+        "counts_by_kind",
+        "sample_labels",
+        "score",
+        "mostly",
+        "candidates",
+    )
+
+    def __init__(
+        self,
+        relative_folder,
+        counts_by_kind,
+        sample_labels,
+        score,
+        mostly=None,
+        candidates=None,
+    ):
         self.relative_folder = relative_folder
         self.counts_by_kind = dict(counts_by_kind)
         self.sample_labels = list(sample_labels)
         self.score = int(score)
+        self.mostly = mostly or constants.MOSTLY_OTHER_LABEL
+        self.candidates = list(candidates or [])
 
     def __repr__(self) -> str:
         return "Place(folder=%r, score=%d)" % (self.relative_folder, self.score)
@@ -596,13 +620,19 @@ class Survey(object):
     The person confirms, adds, or drops, and only then is a list shown.
     """
 
-    __slots__ = ("root", "places", "skipped_counts", "notes")
+    __slots__ = ("root", "places", "skipped_counts", "notes", "version_sets")
 
-    def __init__(self, root, places, skipped_counts=None, notes=None):
+    def __init__(
+        self, root, places, skipped_counts=None, notes=None, version_sets=None
+    ):
         self.root = root
         self.places = list(places)
         self.skipped_counts = dict(skipped_counts or {})
         self.notes = list(notes or [])
+        # Files that look like versions of one document, judged by their names
+        # and dates alone, each set with the one that would be used first.
+        # Nothing is compared here, because nothing has been agreed to yet.
+        self.version_sets = list(version_sets or [])
 
     def __repr__(self) -> str:
         return "Survey(root=%r, places=%d)" % (self.root, len(self.places))
@@ -659,20 +689,29 @@ def kind_of(name: str, heading: str) -> str:
 def first_heading(path: str) -> str:
     """The first heading line of a file, from no further in than the cap.
 
-    Nothing else in the file is read. The line is cut to the cap as well, so a
-    file whose first line is a whole paragraph starting with a hash mark
-    cannot carry a paragraph of its own words into the words being matched.
+    The file is read once, and no further than a fixed number of bytes, so a
+    document whose first line runs on for pages is still read no further than
+    that (Unit 1.6: the survey runs before anybody has said yes, so what it
+    reads has to be bounded in bytes, not only in lines). Of those bytes only
+    the first lines are looked at, and the line found is cut to the cap as
+    well, so a file whose first line is a whole paragraph starting with a hash
+    mark cannot carry a paragraph of its own words into the words being
+    matched.
     """
     try:
-        with open(path, encoding="utf-8", errors="replace") as stream:
-            for number, line in enumerate(stream):
-                if number >= constants.SURVEY_HEADING_LINES:
-                    return ""
-                stripped = line.lstrip("\ufeff").strip()
-                if stripped.startswith("#"):
-                    return stripped[: constants.SURVEY_HEADING_CHARS]
+        with open(path, "rb") as stream:
+            head = stream.read(constants.SURVEY_HEADING_BYTES)
     except OSError:
         return ""
+    text = head.decode("utf-8", errors="replace")
+    lines = text.replace("\r\n", "\n").replace("\r", "\n").split("\n")
+    if len(head) >= constants.SURVEY_HEADING_BYTES and len(lines) > 1:
+        # The last line was cut by the limit, so it is not a whole line.
+        lines = lines[:-1]
+    for line in lines[: constants.SURVEY_HEADING_LINES]:
+        stripped = line.lstrip("\ufeff").strip()
+        if stripped.startswith("#"):
+            return stripped[: constants.SURVEY_HEADING_CHARS]
     return ""
 
 
@@ -684,7 +723,15 @@ def survey(folder: str, limits: Optional[Limits] = None, today=None) -> Survey:
     folders of somebody else's code, files holding other files, other bases,
     and lists of people. Of what is left, a file of rows says nothing but its
     own name, and a document says its name and its first heading. Nothing else
-    is opened, and nothing is read past the first few lines of any file.
+    is opened, and nothing is read past a fixed number of bytes at the start of
+    any file.
+
+    Plans and metrics count towards a place only when the same place holds a
+    customer profile, a persona, or a positioning file (Unit 1.6, requirement
+    P24). A folder of engineering notes holds a deploy plan and a folder of
+    finance holds metrics, and neither is where somebody keeps their
+    marketing. A place holding nothing else is left out with a note, and adding
+    it by name still works.
     """
     listing = list_folder(folder, limits=limits, today=today)
     if CODE_FOLDER_TOO_LARGE in listing.excluded_counts:
@@ -693,26 +740,40 @@ def survey(folder: str, limits: Optional[Limits] = None, today=None) -> Survey:
         )
 
     readable_counts: Dict[str, int] = {}
-    kinds: Dict[str, Dict[str, int]] = {}
-    samples: Dict[str, List[str]] = {}
+    path_kinds: Dict[str, List[str]] = {}
+    found_kinds: Dict[str, List[tuple]] = {}
     for entry in listing.readable:
         where = top_folder(entry.path, listing.root)
         readable_counts[where] = readable_counts.get(where, 0) + 1
+        relative = os.path.relpath(entry.path, listing.root).replace(os.sep, "/")
+        inside = relative if where == "." else relative[len(where) + 1 :]
+        path_kinds.setdefault(where, []).append(path_kind(inside))
         name = os.path.basename(entry.path)
         heading = "" if entry.kind == "csv" else first_heading(entry.path)
         kind = kind_of(name, heading)
         if kind == constants.MARKETING_KIND_OTHER:
             continue
-        counted = kinds.setdefault(where, {})
-        counted[kind] = counted.get(kind, 0) + 1
-        found = samples.setdefault(where, [])
-        if len(found) < constants.SURVEY_SAMPLE_LABELS:
-            found.append(name)
+        found_kinds.setdefault(where, []).append((relative, name, kind))
 
     places: List[Place] = []
     notes: List[str] = []
-    for where in sorted(kinds):
-        counted = kinds[where]
+    for where in sorted(found_kinds):
+        files = found_kinds[where]
+        anchored = any(
+            kind in constants.MARKETING_KINDS_THAT_ANCHOR for _r, _n, kind in files
+        )
+        if not anchored:
+            files = [
+                item
+                for item in files
+                if item[2] not in constants.MARKETING_KINDS_ONLY_BESIDE_A_PROFILE
+            ]
+            if not files:
+                notes.append(constants.SURVEY_PLANS_ALONE_NOTE % where)
+                continue
+        counted: Dict[str, int] = {}
+        for _relative, _name, kind in files:
+            counted[kind] = counted.get(kind, 0) + 1
         classified = sum(counted.values())
         readable = readable_counts.get(where, 0)
         thin = (
@@ -726,9 +787,158 @@ def survey(folder: str, limits: Optional[Limits] = None, today=None) -> Survey:
             count * constants.MARKETING_KIND_WEIGHTS[kind]
             for kind, count in counted.items()
         )
-        places.append(Place(where, counted, sorted(samples.get(where, [])), score))
+        samples = sorted(
+            name for _r, name, _k in files[: constants.SURVEY_SAMPLE_LABELS]
+        )
+        places.append(
+            Place(
+                where,
+                counted,
+                samples,
+                score,
+                mostly=mostly_label(path_kinds.get(where, [])),
+                candidates=[(relative, kind) for relative, _n, kind in files],
+            )
+        )
     places.sort(key=lambda place: (-place.score, place.relative_folder))
-    return Survey(listing.root, places, listing.excluded_counts, notes)
+    sets = [
+        [
+            os.path.relpath(entry.path, listing.root).replace(os.sep, "/")
+            for entry in group
+        ]
+        for group in version_groups(
+            listing.readable, lambda entry: entry.modified_date
+        )
+        if len(group) > 1
+    ]
+    return Survey(listing.root, places, listing.excluded_counts, notes, sets)
+
+
+def mostly_label(kinds: Sequence[str]) -> str:
+    """What a folder mostly holds, in the words a person uses.
+
+    The kind most of its files carry wins, with the kinds tried in the order
+    they are written down when two are level. When no kind has more files than
+    the files that carry none, the folder mostly holds other files.
+    """
+    counts: Dict[str, int] = {}
+    for kind in kinds:
+        counts[kind] = counts.get(kind, 0) + 1
+    best = constants.MARKETING_KIND_OTHER
+    best_count = counts.get(constants.MARKETING_KIND_OTHER, 0)
+    for kind, _words in constants.MARKETING_KINDS:
+        if counts.get(kind, 0) > best_count:
+            best, best_count = kind, counts[kind]
+    if best == constants.MARKETING_KIND_OTHER:
+        return constants.MOSTLY_OTHER_LABEL
+    return constants.MARKETING_KIND_LABELS[best][1]
+
+
+def path_kind(relative_path: str) -> str:
+    """The kind of document a path says a file is, from the path alone."""
+    return kind_of(str(relative_path or "").replace(os.sep, "/"), "")
+
+
+def folder_mostly(root: str, readable: Sequence[Entry]) -> Dict[str, str]:
+    """What each folder at the top of the named one mostly holds, by paths only.
+
+    This is what the folder table says beside each folder's count, so a person
+    asked which folders hold their marketing can tell them apart without
+    anything in them having been read.
+    """
+    kinds: Dict[str, List[str]] = {}
+    for entry in readable:
+        where = top_folder(entry.path, root)
+        relative = os.path.relpath(entry.path, root).replace(os.sep, "/")
+        inside = relative if where == "." else relative[len(where) + 1 :]
+        kinds.setdefault(where, []).append(path_kind(inside))
+    return dict((where, mostly_label(found)) for where, found in kinds.items())
+
+
+# --- Versions of one document -------------------------------------------------
+
+# One piece off the end of a name that says which version it is: a version
+# word, a version number, a copy number a download adds, or a date.
+_VERSION_WORDS = "|".join(
+    re.escape(word) for word in constants.VERSION_MARKER_WORDS
+)
+_VERSION_TAIL = re.compile(
+    r"(?:[ ._-]+(?:" + _VERSION_WORDS + r"|v\d+(?:[._]\d+)*)"
+    r"|[ ._-]*\(\d+\)"
+    r"|[ ._-]+\d{4}(?:[-_.]?\d{2}(?:[-_.]?\d{2})?)?)$",
+    re.IGNORECASE,
+)
+# The same words at the start of a name, as in "final positioning".
+_VERSION_HEAD = re.compile(
+    r"^(?:" + _VERSION_WORDS + r"|copy of)[ ._-]+", re.IGNORECASE
+)
+_FINAL = re.compile(
+    r"(?:^|[^a-z])" + re.escape(constants.VERSION_FINAL_WORD) + r"(?:[^a-z]|$)",
+    re.IGNORECASE,
+)
+
+
+def version_stem(name: str) -> str:
+    """The name the versions of one document share, from a file name alone.
+
+    `positioning.md`, `positioning.final.md`, `Positioning v2.md`, and
+    `positioning (1).md` all come back as `positioning`. A name made of
+    nothing but version words keeps its whole name, so it is never grouped
+    with anything. Nothing in the file is opened.
+    """
+    base = os.path.basename(str(name or ""))
+    whole = os.path.splitext(base)[0]
+    stem = whole.strip()
+    previous = None
+    while stem and stem != previous:
+        previous = stem
+        stem = _VERSION_TAIL.sub("", stem).strip()
+        stem = _VERSION_HEAD.sub("", stem).strip()
+    stem = stem.strip(" ._-").casefold()
+    return stem or whole.casefold()
+
+
+def is_final(name: str) -> bool:
+    """Whether a file name says it is the final version of a document."""
+    base = os.path.splitext(os.path.basename(str(name or "")))[0]
+    return bool(_FINAL.search(base))
+
+
+def version_groups(items, date_of) -> List[list]:
+    """Files that are versions of one document, grouped, each group best first.
+
+    Two files are versions of one document when they sit in the same folder
+    and their names share a stem. Within a group a name carrying "final" comes
+    first whatever its date, because a date says when a file was last touched
+    and not which version somebody signed off; then the newest; then the name,
+    so the order never depends on how the folder happened to be walked. Every
+    item comes back in exactly one group, in the order its group was first
+    met, and an item with no path is a group of its own.
+    """
+    groups: Dict[tuple, list] = {}
+    order: List[tuple] = []
+    for index, item in enumerate(items):
+        path = getattr(item, "path", None)
+        if path:
+            key = (os.path.dirname(os.path.realpath(path)), version_stem(path))
+        else:
+            key = ("", "#%d" % index)
+        if key not in groups:
+            groups[key] = []
+            order.append(key)
+        groups[key].append(item)
+
+    def rank(item):
+        path = getattr(item, "path", None) or ""
+        when = date_of(item)
+        newest_first = -when.toordinal() if hasattr(when, "toordinal") else 0
+        return (
+            0 if is_final(path) else 1,
+            newest_first,
+            os.path.basename(path).casefold(),
+        )
+
+    return [sorted(groups[key], key=rank) for key in order]
 
 
 # --- Dates ------------------------------------------------------------------
