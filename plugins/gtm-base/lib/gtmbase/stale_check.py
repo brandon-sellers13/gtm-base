@@ -38,6 +38,7 @@ from . import (
     duplicate_check,
     formats,
     ids,
+    layout,
     names,
     paths,
     stale,
@@ -549,9 +550,8 @@ def _list_awaiting_local_approval(result, base_root: str, git) -> None:
 def _corrections_citing(base_root: str) -> List["formats.CorrectionsFile"]:
     """Every accepted record the base holds, as far as it can be read."""
     found = []
-    folder = os.path.join(base_root, constants.CORRECTIONS_DIR)
-    for path in sorted(glob.glob(os.path.join(folder, "*.md"))):
-        text = read_text(path)
+    for relative in base_reader.correction_files(base_root):
+        text = read_text(os.path.join(base_root, relative.replace("/", os.sep)))
         if text is None:
             continue
         try:
@@ -870,7 +870,7 @@ def _baseline_sentence(report, finding) -> str:
     items = report.baseline_items()
     unnamed = [item for item in items if item.confirmed_on is None]
     if unnamed or len(items) != 2:
-        path = finding.path or (items[0].path if items else constants.REQUIRED_CONTEXT_FILES[0])
+        path = finding.path or (items[0].path if items else report.required_files[0])
         return FINDING_BASELINE_UNCONFIRMED % names.document_name(path)
     first, second = items[0], items[1]
     one_name = names.document_name(first.path)
@@ -1048,6 +1048,9 @@ def run(
         seat=inputs.seat,
         owner_email=None,
     )
+    # The two required documents where they really are on this base, which
+    # on a base laid out before Unit 1.5b is at their older paths.
+    report.required_files = layout.required_paths(base_root)
     result.report = report
     # Every document with a change waiting on an answer, which is checked
     # before any all-clear (finding G5). It is read here, where the folder is,

@@ -14,10 +14,14 @@ not_now_days: 7
 
 ## Where things live
 
-The `context` folder holds everything the AI reads for meaning, with strategy
-documents in `context/strategy`, numbers and their definitions in
-`context/metrics`, goals and targets in `context/plan`, and your own working
-notes in `context/notes`. The `work` folder holds the record of how the base
-stays current, with one dated entry per context change in `work/changes`
-and the owner's confirmations in `work/confirmations`. The `corrections` folder holds
-what each run found wrong and which rule changed because of it.
+This base is laid out by the five parts of the CLASS framework. The `context`
+folder holds what is true about the business, one file for each subject:
+`goals.md`, `product.md`, `icps.md`, `buyer-personas.md`, `positioning.md`,
+`messaging.md`, `voice.md`, `design.md`, and `metrics.md`, with one file for
+each customer segment in `context/icps`. The `learning` folder holds how the
+base gets better, with one dated entry for each context change in
+`learning/changes` and what each approved fix changed in `learning/corrections`.
+The `access` folder holds `stack.md`, which says where the work comes from and
+where it goes. The `skills` folder is kept empty for now, and the `standards`
+folder holds what good work looks like for each job. The `work` folder holds
+the approvals, with the owner's confirmations in `work/confirmations`.

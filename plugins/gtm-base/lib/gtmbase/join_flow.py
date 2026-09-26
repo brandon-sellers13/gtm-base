@@ -41,6 +41,7 @@ from . import (
     extract,
     formats,
     ids,
+    layout,
     location,
     machine,
     marker,
@@ -1737,7 +1738,10 @@ def reconcile_plan(
         day = day.date()
     ask_about: List[str] = []
     left_flagged: List[str] = []
-    required = list(constants.REQUIRED_CONTEXT_FILES)
+    # The two required documents wherever they really are on this base, and
+    # every path the change names followed to where that document lives.
+    required = list(layout.required_paths(base_root))
+    affects = layout.all_where_they_live(base_root, affects)
     for path in affects:
         if path not in required:
             left_flagged.append(path)

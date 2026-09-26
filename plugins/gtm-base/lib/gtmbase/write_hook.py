@@ -63,7 +63,7 @@ import os
 import sys
 from typing import Any, Dict, List, Optional, Sequence
 
-from . import constants, machine, paths, trust_surface
+from . import constants, layout, machine, paths, trust_surface
 
 # The tools this hook is declared for. Anything else is somebody else's.
 TOOL_NAMES = ("Write", "Edit", "MultiEdit", "NotebookEdit")
@@ -87,6 +87,10 @@ CODE_SEAT_FOLDER = "in-the-records-folder"
 CODE_BASE_REPOSITORY = "in-a-bases-own-repository-folder"
 CODE_BASE_ASSISTANT_FOLDER = "in-a-bases-assistant-folder"
 CODE_PLUGIN_CODE = "in-the-plugins-own-folder"
+# A file inside a base's own skills folder, which is kept empty until the
+# company-skills brainstorm settles who may approve a change to a skill
+# (Unit 1.5b, Brandon's call 13). Its placeholder is allowed.
+CODE_SKILLS_FILE = "in-a-bases-skills-folder"
 CODE_PLUGINS_FOLDER = "in-the-folder-plugins-are-kept-in"
 
 # What the client calls the folder it installed this plugin into.
@@ -138,6 +142,14 @@ REFUSED = (
 # this module ends with the same number when the module cannot load, and a
 # test holds the two together.
 COULD_NOT_RUN = 70
+
+# What a person reads when a file is refused in a base's skills folder. It
+# says why, because the folder is theirs and not GTM Base's, and a refusal
+# with no reason reads as a fault.
+SKILLS_REFUSED = (
+    "A base keeps its skills folder empty until your team has settled who may "
+    "approve a change to a skill, so nothing was written there."
+)
 
 COULD_NOT_CHECK = (
     "GTM Base could not run its own safety check just now, and this file is "
@@ -525,6 +537,33 @@ def _into_the_sessions_own_history(
     return None
 
 
+def _into_a_bases_skills(named: str, real_file: str) -> Optional[str]:
+    """Whether a write lands in a base's own skills folder beyond its placeholder.
+
+    The cheap way out comes first, as it does for the other folders: almost no
+    write on this computer names a folder called skills, and only one that
+    does is walked upwards looking for the base it is in.
+    """
+    wanted = _folded(constants.SKILLS_DIR)
+    for side in (named, real_file):
+        text = str(side or "").replace("\\", "/").replace(os.sep, "/")
+        if wanted not in [_folded(part) for part in text.split("/")]:
+            continue
+        inside = _base_above(side)
+        if inside is None:
+            continue
+        try:
+            relative = os.path.relpath(side, inside)
+        except ValueError:
+            continue
+        parts = [_folded(part) for part in relative.replace(os.sep, "/").split("/")]
+        if parts and parts[0] == "..":
+            continue
+        if layout.is_refused_in_skills(parts, os.path.isdir(side)):
+            return CODE_SKILLS_FILE
+    return None
+
+
 def problem_with(named: str, real_file: str, cwd: Optional[str] = None) -> Optional[str]:
     """Which rule this path falls under, or nothing at all.
 
@@ -567,6 +606,10 @@ def problem_with(named: str, real_file: str, cwd: Optional[str] = None) -> Optio
     own = _into_the_sessions_own_history(named, real_file, cwd, known)
     if own is not None and _a_base_by_its_history(own):
         return CODE_BASE_REPOSITORY
+
+    skills = _into_a_bases_skills(named, real_file)
+    if skills is not None:
+        return skills
 
     if not _names_a_guarded_folder(named, real_file):
         return asking
@@ -631,6 +674,8 @@ def run(payload: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         if found == CODE_CLIENT_SETTINGS:
             asking = True
             continue
+        if found == CODE_SKILLS_FILE:
+            return _answer("deny", SKILLS_REFUSED)
         if found is not None:
             return refusal()
     return question() if asking else None

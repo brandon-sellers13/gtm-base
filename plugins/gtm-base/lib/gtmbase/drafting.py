@@ -57,9 +57,15 @@ PROMPT_FILES = {
 # Where in the plugin the prompt files live.
 PROMPTS_DIR = os.path.join("skills", "join", "references", "prompts")
 
-# Where in the base each step's work is written.
-ICP_PATH = constants.CONTEXT_DIR + "/strategy/icp.md"
-POSITIONING_PATH = constants.CONTEXT_DIR + "/strategy/positioning.md"
+# Where in the base each step's work is written. Setup writes the current
+# layout only (Unit 1.5b); a base laid out before it is read where it is.
+ICP_PATH = constants.REQUIRED_CONTEXT_FILES[0]
+POSITIONING_PATH = constants.REQUIRED_CONTEXT_FILES[1]
+# The path the identifier of setup's context change is worked out from. It is
+# the path the profile had when that identifier was first worked out, and it
+# stays so, because a setup run picked up after an update has to work out the
+# same identifier it worked out before, or it would write the change twice.
+ENTRY_ID_SEED_PATH = constants.LEGACY_REQUIRED_CONTEXT_FILES[0]
 
 # What the settings block at the top of each file has to say the file is.
 KINDS = {

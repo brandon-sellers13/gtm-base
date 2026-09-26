@@ -57,7 +57,7 @@ dates say, because naming it is proof the person saw it.
 
 ## When an accepted record settles a change for a document
 
-An accepted record in the `corrections` folder can settle a change for a
+An accepted record in the `learning/corrections` folder can settle a change for a
 document without anybody being asked. All three of these have to hold:
 
 1. The record names that change.

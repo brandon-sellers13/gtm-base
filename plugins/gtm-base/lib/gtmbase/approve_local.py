@@ -49,6 +49,7 @@ from . import (
     constants,
     formats,
     ids,
+    layout,
     names,
     paths,
     report,
@@ -455,11 +456,13 @@ def _owner_problems(
 
 def _recorded_already(base_root: str, staging_id: str) -> bool:
     """Whether the record of what changed already holds this exact change."""
-    folder = os.path.join(base_root, constants.CORRECTIONS_DIR)
-    if not os.path.isdir(folder):
-        return False
     wanted = "-%s.md" % staging_id
-    return any(name.endswith(wanted) for name in os.listdir(folder))
+    # A record written before the base was moved sits in the older folder, and
+    # it records this change just as surely.
+    for relative in base_reader.correction_files(base_root):
+        if relative.endswith(wanted):
+            return True
+    return False
 
 
 # --- Applying the edits in order ---------------------------------------------
@@ -1002,6 +1005,11 @@ def _read_and_check(base_root, base_id, staging_path, git, today):
             ),
             None,
         )
+    # A change prepared before the base was moved names each document at its
+    # older path. It is still accepted: the paths are followed to where the
+    # documents live now, and the prepared file itself, which the yes is bound
+    # to, is left exactly as it was written.
+    layout.follow_the_move(base_root, staging)
 
     # Approving writes a line recording the owner's yes about every document
     # this change edits, and that line cannot carry a name with a space in it.

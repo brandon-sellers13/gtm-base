@@ -6,22 +6,36 @@ holds the record of how that context stays current as the business moves.
 
 ## What each folder holds
 
-**context** is everything the assistant reads for meaning. Inside it,
-`strategy` holds your ideal customer profile, your positioning, and your
-messaging. `metrics` holds your numbers and what each one means. `plan` holds
-your goals and targets. `notes` holds your own working notes and the thinking
-behind choices that never became a document. `context/map.md` is the map,
-which says where everything lives and carries two settings you can change.
+The folders follow the five parts of the CLASS framework, and one more holds
+the approvals.
 
-**work** holds the record of how the base stays current. `changes` holds one
-dated entry per context change, which is anything that happened that makes a
-document here no longer true. `confirmations` holds the record of the owner
-saying that a file is still right. `inbox` is where you drop meeting notes
-and transcripts for the assistant to read. `proposals` holds suggested changes
-while they are being prepared.
+**context** is what is true about the business, and everything the assistant
+reads for meaning. It holds one file for each subject: your goals, your
+product, your ideal customer profiles, your buyer personas, your positioning,
+your messaging, your voice, your design, and your metric definitions. Each
+customer segment gets its own file in `context/icps`. `context/map.md` is the
+map, which says where everything lives and carries two settings you can change.
 
-**corrections** holds what each run found wrong and which rule changed as a
-result.
+**learning** is how the base gets better. `learning/changes` holds one dated
+entry for each context change, which is anything that happened that makes a
+document here no longer true. `learning/corrections` holds what each approved
+fix changed, and why. `learning/lessons` is kept for lessons from results,
+which arrive later.
+
+**access** holds `stack.md`, which says where your material lives, which tools
+read it, and where finished work is saved. It never holds a password, a key,
+or a token.
+
+**skills** is kept empty for now. It will hold the written steps for each
+recurring job once your team has settled who may approve a change to one.
+
+**standards** holds what good work looks like for each job, and what needs
+approval before it is used.
+
+**work** holds the approvals. `work/confirmations` holds the record of the
+owner saying that a file is still right. `work/inbox` is where you drop meeting
+notes and transcripts for the assistant to read. `work/proposals` holds
+suggested changes while they are being prepared.
 
 **CODEOWNERS** lists the files that need the owner's review before a change to
 them is accepted. **gate-allowlist.txt** lists the exact pieces of text the

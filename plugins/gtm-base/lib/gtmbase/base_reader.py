@@ -19,7 +19,7 @@ import os
 import re
 from typing import Dict, List, Optional, Sequence
 
-from . import constants, formats, ids, paths, stale, state, validate
+from . import constants, formats, ids, layout, paths, stale, state, validate
 from .errors import GtmBaseError, PathError, ValidationError
 from .fsutil import read_text
 from .gitcmd import GitRunner, nul_fields, runner_or_default
@@ -192,11 +192,12 @@ CODE_TWICE_IN_ONE_FOLDER = "same-change-twice-in-one-folder"
 # file named anything else is a change half the product cannot find.
 CODE_NAME_IS_NOT_THE_ID = "the-file-name-is-not-the-change-it-holds"
 
-# The two folders a base may hold entries in, newest layout first. Only the
-# first is ever written to. The second is what a base written before the
-# rename holds, and it is read so that no entry is ever hidden, whatever a
-# migration did or did not manage to finish.
-ENTRY_DIRS = (constants.CHANGES_DIR, constants.LEGACY_CHANGES_DIR)
+# The folders a base may hold entries in, newest layout first. Only the first
+# is ever written to. The second is what a base laid out before Unit 1.5b
+# holds, and the third is what a base written before the rename holds. Both
+# are read so that no entry is ever hidden, whatever a move did or did not
+# manage to finish.
+ENTRY_DIRS = constants.ALL_CHANGES_DIRS
 
 
 def _what_it_says(entry) -> tuple:
@@ -431,6 +432,9 @@ def ledger(
             continue
         kept = []
         for path in entry.affects:
+            # A change written before the base was moved names each document
+            # at its older path, and it still means that document.
+            path = layout.where_it_lives(root, path)
             try:
                 kept.append(paths.canonical_context_path(root, path))
             except (PathError, ValidationError):
@@ -520,6 +524,9 @@ def confirmations(root: str, git: GitRunner) -> "List[stale.ConfirmationRecord]"
                 parsed = formats.ConfirmationLine.parse(line)
             except (ValidationError, PathError):
                 continue
+            # A line written before the base was moved names the document at
+            # its older path, and it still settles that document.
+            parsed.file = layout.where_it_lives(root, parsed.file)
             records.append(
                 stale.ConfirmationRecord(parsed, authors.get(number), None)
             )
@@ -577,10 +584,26 @@ def accepted_by(
 
     Nothing at all comes back when the file is not on that line of work yet.
     """
-    args = ["log", "--first-parent", "--format=%H%x1f%ae%x1f%ad", "--date=short"]
+    # A record the move to the current layout carried over from the older
+    # folder was brought onto the shared line of work when it was added or
+    # last changed there, not when it was moved. Both of its names are asked
+    # about, renames are followed, and a change that only renamed it is left
+    # out, so the move itself is never mistaken for the day somebody accepted
+    # it and every other change counts exactly as it always did.
+    args = [
+        "log",
+        "--first-parent",
+        "-M",
+        # Every kind of change but a rename, spelled out: git 2.39 answers a
+        # filter that only names what to leave out with nothing at all.
+        "--diff-filter=ACDMTUXB",
+        "--format=%H%x1f%ae%x1f%ad",
+        "--date=short",
+    ]
     if default_branch:
         args.append(default_branch)
-    args.extend(["--", relative])
+    args.append("--")
+    args.extend(record_names(relative))
     found = git.run(args, cwd=root, timeout=LOCAL_TIMEOUT_SECONDS)
     if not found.ok:
         return None, None
@@ -595,6 +618,43 @@ def accepted_by(
     return None, None
 
 
+def record_names(relative: str) -> List[str]:
+    """Every path one record of what changed may have been saved under.
+
+    A record the move to the current layout carried over was first added in
+    the older folder, so asking about the newer path alone would find the
+    move and never the change that really added it.
+    """
+    name = relative.split("/")[-1]
+    names = [relative]
+    for folder in constants.ALL_CORRECTIONS_DIRS:
+        other = folder + "/" + name
+        if other not in names:
+            names.append(other)
+    return names
+
+
+def correction_files(root: str) -> List[str]:
+    """Every record of what changed the base holds, as paths, current folder first.
+
+    A record name that sits in both folders is read once, from the current
+    one, because the move takes the older copy away only once the two say the
+    same thing.
+    """
+    found: List[str] = []
+    seen = set()
+    for folder_name in constants.ALL_CORRECTIONS_DIRS:
+        folder = os.path.join(root, folder_name.replace("/", os.sep))
+        if not os.path.isdir(folder):
+            continue
+        for name in sorted(os.listdir(folder)):
+            if not name.endswith(".md") or name in seen:
+                continue
+            seen.add(name)
+            found.append(folder_name + "/" + name)
+    return found
+
+
 def corrections(
     root: str, git: GitRunner, default_branch: Optional[str] = None
 ) -> "List[stale.CorrectionRecord]":
@@ -607,22 +667,20 @@ def corrections(
     records: List[stale.CorrectionRecord] = []
     if default_branch is None:
         default_branch = _default_branch(root, git)
-    folder = os.path.join(root, constants.CORRECTIONS_DIR)
-    if not os.path.isdir(folder):
-        return records
-    for name in sorted(os.listdir(folder)):
-        if not name.endswith(".md"):
-            continue
-        relative = constants.CORRECTIONS_DIR + "/" + name
-        text = read_text(os.path.join(folder, name))
+    for relative in correction_files(root):
+        text = read_text(os.path.join(root, relative.replace("/", os.sep)))
         if text is None:
             continue
         try:
             correction = formats.CorrectionsFile.parse(text)
         except (ValidationError, PathError):
             continue
+        # Both names are asked about and renames are followed, so a record the
+        # move carried over is found where it was first added, and what that
+        # change touched is what it is checked against.
         introduced = git.run(
-            ["log", "--diff-filter=A", "--format=%H", "--", relative],
+            ["log", "-M", "--diff-filter=A", "--format=%H", "--"]
+            + record_names(relative),
             cwd=root,
             timeout=LOCAL_TIMEOUT_SECONDS,
         )
@@ -643,6 +701,15 @@ def corrections(
             if shown.ok:
                 co_modified = nul_fields(shown.stdout)
             hashed = hash_at_commit(root, commit, correction, git)
+        # The hash above is worked out from the paths as that change saved
+        # them. What the record settles is the documents themselves, so every
+        # path in it is followed to where that document lives now, the same
+        # way on both sides of the comparison.
+        correction.touched_paths = [
+            layout.where_it_lives(root, path) if isinstance(path, str) else path
+            for path in (correction.touched_paths or [])
+        ]
+        co_modified = [layout.where_it_lives(root, path) for path in co_modified]
         merged_by, merged_on = accepted_by(root, relative, default_branch, git)
         records.append(
             stale.CorrectionRecord(
@@ -657,11 +724,22 @@ def corrections(
     return records
 
 
-def seat_input(base_id: str, has_remote: bool) -> "stale.SeatInput":
+def seat_input(
+    base_id: str, has_remote: bool, root: Optional[str] = None
+) -> "stale.SeatInput":
     """What this one seat remembers, which is never shared with the team."""
     dropped, _a = state.load_dropped_paths(base_id)
     asked, _b = state.load_asked(base_id)
     suppressions, _c = state.load_suppressions(base_id)
+    if root:
+        # A question set aside before the base was moved was set aside about
+        # the document, not about the path it happened to sit at.
+        moved = {}
+        for path, until in suppressions.items():
+            where = layout.where_it_lives(root, path)
+            if where not in moved or str(until) > str(moved[where]):
+                moved[where] = until
+        suppressions = moved
     dismissals, _d = state.load_dismissals(base_id)
     return stale.SeatInput(
         dropped_paths=dropped,
@@ -680,6 +758,12 @@ def missing_required(files: "Dict[str, stale.ContextFileInfo]") -> List[str]:
     for path in constants.REQUIRED_CONTEXT_FILES:
         info = files.get(path)
         if info is None or not info.present:
+            # A base laid out before Unit 1.5b holds the same document at its
+            # older path, and that is the document this asks about.
+            older = layout.older_of(path)
+            held = files.get(older) if older else None
+            if held is not None and held.present:
+                continue
             missing.append(path)
     return missing
 
@@ -724,7 +808,7 @@ def read_base(
         ledger=ledger(base_root, base_id, day, collect=dropped),
         confirmations=confirmations(base_root, git),
         corrections=corrections(base_root, git, default),
-        seat=seat_input(base_id, has_remote),
+        seat=seat_input(base_id, has_remote, root=base_root),
         seat_email=email,
         default_branch=default,
         has_remote=has_remote,

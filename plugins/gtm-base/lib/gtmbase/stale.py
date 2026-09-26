@@ -96,8 +96,10 @@ KIND_MAP = "map"
 STATUS_SKIPPED = "skipped"
 # What a confirmation line's trigger says when setup wrote it.
 TRIGGER_DRAFTED = "drafted"
-# The files the first run expects a new base to hold.
-REQUIRED_FILES = ("context/strategy/icp.md", "context/strategy/positioning.md")
+# The files the first run expects a new base to hold. A base laid out before
+# Unit 1.5b holds them at their older paths, and the caller that read the base
+# says where by setting `required_files` on the report.
+REQUIRED_FILES = constants.REQUIRED_CONTEXT_FILES
 # The kinds a decision is assumed to touch when nothing else points anywhere.
 FALLBACK_KINDS = ("icp", "positioning")
 
@@ -405,6 +407,10 @@ class StaleReport(object):
         # whether they said it in a line or by accepting a prepared change.
         # A file nobody has confirmed is not in here at all.
         self.confirmed_on: Dict[str, Any] = {}
+        # The two required documents where they really are on this base. The
+        # caller that read the base knows that and sets it; a report built
+        # without it assumes the current layout.
+        self.required_files = tuple(REQUIRED_FILES)
 
     # A base with nowhere to send its work cannot be behind anyone.
     @property
@@ -485,7 +491,7 @@ class StaleReport(object):
         )
 
     def baseline_items(
-        self, required_files: Sequence[str] = REQUIRED_FILES
+        self, required_files: Optional[Sequence[str]] = None
     ) -> List[BaselineItem]:
         """Each required document the base holds, with its two dates.
 
@@ -494,7 +500,7 @@ class StaleReport(object):
         one is worked out on its own rather than one standing in for both.
         """
         items = []
-        for path in required_files:
+        for path in required_files or self.required_files:
             info = self.files.get(path)
             if info is None or not info.present:
                 continue
@@ -505,7 +511,7 @@ class StaleReport(object):
 
     def first_run_finding(
         self,
-        required_files: Sequence[str] = REQUIRED_FILES,
+        required_files: Optional[Sequence[str]] = None,
     ) -> Finding:
         """The one honest thing to say at the end of a first run.
 
@@ -526,6 +532,7 @@ class StaleReport(object):
         never reached, so the order the closing rules promise is the order this
         runs in from the day the baseline lands.
         """
+        required_files = required_files or self.required_files
         for path in required_files:
             info = self.files.get(path)
             if info is None or not info.present:

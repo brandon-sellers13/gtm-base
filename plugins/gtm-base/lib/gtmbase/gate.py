@@ -54,7 +54,7 @@ import shlex
 import sys
 from typing import List, Optional, Sequence, Tuple
 
-from . import constants, machine, marker, paths, scan, state, trust_surface
+from . import constants, layout, machine, marker, paths, scan, state, trust_surface
 from .errors import GitError
 from .gitcmd import GitRunner, runner_or_default
 
@@ -85,6 +85,10 @@ REASON_BAD_PAYLOAD = "unreadable-request"
 REASON_MISSING_FILE = "body-file-unreadable"
 REASON_SEAT_FOLDER = "seat-folder"
 REASON_BASE_NAME = "changes-the-name-a-base-is-known-by"
+# The send carries a file in the base's own skills folder, which is kept empty
+# until the company-skills brainstorm settles who may approve a change to a
+# skill (Unit 1.5b, Brandon's call 13).
+REASON_SKILLS_FILE = "a-file-in-the-skills-folder"
 
 SENTENCES = {
     REASON_UNTOKENIZABLE: (
@@ -154,6 +158,11 @@ SENTENCES = {
     REASON_MISSING_FILE: (
         "GTM Base stopped this because it could not read the file holding the "
         "text that would be sent."
+    ),
+    REASON_SKILLS_FILE: (
+        "GTM Base stopped this because it would send a file in the base's "
+        "skills folder, which stays empty until your team has settled who may "
+        "approve a change to a skill."
     ),
 }
 
@@ -1225,6 +1234,23 @@ def _diff_text(git: GitRunner, cwd: str, start: str, end: str) -> Optional[str]:
     return result.stdout if result.ok else None
 
 
+def _names_in_range(
+    git: GitRunner, cwd: str, start: str, end: str
+) -> Optional[List[str]]:
+    """Every path one range would add or change, or None when git could not say.
+
+    Names end in a NUL and come out exactly as they are, so a file with an
+    accent or a space in its name is read as itself.
+    """
+    result = git.run(
+        ["diff", "--name-only", "-z", "--diff-filter=ACMR", start, end],
+        cwd=cwd,
+    )
+    if not result.ok:
+        return None
+    return [name for name in (result.stdout or "").split("\0") if name]
+
+
 def _messages_text(git: GitRunner, cwd: str, start: str, end: str) -> Optional[str]:
     """The saved notes one range would send, or None when they cannot be read."""
     if start == EMPTY_TREE:
@@ -1792,6 +1818,11 @@ def scan_range(
     diff = _diff_text(git, cwd, start, end)
     if diff is None:
         return sentence_for(REASON_UNREADABLE)
+    carried = _names_in_range(git, cwd, start, end)
+    if carried is None:
+        return sentence_for(REASON_UNREADABLE)
+    if any(layout.names_a_skill_file(name) for name in carried):
+        return sentence_for(REASON_SKILLS_FILE)
     if len(diff.encode("utf-8", "replace")) > constants.MAX_DIFF_BYTES:
         return sentence_for(REASON_TOO_LARGE)
     hits = scan.scan_diff_added_lines(diff, allowlist)

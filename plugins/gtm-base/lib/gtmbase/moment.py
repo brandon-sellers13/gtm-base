@@ -46,6 +46,7 @@ from . import (
     confirm,
     constants,
     formats,
+    layout,
     names,
     paths,
     stale,
@@ -526,6 +527,15 @@ def context_path_of(base_root: str, candidate: str) -> Optional[str]:
     ):
         # A person standing in the context folder names a file from there.
         tries.append(constants.CONTEXT_DIR + "/" + named.lstrip("./"))
+    # A document named at its place in the other layout is the same document,
+    # so an assistant that remembers where the profile used to be is still
+    # answered about the profile (Unit 1.5b).
+    for attempt in list(tries):
+        if os.path.isabs(attempt):
+            continue
+        other = layout.counterpart(attempt.replace("\\", "/").lstrip("./"))
+        if other and other not in tries:
+            tries.append(other)
     for attempt in tries:
         full = attempt if os.path.isabs(attempt) else os.path.join(root, attempt)
         real = os.path.realpath(full)

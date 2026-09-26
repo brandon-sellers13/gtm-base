@@ -6,8 +6,9 @@ first and not one file at the top of it. Two things are checked. The settings
 file that installs and pins the plugin has to hold exactly what the template
 ships and nothing else. And the whole tree has to be free of the files that
 would make opening the folder run something: instruction files any assistant
-loads on its own, agent folders, code files, a folder of plugins, and links
-that point somewhere else.
+loads on its own, agent folders, code files, a folder of plugins, any file in
+the base's own skills folder beyond its placeholder, and links that point
+somewhere else.
 
 Every name is compared after case folding and after Unicode composition, so a
 folder that reads as `.Claude` on a Mac and a name written with its accents
@@ -23,7 +24,7 @@ import os
 import unicodedata
 from typing import Iterable, Optional, Sequence, Set
 
-from . import constants
+from . import constants, layout
 from .gitcmd import GitRunner, nul_fields, runner_or_default
 
 # How long any single git call inside the check may take.
@@ -59,6 +60,10 @@ CODE_GIT_SETTINGS_FILE = "git-settings-file"
 CODE_PLUGINS_FOLDER = "plugins-folder"
 # The tree holds a code file.
 CODE_CODE_FILE = "code-file"
+# The base's own skills folder holds something other than its placeholder.
+# Until the company-skills brainstorm settles who may approve a change to a
+# skill, the folder is kept empty (Unit 1.5b, Brandon's call 13).
+CODE_SKILLS_FILE = "skills-folder-not-empty"
 # The tree holds something under the settings folder other than the settings file.
 CODE_CLAUDE_FOLDER_ENTRY = "claude-folder-entry"
 # The tree holds a link, anywhere.
@@ -185,6 +190,8 @@ def _component_codes(parts: Sequence[str], is_dir: bool) -> Set[str]:
         )
         if not allowed:
             codes.add(CODE_CLAUDE_FOLDER_ENTRY)
+    if layout.is_refused_in_skills(normalized, is_dir):
+        codes.add(CODE_SKILLS_FILE)
     if not is_dir:
         for suffix in constants.TRUST_REFUSED_SUFFIXES:
             if normalized[-1].endswith(suffix):

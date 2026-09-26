@@ -1,6 +1,6 @@
 """The names a person reads for the things in their base.
 
-A marketing lead does not have a file called `context/strategy/icp.md` and does
+A marketing lead does not have a file called `context/icps.md` and does
 not have a change called `stg-bbca9f0e11d24c77`. They have a customer profile,
 and they have the day they decided to stop selling to companies under twenty
 people. This module is the one place that turns what the machine stores into
@@ -23,15 +23,30 @@ from . import constants
 # How much of a change's first line is read aloud before it is cut short.
 CHANGE_LINE_CHARS = 72
 
-# The name each file the product knows about is read aloud by.
+# The name each file the product knows about is read aloud by. The nine core
+# files of the context standard each have one (Unit 1.5b), and a document a
+# base laid out before that still holds at its older path is called exactly
+# what it is called at its new one, because it is the same document.
 KNOWN_DOCUMENTS = {
-    "context/strategy/icp.md": "your customer profile",
-    "context/strategy/positioning.md": "your positioning",
+    "context/goals.md": "your goals",
+    "context/product.md": "your product document",
+    "context/icps.md": "your customer profile",
+    "context/buyer-personas.md": "your buyer personas",
+    "context/positioning.md": "your positioning",
+    "context/messaging.md": "your messaging",
+    "context/voice.md": "your voice guide",
+    "context/design.md": "your design guide",
+    "context/metrics.md": "your metric definitions",
     constants.MAP_PATH: "your base's map",
+    constants.STACK_PATH: "your source map",
 }
+for _older, _current in constants.LEGACY_DOCUMENT_PATHS:
+    KNOWN_DOCUMENTS.setdefault(_older, KNOWN_DOCUMENTS[_current])
 
-# Where one segment of the customer profile lives.
-SEGMENTS_DIR = "context/strategy/segments"
+# Where one segment of the customer profile lives, and where a base laid out
+# before Unit 1.5b planned to keep one.
+SEGMENTS_DIR = constants.SEGMENTS_DIR
+SEGMENT_DIRS = (constants.SEGMENTS_DIR, constants.LEGACY_SEGMENTS_DIR)
 
 # What a change with nothing written in it yet is called.
 CHANGE_WITHOUT_A_LINE = "the change you recorded"
@@ -62,7 +77,9 @@ def _words(stem: str) -> str:
 def is_segment(path: str) -> bool:
     """True when the path is one segment of the customer profile."""
     normalized = _normalize(path)
-    return normalized.startswith(SEGMENTS_DIR + "/") and normalized.endswith(".md")
+    if not normalized.endswith(".md"):
+        return False
+    return any(normalized.startswith(folder + "/") for folder in SEGMENT_DIRS)
 
 
 def document_name(path: str) -> str:

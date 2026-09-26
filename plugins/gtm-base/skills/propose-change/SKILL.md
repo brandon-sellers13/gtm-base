@@ -42,7 +42,7 @@ the file to change, the heading inside it, the new words, the evidence behind
 them, and the context change that prompted them.
 
 The second way is the person's own hand. Somebody reads a report, opens
-`context/strategy/icp.md`, changes a paragraph, and saves it. Their change stays
+`context/icps.md`, changes a paragraph, and saves it. Their change stays
 exactly where they put it, and this skill builds the proposal around it. Two
 things are asked before it is built, one at a time and never in one breath.
 

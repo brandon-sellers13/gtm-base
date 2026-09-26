@@ -34,6 +34,7 @@ from . import (
     drafting,
     formats,
     ids,
+    layout,
     paths,
     redaction_patterns,
     scan,
@@ -275,7 +276,7 @@ def entry_id(sequence: int = 0) -> str:
     It is worked out here and never read off the draft, because an identifier a
     model wrote is an identifier nobody can work out again.
     """
-    return ids.staging_id("join", drafting.ICP_PATH, "join", sequence)
+    return ids.staging_id("join", drafting.ENTRY_ID_SEED_PATH, "join", sequence)
 
 
 # How many identifiers are tried before a base is said to have no room for
@@ -363,6 +364,21 @@ def entry_path(draft, base_root: Optional[str] = None) -> str:
     if base_root:
         return base_reader.where_to_write_the_entry(base_root, name)
     return constants.CHANGES_DIR + "/" + name + ".md"
+
+
+def _already_there(base_root: str, relative: str) -> bool:
+    """Whether this document is already in the base, at its path in either layout.
+
+    Setup writes a document only where nothing is, and a base laid out before
+    Unit 1.5b holds the same document at its older path. Writing the new one
+    beside it would leave one document in two places saying two things.
+    """
+    for candidate in (relative, layout.counterpart(relative)):
+        if candidate and os.path.lexists(
+            os.path.join(base_root, candidate.replace("/", os.sep))
+        ):
+            return True
+    return False
 
 
 def path_for(draft, base_root: Optional[str] = None) -> str:
@@ -519,7 +535,7 @@ def approve(
         )
 
     ready_to_write(base_root, git)
-    if os.path.lexists(os.path.join(base_root, relative.replace("/", os.sep))):
+    if _already_there(base_root, relative):
         raise ReviewError(CODE_FILE_EXISTS)
     return _write_and_save(
         base_root, base_id, relative, draft.text, run_id, moment, git
@@ -551,7 +567,7 @@ def skip(
     text = drafting.skipped_text(step, address, state.today(moment).isoformat())
 
     ready_to_write(base_root, git)
-    if os.path.lexists(os.path.join(base_root, relative.replace("/", os.sep))):
+    if _already_there(base_root, relative):
         raise ReviewError(CODE_FILE_EXISTS)
     _write(base_root, relative, text)
     _stage(git, base_root, relative)

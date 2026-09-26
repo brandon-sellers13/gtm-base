@@ -92,7 +92,7 @@ def build_parser():
     parser.add_argument(
         "--move-changes",
         action="store_true",
-        help="store the context changes the new way, after the owner says yes",
+        help="move the base to the current layout, after the owner says yes",
     )
     parser.add_argument(
         "--every-seat-updated",

@@ -75,14 +75,15 @@ another folder first.
 - `python3 scripts/stale_check.py --dismiss-quiet-record` stops the quiet
   record of context changes being mentioned for a while. Use it only after the
   person says nothing about the business has changed lately.
-- `python3 scripts/stale_check.py --check-move` says what the update would do
-  and whether GTM Base would offer it. It reads and writes nothing at all, so
-  it is the one to run when somebody wants to know where they stand before
-  deciding anything.
-- `python3 scripts/stale_check.py --move-changes` stores a base's context
-  changes the way GTM Base stores them today. Run it only after the person has
-  said yes to the offer the review makes, never on your own. Add `--dry-run`
-  to say what it would do and write nothing.
+- `python3 scripts/stale_check.py --check-move` says what the move to the
+  current layout would do and whether GTM Base would offer it. It reads and
+  writes nothing at all, so it is the one to run when somebody wants to know
+  where they stand before deciding anything.
+- `python3 scripts/stale_check.py --move-changes` moves a base laid out the
+  older way to the current layout, its documents, its context changes, and its
+  records together, in one move. Run it only after the person has said yes to
+  the offer the review makes, never on your own. Add `--dry-run` to say what
+  it would do and write nothing.
 - `python3 scripts/stale_check.py --not-now-move` records that they do not
   want to be asked about it yet, and the offer stays away for a month. Run it
   when they say not now, so the answer is kept rather than asked again at
@@ -118,7 +119,7 @@ Say the three answers once, here, and never again per item:
 
 Then read the list out as it came back, one line each, and take them in order.
 When it comes back with nothing due, say that sentence as it is, and anything
-it says after it, such as the offer to update how context changes are stored.
+it says after it, such as the offer to move the base to the current layout.
 
 - Under each line the review prints a second line marked for the assistant,
   holding the path and the question identifier. It is there for you to use and
@@ -211,12 +212,15 @@ A context change carries a date it should be looked at again. Every change past
 that date is listed, and the list is kept for the next session to raise.
 Answering it is a conversation with the person, not something this skill does.
 
-## Updating how a base stores its context changes
+## Moving a base to the current layout
 <!-- step -->
 
-This step exists so a base set up before the rename can store its context
-changes the way GTM Base stores them now. Nothing is broken until it runs, and
-nothing has to happen today.
+This step exists so a base set up the older way can be laid out by the five
+parts of the CLASS framework, the way GTM Base lays a base out now. Nothing is
+broken until it runs, and nothing has to happen today.
+
+- The review makes one offer, whichever older layout the base is on.
+- One yes takes the base all the way to the current layout.
 
 Two of these carry the person's own answer, and you may never supply either
 one yourself:
@@ -234,7 +238,7 @@ base, so the only way to know is to ask.
 If they say not now, run `--not-now-move`.
 
 <!-- ask -->
-Shall I go ahead and update how your context changes are stored?
+Shall I go ahead and move your base to the current layout?
 <!-- end ask -->
 
 ## When one context change is written down twice

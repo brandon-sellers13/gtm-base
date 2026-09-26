@@ -42,6 +42,7 @@ from . import (
     formats,
     gate,
     ids,
+    layout,
     names,
     paths,
     scan,
@@ -1066,14 +1067,18 @@ def against_change(
         moment = datetime.datetime(moment.year, moment.month, moment.day)
     today = state.today(moment)
     try:
-        relative_context = paths.canonical_context_path(base_root, path)
+        # A path named at its older place, on a base that has been moved, is
+        # the same document at its new one.
+        relative_context = paths.canonical_context_path(
+            base_root, layout.where_it_lives(base_root, path)
+        )
     except (PathError, ValidationError):
         return _refused(CODE_DROPPED_PATH, DROPPED_PATH)
     if formats.name_has_a_space(relative_context):
         return _refused(formats.CODE_NAME_WITH_A_SPACE, formats.NAME_WITH_A_SPACE)
     document = names.document_name(relative_context)
 
-    if relative_context not in constants.REQUIRED_CONTEXT_FILES:
+    if relative_context not in layout.required_paths(base_root):
         return _refused(CODE_NOT_ONE_OF_THE_TWO, NOT_ONE_OF_THE_TWO % document)
 
     entry = _entry_the_base_holds(base_root, base_id, entry_id, today, git)
@@ -1081,7 +1086,9 @@ def against_change(
         return _refused(
             CODE_ENTRY_MISSING, CHANGE_NOT_IN_THE_BASE % document
         )
-    if relative_context not in list(entry.affects):
+    if relative_context not in layout.all_where_they_live(
+        base_root, list(entry.affects)
+    ):
         return _refused(
             CODE_NOT_ABOUT_THIS_FILE, CHANGE_IS_NOT_ABOUT_IT % document
         )

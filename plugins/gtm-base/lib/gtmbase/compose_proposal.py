@@ -33,6 +33,7 @@ from . import (
     gate,
     ghcmd,
     ids,
+    layout,
     names,
     paths,
     push_conditions,
@@ -616,6 +617,7 @@ def waiting_changes(base_root: str) -> List[WaitingChange]:
             continue
         if staging.staging_id != staging_id:
             continue
+        layout.follow_the_move(base_root, staging)
         targets = targets_of(staging)
         if not targets:
             continue
@@ -909,6 +911,9 @@ def propose(
         return ProposalResult(
             STATUS_REFUSED, codes=[failure.code or CODE_INVALID], reasons=[str(failure)]
         )
+    # A change prepared before the base was moved names its documents at
+    # their older paths, and it is still the change to those documents.
+    layout.follow_the_move(base_root, staging)
     edit_problems = check_edits(base_root, staging)
     if edit_problems:
         return ProposalResult(
@@ -1645,19 +1650,20 @@ def _name_is_taken(base_root: str, staging_id: str) -> bool:
         constants.PROPOSALS_PENDING_DIR,
         constants.PROPOSALS_OPENED_DIR,
         constants.PROPOSALS_DROPPED_DIR,
-        constants.CHANGES_DIR,
-        constants.LEGACY_CHANGES_DIR,
-    ):
+    ) + constants.ALL_CHANGES_DIRS:
         whole = os.path.join(base_root, folder.replace("/", os.sep))
         if os.path.lexists(os.path.join(whole, staging_id + ".md")):
             return True
-    corrections = os.path.join(base_root, constants.CORRECTIONS_DIR)
     wanted = "-%s.md" % staging_id
-    try:
-        names = os.listdir(corrections)
-    except OSError:
-        names = []
-    return any(name.endswith(wanted) for name in names)
+    for folder in constants.ALL_CORRECTIONS_DIRS:
+        corrections = os.path.join(base_root, folder.replace("/", os.sep))
+        try:
+            names = os.listdir(corrections)
+        except OSError:
+            names = []
+        if any(name.endswith(wanted) for name in names):
+            return True
+    return False
 
 
 def stage_local_edit(

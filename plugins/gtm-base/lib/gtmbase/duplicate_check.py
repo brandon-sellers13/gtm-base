@@ -13,12 +13,11 @@ it found.
 
 from __future__ import annotations
 
-import glob
 import json
 import os
 from typing import List, Optional
 
-from . import constants, ghcmd
+from . import base_reader, ghcmd
 from .formats import CorrectionsFile
 from .fsutil import read_text
 from .validate import find_marker, marker_line
@@ -73,8 +72,10 @@ def marker_for(staging) -> str:
 
 def _accepted_files(base_root: str, staging_id: str, codes: List[str]) -> Optional[str]:
     """The accepted file already recording this proposal, if there is one."""
-    folder = os.path.join(base_root, constants.CORRECTIONS_DIR)
-    for path in sorted(glob.glob(os.path.join(folder, "*.md"))):
+    # Both folders a record may sit in are read, the one written to today
+    # first, so a proposal recorded before the base was moved is still found.
+    for relative in base_reader.correction_files(base_root):
+        path = os.path.join(base_root, relative.replace("/", os.sep))
         text = read_text(path)
         if text is None:
             codes.append(CODE_CORRECTIONS_UNREADABLE)

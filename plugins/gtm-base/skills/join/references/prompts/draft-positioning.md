@@ -30,7 +30,7 @@ Where you have no quote for a claim, you have no claim. Leave it out.
 
 ## The document to write
 
-The file is `context/strategy/positioning.md`. It starts with a settings block
+The file is `context/positioning.md`. It starts with a settings block
 and then carries its sections. The settings block holds exactly these five
 settings:
 
