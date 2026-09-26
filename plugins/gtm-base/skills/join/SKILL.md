@@ -155,238 +155,252 @@ storage. If they say yes, do not build there.
 
 Only when they have said yes does anything get created, and that happens later,
 at the moment they approve the first document. Pass the same folder to
-`approve` on that first document, in a fresh file, the way step 6 shows, so the
+`approve` on that first document, in a fresh file, the way step 6b shows, so the
 base is linked at the moment it comes into being.
 
-### Step 5. What will be read, and the yes that fixes the list
+### Step 5. Where the material sits
 
-Start by finding the likely material rather than asking them to find it. Say
-that GTM Base will look through the folder they named for the places their
-marketing material sits in, and that it will look at nothing but file names and
-first headings while it does. Then run:
+This step finds the places their marketing material sits, because the person
+least likely to know which folder holds what should not be the one asked. GTM
+Base will look through the folder they named, at nothing but file names and
+first headings, and propose the places back. Say that, then run:
 
 ```
 python3 scripts/join.py words-file --run <run identifier> --for folder
 python3 scripts/join.py survey --folder-file <the path it printed> --run <run identifier>
 ```
 
-The first command prints `words=<path>`. Write the folder they named into that
-path and pass it back. A folder name is whatever somebody called their folder,
-so it never goes in the command itself, and the file is read once and then
-taken away, so ask for a fresh one before each of the three steps below.
+- The first command prints `words=<path>`. Write the folder they named into
+  that path and pass it back. A folder name never goes in a command, and each
+  file is read once and then taken away, so ask for a fresh one before every
+  command below that takes a folder.
+- The survey prints one sentence, then one line per place, of the form
+  `place=<folder> number=<number> score=<number> mostly=<what it mostly holds>`
+  with a count of each kind of document, and a `note=` line for each place it
+  left out.
+- A folder of plans or metrics with no customer profile, persona, or
+  positioning file beside it is not proposed, and leaves
+  `note=plans-alone:<folder>`. A deploy plan among engineering notes is not
+  marketing, and a folder like that can still be added by name.
 
-It prints one sentence and then one `place=<folder> number=<number> score=<number>` line for
-each place it found, with a count of each kind of document after it, and a
-`note=` line for anything it left out. Say that sentence word for word and say
-nothing else about the places. It is one of these three:
+Say the sentence word for word and nothing else about the places:
 
+<!-- ask -->
 It looks like your marketing material sits in these places: <folder> (<number> customer profiles, <number> persona files), <folder> (...). Is this it? Say yes, name a folder to add, or name one to drop.
+<!-- end ask -->
 
-It looks like your marketing material sits in <folder> (<number> customer profiles, <number> persona files). Is this it? Say yes, name a folder to add, or name one to drop.
+- When everything sits in the one folder they named, the sentence is: It
+  looks like your marketing material sits in <folder> (<number> customer
+  profiles, <number> persona files). Is this it? Say yes, name a folder to
+  add, or name one to drop.
+- When nothing looks like marketing material, it is: I could not find
+  anything that looks like marketing material in <folder> by its file names
+  and headings. You can name a folder inside it, or paste the material in.
 
-I could not find anything that looks like marketing material in <folder> by its file names and headings. You can name a folder inside it, or paste the material in.
-
-Wait for their answer. On a plain yes, and on any answer that adds or drops
-folders, run the list for the places they settled on:
+Their answer settles the places, and the list of files in those places is made
+next, with this, whatever they answered:
 
 ```
 python3 scripts/join.py words-file --run <run identifier> --for folder
 python3 scripts/join.py list-sources --folder-file <the path it printed> --run <run identifier> --from-survey
 ```
 
-Add one `--add-file <a fresh folder file>` for each folder they named to add,
-with that one folder written in it, and one `--drop <place number>` for each
-place they named to drop, using the number the survey printed beside it. A
-place is never dropped by its name, and a name is refused. The files lying
-loose at the top of the folder they named are a place of their own, and its
-name on the `place=` line is a single full stop, so drop that place by its
-number when they say those files do not belong. A folder to add has to sit
-directly inside the one they named, not in a folder further down. One that
-does not comes back as `codes=no-such-folder` and nothing is shown, so ask them
-for a folder directly inside the one they named. Dropping every place comes back as
-`codes=no-folders-chosen`, and the answer to that is to ask which folder holds
-the material and list that one.
+- On a plain yes, run it as it is.
+- For each folder they named to add, add `--add-file <a fresh folder file>`
+  with that one folder written in it. It has to sit directly inside the folder
+  they named; one that does not comes back as `codes=no-such-folder` and
+  nothing is shown, so ask for a folder directly inside it.
+- For each place they named to drop, add `--drop <place number>`, the number
+  the survey printed beside it. A place is never dropped by its name, and a
+  name is refused. The files loose at the top are the place named `.`.
+- When they name the places to use rather than the ones to drop, add
+  `--keep <place number>` for each of those instead, and every place they did
+  not name is left out.
+- Dropping every place comes back as `codes=no-folders-chosen`. Ask which
+  folder holds the material and list that one.
+- Folders they named themselves, as places to use or to add, are their own
+  choice, and the list prints `choice=explicit`. A plain yes, with or without
+  a place dropped, prints `choice=plain-yes`, because the folders on it are
+  still the ones GTM Base picked.
 
-It prints the files that would be read, with a date on each one that has a date,
-and then what was left out, counted by the reason it was left out. Show them
-both halves. The command also writes that list down inside the run's own
-folder, which is what their yes is taken against. If it prints
-`note=date-clamped`, one of the files says it was changed on a day still to
-come, and the date shown for it is today rather than the day the file claims.
-Say so. If the command says a second yes is needed, or that the folder looks
-like it holds work for more than one company, follow
-`references/reading-rules.md` before going any further.
+### Step 5b. A list too large to read through
 
-If the command prints `note=narrow-first`, the places they settled on still hold
-a large number of files spread across several folders, which is what a whole
-working repository looks like rather than a folder of marketing material. This
-is the backstop behind the step above and it rarely happens once the places
-have been settled. Do not ask for a yes over that list. The command has already printed the sentence that
-names the two numbers and the `folder=<name> number=<number> count=<number>` lines that go with
-it. Say that sentence and read the folders and their counts out. It is this
-sentence:
+This step happens only when the list prints `note=narrow-first`, which means a
+plain yes settled on more files, across more folders, than anybody could read
+through, and a yes is never asked over a list nobody could read. It will be
+asked at most once, and never after they named their folders themselves.
 
+- The list-sources command has already printed the sentence, and one line per
+  folder: `folder=<name> number=<number> count=<number> mostly=<what it mostly holds>`.
+- Say the sentence, then read each folder out with its count and what it
+  mostly holds.
+
+<!-- ask -->
 That folder holds <number> files across <number> folders, most of which are probably not marketing material. Which of these folders hold your customer profiles, positioning, messaging, or plans?
+<!-- end ask -->
 
-When they name the folders, run the same command again, naming each folder
-by the number printed beside it:
+When they name the folders, list those, each by the number printed beside it:
 
 ```
 python3 scripts/join.py words-file --run <run identifier> --for folder
 python3 scripts/join.py list-sources --folder-file <the path it printed> --run <run identifier> --only-folder <number> --only-folder <number>
 ```
 
-Name the folders by the number the listing printed beside each one, as above.
-A folder name is whatever somebody called their folder, and quotation marks
-are not enough: a folder called Brandon's Docs breaks the command that carries
-its name. A number that is not on the list is refused and nothing is shown.
+- A folder name is whatever somebody called their folder, and quotation marks
+  are not enough, so a folder is only ever named by its number.
+- A number that is not on the list comes back as `codes=no-such-folder` and
+  nothing is shown. Read the folders out again and ask which of those.
+- Folders named this way are their own choice, so the shorter list prints
+  `choice=explicit` and is never narrowed again.
+- A yes over the long list is refused anyway: `freeze-sources` prints
+  `codes=narrow-first` and takes nothing.
 
-Show them that shorter list, and only then ask for the yes. A name that is not
-one of the folders the counts named comes back as `codes=no-such-folder` and
-nothing is shown, so ask them for one of the names from the counts. Asking for
-the yes over the long list is refused anyway: `freeze-sources` prints
-`codes=narrow-first` and takes nothing, because a list nobody could read
-through is not a list anybody can agree to.
+### Step 5c. The yes that fixes the list
 
-Contact lists are left out of every list on purpose. A file of rows whose
-heading names an email address, a phone number, or a social profile, or whose
-rows are mostly email addresses, is counted under `left-out=contact-list` and
-is never offered for reading, whatever else it looks like. Say so if they ask
-where their prospect list went, and say that naming it by hand will not bring
-it back either.
+This step takes the one yes that decides which of their files will be read,
+and the list is fixed from that moment. What they are shown first depends on
+the `choice=` line the list printed.
 
-Before asking for their yes, say what the yes is for, in these words, because
-the list can read as a list of files about to be copied somewhere, and it is
-not:
+- `choice=explicit`: they named these folders themselves, so they are not
+  asked to narrow them again. The command printed one sentence counting the
+  files, such as "That is 48 files in the 4 folders you named." Say it, and
+  say in one line what was left out. Read the files out if they ask.
+- `choice=plain-yes`: show them the files it would read, with the date on
+  each one that has a date, and what was left out, counted by reason.
+- `note=date-clamped`: one of the files says it was changed on a day still to
+  come, and the date shown for it is today. Say so.
+- `needs-second-yes=true` or `appears-multi-company=true`: follow
+  `references/reading-rules.md` before going any further.
+- Contact lists are left out of every list on purpose, counted under
+  `left-out=contact-list`: a file of rows naming an email address, a phone
+  number, or a social profile, or mostly holding email addresses. Say so if
+  they ask where their prospect list went, and that naming it will not help.
 
-To find these places I looked only at file names and the first heading of each document, and nothing else has been opened. These are the documents I would read to draft your ideal customer profile and your positioning. None of them is copied into the base or changed in any way. The base only ever gets the two drafts you approve, one at a time. Once you say yes, this list is fixed, and from that point nothing leaves this computer for the rest of this session. A file added to the folder afterwards will not be read until you are shown a new list. May I read these?
+The yes is asked in these three lines and the question, because a list offered
+for one yes can read as files about to be copied somewhere, and it is not:
+
+<!-- ask -->
+To find these, I looked only at file names and first headings.
+I will read these files, and I will not copy them anywhere, not even into your base, or change them.
+Once you say yes, this list is fixed, and nothing leaves this computer for the rest of this session.
+May I read these?
+<!-- end ask -->
 
 Ask it that way, as a question about reading, and never as a question about
-taking or importing the files.
-
-A document that holds a comment, a tag, or a character a reader of the file
-would never see is still read. Those parts are taken out of the text and
-counted, and the drafting step below prints one sentence for each document
-something was taken out of. Say that sentence when it appears. Nobody has to be
-told about it before it happens, because nothing is lost by it.
-
-On a plain yes, run:
+taking or importing the files. On a yes, run:
 
 ```
 python3 scripts/join.py words-file --run <run identifier> --for folder
 python3 scripts/join.py freeze-sources --folder-file <the path it printed> --session <session id> --run <run identifier>
 ```
 
-This takes their yes against the list they were actually shown. It looks at the
-folder once more first, and if anything in it has changed since the list was
-shown it prints `codes=listing-changed` and refuses. That is not a failure and
-you do not treat it as one. Run `list-sources` again, show them the new list,
-say plainly that the folder changed while they were reading, and ask again.
-
-From the moment the yes is taken, nothing leaves this computer for the rest of
-the session, and you say so.
+- `codes=listing-changed` means the folder changed after the list was shown.
+  It is not a failure. Run list-sources again, show the new list, say plainly
+  that the folder changed while they were reading, and ask again.
+- `codes=narrow-first` means the list still needs step 5b first.
+- A different list shown after the yes needs a yes of its own. Until it has
+  one, the drafting steps print `codes=asks-again` and read nothing, so show
+  that list and ask again.
+- From the moment the yes is taken, nothing leaves this computer for the rest
+  of the session, and you say so.
+- A document holding a comment, a tag, or a character a reader would never
+  see is still read, with those parts taken out and counted. The drafting
+  step prints one sentence for each such document. Say it when it appears.
 
 Pastes, PDFs, web pages, and anything a connected tool hands back are read the
-way `references/reading-rules.md` sets out, with your own tools, one bounded
-read each. Every one of them, including anything a connector returned, is
-handed over the same way, and every piece of that text is held for the run
-with:
+way `references/reading-rules.md` sets out, one bounded read each, and every
+piece of that text is held for the run with:
 
 ```
 python3 scripts/join.py words-file --run <run identifier> --for label
 python3 scripts/join.py add-paste --run <run identifier> --label-file <the path it printed> --session <session id> --from <file you wrote it to>
 ```
 
-The short label is usually taken from the name of the file it came out of, and
-a file may be named anything at all, so it goes in a file the first command
-hands out rather than in the command itself.
+- The short label is usually the name of the file it came out of, and a file
+  may be named anything at all, so it travels in a file too.
+- Handing text over this way also tells the safeguard this session has read
+  their own material, so from the first one nothing leaves this computer for
+  the rest of the session, exactly as after a yes to a folder. Say so.
+- That folder is theirs alone, it is deleted at the closing, and nothing in it
+  is ever written into the base. A run that stops part way is cleared away by
+  the next run started on a later day.
 
-Handing text over this way is also what tells the safeguard this session has
-read the person's own material, which is why the session identifier belongs on
-it. From the first one, nothing leaves this computer for the rest of the
-session, exactly as after a yes to a folder, and you say so.
+### Step 6. What each draft will read
 
-That folder is this person's own, readable by nobody else, and it is deleted at
-the closing. Nothing in it is ever written into the base. A run that stops part
-way is never closed, so the next run started on a later day clears away what it
-was holding.
+This step shows, before each draft, what that draft will read and what it will
+leave out, so nothing is drafted from the wrong half of their material. The
+order is fixed: the ideal customer profile, then the positioning. (Amended
+2026-09-19, r2.4 section A: setup no longer drafts a third document.)
 
-### Step 6. The two drafts, one at a time
-
-Say that GTM Base will now draft the first document, that they will see it
-whole, and that nothing is written until they say yes. The order is fixed: the
-ideal customer profile, then the positioning. (Amended 2026-09-19, r2.4 section
-A: setup used to draft a third document, an entry recording something the team
-had decided. It is no longer a drafted step here.)
-
-For each step in turn, with `<step>` being `icp` and then `positioning`, start
-by seeing what this one document would read:
+For each step in turn, with `<step>` being `icp` and then `positioning`, run:
 
 ```
 python3 scripts/join.py preview --step <step> --run <run identifier>
 ```
 
-This writes nothing at all. It prints `going-in=`, the number of files this
-draft would read, `left-out-count=`, the number it would not, and `total=`, the
-number named for this step. Then it prints the first twenty labels going in,
-and one line for each file left out, with `reason=over-the-cap` when there was
-no room for it and `reason=unusable:<code>` when it could not be read at all.
+- It writes nothing. For the assistant it prints `choice=`, `going-in=`,
+  `left-out-count=`, `total=`, the first twenty labels going in, and one
+  `left-out=` line for each file left out, with `reason=over-the-cap`,
+  `reason=unusable:<code>`, or `reason=older-version`.
+- Then it prints the sentences to say, and you say them as they are written:
+  how much this draft reads and which files it leaves out; when the cap left
+  anything out, why a draft reads a limited amount at all; for each older
+  version of a document, why it was not used, and whether the versions say
+  different things; and, after a plain yes not yet narrowed, the question.
+- After `choice=explicit` there is no question. They named their folders
+  themselves and are not asked about them again, so go on to step 6b. They
+  can still narrow a draft whenever they ask to.
+- After `choice=plain-yes` the last sentence is the question, and it is the
+  one thing this step asks. When the cap left something out it is "Tell me
+  which files or which folder matter most for this document and I will draft
+  from those instead." Otherwise it is:
 
-Say those numbers to the person in plain words and name what is being left out.
-Then ask whether to draft from that or to narrow it to the files or the folder
-that matter for this document. If the command prints the sentence that begins
-"Your folder holds more than one draft can read at once", say that sentence as
-it is written. When everything but a handful of their files would be left out,
-say so plainly and suggest naming the folder that holds the documents for this
-draft.
+<!-- ask -->
+Shall I draft from all of these, or only from some of the files or one folder?
+<!-- end ask -->
 
 When they name files or a folder, run the preview again with `--only` or with
 `--only-folder <number>`, the number the list printed beside that folder, and
-show them the new numbers. Both of those narrow
-the list they already agreed to and neither widens it.
+say what it prints. Both narrow the list they already agreed to, and neither
+widens it.
 
-`--only` takes the numbers the listing printed beside each file, separated by
-commas, and nothing else: `--only 1,2`. It never takes a file name. A file
-name is whatever somebody called their file, so writing one into a command puts
-their text where a command goes, and a command line naming a file is refused
-outright. A number that is not on the list is refused with
-`codes=not-consented`, and the answer to that is to read the list out again and
-ask which of those they mean.
+- `--only` takes the numbers the listing printed beside each file, separated
+  by commas, and nothing else: `--only 1,2`. It never takes a file name, and a
+  command line naming a file is refused outright.
+- A number that is not on the list is refused with `codes=not-consented`. Read
+  the list out again and ask which of those they mean.
+- Naming only the older version of a document uses that version.
+- A preview they narrowed asks nothing more, because they have answered.
 
-Only when they have said what to draft from, build the request, carrying the
-same narrowing if they gave one:
+### Step 6b. The draft, whole
+
+This step drafts the one document and shows it whole, and nothing will be
+written until they say yes to it. Build the request, carrying the same
+narrowing if they gave one:
 
 ```
 python3 scripts/join.py words-file --run <run identifier> --for company
 python3 scripts/join.py assemble --step <step> --run <run identifier> --company-file <the path it printed> --email <their address>
 ```
 
-The company file from step 4 has already been read and taken away, so this
-step asks for a fresh one, and so does every step after it that needs the
-name.
-
-Add `--paste-file <the path add-paste printed>` once for each piece of text held in step 5. The
-command prints `prompt=<path>` along with the labels of what went in and what
-had to be left out. Read that file and follow it: it is the request you write
-the draft from. Write your draft to the file the command names as `draft=`.
-
-Four of its other lines need something said out loud.
-
-- Every line beginning `Left out:` names one of the person's own documents that
-  could not be used at all, with the reason in brackets. Read those out. They
-  named that material and they are entitled to know it did not go in.
+- The company file from step 4 has already been read and taken away, so this
+  step asks for a fresh one, and so does every step after it that needs the
+  name. Add `--paste-file <the path add-paste printed>` once for each piece
+  of text held in step 5c.
+- It prints `prompt=<path>`. Read that file and follow it: it is the request
+  you write the draft from. Write your draft to the file it names as `draft=`.
+- Every line beginning `Left out:` names one of their own documents that could
+  not be used at all, with the reason in brackets. Read those out.
 - Every line beginning `Hidden parts removed from` names one of their own
-  documents and says what was taken out of it, such as three comments in a
-  template. Read it out in one sentence and carry on. The document was used,
-  with those parts gone.
+  documents and says what was taken out of it. Read it out in one sentence
+  and carry on.
 - `note=date-clamped` means one of the sources says it was changed on a day
   still to come, so the date recorded for it is today. Say so.
-- When the command exits saying `codes=no-sources`, nothing survived and no
-  request was built. Read out the lines beginning `Left out:`, say plainly that
-  there was nothing left to draft from, and ask them for a shorter paste or a
-  narrower folder. Do not write a draft from nothing.
+- `codes=no-sources` means nothing survived and no request was built. Read
+  out the `Left out:` lines, say there was nothing left to draft from, and ask
+  for a shorter paste or a narrower folder. Never write a draft from nothing.
 
-Before each wait, say the line for that step, and say nothing else while the
+Before each wait, say the line for that step, and nothing else while the
 person is waiting:
 
 - Reading what you named.
@@ -400,52 +414,42 @@ Then check the draft before showing it:
 python3 scripts/join.py review --step <step> --run <run identifier> --draft <draft file>
 ```
 
-The draft file is the one `assemble` printed as `draft=`, and it is the only
-file this step will read. A draft written anywhere else is refused, because a
-step that reads any path it is handed is a step a document can point at
-somebody's private notes.
-
-It prints `ready`, or one line of `codes=` naming what it found. On any code,
-write the draft again from the same request and check it again. Never show the
-person a draft that has not come back ready, and never repeat a line of a
-refused draft to them.
+- The draft file is the one `assemble` printed as `draft=`, and it is the only
+  file this step will read. A draft written anywhere else is refused.
+- It prints `ready`, or one line of `codes=` naming what it found. On any
+  code, write the draft again from the same request and check it again.
+- Never show the person a draft that has not come back ready, and never repeat
+  a line of a refused draft to them.
+- If a draft cannot be read back at all, write it again from the same step.
+  Never move on to the next document or ask the person to fix it.
 
 When it is ready, show them the whole document and offer the answers they
-actually have.
-
-On the first document, there are three: approve it, edit it themselves, or ask
-what is wrong with it. Skipping is not one of them. A skipped document is
-written into the base saying it was skipped, and until the first document is
-approved there is no base to write it into. From the second document onward
-there are four, with skip among them.
+actually have. The first document has three: approve it, edit it, or ask what
+is wrong with it. From the second on there are four, with skip among them,
+because a skipped document is written into the base the first approval makes.
 
 - **What is wrong with this?** Ask this run for a file to put their answer in
   with `python3 scripts/join.py words-file --run <run identifier> --for answer`,
   write what they said into the path it prints, and run
   `python3 scripts/join.py what-is-wrong --step <step> --run <run identifier> --answer-file <the path it printed>`.
-  It prints a note. Follow the note, write the whole document again, and show
-  them the new one. Their words go here and nowhere else.
+  Follow the note it prints, write the whole document again, and show them the
+  new one. Their words go here and nowhere else.
 - **Edit.** Take their own wording, put it in the draft file, and check it again
   with `review`.
-- **Approve.** For the first document they approve, which is the one that
-  creates the base:
+- **Approve**, the first document they approve, which creates the base:
   `python3 scripts/join.py approve --step <step> --draft <draft file> --run <run identifier> --parent <the parent from step 4> --company-file <a fresh company file>`.
   Add `--email <address>` when they gave one, and
   `--content-folder-file <a fresh folder file>` when they named a folder in
-  step 4. For every document after it:
+  step 4.
+- **Approve**, every document after the first:
   `python3 scripts/join.py approve --step <step> --draft <draft file> --run <run identifier> --base <base folder>`.
-  The command prints `base=` and `file=`.
-  If it prints the sentence saying GTM Base needs their work email address,
-  this computer has no address recorded on it. Ask them for the address they
-  work under, then run the same approve again with `--email <address>`.
-  Nothing was written, so nothing has to be undone.
-- **Skip**, from the second document onward.
+  It prints `base=` and `file=`. When it says GTM Base needs their work email
+  address, ask for the address they work under and run the same approve again
+  with `--email <address>`. Nothing was written, so nothing is undone.
+- **Skip**, from the second document onward:
   `python3 scripts/join.py skip --step <step> --base <base folder>`.
   Say plainly that a skipped document is written down as skipped and that the
   next session will offer to finish it.
-
-If a draft cannot be read back at all, go back to the same step and write it
-again. Do not move on to the next document and do not ask the person to fix it.
 
 ### Step 7. The one question about what changed
 <!-- step -->
@@ -520,7 +524,7 @@ The whole change, settings and all, as `preview-change` printed it.
 Approve this, correct anything in it, skip it, or say what is wrong with it.
 <!-- end ask -->
 
-The four answers work exactly as they do in step 6. A correction goes back
+The four answers work exactly as they do in step 6b. A correction goes back
 through `review` and `preview-change` before it is shown again. Approving is
 `python3 scripts/join.py approve --step change-entry --draft <draft file> --run <run identifier> --base <base folder>`.
 
@@ -672,7 +676,7 @@ once, with no apology.
 Each prints the sentence to say. In a session that has already read the
 person's own documents, the sentence says instead that nothing leaves this
 computer until the session ends, which is the same rule they agreed to in step
-5.
+5c.
 
 ## When they say not now
 

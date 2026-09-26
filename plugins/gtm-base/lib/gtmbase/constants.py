@@ -574,16 +574,9 @@ DRAFT_RELEVANCE = {
         "narrative",
     ),
 }
-# What a person is told when their folder holds more than one draft can read.
-# It says the numbers, names what is being left out, and asks them to narrow
-# it, because the answer to too much material is theirs to give and not ours
-# to guess.
-DRAFT_TOO_MUCH_MATERIAL = (
-    "Your folder holds more than one draft can read at once. This draft will "
-    "read %(read)d of the %(total)d files and leave out %(left)d. The ones "
-    "left out are: %(labels)s. Tell me which files or which folder matter most "
-    "for this document and I will draft from those instead."
-)
+# What a person is told about how much one draft reads lives with the
+# selection fixes below (Unit 1.6), which split the old single sentence into
+# the count, the reason, and a narrowing question asked only after a plain yes.
 
 # --- Setting a base up: the join skill (added by the join plan's Unit 5) ----
 
@@ -799,3 +792,136 @@ LAYOUT_EMPTY_FOLDERS = (LESSONS_DIR, SKILLS_DIR, STANDARDS_DIR)
 MOVE_TO_LAYOUT_SUBJECT = "Move the base to the CLASS layout"
 REWRITE_FOR_LAYOUT_SUBJECT = "Bring each moved file's settings up to date"
 RECORD_LAYOUT_SUBJECT = "Record the move to the CLASS layout"
+
+# --- Selection fixes (added by Unit 1.6) -------------------------------------
+
+# The kinds that count towards a place only when the same place also holds a
+# document saying who the company sells to or how it describes itself. The
+# third real run proposed ten places where two were right, because a folder of
+# engineering notes holds a deploy plan and a folder of finance holds metrics.
+# A folder of plans on its own can still be added by name.
+MARKETING_KINDS_ONLY_BESIDE_A_PROFILE = ("plan", "metrics")
+# The kinds whose presence in a place lets plans and metrics count there.
+MARKETING_KINDS_THAT_ANCHOR = ("customer-profile", "persona", "positioning")
+# The note a place leaves behind when it held nothing but plans and metrics,
+# with the folder's name after it.
+SURVEY_PLANS_ALONE_NOTE = "plans-alone:%s"
+# What a place is said to mostly hold when most of its files carry no kind by
+# their names, in the words a person would use.
+MOSTLY_OTHER_LABEL = "other files"
+# How much of the start of a file the finding step reads to find its first
+# heading. It is one bounded read, so a file whose first line is enormous is
+# still read no further than this.
+SURVEY_HEADING_BYTES = 4096
+
+# The words in a file name that say it is one version of a document rather
+# than a document of its own. They are taken off the end of the name, and off
+# the start, to find the name the versions share. The list is kept short on
+# purpose, because a version left out of a draft is material not read: "copy"
+# is not on it, since ad copy is a document of its own, and neither are "new"
+# or "current", since new customers and current customers are two documents.
+VERSION_MARKER_WORDS = (
+    "final",
+    "draft",
+    "old",
+    "latest",
+    "updated",
+    "revised",
+    "wip",
+    "backup",
+)
+# The one word that makes a version outrank a newer one. A date on a file says
+# when it was last touched, not which version somebody signed off.
+VERSION_FINAL_WORD = "final"
+# The words that say a version was put aside. A name carrying one of them
+# ranks below a sibling that carries none, whatever the dates say, because a
+# copy saved the same day as the current one ties on its date, and the name
+# was then all that decided it (finding 1 of the unit's correctness review).
+VERSION_SET_ASIDE_WORDS = ("old", "backup", "draft", "wip")
+# The words that may also open a name and still mark it as a version, as in
+# "final positioning". The others are left off, because "old customers" and
+# "backup plan" are documents of their own.
+VERSION_HEAD_WORDS = ("final", "draft")
+# Why a version was left out of a draft, as a short code on the preview's
+# lines for the assistant.
+REASON_OLDER_VERSION = "older-version"
+
+# Words in a file's name or first heading that say it is a template, and file
+# names that say it is a read-me. Both go last in every draft, so they are the
+# first things the cap leaves out: a template is the shape of a document with
+# nothing of the business in it.
+DRAFT_LAST_WORDS = ("template",)
+DRAFT_LAST_NAMES = ("readme",)
+
+# How a list of files came to be the one a person said yes to. A plain yes
+# accepts what GTM Base proposed. An explicit choice is the folders the person
+# named themselves, and it is honored without asking them to narrow it again.
+CHOICE_PLAIN_YES = "plain-yes"
+CHOICE_EXPLICIT = "explicit"
+CONSENT_CHOICES = (CHOICE_PLAIN_YES, CHOICE_EXPLICIT)
+
+# The count a person confirms after naming their folders themselves.
+EXPLICIT_COUNT_SENTENCE = (
+    "That is %(files)s in the %(folders)s you named."
+)
+# What the preview says about how much one draft will read.
+PREVIEW_READS_ALL = "This draft will read all %(read)d files on your list."
+PREVIEW_READS_THE_ONE = "This draft will read the one file on your list."
+PREVIEW_READS_SOME = (
+    "This draft will read %(read)d of the %(total)d files on your list and "
+    "leave out %(left)d: %(labels)s."
+)
+# The same three, once the person has narrowed the draft to part of the list.
+PREVIEW_READS_ALL_CHOSEN = "This draft will read all %(read)d files you chose."
+PREVIEW_READS_THE_ONE_CHOSEN = "This draft will read the one file you chose."
+PREVIEW_READS_SOME_CHOSEN = (
+    "This draft will read %(read)d of the %(total)d files you chose and leave "
+    "out %(left)d: %(labels)s."
+)
+# Why a draft reads a limited amount at all, said whenever the cap left
+# anything out.
+PREVIEW_WHY_LIMITED = (
+    "A draft reads a limited amount because the assistant can take in only so "
+    "much at once, so the files that matter least for this document are left "
+    "out whole rather than read in part."
+)
+# Said for each version of a document a draft does not use.
+VERSION_NOT_USED_FINAL = (
+    "%(older)s was not used, because %(winner)s is named as the final version "
+    "of the same document."
+)
+VERSION_NOT_USED_FINAL_OVER_NEWER = (
+    "%(older)s was not used although it is newer, because %(winner)s is named "
+    "as the final version of the same document."
+)
+VERSION_NOT_USED_NEWER = (
+    "%(older)s was not used, because %(winner)s is the newer version of the "
+    "same document."
+)
+VERSION_NOT_USED_SET_ASIDE = (
+    "%(older)s was not used, because its name marks it as an older copy of "
+    "%(winner)s."
+)
+VERSION_NOT_USED_LATER_NUMBER = (
+    "%(older)s was not used, because %(winner)s carries a later version number "
+    "in its name."
+)
+VERSION_NOT_USED_SAME_DAY = (
+    "%(older)s was not used, because %(winner)s is another version of the same "
+    "document, and neither one is newer."
+)
+# Said when two versions of one document say different things.
+VERSION_CONFLICT = (
+    "%(winner)s and %(older)s are versions of the same document, and they say "
+    "different things."
+)
+# The narrowing question, asked before a draft only when the list was a plain
+# yes rather than folders the person named.
+PREVIEW_NARROW_ASK_ALL = (
+    "Shall I draft from all of these, or only from some of the files or one "
+    "folder?"
+)
+PREVIEW_NARROW_ASK_SOME = (
+    "Tell me which files or which folder matter most for this document and I "
+    "will draft from those instead."
+)

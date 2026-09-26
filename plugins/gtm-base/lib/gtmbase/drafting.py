@@ -267,8 +267,15 @@ def order_sources(step: str, sources: Sequence["sources_module.Source"]):
     was reached, and every one of the fourteen files describing who the company
     sells to sat past it while the profile was drafted from one file about
     messaging.
+
+    Templates and read-me files go last of all, whatever step it is and
+    whatever their names say they are about (Unit 1.6). The third real run
+    spent room on templates while a finished document sat past the cap, and a
+    template is the shape of a document with nothing of the business in it,
+    so it is the first thing the cap should reach.
     """
-    listed = list(sources)
+    listed = [source for source in sources if not is_template_or_readme(source)]
+    last = [source for source in sources if is_template_or_readme(source)]
     if step == STEP_CHANGE:
         # What a context change wants first is the most recent material, so
         # the dated sources lead, newest first, and the undated follow in the
@@ -276,13 +283,37 @@ def order_sources(step: str, sources: Sequence["sources_module.Source"]):
         dated = [source for source in listed if getattr(source, "date", None)]
         undated = [source for source in listed if not getattr(source, "date", None)]
         dated.sort(key=lambda source: str(source.date), reverse=True)
-        return dated + undated
+        return dated + undated + last
     words = constants.DRAFT_RELEVANCE.get(step, ())
     if not words:
-        return listed
+        return listed + last
     wanted = [source for source in listed if _is_wanted_first(source, words)]
     rest = [source for source in listed if not _is_wanted_first(source, words)]
-    return wanted + rest
+    return wanted + rest + last
+
+
+def _words_in(text: str):
+    return [word for word in re.split(r"[^a-z0-9]+", str(text or "").casefold()) if word]
+
+
+def is_template_or_readme(source) -> bool:
+    """Whether a source is a template or a read-me, by its name or first heading.
+
+    The words are matched whole, so a file of email templates and a finished
+    positioning built on somebody's template are not taken for templates. A
+    heading counts only when it is short, as the title of a template is, such
+    as "Launch brief template" (finding 5 of the unit's correctness review).
+    """
+    label = str(getattr(source, "label", "") or "")
+    name_words = _words_in(os.path.splitext(label)[0])
+    if any(word in name_words for word in constants.DRAFT_LAST_NAMES):
+        return True
+    if any(word in name_words for word in constants.DRAFT_LAST_WORDS):
+        return True
+    heading_words = _words_in(_first_heading(source))
+    return len(heading_words) <= 5 and any(
+        word in heading_words for word in constants.DRAFT_LAST_WORDS
+    )
 
 
 def plan_sources(step: str, sources: Sequence["sources_module.Source"]) -> SourcePlan:

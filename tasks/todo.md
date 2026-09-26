@@ -1338,3 +1338,15 @@ Pass: docs/reviews/2026-09-26-unit-1-5b-verify-astra.md in the main checkout. Te
 - [x] 5 The shell fallback needs the map and a history, or a registered root, before it calls a folder a base.
 - [x] The merge regression from finding 6 of the first review: a merge that adds a skill neither side had, taken away after; it fails on fb13268.
 - [ ] Open: the check before a send still refuses a source map holding a link in angle brackets, because every outgoing file is held to the hidden-content rule.
+
+### 2026-09-26, Unit 1.6: selection fixes
+Plan: docs/plans/2026-09-19-001-feat-base-that-produces-work-plan.md, Unit 1.6 (requirements P24 to P26). Built on its own branch, `unit-1-6`, on top of the unmerged Unit 1.5b; not merged, not released.
+- [x] Survey: plans and metrics count only beside a profile, persona, or positioning file (`plans-alone` note); each place says what it mostly holds from paths only; per-file candidates and same-stem version sets in the survey output; the first heading read in one bounded read of 4096 bytes as well as forty lines.
+- [x] Provenance: the listing and the yes record `choice` (explicit or plain-yes), the folders the person named, and a manifest digest. `--keep <place number>` names the places to use. An explicit choice is never narrowed again and gets a plain count; a plain yes to a list that is itself too large is narrowed once (the old rule let any plain yes with folders past it); a list shown after the yes stops reading with `codes=asks-again` until it has a yes of its own.
+- [x] Preview: the count, the files left out, and why a draft reads a limited amount; one version of each document (final over a newer date, else the newest), each version left out named and a body conflict said aloud, after consent only; the narrowing question printed only after a plain yes; assemble no longer repeats it. Preview and assemble share one chooser, so they read the same files.
+- [x] `order_sources`: templates and read-me files last for every step.
+- [x] Join skill steps 5 and 6 rewritten as 5, 5b, 5c, 6, 6b, each opening with its purpose and asking one thing; the consent paragraph cut to three short lines and the question; Unit 1.6's four exemptions removed; new sentences registered with the lint.
+- [x] Tests: every plan scenario (tests/test_sources.py, tests/test_join_setup_flow.py, tests/test_drafting.py), including a guarded reader that fails any survey read past its byte cap.
+- [x] Atlas figure 7 (not republished), the reading rules, the join guide, the draft Unreleased CHANGELOG.
+- [ ] Brandon: the words listed in the hand-back report; then the live survey of ~/Gridwise.
+- [ ] Orchestrator: review, merge after 1.5b, version bump, atlas republish.

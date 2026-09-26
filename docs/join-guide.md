@@ -133,7 +133,8 @@ through the folder you named before you are shown any list of files, and
 proposes the places inside it that look like your marketing material, with a
 count of what it found in each one, and asks you whether that is it. You say
 yes, add a folder, or drop one, and the list you are then asked about covers
-only those places. That finding step looks at the name of each file and the
+only those places. If you name the folders yourself, you are shown a count of
+the files in them to confirm, and you are never asked to narrow them again. That finding step looks at the name of each file and the
 first heading inside each document, and at nothing else. It works this way
 because a list of a hundred and fifty files offered for one yes is a list
 nobody can really read, and working out which folder holds what is not a job to
@@ -143,7 +144,12 @@ offered for reading and cannot be named back in, because that is other people's
 personal information rather than a document about your business. Before
 each of the two drafts you are shown what that draft will read and what it
 will leave out, and you can narrow it to the files or the folder that matter for
-that one document, which is worth doing when the folder you named is large. It
+that one document, which is worth doing when the folder you named is large. You
+are asked whether to narrow it only when you said yes to the places GTM Base
+proposed rather than naming your own. When a draft cannot read everything, you
+are told why. When two files are versions of one document, the draft reads the
+one whose name says final, or else the newer one, and you are told which one it
+left out and whether the two say different things. It
 then drafts two things for you, which are your ideal customer profile and your
 positioning. You read each
 draft as a whole document and either approve it, edit it, or skip it. Nothing is

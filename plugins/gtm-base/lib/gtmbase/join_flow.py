@@ -26,6 +26,8 @@ how to come back to it.
 from __future__ import annotations
 
 import datetime
+import hashlib
+import json
 import os
 import shutil
 import stat
@@ -108,6 +110,9 @@ CODE_NO_SURVEY = "no-survey"
 # Every place the finding step proposed was dropped and none was added, so
 # there is nothing left to show.
 CODE_NO_FOLDERS_CHOSEN = "no-folders-chosen"
+# A different list was shown after the yes was given, so the yes does not
+# carry over to it and nothing is read until that list has one (Unit 1.6).
+CODE_ASK_AGAIN = "asks-again"
 # The note about what got in the way could not be saved into the base.
 NOTE_NOT_SAVED = "note-not-saved"
 
@@ -228,6 +233,7 @@ class Assembled(object):
         "codes",
         "left_out",
         "removed",
+        "superseded",
     )
 
     def __init__(
@@ -239,6 +245,7 @@ class Assembled(object):
         codes=None,
         left_out=None,
         removed=None,
+        superseded=None,
     ):
         self.path = path
         self.step = step
@@ -250,6 +257,9 @@ class Assembled(object):
         self.left_out = list(left_out or [])
         # Pairs of the label and the counts of what was taken out of it.
         self.removed = list(removed or [])
+        # Each version of a document left out because another version of it
+        # was used (Unit 1.6).
+        self.superseded = list(superseded or [])
 
     def __repr__(self) -> str:
         return "Assembled(step=%r, included=%d)" % (
@@ -270,6 +280,9 @@ class Previewed(object):
         "left_out",
         "removed",
         "total",
+        "superseded",
+        "choice",
+        "narrowed",
     )
 
     def __init__(
@@ -281,6 +294,9 @@ class Previewed(object):
         codes=None,
         left_out=None,
         removed=None,
+        superseded=None,
+        choice=None,
+        narrowed=False,
     ):
         self.step = step
         self.included_labels = list(included_labels)
@@ -289,10 +305,24 @@ class Previewed(object):
         self.codes = list(codes or [])
         self.left_out = list(left_out or [])
         self.removed = list(removed or [])
+        # Each version of a document left out because another version of it
+        # was used, with the reason and whether the two say different things.
+        self.superseded = list(superseded or [])
+        # Whether the list this draft reads from was folders the person named
+        # or a plain yes to a proposal. Only a plain yes is asked, before a
+        # draft, whether to narrow it (ruling 2 of the acceptance matrix).
+        self.choice = choice or constants.CHOICE_PLAIN_YES
+        # Whether the person narrowed this draft to part of the list. A draft
+        # they narrowed has had its question answered, so it is not asked
+        # again (finding 3 of the unit's correctness review).
+        self.narrowed = bool(narrowed)
         # Every document named for this step, including the ones that could
-        # not be used at all, which is the number the person recognises as
-        # the size of their own folder.
-        self.total = len(self.ordered_labels) + len(self.left_out)
+        # not be used at all and the versions another version stood in for,
+        # which is the number the person recognises as the size of their own
+        # folder.
+        self.total = (
+            len(self.ordered_labels) + len(self.left_out) + len(self.superseded)
+        )
 
     def __repr__(self) -> str:
         return "Previewed(step=%r, included=%d, dropped=%d)" % (
@@ -621,11 +651,17 @@ def survey_sources(run_id: str, folder: str, today=None):
                         "counts": dict(place.counts_by_kind),
                         "samples": list(place.sample_labels),
                         "score": place.score,
+                        "mostly": place.mostly,
+                        "candidates": [
+                            {"path": relative, "kind": kind}
+                            for relative, kind in place.candidates
+                        ],
                     }
                     for place in found.places
                 ],
                 "notes": list(found.notes),
                 "skipped": dict(found.skipped_counts),
+                "version_sets": [list(group) for group in found.version_sets],
             },
             inside=paths.seat_home(),
         )
@@ -674,27 +710,60 @@ def _added_place(root: str, name: str) -> Optional[str]:
     return os.path.basename(real)
 
 
-def chosen_places(run_id: str, added=None, dropped=None):
+def chosen_places(run_id: str, added=None, dropped=None, kept=None):
     """The places to list: what was proposed, plus adds, less drops.
 
     A name nobody proposed and nobody added is refused rather than quietly
     listed, and so is a name dropped that was never on offer, because both of
     those are somebody naming a folder that is not the one they think it is.
     """
+    return settle_places(run_id, added=added, dropped=dropped, kept=kept)[0]
+
+
+def settle_places(run_id: str, added=None, dropped=None, kept=None):
+    """The places to list, and which of them the person named themselves.
+
+    Unit 1.6, requirement P25. `kept` is the proposed places the person named
+    as the ones to use, and when it is given every other proposed place is
+    left out. `added` is folders they named that were not proposed. Both are
+    folders the person named, and a list made only of folders they named is
+    an explicit choice; a plain yes to what was proposed, with or without a
+    place dropped, is not, because the folders on it are still the ones GTM
+    Base picked.
+    """
     found = load_survey(run_id)
     if found is None:
         raise ConsentError(
             "no places have been proposed for this run yet", code=CODE_NO_SURVEY
         )
-    chosen = list(found["places"])
+    proposed = list(found["places"])
+    chosen = list(proposed)
+    named: List[str] = []
+    keep = [str(item).strip() for item in (kept or []) if str(item).strip()]
+    if keep:
+        wanted_places = []
+        for name in keep:
+            wanted = name.strip("/").replace(os.sep, "/").split("/")[-1] or name
+            if wanted not in proposed:
+                raise ConsentError(
+                    "that folder is not one of the places that were proposed",
+                    code=CODE_NO_SUCH_FOLDER,
+                )
+            if wanted not in wanted_places:
+                wanted_places.append(wanted)
+        chosen = [place for place in proposed if place in wanted_places]
+        named.extend(chosen)
     for name in [str(item).strip() for item in (dropped or []) if str(item).strip()]:
         wanted = name.strip("/").replace(os.sep, "/").split("/")[-1] or name
-        if wanted not in chosen:
+        if wanted not in proposed:
             raise ConsentError(
                 "that folder is not one of the places that were proposed",
                 code=CODE_NO_SUCH_FOLDER,
             )
-        chosen.remove(wanted)
+        if wanted in chosen:
+            chosen.remove(wanted)
+        if wanted in named:
+            named.remove(wanted)
     for name in [str(item).strip() for item in (added or []) if str(item).strip()]:
         wanted = _added_place(found["root"], name)
         if wanted is None:
@@ -704,11 +773,16 @@ def chosen_places(run_id: str, added=None, dropped=None):
             )
         if wanted not in chosen:
             chosen.append(wanted)
+        # A folder named to add that GTM Base had already proposed is still a
+        # proposed folder, so adding it cannot turn a plain yes into a choice
+        # that skips the narrowing question.
+        if wanted not in proposed and wanted not in named:
+            named.append(wanted)
     if not chosen:
         raise ConsentError(
             "no places are left to show", code=CODE_NO_FOLDERS_CHOSEN
         )
-    return chosen
+    return chosen, named
 
 
 def list_sources(
@@ -719,6 +793,7 @@ def list_sources(
     from_survey: bool = False,
     added: Optional[Sequence[str]] = None,
     dropped: Optional[Sequence[str]] = None,
+    kept: Optional[Sequence[str]] = None,
 ):
     """Everything in a folder that could be read, and everything left out.
 
@@ -737,9 +812,19 @@ def list_sources(
     shown and before it is written down. The value standing for the whole of
     it still covers the whole folder, because that value is what says whether
     the folder itself has changed since the person looked at it.
+
+    Unit 1.6: the list also records how it came to be. Folders the person
+    named, at the narrowing question or as the places to use or add, make an
+    explicit choice. Anything else is a plain yes to what GTM Base proposed.
+    An explicit choice is not asked to be narrowed again, however many files
+    it holds, and gets a plain count to confirm instead. A plain yes to a list
+    too large and spread out to read through is still narrowed first, because
+    a proposed list is populated with folders too, and folders on a list say
+    nothing about who picked them.
     """
     whole = sources_module.list_folder(folder, today=today)
     chosen = [str(name).strip() for name in (only_folders or []) if str(name).strip()]
+    named = list(chosen)
     adjustments = {"added": [], "dropped": []}
     if from_survey:
         adjustments = {
@@ -750,7 +835,9 @@ def list_sources(
                 set(str(name).strip() for name in (dropped or []) if str(name).strip())
             ),
         }
-        chosen = chosen_places(run_id, added=added, dropped=dropped)
+        chosen, named = settle_places(
+            run_id, added=added, dropped=dropped, kept=kept
+        )
     listing = whole
     if chosen:
         missing = [
@@ -764,6 +851,16 @@ def list_sources(
                 code=CODE_NO_SUCH_FOLDER,
             )
         listing = sources_module.narrow_to_folders(whole, chosen)
+    choice = choice_of(chosen, named)
+    if choice == constants.CHOICE_EXPLICIT:
+        # Folders the person named are not narrowed again, however many files
+        # they hold. The third real run asked a second time after four
+        # folders had been named, and that is the question this takes away.
+        listing.codes = [
+            code for code in listing.codes if code != sources_module.CODE_NARROW_FIRST
+        ]
+    narrow_first = sources_module.CODE_NARROW_FIRST in listing.codes
+    shown_paths = [os.path.realpath(entry.path) for entry in files_in_order(listing)]
     if run_id:
         atomic_write_json(
             os.path.join(scratch_dir(run_id), LISTING_FILE),
@@ -771,6 +868,10 @@ def list_sources(
                 "root": listing.root,
                 "digest": sources_module.listing_digest(whole),
                 "note": sources_module.CODE_NARROW_FIRST in whole.codes,
+                "narrow_first": narrow_first,
+                "choice": choice,
+                "named": sorted(set(_folder_name(name) for name in named)),
+                "manifest": manifest_digest(listing.root, chosen, choice, shown_paths),
                 "folders": sorted(set(chosen)),
                 "from_survey": bool(from_survey),
                 "added": list(adjustments["added"]),
@@ -779,14 +880,53 @@ def list_sources(
                 # so the skill can name one by its number afterwards rather
                 # than by a name a folder's author chose (finding F6).
                 "folder_names": folders_in_order(listing),
-                "paths": [
-                    os.path.realpath(entry.path)
-                    for entry in files_in_order(listing)
-                ],
+                "paths": shown_paths,
             },
             inside=paths.seat_home(),
         )
     return listing
+
+
+def _folder_name(name) -> str:
+    """One folder of a list, as the last part of whatever named it."""
+    text = str(name or "").strip()
+    return text.strip("/").replace(os.sep, "/").split("/")[-1] or text
+
+
+def choice_of(chosen, named) -> str:
+    """Whether a list is an explicit choice or a plain yes to a proposal.
+
+    It is explicit only when there is a list of folders and the person named
+    every one of them. A list of the whole folder, or one holding any folder
+    GTM Base proposed and the person only let stand, is a plain yes.
+    """
+    folders = set(_folder_name(name) for name in (chosen or []) if str(name).strip())
+    if not folders:
+        return constants.CHOICE_PLAIN_YES
+    if folders <= set(_folder_name(name) for name in (named or [])):
+        return constants.CHOICE_EXPLICIT
+    return constants.CHOICE_PLAIN_YES
+
+
+def manifest_digest(root, folders, choice, shown_paths) -> str:
+    """One value standing for the list a yes is given to, and how it was chosen.
+
+    The listing digest says whether the folder itself has changed. This one
+    says whether the list has: which folders it covers, whether they were named
+    or proposed, and exactly which files are on it, in the order they were
+    shown. A yes is kept with this value, and a list whose value differs is a
+    different list that needs a yes of its own (Unit 1.6).
+    """
+    payload = json.dumps(
+        {
+            "root": os.path.realpath(str(root or "")),
+            "folders": sorted(set(_folder_name(name) for name in (folders or []))),
+            "choice": str(choice or ""),
+            "paths": list(shown_paths or []),
+        },
+        sort_keys=True,
+    )
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()
 
 
 def files_in_order(listing) -> list:
@@ -845,11 +985,26 @@ def load_listing(run_id: str):
         found = payload.get(key)
         return [str(item) for item in found] if isinstance(found, list) else []
 
+    folders = [str(item) for item in folders] if isinstance(folders, list) else []
+    note = bool(payload.get("note"))
+    narrow_first = payload.get("narrow_first")
+    if not isinstance(narrow_first, bool):
+        # A list written before Unit 1.6 carries no answer of its own, so it
+        # keeps the rule it was written under.
+        narrow_first = note and not folders
+    choice = payload.get("choice")
+    if choice not in constants.CONSENT_CHOICES:
+        choice = constants.CHOICE_PLAIN_YES
+    manifest = payload.get("manifest")
     return {
         "root": str(payload.get("root") or ""),
         "digest": digest,
-        "note": bool(payload.get("note")),
-        "folders": [str(item) for item in folders] if isinstance(folders, list) else [],
+        "note": note,
+        "narrow_first": narrow_first,
+        "choice": choice,
+        "named": names("named"),
+        "manifest": manifest if isinstance(manifest, str) else "",
+        "folders": folders,
         "from_survey": bool(payload.get("from_survey")),
         "added": names("added"),
         "dropped": names("dropped"),
@@ -868,7 +1023,14 @@ def freeze_sources(folder: str, session_id: str, run_id: str, today=None):
 
     A list that was too large and too spread out to be read through is refused
     as well, until the person has said which of its folders hold their
-    marketing material. A yes nobody could have read is not a yes.
+    marketing material. A yes nobody could have read is not a yes. Since Unit
+    1.6 that is asked of the list as it was shown, not of the whole folder, so
+    a plain yes to a proposal that is itself too large is narrowed too, and an
+    explicit choice is never narrowed again.
+
+    The yes is written down with the value standing for the list it was given
+    to. If a different list is shown afterwards, that yes does not carry over
+    to it: nothing is read until the new list has a yes of its own.
     """
     shown = load_listing(run_id)
     if shown is None:
@@ -881,7 +1043,7 @@ def freeze_sources(folder: str, session_id: str, run_id: str, today=None):
             "that folder is not what it was when the list was shown",
             code=CODE_LISTING_CHANGED,
         )
-    if shown["note"] and not shown["folders"]:
+    if shown["narrow_first"]:
         raise ConsentError(
             "that list is too large to be agreed to whole",
             code=CODE_NARROW_FIRST,
@@ -892,6 +1054,9 @@ def freeze_sources(folder: str, session_id: str, run_id: str, today=None):
         {
             "root": shown["root"],
             "folders": list(shown["folders"]),
+            "choice": shown["choice"],
+            "named": list(shown["named"]),
+            "manifest": shown["manifest"],
             "from_survey": bool(shown["from_survey"]),
             "added": list(shown["added"]),
             "dropped": list(shown["dropped"]),
@@ -922,6 +1087,38 @@ def load_consent(run_id: str):
         str(payload.get("session_id") or ""),
         str(payload.get("frozen_at") or ""),
     )
+
+
+def consent_choice(run_id: str) -> str:
+    """Whether the yes this run holds was an explicit choice or a plain yes."""
+    payload = _consent_payload(run_id)
+    choice = payload.get("choice") if payload else None
+    if choice in constants.CONSENT_CHOICES:
+        return choice
+    return constants.CHOICE_PLAIN_YES
+
+
+def _refuse_a_yes_given_to_another_list(run_id: str) -> None:
+    """Refuse to read when the list shown last is not the list the yes was for.
+
+    Unit 1.6: a changed list asks again. The yes is kept with the value
+    standing for the list it was given to, and the list shown last is kept
+    with its own. When they differ the person has been shown a list they have
+    not said yes to, and the old yes is not reused for it. A yes or a list
+    written before this unit carries no value, and is read as it always was.
+    """
+    payload = _consent_payload(run_id)
+    shown = load_listing(run_id)
+    if payload is None or shown is None:
+        return
+    given = payload.get("manifest")
+    if not isinstance(given, str) or not given or not shown["manifest"]:
+        return
+    if given != shown["manifest"]:
+        raise ConsentError(
+            "a different list has been shown since the yes",
+            code=CODE_ASK_AGAIN,
+        )
 
 
 def consent_root(run_id: str) -> str:
@@ -1067,7 +1264,11 @@ def read_sources(
     `only` and `only_folder` narrow what is read to a part of the list the
     person already agreed to. They never widen it: a name that is not on the
     frozen list is refused.
+
+    A list shown after the yes, which the person has not said yes to, stops
+    the reading altogether (Unit 1.6): the yes they gave was to another list.
     """
+    _refuse_a_yes_given_to_another_list(run_id)
     consent = load_consent(run_id)
     found: List["sources_module.Source"] = []
     left_out: List[tuple] = []
@@ -1159,17 +1360,12 @@ def preview_step(
     material.
     """
     day = today or state.today()
-    read = read_sources(
-        run_id,
-        paste_files,
-        today=day,
-        only=only,
-        only_folder=only_folder,
-        only_index=only_index,
+    read, chosen, superseded = _sources_for_a_draft(
+        run_id, paste_files, day, only, only_folder, only_index
     )
-    plan = drafting.plan_sources(step, read.sources)
+    plan = drafting.plan_sources(step, chosen)
     codes = list(plan.codes)
-    if read.sources and not plan.included:
+    if chosen and not plan.included:
         codes.append(drafting.CODE_NO_SOURCES)
     return Previewed(
         step,
@@ -1179,6 +1375,9 @@ def preview_step(
         codes,
         read.left_out,
         read.removed,
+        superseded=superseded,
+        choice=consent_choice(run_id),
+        narrowed=bool(only or only_folder or only_index),
     )
 
 
@@ -1201,18 +1400,13 @@ def assemble_step(
     when nothing was left to draft from.
     """
     day = today or state.today()
-    read = read_sources(
-        run_id,
-        paste_files,
-        today=day,
-        only=only,
-        only_folder=only_folder,
-        only_index=only_index,
+    read, chosen, superseded = _sources_for_a_draft(
+        run_id, paste_files, day, only, only_folder, only_index
     )
     try:
         assembly = drafting.assemble(
             step,
-            read.sources,
+            chosen,
             company,
             day.isoformat() if hasattr(day, "isoformat") else str(day),
             owner_email,
@@ -1231,7 +1425,137 @@ def assemble_step(
         assembly.codes,
         read.left_out,
         read.removed,
+        superseded=superseded,
     )
+
+
+class VersionLeftOut(object):
+    """One version of a document a draft does not use, and why.
+
+    `reason` is one of the cases the preview has a sentence for, and
+    `differs` says whether its words differ from the version that was used,
+    which is a conflict the person is told about rather than one settled for
+    them in silence.
+    """
+
+    __slots__ = ("older", "winner", "older_line", "reason", "differs")
+
+    FINAL = "final"
+    FINAL_OVER_NEWER = "final-over-newer"
+    SET_ASIDE = "set-aside"
+    LATER_NUMBER = "later-number"
+    NEWER = "newer"
+    SAME_DAY = "same-day"
+
+    def __init__(self, older, winner, older_line, reason, differs):
+        self.older = older
+        self.winner = winner
+        self.older_line = older_line
+        self.reason = reason
+        self.differs = bool(differs)
+
+    def __repr__(self) -> str:
+        return "VersionLeftOut(older=%r, winner=%r, reason=%r)" % (
+            self.older,
+            self.winner,
+            self.reason,
+        )
+
+
+def _day_of(source):
+    when = getattr(source, "date", None)
+    return when if hasattr(when, "toordinal") else None
+
+
+def _why_this_version(winner, older) -> str:
+    """Which reason put one version ahead of another, in the order they rank."""
+    winner_path = getattr(winner, "path", "") or ""
+    older_path = getattr(older, "path", "") or ""
+    winner_day = _day_of(winner)
+    older_day = _day_of(older)
+    if sources_module.is_final(winner_path) and not sources_module.is_final(
+        older_path
+    ):
+        if older_day and winner_day and older_day > winner_day:
+            return VersionLeftOut.FINAL_OVER_NEWER
+        if older_day and not winner_day:
+            return VersionLeftOut.FINAL_OVER_NEWER
+        return VersionLeftOut.FINAL
+    if sources_module.is_set_aside(older_path) and not sources_module.is_set_aside(
+        winner_path
+    ):
+        return VersionLeftOut.SET_ASIDE
+    if sources_module.version_number(winner_path) > sources_module.version_number(
+        older_path
+    ):
+        return VersionLeftOut.LATER_NUMBER
+    if winner_day and (older_day is None or winner_day > older_day):
+        return VersionLeftOut.NEWER
+    return VersionLeftOut.SAME_DAY
+
+
+def _words_of(source) -> str:
+    return " ".join(str(getattr(source, "text", "") or "").split())
+
+
+def choose_versions(found):
+    """Keep one version of each document, and say which versions went and why.
+
+    Unit 1.6, requirement P26. Versions are grouped by name alone, exactly as
+    the survey groups them, and the one used is the one whose name says final,
+    or else the newest. It takes the place of the first version of it on the
+    list, so it is read as early as any version of it would have been. Now
+    that the person has said yes, the words of each version left out are
+    compared with the one used, and a difference is reported as a conflict
+    rather than settled without a word, because a date on a file says when it
+    was touched and not which version is right.
+
+    This only ever takes versions away from what was agreed. It never adds.
+    """
+    groups = sources_module.version_groups(found, _day_of)
+    winner_of = {}
+    left: List[VersionLeftOut] = []
+    for group in groups:
+        winner = group[0]
+        for member in group:
+            winner_of[id(member)] = winner
+        for older in group[1:]:
+            left.append(
+                VersionLeftOut(
+                    older.label,
+                    winner.label,
+                    drafting.source_line(older),
+                    _why_this_version(winner, older),
+                    _words_of(older) != _words_of(winner),
+                )
+            )
+    kept = []
+    placed = set()
+    for source in found:
+        winner = winner_of.get(id(source), source)
+        if id(winner) in placed:
+            continue
+        placed.add(id(winner))
+        kept.append(winner)
+    return kept, left
+
+
+def _sources_for_a_draft(run_id, paste_files, day, only, only_folder, only_index):
+    """What one draft reads: the agreed list, narrowed, one version of each.
+
+    The preview and the request go through this one function, so the two can
+    never disagree about which files a draft reads.
+    """
+    read = read_sources(
+        run_id,
+        paste_files,
+        today=day,
+        only=only,
+        only_folder=only_folder,
+        only_index=only_index,
+    )
+    chosen, superseded = choose_versions(read.sources)
+    return read, chosen, superseded
 
 
 def drafts_dir(run_id: str) -> str:
