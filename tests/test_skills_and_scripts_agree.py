@@ -485,6 +485,8 @@ CONSUMES_WORDS = (
     "--words",
     "--content-folder-file",
     "--add-file",
+    "--scope-file",
+    "--segments-file",
 )
 
 # One documented command per script that is actually run, with the placeholders
@@ -680,6 +682,8 @@ class TestTheSkillsAsTheyAreWritten(unittest.TestCase):
         "--what-changed-file": "what-changed",
         "--content-folder-file": "folder",
         "--add-file": "folder",
+        "--scope-file": "scope",
+        "--segments-file": "segments",
     }
 
     def _flag_before(self, command, placeholder):
@@ -861,6 +865,10 @@ class TestTheSkillsAsTheyAreWritten(unittest.TestCase):
         "reason": "We moved up market, so this is out of date now.",
         "source": "The quarterly review deck, slide four, said so.",
         "what-changed": "We moved up market because the small ones churned.",
+        # Unit 1.7a: the part of the company a base is for, and one line per
+        # segment the way the join skill says to write them.
+        "scope": "Payments",
+        "segments": "draft - Fintech lenders\nleave-out - Regional banks\n",
     }
 
     def handed_out(self, state, command, printed):

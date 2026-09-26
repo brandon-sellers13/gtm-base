@@ -870,6 +870,25 @@ PYTHON_SENTENCES = (
     ("constants", "VERSION_CONFLICT"),
     ("constants", "PREVIEW_NARROW_ASK_ALL"),
     ("constants", "PREVIEW_NARROW_ASK_SOME"),
+    # Unit 1.7a: what the base is for, said back once it is held, and the
+    # inventory of segments, its question, its read-back, and its refusals.
+    ("constants", "SCOPE_SPLITS_SENTENCE"),
+    ("constants", "SCOPE_HELD_SENTENCE"),
+    ("constants", "SCOPE_WHOLE_SENTENCE"),
+    ("segments", "FOUND_SENTENCE"),
+    ("segments", "ASK_SENTENCE"),
+    ("segments", "WILL_ADOPT"),
+    ("segments", "WILL_DRAFT"),
+    ("segments", "WILL_LEAVE_OUT"),
+    ("segments", "SAVED_SENTENCE"),
+    ("segments", "ONE_SEGMENT_SENTENCE"),
+    ("segments", "SAME_NAME"),
+    ("segments", "NO_USABLE_NAME"),
+    ("segments", "RESERVED_NAME"),
+    ("segments", "SAME_DOCUMENT"),
+    ("segments", "NAME_UNUSABLE"),
+    ("segments", "TOO_MANY"),
+    ("segments", "NONE_NAMED"),
 )
 
 # Constants that read like a sentence but that no person ever reads. Each one

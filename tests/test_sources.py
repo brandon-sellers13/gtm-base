@@ -1449,5 +1449,27 @@ class TestTheReadingRules(unittest.TestCase):
         self.assertIn("empty page", text.lower())
 
 
+class TestTheScopeTravelsWithTheYes(unittest.TestCase):
+    """Unit 1.7a: the consent record keeps what the base is for."""
+
+    def test_a_yes_carries_the_scope_it_was_given_under(self):
+        with Sandbox():
+            with TempFolder(copy_fixtures=True) as temp:
+                listing = sources.list_folder(temp.folder, today=TODAY)
+                paths_ = [entry.path for entry in listing.readable]
+                consent = sources.ConsentList.freeze_paths(
+                    paths_, "session-1", scope="Payments"
+                )
+                self.assertEqual("Payments", consent.scope)
+                self.assertEqual(len(listing.readable), len(consent.paths))
+
+    def test_a_yes_given_with_no_scope_carries_none(self):
+        with Sandbox():
+            with TempFolder(copy_fixtures=True) as temp:
+                listing = sources.list_folder(temp.folder, today=TODAY)
+                self.assertEqual("", sources.ConsentList.freeze(listing, "s").scope)
+                self.assertEqual("", sources.Consent([], "s", "t").scope)
+
+
 if __name__ == "__main__":
     unittest.main()
