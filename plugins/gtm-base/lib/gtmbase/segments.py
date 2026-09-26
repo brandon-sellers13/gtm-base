@@ -126,6 +126,21 @@ SENTENCES = {
 
 _SLUG_RE = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
 _NOT_SLUG_RE = re.compile(r"[^a-z0-9]+")
+# Letters that do not come apart into a base letter and a mark, written the
+# way they are usually spelled in the letters A to Z. Any other character
+# outside A to Z becomes a hyphen, so two words it joined stay two words
+# (finding 7 of the unit's correctness review).
+_SPELLED_OUT = {
+    "\u00e6": "ae",
+    "\u00f8": "o",
+    "\u0153": "oe",
+    "\u0142": "l",
+    "\u0111": "d",
+    "\u00f0": "d",
+    "\u00fe": "th",
+    "\u0131": "i",
+    "\u00df": "ss",
+}
 
 
 class InventoryRefused(GtmBaseError):
@@ -155,7 +170,11 @@ def slug_for(name) -> str:
     text = unicodedata.normalize("NFKD", str(name or "").casefold())
     text = "".join(ch for ch in text if not unicodedata.combining(ch))
     text = unicodedata.normalize("NFKD", text.casefold())
-    text = text.encode("ascii", "ignore").decode("ascii")
+    text = "".join(
+        ch if ch.isascii() else _SPELLED_OUT.get(ch, "-")
+        for ch in text
+        if not unicodedata.combining(ch)
+    )
     text = _NOT_SLUG_RE.sub("-", text).strip("-")
     cap = constants.SEGMENT_SLUG_MAX_CHARS
     if len(text) > cap:
@@ -323,8 +342,16 @@ class Inventory(object):
 
     @property
     def is_single(self) -> bool:
-        """Whether there is one segment, which the profile describes in full."""
-        return len(self.segments) == 1
+        """Whether there is one segment, which the profile describes in full.
+
+        A lone segment left out is not that: it is named as still to come,
+        like any other segment left out (finding 5 of the unit's correctness
+        review).
+        """
+        return (
+            len(self.segments) == 1
+            and self.segments[0].answer != constants.SEGMENT_LEAVE_OUT
+        )
 
     def left_out(self) -> List[Segment]:
         return [
@@ -466,37 +493,29 @@ def load(folder: str) -> Optional[Inventory]:
     items = payload.get("segments")
     if not isinstance(items, list) or not items:
         return None
-    segments: List[Segment] = []
-    seen = set()
+    lines = []
     for item in items:
         if not isinstance(item, dict):
             return None
-        name = item.get("name")
-        slug = item.get("slug")
-        answer = item.get("answer")
         number = item.get("number")
-        try:
-            if clean_name(name) != name:
-                return None
-        except InventoryRefused:
-            return None
-        if slug != slug_for(name) or slug_problem(slug) is not None or slug in seen:
-            return None
-        if answer not in constants.SEGMENT_ANSWERS:
-            return None
         if number is not None and (
             not isinstance(number, int) or isinstance(number, bool)
         ):
             return None
-        source = item.get("source") or ""
-        label = item.get("label") or ""
-        if not isinstance(source, str) or not isinstance(label, str):
-            return None
-        if answer == constants.SEGMENT_ADOPT and (number is None or not source):
-            return None
-        seen.add(slug)
-        segments.append(Segment(name, slug, answer, number, source, label))
-    return Inventory(segments)
+        lines.append((item.get("answer"), number, item.get("name")))
+    # Settled again from the answers alone, against the documents this run
+    # kept as shown, and compared whole: a source, a label, a number used
+    # twice, or anything else settle would refuse makes the file unreadable
+    # (finding 3 of the unit's correctness review).
+    if any(answer not in constants.SEGMENT_ANSWERS for answer, _n, _name in lines):
+        return None
+    try:
+        again = settle(lines, load_candidates(folder) or [])
+    except InventoryRefused:
+        return None
+    if again.to_payload() != payload:
+        return None
+    return again
 
 
 def readback(inventory: Inventory) -> List[str]:

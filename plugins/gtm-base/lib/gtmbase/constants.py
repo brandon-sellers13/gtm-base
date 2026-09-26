@@ -958,8 +958,8 @@ SEGMENT_INVENTORY_MAX = 50
 # segment is never saved under one, because a base is meant to open anywhere.
 SEGMENT_RESERVED_SLUGS = (
     ("con", "prn", "aux", "nul")
-    + tuple("com%d" % number for number in range(1, 10))
-    + tuple("lpt%d" % number for number in range(1, 10))
+    + tuple("com%d" % number for number in range(0, 10))
+    + tuple("lpt%d" % number for number in range(0, 10))
 )
 
 # Said before the scope question, when two or more of the places found each

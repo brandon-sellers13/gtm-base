@@ -126,6 +126,10 @@ NARROW_FIRST = (
     "the yes was not taken. Ask which of its folders hold the marketing "
     "material, then show the list for those folders and ask again."
 )
+SCOPE_CHANGED = (
+    "What the base is for changed after the list was shown, so the yes was "
+    "not taken. Run list-sources again, show the new list, and ask again."
+)
 NO_SUCH_FOLDER = (
     "That is not one of the folders in the list, so nothing was shown. Name "
     "one of the folders the counts above name instead."
@@ -743,8 +747,8 @@ SCOPE_NOT_A_NAME = (
     "this again."
 )
 SCOPE_AFTER_THE_YES = (
-    "The list of files was already agreed to, so what the base is for cannot "
-    "change in this run. Carry on with the drafts."
+    "The list of files was already agreed to, or the customer profile already "
+    "approved, so what the base is for cannot change in this run. Carry on."
 )
 SCOPE_NEEDS_AN_ANSWER = (
     "This step needs either --scope-file with the part of the company, or "
@@ -1005,6 +1009,10 @@ def run_freeze_sources(options, out):
         if refusal.code == join_flow.CODE_NARROW_FIRST:
             line(out, "codes", refusal.code)
             out.write(NARROW_FIRST + "\n")
+            return EXIT_REFUSED
+        if refusal.code == join_flow.CODE_SCOPE_CHANGED:
+            line(out, "codes", refusal.code)
+            out.write(SCOPE_CHANGED + "\n")
             return EXIT_REFUSED
         raise
     out.write(

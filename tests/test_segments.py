@@ -381,9 +381,14 @@ class TestTheInventoryOfARealRun(unittest.TestCase):
             self.assertIn("codes=one-or-none", printed)
             self.assertNotIn(segments.ASK_SENTENCE, printed)
 
-            inventory = join_flow.settle_segments(
-                run, "draft %d Everyone we sell to\n" % candidates[0].number
-            )
+            # No numbered list was shown, so no number means a document, and
+            # the one segment is named with a hyphen (finding 6 of the unit's
+            # correctness review).
+            with self.assertRaises(InventoryRefused) as caught:
+                join_flow.settle_segments(run, "adopt 1 Everyone we sell to\n")
+            self.assertEqual(segments.CODE_NO_SUCH_DOCUMENT, caught.exception.code)
+            self.assertEqual([], segments.load_candidates(join_flow.scratch_dir(run)))
+            inventory = join_flow.settle_segments(run, "draft - Everyone we sell to\n")
             self.assertTrue(inventory.is_single)
             self.assertEqual([], inventory.segment_files())
             self.assertEqual([segments.ONE_SEGMENT_SENTENCE], segments.readback(inventory))
@@ -521,6 +526,89 @@ class TestTheWordsAPersonReads(unittest.TestCase):
         self.assertIn(segments.ASK_SENTENCE, step)
         self.assertIn("segments-settle", step)
         self.assertIn("codes=one-or-none", step)
+
+
+class TestTheInventoryAfterTheCorrectnessReview(unittest.TestCase):
+    """Findings 3, 5 and 7 of the Unit 1.7a correctness review."""
+
+    def test_an_inventory_settle_would_refuse_is_never_read(self):
+        """Finding 3: load settles the answers again and compares the whole."""
+        with support.Sandbox():
+            content = pages(("Fintech lenders", "Regional banks"))
+            run = join_flow.new_run(TODAY)
+            agreed(content, run)
+            candidates = join_flow.segment_candidates(run, today=TODAY)
+            join_flow.settle_segments(
+                run,
+                "adopt %d Fintech lenders\ndraft %d Regional banks\n"
+                % (candidates[0].number, candidates[1].number),
+            )
+            self.assertIsNotNone(join_flow.load_inventory(run))
+            path = os.path.join(join_flow.scratch_dir(run), segments.INVENTORY_FILE)
+            payload = json.loads(support.read(path))
+            many = [
+                {
+                    "name": "Segment %d" % number,
+                    "slug": "segment-%d" % number,
+                    "answer": "draft",
+                    "number": None,
+                    "source": "",
+                    "label": "",
+                }
+                for number in range(constants.SEGMENT_INVENTORY_MAX + 1)
+            ]
+            for change in (
+                lambda p: p["segments"][0].update(source="/etc/hosts"),
+                lambda p: p["segments"][0].update(label="elsewhere.md"),
+                lambda p: p["segments"][1].update(number=p["segments"][0]["number"]),
+                lambda p: p["segments"][1].update(source=p["segments"][0]["source"]),
+                lambda p: p["segments"][1].update(number=0),
+                lambda p: p["segments"][1].update(number=True),
+                lambda p: p.update(segments=many),
+                lambda p: p["segments"].append(dict(p["segments"][0], extra=1)),
+            ):
+                edited = json.loads(json.dumps(payload))
+                change(edited)
+                support.write(path, json.dumps(edited))
+                with self.subTest(edited=edited):
+                    self.assertIsNone(join_flow.load_inventory(run))
+            support.write(path, json.dumps(payload))
+            self.assertIsNotNone(join_flow.load_inventory(run))
+
+    def test_a_lone_segment_left_out_is_read_back_as_left_out(self):
+        """Finding 5: one segment left out is not a profile written in full."""
+        inventory = segments.settle(
+            segments.read_lines("leave-out - Credit unions\n"), []
+        )
+        self.assertFalse(inventory.is_single)
+        self.assertEqual([], inventory.segment_files())
+        self.assertEqual(
+            [
+                segments.WILL_LEAVE_OUT % {"name": "Credit unions"},
+                segments.SAVED_SENTENCE,
+            ],
+            segments.readback(inventory),
+        )
+
+    def test_letters_outside_a_to_z_keep_the_words_apart(self):
+        """Finding 7: a dash or a letter with no parts no longer vanishes."""
+        for name, expected in (
+            ("Retail\u2013Wholesale", "retail-wholesale"),
+            ("\u00d8resund", "oresund"),
+            ("\u0141\u00f3d\u017a Retail", "lodz-retail"),
+            ("\u00c6sir", "aesir"),
+            ("Hotels\u00b7Resorts", "hotels-resorts"),
+        ):
+            with self.subTest(name=name):
+                self.assertEqual(expected, segments.slug_for(name))
+
+    def test_the_newer_reserved_device_names_are_refused_too(self):
+        for name in ("com0", "LPT0"):
+            with self.subTest(name=name):
+                self.assertEqual(
+                    segments.CODE_RESERVED_NAME,
+                    segments.slug_problem(segments.slug_for(name)),
+                )
 
 
 if __name__ == "__main__":

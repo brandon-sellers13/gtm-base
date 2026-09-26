@@ -882,8 +882,9 @@ def list_sources(
                 "added": list(adjustments["added"]),
                 "dropped": list(adjustments["dropped"]),
                 # What the base is for, beside the places dropped for it
-                # (Unit 1.7a). Empty when nobody said it is for one part.
-                "scope": held_scope(run_id) or "",
+                # (Unit 1.7a): a name, "" for the whole company, or None when
+                # nobody was asked.
+                "scope": held_scope(run_id),
                 # The folders the counts named, in the order they were printed,
                 # so the skill can name one by its number afterwards rather
                 # than by a name a folder's author chose (finding F6).
@@ -993,6 +994,12 @@ def load_listing(run_id: str):
         found = payload.get(key)
         return [str(item) for item in found] if isinstance(found, list) else []
 
+    extra = {}
+    if "scope" in payload:
+        # A list written before Unit 1.7a carries no scope, and is not held
+        # to one.
+        extra["scope"] = _stored_scope(payload.get("scope"))
+
     folders = [str(item) for item in folders] if isinstance(folders, list) else []
     note = bool(payload.get("note"))
     narrow_first = payload.get("narrow_first")
@@ -1016,8 +1023,8 @@ def load_listing(run_id: str):
         "from_survey": bool(payload.get("from_survey")),
         "added": names("added"),
         "dropped": names("dropped"),
-        "scope": _scope_value(payload.get("scope")),
         "paths": [str(item) for item in wanted],
+        **extra,
     }
 
 
@@ -1057,12 +1064,19 @@ def freeze_sources(folder: str, session_id: str, run_id: str, today=None):
             "that list is too large to be agreed to whole",
             code=CODE_NARROW_FIRST,
         )
-    # The scope is the one held now, which is the one the list was shown
-    # under, because nothing may change it once a list has been shown and a
-    # yes taken (Unit 1.7a). It sits beside the places dropped for it.
-    scope = held_scope(run_id) or ""
+    # The scope kept with the yes is the one the list was shown under, and
+    # it sits beside the places dropped for it (Unit 1.7a). An answer given
+    # after the list was shown was not in front of the person when they
+    # dropped places, so the list is shown again before a yes is taken
+    # (finding 2 of the unit's correctness review).
+    scope = held_scope(run_id)
+    if "scope" in shown and shown["scope"] != scope:
+        raise ConsentError(
+            "what the base is for changed after the list was shown",
+            code=CODE_SCOPE_CHANGED,
+        )
     consent = sources_module.ConsentList.freeze_paths(
-        shown["paths"], session_id, scope=scope
+        shown["paths"], session_id, scope=scope or ""
     )
     atomic_write_json(
         os.path.join(scratch_dir(run_id), CONSENT_FILE),
@@ -1075,7 +1089,7 @@ def freeze_sources(folder: str, session_id: str, run_id: str, today=None):
             "from_survey": bool(shown["from_survey"]),
             "added": list(shown["added"]),
             "dropped": list(shown["dropped"]),
-            "scope": consent.scope,
+            "scope": scope,
             "session_id": consent.session_id,
             "frozen_at": consent.frozen_at,
             "paths": list(consent.paths),
@@ -1150,9 +1164,58 @@ def consent_root(run_id: str) -> str:
 
 # Why the part of the company a base is for could not be held.
 CODE_BAD_SCOPE = "bad-scope"
-# The list was already agreed to, and the places on it were settled without
-# this answer, so it is too late in this run to say what the base is for.
+# The list was already agreed to, or the profile already approved, so it is
+# too late in this run to say what the base is for.
 CODE_SCOPE_AFTER_THE_YES = "scope-after-the-yes"
+# The answer changed after the list was shown, so the list has to be shown
+# again before a yes is taken over it.
+CODE_SCOPE_CHANGED = "scope-changed"
+
+# The sections of the smallest profile the profile step accepts, used to
+# check a scope before it is held, each with one word under it. Nobody reads
+# it; it is only ever parsed and screened.
+_SCOPE_PROBE_SECTIONS = drafting.ALWAYS_SECTIONS
+
+
+def _stored_scope(value):
+    """A scope as a run's own file keeps it: None when nobody was asked."""
+    if value is None:
+        return None
+    return _scope_value(value)
+
+
+def _survives_the_profile(label: str) -> bool:
+    """Whether a profile carrying this scope passes every check approval runs.
+
+    Finding 1 of the unit's correctness review. The approved profile is read
+    back through the words a draft may never use and through the screen for
+    contact details and keys, and the scope line is part of what they read.
+    A scope that fails them made the profile impossible to approve for the
+    rest of the run, because the scope cannot change once the list is agreed
+    to. So the same checks run on the scope before it is held.
+    """
+    owner = constants.OWNER_PLACEHOLDER_EMAIL
+    body = "# Ideal customer profile\n" + "".join(
+        "\n## %s\n\nWritten\n" % heading for heading in _SCOPE_PROBE_SECTIONS
+    )
+    text = formats.render_document(
+        {
+            "kind": drafting.KINDS[drafting.STEP_ICP],
+            "owner": owner,
+            "last_confirmed": "2026-01-01",
+            "sources": [],
+            "status": "draft",
+            constants.COVERS_FIELD: label,
+        },
+        body,
+    )
+    try:
+        draft = drafting.parse(
+            drafting.STEP_ICP, "```markdown\n" + text.rstrip("\n") + "\n```\n"
+        )
+    except (DraftError, ValidationError, PathError):
+        return False
+    return not review.screen(draft, owner)
 
 
 def _scope_value(value) -> str:
@@ -1231,7 +1294,7 @@ def hold_scope(run_id: str, covers: Optional[str] = None, whole: bool = False) -
     answer given after the list was agreed to is refused, because the places
     on that list were settled without it.
     """
-    if _consent_payload(run_id) is not None:
+    if _consent_payload(run_id) is not None or _scope_payload(run_id).get("fixed"):
         raise ValidationError(
             "the list was already agreed to", code=CODE_SCOPE_AFTER_THE_YES
         )
@@ -1242,6 +1305,11 @@ def hold_scope(run_id: str, covers: Optional[str] = None, whole: bool = False) -
             label = validate.validate_covers(covers)
         except ValidationError as refusal:
             raise ValidationError(str(refusal), code=CODE_BAD_SCOPE)
+        if not _survives_the_profile(label):
+            raise ValidationError(
+                "the scope would not pass the checks the profile meets",
+                code=CODE_BAD_SCOPE,
+            )
     atomic_write_json(
         os.path.join(scratch_dir(run_id), SCOPE_FILE),
         {"whole": not label, "covers": label},
@@ -1258,13 +1326,32 @@ def held_scope(run_id: str) -> Optional[str]:
     """
     payload = _consent_payload(run_id)
     if payload is not None and "scope" in payload:
-        return _scope_value(payload.get("scope"))
-    held = read_json(os.path.join(scratch_dir(run_id), SCOPE_FILE))
-    if not isinstance(held, dict):
-        return None
+        return _stored_scope(payload.get("scope"))
+    held = _scope_payload(run_id)
     if held.get("whole") is True:
         return ""
     return _scope_value(held.get("covers")) or None
+
+
+def _scope_payload(run_id: str) -> dict:
+    held = read_json(os.path.join(scratch_dir(run_id), SCOPE_FILE))
+    return held if isinstance(held, dict) else {}
+
+
+def fix_the_scope(run_id: str) -> None:
+    """Keep the scope as it is from the moment the profile is approved.
+
+    A run that read only pasted text has no agreed list to fix the scope
+    with, so without this the scope could change after the profile already
+    carried it, and the base and the run would disagree (finding 4 of the
+    unit's correctness review).
+    """
+    held = held_scope(run_id)
+    atomic_write_json(
+        os.path.join(scratch_dir(run_id), SCOPE_FILE),
+        {"whole": held == "", "covers": held or "", "fixed": True},
+        inside=paths.seat_home(),
+    )
 
 
 def with_scope(draft, covers: Optional[str]):
@@ -1302,6 +1389,12 @@ def segment_candidates(run_id: str, today=None) -> List[segments.Candidate]:
     """
     consent = load_consent(run_id)
     if consent is None:
+        if _holds_pastes(run_id):
+            # A run that read only pasted text has no documents to number,
+            # and every segment it names is named with no document (finding 4
+            # of the unit's correctness review).
+            segments.save_candidates(scratch_dir(run_id), [], paths.seat_home())
+            return []
         raise ConsentError("no list has been agreed to yet", code=CODE_NO_CONSENT)
     root = consent_root(run_id)
     day = today or state.today()
@@ -1344,8 +1437,23 @@ def segment_candidates(run_id: str, today=None) -> List[segments.Candidate]:
         candidates.append(
             segments.Candidate(number, path, label.replace(os.sep, "/"))
         )
-    segments.save_candidates(scratch_dir(run_id), candidates, paths.seat_home())
+    # A number means the document shown beside it. With fewer than two, no
+    # numbered list is shown, so none is kept either, and a segment is then
+    # named with no document (finding 6 of the unit's correctness review).
+    segments.save_candidates(
+        scratch_dir(run_id),
+        candidates if len(candidates) > 1 else [],
+        paths.seat_home(),
+    )
     return candidates
+
+
+def _holds_pastes(run_id: str) -> bool:
+    folder = os.path.join(scratch_dir(run_id), PASTES_DIR)
+    try:
+        return any(name.endswith(".txt") for name in os.listdir(folder))
+    except OSError:
+        return False
 
 
 def settle_segments(run_id: str, text: str) -> segments.Inventory:
@@ -1965,7 +2073,8 @@ def approve_step(
     reviewed = review_step(step, draft_file, base_root=base_root, email=email, runner=git)
     if not reviewed.ready:
         raise ReviewError(review.CODE_SCREENED, codes=reviewed.codes)
-    if reviewed.draft.step == drafting.STEP_ICP:
+    profile = reviewed.draft.step == drafting.STEP_ICP
+    if profile:
         # What the base covers goes onto the profile from the answer this run
         # holds, and from nothing a draft said (Unit 1.7a, requirement P23).
         reviewed.draft = with_scope(reviewed.draft, held_scope(run_id))
@@ -1990,7 +2099,7 @@ def approve_step(
         base_id = resolution.base_id
         root = resolution.root or base_root
 
-    return review.approve(
+    result = review.approve(
         reviewed.draft,
         root,
         base_id,
@@ -2005,6 +2114,9 @@ def approve_step(
         confirmed_home=confirmed_home,
         content_root=content_folder if first_file else None,
     )
+    if profile:
+        fix_the_scope(run_id)
+    return result
 
 
 def skip_step(

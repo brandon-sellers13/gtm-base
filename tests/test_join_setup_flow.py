@@ -4534,7 +4534,9 @@ class TestWhatTheBaseIsFor(unittest.TestCase):
             )
             join_flow.freeze_sources(content, SESSION, run, today=TODAY)
             self.assertEqual("", join_flow.load_consent(run).scope)
-            self.assertEqual("", join_flow.held_scope(run))
+            # Nobody was asked, and the yes keeps it that way rather than
+            # reading as an answer of the whole company.
+            self.assertIsNone(join_flow.held_scope(run))
 
     def test_material_that_splits_is_said_out_loud_before_the_places(self):
         with support.Sandbox():
@@ -4645,6 +4647,120 @@ class TestWhatTheBaseIsFor(unittest.TestCase):
         self.assertIn("Otherwise it is skipped and nothing about it is asked.", step)
         self.assertIn("--whole", step)
         self.assertEqual(1, step.count(plain_language.ASK_OPEN))
+
+
+class TestTheScopeAfterTheCorrectnessReview(unittest.TestCase):
+    """Findings 1, 2 and 4 of the Unit 1.7a correctness review."""
+
+    def test_a_scope_the_profile_would_fail_on_is_refused_when_it_is_given(self):
+        """Finding 1: the refusal comes where the person can still answer."""
+        with support.Sandbox():
+            run = join_flow.new_run(TODAY)
+            for bad in (
+                "Empower Retirement",
+                "Unlock Mortgages",
+                "TBD Division",
+                "Todo lists",
+                "Team 415 555 0100",
+            ):
+                with self.subTest(bad=bad):
+                    with self.assertRaises(join_flow.ValidationError) as caught:
+                        join_flow.hold_scope(run, bad)
+                    self.assertEqual(join_flow.CODE_BAD_SCOPE, caught.exception.code)
+            self.assertIsNone(join_flow.held_scope(run))
+
+    def test_every_scope_that_is_held_can_be_approved_on_the_profile(self):
+        with support.Sandbox() as sandbox:
+            setup = SetupRun(sandbox)
+            join_flow.hold_scope(setup.run, "Retirement plans (US)")
+            setup.agree_to_the_list()
+            setup.profile()
+            fields = frontmatter_of(os.path.join(setup.root, ICP))
+            self.assertEqual("Retirement plans (US)", fields[constants.COVERS_FIELD])
+
+    def test_a_scope_given_after_the_list_was_shown_asks_for_the_list_again(self):
+        """Finding 2: the listing and the yes never disagree about the scope."""
+        import json
+
+        with support.Sandbox():
+            content = two_product_lines()
+            run = join_flow.new_run(TODAY)
+            join_flow.survey_sources(run, content, today=TODAY)
+            join_flow.list_sources(
+                content, run, today=TODAY, from_survey=True, dropped=["lending"]
+            )
+            self.assertIsNone(join_flow.load_listing(run)["scope"])
+            join_flow.hold_scope(run, "Payments")
+
+            with self.assertRaises(join_flow.ConsentError) as caught:
+                join_flow.freeze_sources(content, SESSION, run, today=TODAY)
+            self.assertEqual(join_flow.CODE_SCOPE_CHANGED, caught.exception.code)
+            self.assertIsNone(join_flow.load_consent(run))
+            frozen = run_join(
+                "freeze-sources", "--folder", content, "--session", SESSION, "--run", run
+            )
+            self.assertEqual(1, frozen.returncode)
+            self.assertIn("codes=scope-changed", frozen.stdout.decode("utf-8"))
+
+            join_flow.list_sources(
+                content, run, today=TODAY, from_survey=True, dropped=["lending"]
+            )
+            consent = join_flow.freeze_sources(content, SESSION, run, today=TODAY)
+            record = json.loads(
+                support.read(
+                    os.path.join(join_flow.scratch_dir(run), join_flow.CONSENT_FILE)
+                )
+            )
+            self.assertEqual("Payments", consent.scope)
+            self.assertEqual("Payments", join_flow.load_listing(run)["scope"])
+            self.assertEqual("Payments", record["scope"])
+
+    def test_in_a_run_of_pasted_text_the_scope_is_fixed_once_the_profile_is_approved(self):
+        """Finding 4: with no list to fix it, the profile's approval fixes it."""
+        with support.Sandbox() as sandbox:
+            setup = SetupRun(sandbox)
+            join_flow.write_paste(setup.run, "notes", "Who we sell to.\n", SESSION)
+            join_flow.hold_scope(setup.run, "Payments")
+            join_flow.hold_scope(setup.run, "Lending")
+            setup.profile()
+
+            with self.assertRaises(join_flow.ValidationError) as caught:
+                join_flow.hold_scope(setup.run, "Payments")
+            self.assertEqual(join_flow.CODE_SCOPE_AFTER_THE_YES, caught.exception.code)
+            self.assertEqual("Lending", join_flow.held_scope(setup.run))
+            fields = frontmatter_of(os.path.join(setup.root, ICP))
+            self.assertEqual("Lending", fields[constants.COVERS_FIELD])
+
+    def test_a_profile_approved_with_nobody_asked_fixes_the_scope_as_never_asked(self):
+        with support.Sandbox() as sandbox:
+            setup = SetupRun(sandbox)
+            setup.profile()
+            self.assertIsNone(join_flow.held_scope(setup.run))
+            with self.assertRaises(join_flow.ValidationError):
+                join_flow.hold_scope(setup.run, whole=True)
+
+    def test_in_a_run_of_pasted_text_there_are_no_documents_to_number(self):
+        """Finding 4: no yes to take, so none is asked for."""
+        from gtmbase import segments
+
+        with support.Sandbox():
+            run = join_flow.new_run(TODAY)
+            join_flow.write_paste(run, "notes", "Who we sell to.\n", SESSION)
+
+            self.assertEqual([], join_flow.segment_candidates(run, today=TODAY))
+            shown = run_join("segments", "--run", run)
+            printed = shown.stdout.decode("utf-8")
+            self.assertEqual(0, shown.returncode, printed)
+            self.assertIn("codes=one-or-none", printed)
+            self.assertNotIn("codes=no-consent", printed)
+
+            inventory = join_flow.settle_segments(
+                run, "draft - Fintech lenders\nleave-out - Regional banks\n"
+            )
+            self.assertEqual(["context/icps/fintech-lenders.md"], inventory.segment_files())
+            with self.assertRaises(segments.InventoryRefused) as caught:
+                join_flow.settle_segments(run, "adopt 1 Fintech lenders\n")
+            self.assertEqual(segments.CODE_NO_SUCH_DOCUMENT, caught.exception.code)
 
 
 if __name__ == "__main__":

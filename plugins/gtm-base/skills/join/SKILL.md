@@ -257,8 +257,10 @@ python3 scripts/join.py scope --run <run identifier> --scope-file <the path it p
   base is for, and the customer profile carries it once it is approved.
 - `codes=bad-scope` means what was written is not a short name. Write it
   shorter and run it again.
-- `codes=scope-after-the-yes` means the list is already fixed, so it is too
-  late to change in this run. Carry on.
+- `codes=scope-after-the-yes` means the list is already fixed, or the
+  profile approved, so it is too late to change in this run. Carry on.
+- Held after the list was shown, it makes `freeze-sources` print
+  `codes=scope-changed`: run list-sources again, show it, and ask again.
 
 ### Step 5b. A list too large to read through
 
@@ -372,9 +374,10 @@ single profile. It runs once the list is fixed:
 python3 scripts/join.py segments --run <run identifier>
 ```
 
-- `codes=one-or-none` means the list holds at most one document describing
-  customers. Skip this step, unless they have said they sell to several
-  separate groups; then ask the question below anyway.
+- `codes=one-or-none` means at most one document describes customers, or
+  only pasted text was read. Skip this step, unless they have said they sell
+  to several separate groups; then ask the question below anyway, and name
+  every segment with a hyphen, because no document was numbered.
 - Otherwise it prints a sentence, a numbered list of documents, and the
   question. Say all three as printed, and nothing else about them.
 
