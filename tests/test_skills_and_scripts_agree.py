@@ -928,6 +928,11 @@ class TestTheSkillsAsTheyAreWritten(unittest.TestCase):
             text = state["material"]
         if kind == "segments" and state.get("adopt_number"):
             text += "adopt %s Credit unions\n" % state["adopt_number"]
+        if kind == "segments" and state.get("later_number"):
+            # A segment settled to be drafted that the walk never drafts in
+            # step 6c, so the closing keeps it and the later session's steps
+            # have a segment to finish (Brandon's call 29).
+            text += "draft %s Savings banks\n" % state["later_number"]
         self.assertIsNotNone(kind, command)
         support.write(path, text or "Acme")
         state["words"] = path
@@ -981,6 +986,17 @@ class TestTheSkillsAsTheyAreWritten(unittest.TestCase):
                 ):
                     state["adopt_number"] = line.split(" number=")[1].strip()
                     break
+            for line in printed.split("\n"):
+                if line.startswith("candidate=") and " number=" in line:
+                    number = line.split(" number=")[1].strip()
+                    if number != state.get("adopt_number"):
+                        state["later_number"] = number
+                        break
+        if mode == "resume":
+            # The segment the later session finishes is the one it names.
+            later = self.value_of(printed, "to-draft")
+            if later:
+                state["segment"] = later
         if mode == "adopt-show":
             digest = self.value_of(printed, "hash")
             if digest:
@@ -1020,7 +1036,7 @@ class TestTheSkillsAsTheyAreWritten(unittest.TestCase):
             # The walk settles two segments: one drafted, one left out.
             if step == "umbrella":
                 return umbrella.umbrella_text(
-                    drafted=("Fintech lenders", "Credit unions"),
+                    drafted=("Fintech lenders", "Credit unions", "Savings banks"),
                     left_out=("Regional banks",),
                 )
             return umbrella.segment_text("Fintech lenders")

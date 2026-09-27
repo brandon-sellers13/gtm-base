@@ -126,6 +126,17 @@ first. You are then shown only the documents you had not answered for yet. A
 file already sitting where a document would go is never written over, and you
 are told which document that was.
 
+A segment you chose to have drafted that was not drafted before the end of
+setup is kept too, as its name and your answer, and never as your material or
+a draft. The next session offers to finish it. Because reading your files
+needs your yes, and that yes ended with setup, you are shown the files its
+draft would read, at first only the document you named for it, and asked
+again. You can add a folder or drop a file first. If that document is gone,
+or you named none, you are told so and asked to name the folder that holds
+its material or leave the segment out, because nothing is drafted from
+nothing. The draft is shown whole and approved exactly as in setup, and a
+segment you leave out is never offered again.
+
 A draft sometimes leaves a question only you can answer, marked in it where it
 comes up. You are told how many there are before you read it, and you can
 answer them there or approve the draft with them left open. A document with a

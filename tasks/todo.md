@@ -1527,3 +1527,26 @@ Review: docs/reviews/2026-09-27-unit-1-7c-1-7d-verify-3-astra.md, ready with one
 - [x] Every refusal about unsaved words in changes.py (`THEIR_WORDS`, `GAVE_UP_LEFT_ALONE`) names files by `unsaved.plain_name`; a record is "one of your records", a context change in any of the three folders "one of your context changes".
 - [x] session_start keeps the stopped-import sentence beside the unsaved-edits sentence, after the shared look.
 - [ ] Orchestrator: review and commit the merge.
+#### Call 29: a segment settled to be drafted but not drafted before the closing (2026-09-27)
+Brandon's call 29: a later session asks again for consent to the material and finishes it. Branch `call-29` from `release-b`.
+- [ ] The import record carries a segment left to draft as one more per-file state (name and settled answer from the inventory; state approved with the hash of the approved draft, saved, or left out), never material or a draft body, and never a yes to read anything. It is kept from the moment the base exists, including an import with no finished page to take in.
+- [ ] Setup's step 6c writes a segment through the same write-ahead path as a finished page (the yes written down, then written, staged, its line, saved, then saved written down), so a stop anywhere is finished by the next session.
+- [ ] The closing keeps the record while a segment is left to draft and says so in one sentence.
+- [ ] "Finish setting up my base" finishes a draft whose yes was given and names each segment still to draft; a stop partway through a draft's save is finished, taken back, or drafted again, never written over.
+- [ ] A segment still to draft is drafted in a run of its own, after the same survey-free consent step as Unit 1.6: only the numbered document the record kept for it is offered, the person may add a folder or drop a file, a changed list asks again, and nothing is read before the yes. Material gone or changed is said plainly with two choices, leave it out or name new material, and nothing is drafted from nothing.
+- [ ] The draft is shown whole and approved exactly as step 6c; leaving a segment out ends it and it is never offered again.
+- [ ] The session-start notice covers both kinds in one notice; a segment left out is not "to finish".
+- [ ] Tests failing first: survives the closing and finished after a fresh consent; a changed list asks again; missing material said with the two choices; leave-out ends it; one notice; a stop at every mutation step resumes cleanly. run.sh linked-folder list and its guard for any new script-starting class.
+- [ ] Join skill, lint registry, atlas figure 7 (not republished), join guide and closing rules if they describe it, the draft Unreleased CHANGELOG.
+- [ ] Full suite, both runs; a correctness review of release-b to HEAD, fixes with tests, suite again.
+
+#### Progress and review, call 29 (2026-09-27)
+- [x] Record: `segments.ImportRecord.to_draft`, `drafts_unfinished`, `pages_unfinished`; `unfinished` covers both; kept from the first approval even with no page to take in. No second record; names, answers, and the approved draft's hash and day only.
+- [x] Step 6c and later drafts both go through `join_flow._approve_a_segment` (yes written down, `review.approve_adopted`, saved written down); resume settles each with `_settle_a_draft`.
+- [x] Later session: `join.py draft-list`, `draft-freeze`, `draft-leave` in a run of its own; `resume` prints `to-draft=`; `close` prints one sentence; one notice (`finish-import.md` segment blocks).
+- [x] Tests: tests/test_segments_left_to_draft.py (committed failing first), the linked-folder run and its guard, the skill walk leaves one segment for the later session.
+- [x] Join skill, lint registry, atlas figure 7 (not republished), join guide, closing rules, draft Unreleased CHANGELOG.
+- [x] Full suite before the review: 2484 tests OK, then 120 from a linked folder OK (tests/run.sh exit 0).
+- [x] Correctness review (subagent): three medium, two medium-low, four low findings; all fixed with a test in TestTheCorrectnessReview, committed failing first.
+- [x] Full suite after the review fixes: 2495 tests OK in 1339 seconds, then 120 from a linked folder OK in 193 seconds (tests/run.sh exit 0).
+- [ ] Brandon: the new sentences, and a live run that closes with a segment undrafted and finishes it in the next session.

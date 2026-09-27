@@ -92,6 +92,13 @@ does not clear it (Brandon's call 18 of the 2026-09-19 plan, built by Unit
 1.7d). Saying "finish setting up my base" finishes it without asking anything
 they already answered.
 
+When a segment the person settled to be drafted is not in the base yet, the
+sentence says instead that the next session will offer to finish the
+segments, and that it will ask again before it reads any of their files to
+draft one. The yes to read their material ends with the setup, so a later
+session never drafts from it without asking again (Brandon's call 29). Say it
+as printed. Only one of the two sentences is ever said.
+
 ## Before a base holding many files is first backed up
 
 The review of what leaves the computer the first time a base is backed up was

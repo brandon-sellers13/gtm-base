@@ -392,6 +392,27 @@ def list_folder(folder: str, limits: Optional[Limits] = None, today=None) -> Lis
     )
 
 
+def file_entry(path: str, limits: Optional[Limits] = None, today=None):
+    """One file named on its own, checked the way the walk checks each file.
+
+    Brandon's call 29: a later session offers the one document a segment was
+    named with, which was found by a walk in an earlier session, so it is
+    checked again here, as that walk would check it now, before it is put on
+    a list. Nothing is opened but the first few bytes, exactly as in the
+    walk. Returns the entry, or None and the code saying why it would not be
+    read: gone, a link, a key, a contact list, too large, and the rest.
+    """
+    limits = limits or Limits()
+    today = today or datetime.date.today()
+    full = os.path.abspath(os.path.expanduser(str(path or "")))
+    if not path or not os.path.lexists(full):
+        return None, CODE_UNREADABLE
+    root = os.path.dirname(full)
+    if os.path.realpath(root) != root:
+        return None, CODE_OUTSIDE_FOLDER
+    return _file_verdict(full, os.path.basename(full), root, limits, today)
+
+
 def _folder_code(name: str, full: str) -> Optional[str]:
     """Why a folder is left alone, or None when we look inside it."""
     if os.path.islink(full):

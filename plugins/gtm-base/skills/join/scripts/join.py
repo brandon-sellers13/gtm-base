@@ -1261,6 +1261,7 @@ STEP_REFUSALS = {
     join_flow.CODE_NOT_THIS_SEGMENTS_DRAFT: NOT_THIS_SEGMENTS_DRAFT,
     join_flow.CODE_NO_RUN: NEEDS_A_RUN_OR_SESSION,
     "cannot-skip": CANNOT_SKIP_THIS,
+    join_flow.CODE_DRAFT_NOT_AGREED: join_flow.DRAFT_NOT_AGREED,
 }
 
 
@@ -1504,6 +1505,18 @@ def an_approval_refusal(refusal, options, out):
         # which one it is, and a name can have come out of their material.
         out.write(segments.FILE_TAKEN + "\n")
         return EXIT_REFUSED
+    if code in join_flow.DRAFT_SENTENCES:
+        # A segment drafted in a later session is written only after a yes to
+        # read its material (call 29).
+        line(out, "codes", code)
+        out.write(join_flow.DRAFT_SENTENCES[code] + "\n")
+        return EXIT_REFUSED
+    if code in join_flow.BASE_REFUSALS:
+        # A segment is written the way a finished page is, so it meets the
+        # same refusals from the base, each with its one sentence.
+        line(out, "codes", code)
+        out.write(join_flow.BASE_REFUSALS[code] + "\n")
+        return EXIT_REFUSED
     raise refusal
 
 
@@ -1669,11 +1682,122 @@ def run_resume(options, out):
         line(out, "codes", resumed.stopped[1])
     for segment in resumed.to_show:
         line(out, "segment", segment.slug)
+    for segment in resumed.to_draft:
+        line(out, "to-draft", segment.slug)
     for segment in resumed.unreadable:
         line(out, "unreadable", segment.slug)
     for sentence in resumed.sentences():
         out.write(sentence + "\n")
     return EXIT_REFUSED if resumed.stopped is not None else EXIT_DONE
+
+
+def a_draft_refusal(refusal, out):
+    """Say why a segment still to draft was not listed, agreed to, or left out."""
+    code = getattr(refusal, "code", None)
+    sentence = getattr(refusal, "sentence", "") or join_flow.DRAFT_SENTENCES.get(code)
+    if not sentence:
+        raise refusal
+    line(out, "codes", code)
+    out.write(sentence + "\n")
+    return EXIT_REFUSED
+
+
+def file_numbers(options, out):
+    """The numbers of the files to drop from the list, or a refusal said once."""
+    asked = [str(item).strip() for item in (options.dropped or []) if str(item).strip()]
+    if not all(item.isdigit() and item.isascii() for item in asked):
+        out.write(ONLY_BY_NUMBER + "\n")
+        return None, False
+    return [int(item) for item in asked], True
+
+
+def run_draft_list(options, out):
+    """Show the files a segment still to draft would read, before any yes."""
+    run_id = need(options, "run", out)
+    slug = need(options, "segment", out)
+    if not run_id or not slug:
+        return EXIT_ERROR
+    root = base_folder(options, out)
+    if root is None:
+        return EXIT_REFUSED
+    dropped, read = file_numbers(options, out)
+    if not read:
+        return EXIT_REFUSED
+    added, read = added_places(options, out)
+    if not read:
+        return EXIT_REFUSED
+    try:
+        shown = join_flow.draft_list(run_id, slug, root, added=added, dropped=dropped)
+    except ConsentError as refusal:
+        return a_draft_refusal(refusal, out)
+    except (ReviewError, PathError) as refusal:
+        return an_adoption_base_refusal(refusal, out)
+    except adopt.AdoptionRefused as refusal:
+        return an_adoption_refusal(refusal, out)
+    line(out, "segment", shown.segment.slug)
+    if shown.code:
+        line(out, "codes", shown.code)
+    for sentence in shown.sentences():
+        out.write(sentence + "\n")
+    # The number is what a file is dropped by, because a file name is
+    # somebody else's text and a number is not.
+    for number, entry in enumerate(shown.entries, start=1):
+        out.write(
+            "read=%s number=%d kind=%s date=%s\n"
+            % (
+                safe_value(entry.path),
+                number,
+                safe_value(entry.kind),
+                safe_value(entry.modified_date or "none"),
+            )
+        )
+    for reason in sorted(shown.left_out):
+        out.write(
+            "left-out=%s count=%d\n" % (safe_value(reason), shown.left_out[reason])
+        )
+    if shown.needs_second_yes:
+        out.write("needs-second-yes=true\n")
+    if shown.appears_multi_company:
+        out.write("appears-multi-company=true\n")
+    return EXIT_REFUSED if shown.code else EXIT_DONE
+
+
+def run_draft_freeze(options, out):
+    """Take the yes to the list a segment still to draft would read."""
+    run_id = need(options, "run", out)
+    session = need(options, "session", out)
+    if not run_id or not session:
+        return EXIT_ERROR
+    try:
+        consent = join_flow.draft_freeze(run_id, session)
+    except ConsentError as refusal:
+        return a_draft_refusal(refusal, out)
+    out.write(
+        "The list is fixed. Nothing leaves this computer for the rest of this "
+        "session.\n"
+    )
+    out.write("frozen=%d\n" % len(consent.paths))
+    return EXIT_DONE
+
+
+def run_draft_leave(options, out):
+    """Write down that the person left a segment still to draft out."""
+    slug = need(options, "segment", out)
+    if not slug:
+        return EXIT_ERROR
+    root = base_folder(options, out)
+    if root is None:
+        return EXIT_REFUSED
+    try:
+        sentence = join_flow.draft_leave_out(slug, root)
+    except ConsentError as refusal:
+        return a_draft_refusal(refusal, out)
+    except (ReviewError, PathError) as refusal:
+        return an_adoption_base_refusal(refusal, out)
+    except adopt.AdoptionRefused as refusal:
+        return an_adoption_refusal(refusal, out)
+    out.write(sentence + "\n")
+    return EXIT_DONE
 
 
 def base_and_id(options, out):
@@ -1809,7 +1933,11 @@ def run_close(options, out):
             out.write(join_flow.NOTE_NOT_WRITTEN + "\n")
         line(out, "note-code", ",".join(result.note_codes))
     out.write(result.closing)
-    if result.import_unfinished:
+    if result.drafts_unfinished:
+        # One sentence either way: segments still to draft are said with the
+        # yes the next session will ask again for (call 29).
+        out.write(join_flow.CLOSING_DRAFTS_UNFINISHED + "\n")
+    elif result.import_unfinished:
         out.write(join_flow.CLOSING_IMPORT_UNFINISHED + "\n")
     return EXIT_DONE
 
@@ -1933,6 +2061,9 @@ MODES = {
     "adopt": run_adopt,
     "adopt-leave": run_adopt_leave,
     "resume": run_resume,
+    "draft-list": run_draft_list,
+    "draft-freeze": run_draft_freeze,
+    "draft-leave": run_draft_leave,
     "closing-question": run_closing_question,
     "preview-change": run_preview_change,
     "reconcile": run_reconcile,

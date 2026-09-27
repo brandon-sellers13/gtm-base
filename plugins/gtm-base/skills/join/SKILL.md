@@ -1,6 +1,6 @@
 ---
 name: join
-description: Set up a company base for somebody who does not have one yet, reading the marketing material they name and drafting their ideal customer profile and their positioning for approval. Use when the person says "set up my company base", asks to set up a company base, says they want to start a base, or answers yes to the setup offer. Say "set up my company base" whenever you are ready. Also handles "link this folder to my base", "unlink this folder from my base", and "show my linked folders", which connect a base to the folder somebody keeps their marketing material in. Also handles "finish setting up my base", which finishes taking in the finished documents somebody chose when an earlier session stopped partway. Also handles "join a base from a link" and "back this up", both of which arrive with the next release and are refused today with one sentence.
+description: Set up a company base for somebody who does not have one yet, reading the marketing material they name and drafting their ideal customer profile and their positioning for approval. Use when the person says "set up my company base", asks to set up a company base, says they want to start a base, or answers yes to the setup offer. Say "set up my company base" whenever you are ready. Also handles "link this folder to my base", "unlink this folder from my base", and "show my linked folders", which connect a base to the folder somebody keeps their marketing material in. Also handles "finish setting up my base", which finishes taking in the finished documents and drafting the segments somebody chose when an earlier session stopped partway. Also handles "join a base from a link" and "back this up", both of which arrive with the next release and are refused today with one sentence.
 ---
 
 # Set up a company base
@@ -558,7 +558,8 @@ because a skipped document is written into the base the first approval makes.
 This step will draft each segment they said to draft into a document of its
 own, so a segment's page is never folded into one profile. It runs after the
 positioning, once for each `segment=` line step 5d printed with
-`answer=draft`, and before the closing, which clears what drafting reads.
+`answer=draft`, and before the closing, which clears what drafting reads. A
+segment not drafted by then is kept for a later session to finish.
 
 ```
 python3 scripts/join.py preview --step segment --segment <segment> --run <run identifier>
@@ -822,28 +823,31 @@ Add `--got-in-the-way-file <path to their words>` when they said something.
   there, and it gives the base's own folder as well.
 - Say it exactly as printed. Which of the two messages is right depends on
   whether a folder was linked, and the command has already worked that out.
-- When some finished documents they chose are not in the base yet, it ends
-  with one more sentence saying the next session will offer to finish them.
-  Say that too.
+- When some finished documents or segments they chose are not in the base
+  yet, it ends with one more sentence saying the next session will offer to
+  finish them. Say that too.
 
 ### Finishing an import that stopped
 <!-- step -->
 
-This step will finish taking in the finished documents they chose when an
-earlier session stopped partway, and it asks nothing they already answered.
-It runs when they say "finish setting up my base", in a run of its own:
+This step will finish taking in the finished documents and the segments they
+chose when an earlier session stopped partway, and it asks nothing they
+already answered. It runs when they say "finish setting up my base", in a run
+of its own:
 
 ```
 python3 scripts/join.py new-run
 python3 scripts/join.py resume --run <run identifier> --base <base folder> --session <session id>
 ```
 
-- It saves every page they already said yes to that is not saved yet, and
-  says what it did in sentences. Say them as printed.
+- It saves every page and every segment they already said yes to that is not
+  saved yet, and says what it did in sentences. Say them as printed.
 - Each `segment=` line is a page nobody has answered for yet. Show each one
   exactly as step 6d does, with this run identifier, and ask its question.
-- When every page is answered, run the same `resume` again. It lets go of what
-  it kept and says nothing is left to finish.
+- Each `to-draft=` line is a segment still to draft. Once the pages are
+  answered, finish each one as the next step says.
+- When every page and segment is answered, run the same `resume` again. It
+  lets go of what it kept and says nothing is left to finish.
 - Each `unreadable=` line is a page whose original could not be read just
   now. Its yes stands for next time. If they say it is gone for good, leave
   it out with `adopt-leave` exactly as step 6d does.
@@ -851,6 +855,57 @@ python3 scripts/join.py resume --run <run identifier> --base <base folder> --ses
   printed; what was finished before it is saved.
 - A refusal is one sentence. Say it. After `codes=unsaved-edits` nothing was
   touched, because something of theirs is half done in the base.
+
+### Finishing a segment still to draft
+<!-- step -->
+
+This step will draft a segment they chose to have drafted, which an earlier
+session stopped before drafting. The yes to read their files ended with that
+session, so it will be asked again. Each segment gets a run of its own:
+
+```
+python3 scripts/join.py new-run
+python3 scripts/join.py draft-list --run <run identifier> --segment <segment> --base <base folder>
+```
+
+- The segment is the name on its `to-draft=` line.
+- It prints one sentence and one `read=` line per file, with a number. Say
+  the sentence and read the files out. It reads nothing and writes nothing.
+- They can name a folder to add. Ask this run for a folder file, write the
+  folder into it, and run the same command with `--add-file` and that file.
+- They can drop a file by its number. Run the same command with `--drop` and
+  that number. Dropping only ever takes part of the list.
+- `codes=material-gone` or `codes=nothing-on-the-list`: the sentence names
+  two choices, a folder to add or leaving the segment out. Ask which. Nothing
+  is ever drafted from nothing.
+- `needs-second-yes=true` or `appears-multi-company=true` after a folder was
+  added: follow `references/reading-rules.md` before asking.
+- `codes=segment-file-taken`: something already stands where the segment
+  would go. Say the sentence; leaving it out is the answer left.
+
+<!-- ask -->
+I will read these files, and I will not copy them anywhere, not even into your base, or change them.
+Once you say yes, this list is fixed, and nothing leaves this computer for the rest of this session.
+May I read these?
+<!-- end ask -->
+
+On a yes, run:
+
+```
+python3 scripts/join.py draft-freeze --run <run identifier> --session <session id>
+```
+
+- `codes=draft-list-changed` means a file changed after the list was shown.
+  Show the list again and ask again.
+- A list shown after the yes needs a yes of its own before anything is read.
+- Then draft the segment exactly as step 6c does, with this run identifier,
+  from the preview to the approval, and show it whole before the approval.
+- When they leave the segment out, run this and say the sentence it prints.
+  It is never offered again, and nothing is written into the base.
+
+```
+python3 scripts/join.py draft-leave --segment <segment> --base <base folder>
+```
 
 ## Linking a folder
 

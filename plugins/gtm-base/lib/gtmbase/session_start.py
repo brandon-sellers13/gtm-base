@@ -1105,7 +1105,11 @@ def _import_offer(base_id, root_of_plugin) -> _Question:
 
     Unit 1.7d. It is worked out from the record this seat keeps for the base,
     read and never written, and it is said only while a page the owner chose
-    is still neither saved, left out, nor refused.
+    is still neither saved, left out, nor refused. Brandon's call 29 adds a
+    segment settled to be drafted and not yet drafted, and it is still one
+    notice: the words that cover segments to draft replace the words about
+    finished pages whenever any segment is still to draft. A segment left out
+    is not still to finish, and is never offered.
     """
     try:
         record = segments.load_import(base_id) if base_id else None
@@ -1114,6 +1118,10 @@ def _import_offer(base_id, root_of_plugin) -> _Question:
     if record is None or not record.unfinished():
         return _Question("", "")
     blocks = load_blocks(root_of_plugin, "finish-import.md")
+    if record.drafts_unfinished():
+        return _Question(
+            blocks.get("context-segments", ""), blocks.get("visible-segments", "")
+        )
     return _Question(blocks.get("context", ""), blocks.get("visible", ""))
 
 

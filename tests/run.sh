@@ -84,6 +84,7 @@ python3 -m unittest -v \
   test_adoption.TestAstraFindingOne \
   test_adoption.TestTheApprovalShowing \
   test_import_astra_merged.TestNoFileNameOutsideTheFence \
-  test_os_clutter.TestTheApprovalScriptPastClutter
+  test_os_clutter.TestTheApprovalScriptPastClutter \
+  test_segments_left_to_draft.TestTheScript
 nothing_written_to_a_seat_nobody_made
 rm -rf "$UNOWNED_SEAT"
