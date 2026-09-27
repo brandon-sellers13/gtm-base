@@ -805,7 +805,7 @@ class TestTheSkillsAsTheyAreWritten(unittest.TestCase):
         ),
         "<segment>": lambda self, state, command: (
             state.get("adopt_segment")
-            if shlex.split(command)[1:2] in (["adopt-show"], ["adopt"])
+            if shlex.split(command)[1:2] in (["adopt-show"], ["adopt-read"], ["adopt"])
             else state.get("segment")
         ),
         "<hash>": lambda self, state, command: state.get("hash"),

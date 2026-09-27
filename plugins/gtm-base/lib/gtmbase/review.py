@@ -34,6 +34,7 @@ from . import (
     create_base,
     drafting,
     formats,
+    fsutil,
     ids,
     layout,
     paths,
@@ -615,7 +616,31 @@ def approve_adopted(
     _segment_file_is_free(base_root, relative)
     if _already_there(base_root, relative):
         raise ReviewError(CODE_FILE_EXISTS)
-    return _write_and_save(base_root, base_id, relative, text, run_id, moment, git)
+    confirmations = confirm.confirmations_path_for(relative)
+    kept = fsutil.read_bytes(os.path.join(base_root, confirmations.replace("/", os.sep)))
+    try:
+        return _write_and_save(base_root, base_id, relative, text, run_id, moment, git)
+    except Exception:
+        # A step after the page was written failed, so the page, its staging
+        # and the line recording the yes are all taken back, and the base is
+        # exactly as it was before the yes (the unit's correctness review, C2).
+        _take_back(git, base_root, relative, confirmations, kept)
+        raise
+
+
+def _take_back(git, base_root, relative, confirmations, kept) -> None:
+    """Put a base back as it was before one page was written into it."""
+    git.run(["reset", "-q", "--", relative, confirmations], cwd=base_root)
+    written = os.path.join(base_root, relative.replace("/", os.sep))
+    if os.path.lexists(written):
+        os.remove(written)
+    held = os.path.join(base_root, confirmations.replace("/", os.sep))
+    if kept is None:
+        if os.path.lexists(held):
+            os.remove(held)
+    else:
+        with open(held, "wb") as handle:
+            handle.write(kept)
 
 
 def skip(

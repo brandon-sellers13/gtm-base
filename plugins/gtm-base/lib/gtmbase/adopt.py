@@ -47,6 +47,7 @@ from __future__ import annotations
 import hashlib
 import os
 import re
+import unicodedata
 from typing import Dict, List, Optional, Sequence
 
 from . import callmarkers, constants, formats, redaction_patterns, review, segments
@@ -314,10 +315,12 @@ _HEADING_SHAPED_RE = re.compile(r"^\s+#{1,6}\s+\S")
 # The line opening or closing a fenced block of code.
 _FENCE_RE = re.compile(r"^ {0,3}(`{3,}|~{3,})(.*)$")
 # The line underneath a heading written the underlined way.
-_UNDERLINE_RE = re.compile(r"^ {0,3}(?:=+|-{2,})[ \t]*$")
+_UNDERLINE_RE = re.compile(r"^ {0,3}(?:=+|-+)[ \t]*$")
 # A line that starts an item of a list, a quotation, or a row of a table,
 # none of which can be underlined into a heading.
-_NOT_A_PARAGRAPH_RE = re.compile(r"^\s*(?:[-*+>]\s|\d+[.)]\s|\|)")
+_NOT_A_PARAGRAPH_RE = re.compile(r"^\s*(?:[-*+>]\s|\d+[.)]\s)")
+# The closing hashes a heading may end with, which a reader never sees.
+_CLOSING_HASHES_RE = re.compile(r"\s+#+\s*$")
 
 
 def _fence_closes(line: str, opener: str) -> bool:
@@ -367,7 +370,8 @@ def heading_problem(body: str) -> Optional[str]:
             return CODE_HEADING_IN_CODE
         heading = _HEADING_RE.match(line)
         if heading:
-            key = line.strip()
+            text = _CLOSING_HASHES_RE.sub("", line[len(heading.group(1)) :])
+            key = (len(heading.group(1)), " ".join(text.split()).casefold())
             if key in seen:
                 return CODE_DUPLICATE_HEADING
             seen.add(key)
@@ -407,7 +411,8 @@ def scope_problem(body: str, covers: Optional[str], dropped: Sequence[str]) -> b
     own = segments.slug_for(covers)
     names = []
     for place in dropped or ():
-        folded = segments.slug_for(str(place or "").replace("_", " "))
+        last = str(place or "").strip().strip("/").replace(os.sep, "/").split("/")[-1]
+        folded = segments.slug_for(last.replace("_", " "))
         if folded and folded != own and folded not in names:
             names.append(folded)
     if not names:
@@ -506,6 +511,45 @@ def _discard_settings(text: str):
     return rest, True
 
 
+# Characters that draw nothing, beyond the ones taken out as hidden content
+# already: fillers and the selectors that can follow a letter unseen. One
+# variation selector straight after an ordinary character is how an emoji is
+# asked for, and is allowed; any other, or a run of them, is how text is
+# smuggled past a reader, and is not (the unit's security review, S1).
+_INVISIBLE = frozenset(
+    [0x00AD, 0x034F, 0x115F, 0x1160, 0x17B4, 0x17B5, 0x2800, 0x3164, 0xFFA0]
+    + list(range(0x180B, 0x1810))
+)
+_EMOJI_SELECTORS = (0xFE0E, 0xFE0F)
+
+
+def _is_selector(code: int) -> bool:
+    return 0xFE00 <= code <= 0xFE0F or 0xE0100 <= code <= 0xE01EF
+
+
+def has_invisible(text: str) -> bool:
+    """Whether the text holds a character a reader of the page would not see.
+
+    Every format and control character counts, apart from the line break and
+    the tab, and so do the characters that draw nothing at all. The page is
+    kept exactly as it stands, so these are refused rather than taken out.
+    """
+    previous = None
+    for character in str(text or ""):
+        code = ord(character)
+        if character in ("\n", "\t"):
+            previous = code
+            continue
+        category = unicodedata.category(character)
+        if category in ("Cc", "Cf", "Cs") or code in _INVISIBLE:
+            return True
+        if _is_selector(code):
+            if code not in _EMOJI_SELECTORS or previous is None or _is_selector(previous):
+                return True
+        previous = code
+    return False
+
+
 def _screen(text: str, frontmatter_lines=None) -> List[str]:
     return review.screen(text, None, frontmatter_lines=frontmatter_lines or set())
 
@@ -543,7 +587,16 @@ def clean(
     """
     if not isinstance(raw_text, str):
         raise AdoptionRefused(CODE_UNREADABLE)
-    body, had_settings = _discard_settings(raw_text)
+    # Hidden content comes out first, so a character nobody sees in front of
+    # the original settings cannot keep them in the page (security review S3).
+    visible, removed = sources_module.strip_hidden(raw_text)
+    body, had_settings = _discard_settings(visible)
+    if body.lstrip("\n").split("\n", 1)[0].strip() == formats.FRONTMATTER_FENCE:
+        # A second settings block, or one after a blank line: every reader
+        # of the saved file takes the first block as the settings, so what
+        # this one says would sit in the page unread and unsaid (correctness
+        # review C1, security review S3).
+        raise AdoptionRefused(CODE_MALFORMED_SETTINGS)
     try:
         source = sources_module.make_source(label, body, "markdown")
     except SourceRejected as refusal:
@@ -551,6 +604,10 @@ def clean(
             raise AdoptionRefused(CODE_FENCE_MARKER)
         raise AdoptionRefused(CODE_UNREADABLE)
     cleaned = source.text
+    for kind, count in source.removed.items():
+        removed[kind] = removed.get(kind, 0) + count
+    if has_invisible(cleaned):
+        _refuse_screened([redaction_patterns.HIDDEN_CONTENT])
     found = _screen(cleaned)
     if found:
         _refuse_screened(found)
@@ -561,9 +618,6 @@ def clean(
         raise AdoptionRefused(
             CODE_WIDER_THAN_SCOPE, WIDER_THAN_SCOPE % {"covers": covers}
         )
-    marks = callmarkers.find(cleaned)
-    if any(mark.heading is None for mark in marks):
-        raise AdoptionRefused(CODE_QUESTION_UNREACHABLE)
     fields = {
         "kind": constants.SEGMENT_KIND,
         "owner": owner_email,
@@ -580,15 +634,21 @@ def clean(
     found = _screen(text, review.frontmatter_line_numbers(text))
     if found:
         _refuse_screened(found)
+    try:
+        sources_module._refuse_fence_markers(text)
+    except SourceRejected:
+        raise AdoptionRefused(CODE_FENCE_MARKER)
+    # Questions are found in the file exactly as it will be saved, the way
+    # every later reader finds them (correctness review C1).
+    marks = callmarkers.find(text)
+    if any(mark.heading is None for mark in marks):
+        raise AdoptionRefused(CODE_QUESTION_UNREACHABLE)
     final_body = formats.split_document(text)[1]
-    return Cleaned(
-        text,
-        final_body,
-        source.removed,
-        had_settings,
-        len(marks),
-        label,
-    )
+    return Cleaned(text, final_body, removed, had_settings, len(marks), label)
+
+
+# A date as the settings are read for one (security review S4).
+_DATE_SHAPED = re.compile(r"\d{4}-\d{2}-\d{2}")
 
 
 def source_line_for(label: str, day) -> str:
@@ -602,6 +662,8 @@ def source_line_for(label: str, day) -> str:
         character if (character.isalnum() or character in " ._-/") else "-"
         for character in str(label or "")
     ).strip()[:120] or "a finished document"
+    while _DATE_SHAPED.search(text):
+        text = _DATE_SHAPED.sub(lambda found: found.group(0).replace("-", " "), text)
     when = day.isoformat() if hasattr(day, "isoformat") else str(day or "")
     return "%s (%s)" % (text, when) if when else text
 
@@ -649,12 +711,17 @@ def record_refused(folder: str, slug: str, code: str, inside: str) -> None:
     _keep(folder, held, inside)
 
 
+def is_a_digest(value) -> bool:
+    """Whether a value is shaped like the hash a yes is bound to."""
+    return bool(re.match(r"\A[0-9a-f]{64}\Z", str(value or "")))
+
+
 def shown(folder: str, slug: str) -> Optional[dict]:
     """What was shown for one segment, or None when nothing was."""
     item = _state(folder).get(slug)
     if not item or not isinstance(item.get("shown"), str) or not item.get("day"):
         return None
-    if not re.match(r"^[0-9a-f]{64}$", item["shown"]):
+    if not is_a_digest(item["shown"]):
         return None
     return item
 

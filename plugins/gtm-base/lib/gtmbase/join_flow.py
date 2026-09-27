@@ -1695,6 +1695,13 @@ def _dropped_places(run_id: str) -> List[str]:
     return [str(item) for item in held] if isinstance(held, list) else []
 
 
+def _owner_address(root, email, git) -> str:
+    address = _address_for(root, email, git)
+    if not address or not validate.is_valid_email(address):
+        raise ReviewError(review.CODE_OWNER_MISSING, code=review.CODE_OWNER_MISSING)
+    return address
+
+
 def _cleaned_page(run_id, segment, root, address, day):
     """Run the whole contract on one settled segment's page, in its order.
 
@@ -1717,8 +1724,12 @@ def _cleaned_page(run_id, segment, root, address, day):
     if not adopt.is_markdown(real):
         raise adopt.AdoptionRefused(adopt.CODE_NOT_MARKDOWN)
     try:
-        raw, _notes = extract.extract(real, "markdown")
+        raw, notes = extract.extract(real, "markdown")
     except SourceRejected:
+        raise adopt.AdoptionRefused(adopt.CODE_UNREADABLE)
+    if extract.NOTE_CHARACTERS_REPLACED in notes:
+        # Some bytes were not the text the file said it was, and saving the
+        # stand-ins would not be the page as it stands (correctness review C7).
         raise adopt.AdoptionRefused(adopt.CODE_UNREADABLE)
     when = sources_module.date_for_file(real, today=day).date
     return adopt.clean(
@@ -1788,13 +1799,15 @@ def adoption_show(
     git = runner_or_default(runner)
     root, _base_id = _adoption_base(base_root, git)
     day = today or state.today()
-    address = _address_for(root, email, git)
-    if not address:
-        raise ReviewError(review.CODE_OWNER_MISSING, code=review.CODE_OWNER_MISSING)
+    address = _owner_address(root, email, git)
     path = adoption_file(run_id, segment.slug)
     try:
         cleaned = _cleaned_page(run_id, segment, root, address, day)
     except adopt.AdoptionRefused as refusal:
+        # A cleaned page from an earlier showing is not left to be read as
+        # though it were this one.
+        if os.path.lexists(path):
+            os.remove(path)
         if refusal.code in adopt.OFFERS_A_DRAFT:
             adopt.record_refused(
                 scratch_dir(run_id), segment.slug, refusal.code, paths.seat_home()
@@ -1809,6 +1822,24 @@ def adoption_show(
         paths.seat_home(),
     )
     return Shown(segment, cleaned, path)
+
+
+def adoption_read(run_id: str, slug: Optional[str]) -> str:
+    """The whole cleaned page, for the assistant to show, if it is the one shown.
+
+    The assistant reads the page through this and never by opening the file,
+    so the page reaches it inside the data fence like every other context
+    document, and a cleaned file somebody changed after the showing is not
+    read out at all (the unit's security review, S2).
+    """
+    segment = segment_to_adopt(run_id, slug)
+    record = adopt.shown(scratch_dir(run_id), segment.slug)
+    if record is None:
+        raise adopt.AdoptionRefused(adopt.CODE_NOT_SHOWN)
+    held = read_bytes(adoption_file(run_id, segment.slug))
+    if held is None or hashlib.sha256(held).hexdigest() != record["shown"]:
+        raise adopt.AdoptionRefused(adopt.CODE_CHANGED)
+    return held.decode("utf-8")
 
 
 def adoption_approve(
@@ -1836,15 +1867,16 @@ def adoption_approve(
     record = adopt.shown(scratch_dir(run_id), segment.slug)
     if record is None:
         raise adopt.AdoptionRefused(adopt.CODE_NOT_SHOWN)
-    if not hmac.compare_digest(str(shown_digest or ""), record["shown"]):
+    given = str(shown_digest or "")
+    if not adopt.is_a_digest(given) or not hmac.compare_digest(given, record["shown"]):
+        # Anything but the hash that was shown, including something that is
+        # not a hash at all, asks again (correctness review C6).
         raise adopt.AdoptionRefused(adopt.CODE_CHANGED)
     try:
         day = datetime.date.fromisoformat(record["day"])
     except (TypeError, ValueError):
         raise adopt.AdoptionRefused(adopt.CODE_NOT_SHOWN)
-    address = _address_for(root, email, git)
-    if not address:
-        raise ReviewError(review.CODE_OWNER_MISSING, code=review.CODE_OWNER_MISSING)
+    address = _owner_address(root, email, git)
     try:
         cleaned = _cleaned_page(run_id, segment, root, address, day)
     except adopt.AdoptionRefused as refusal:

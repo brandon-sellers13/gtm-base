@@ -16,16 +16,18 @@ any later day the page is read.
    the folder the base keeps segments in. That folder must be an ordinary
    folder inside the base, no file already there may have a name that comes
    out the same, and the name may not be one the base keeps for itself.
-2. The page must be written in Markdown. The settings at the top of it, if
-   it has any, are set aside whole. Settings that are never closed, or that
-   hold a line no settings block holds, refuse the page, because nobody can
-   say where the page begins.
-3. Anything a reader would not see, such as a comment, a tag, or a hidden
-   character, is taken out and counted, exactly as it is for a draft.
-4. What is left may not hold a line GTM Base uses to keep material apart
-   from its own instructions, which a comment could have been hiding. It may
-   not hold an email address, a phone number, or anything shaped like a key
-   or a token.
+2. The page must be written in Markdown, and every character in it must
+   read as what it says. Anything a reader would not see, such as a comment,
+   a tag, or a hidden character, is taken out and counted first, exactly as
+   it is for a draft.
+3. The settings at the top of the page, if it has any, are then set aside
+   whole. Settings that are never closed, that hold a line no settings block
+   holds, or a second settings block under the first, refuse the page,
+   because nobody can say where the page begins.
+4. What is left may not hold a character that draws nothing, a line GTM
+   Base uses to keep material apart from its own instructions, which a
+   comment could have been hiding, an email address, a phone number, or
+   anything shaped like a key or a token.
 5. Its headings must be ones a later change can find: no heading used twice
    at one level, no line shaped like a heading inside a block of code, no
    heading written by underlining it, and at least one part under a heading
@@ -44,7 +46,8 @@ any later day the page is read.
 
 They hear what was taken out, see the first lines of the page as it will be
 saved, and are told the whole cleaned page is kept in this setup's own folder
-and can be read in full before they answer. A yes is taken only for a page
+and can be read in full before they answer. You show it whole only through
+the script, which holds it apart as data, and never by opening the file. A yes is taken only for a page
 shown this way, and it counts only for the bytes they were shown: if the
 original or the cleaned file changes afterwards, the page is shown again.
 

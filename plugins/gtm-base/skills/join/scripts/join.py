@@ -1573,6 +1573,20 @@ def run_adopt_show(options, out):
     return EXIT_DONE
 
 
+def run_adopt_read(options, out):
+    """Show the whole cleaned page, held apart as data, if it is the one shown."""
+    run_id = need(options, "run", out)
+    slug = need(options, "segment", out)
+    if not run_id or not slug:
+        return EXIT_ERROR
+    try:
+        text = join_flow.adoption_read(run_id, slug)
+    except adopt.AdoptionRefused as refusal:
+        return an_adoption_refusal(refusal, out)
+    out.write(moment.fenced(text.rstrip("\n")) + "\n")
+    return EXIT_DONE
+
+
 def run_adopt(options, out):
     """Write one page the person said yes to, bound to the hash they were shown."""
     run_id = need(options, "run", out)
@@ -1858,6 +1872,7 @@ MODES = {
     "approve": run_approve,
     "skip": run_skip,
     "adopt-show": run_adopt_show,
+    "adopt-read": run_adopt_read,
     "adopt": run_adopt,
     "closing-question": run_closing_question,
     "preview-change": run_preview_change,

@@ -1401,3 +1401,18 @@ Plan: docs/plans/2026-09-19-001-feat-base-that-produces-work-plan.md, Unit 1.7c 
 - [ ] The fence on every path that hands a context file to the model, proved with a hostile adopted document.
 - [ ] Lint registry, atlas figures 1 and 7 (not republished), the join guide, the draft Unreleased CHANGELOG with the residual-risk sentence.
 - [ ] Full suite, both runs; a correctness review and a security review of the diff, fixes with tests, suite again.
+
+#### Progress and review, Unit 1.7c (2026-09-26)
+- [x] Fixtures and failing tests first: tests/fixtures/adoption (one per clause, plus a question under a part, a question above every part, no parts, and a page that is not Markdown) and tests/test_adoption.py; the first run failed on the missing module, as it should.
+- [x] `adopt.py`: the contract in order; `join.py adopt-show`, `adopt-read`, `adopt`; `review.approve_adopted`; a page the contract refused may be drafted instead.
+- [x] The yes bound to the hash of the exact bytes: the page cleaned again from the original and the cleaned file read again at the yes; a yes to several counts only for pages each shown.
+- [x] The fence on every path that hands the page to the model, proved with a hostile adopted page; the session's context carries none of it.
+- [x] Join skill step 6d (before the closing), adoption rules, lint registry, the skill walk adopts a page, the linked-folder second run covers the class that starts scripts.
+- [x] Atlas figures 1 and 7 (not republished), the join guide, the draft Unreleased CHANGELOG with the residual-risk sentence.
+- [x] Full suite before the reviews: 2314 tests OK, then 103 from a linked folder OK (tests/run.sh exit 0).
+- [x] Correctness review and security review of the diff (subagents): eleven findings and two smaller ones from their residual risks, each fixed with a test that failed before (tests/test_adoption.py, TestTheCorrectnessReview and TestTheSecurityReview).
+- [ ] Full suite after the fixes.
+- [ ] Brandon: the words listed in the hand-back report, the question marker call, and the live replay of the Gridwise pages.
+- [ ] Orchestrator: review, merge into release-b, then 1.7d, which must keep the record of what was shown past the closing.
+
+Review: the contract's scope clause is a heading naming a place dropped for the scope, because 1.7a settled that no filter reads the words of a document and the places dropped are what apply the scope. A `[your call: ...]` question in a finished page is kept as an open question rather than refused, only under a heading and only on the person's say, because adoption never edits the page and P27 already makes such a file unconfirmed until it is answered.
