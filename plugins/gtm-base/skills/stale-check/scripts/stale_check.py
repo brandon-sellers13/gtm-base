@@ -207,18 +207,21 @@ def print_review(result):
     return EXIT_REFUSED if result.stopped else EXIT_DONE
 
 
-def _words(path, base_id):
+def _claim(path, base_id, claims):
     """Somebody's own words, from a file this script handed out, or nothing.
 
-    A path it did not hand out is refused with the one sentence that says so,
-    and an empty answer is the same as no answer.
+    The file is held rather than taken away, and taken away only once the
+    showing it is for has worked, because a showing can still be refused and
+    its sentence asks for it again (the correctness review of 0.3.3). A path
+    it did not hand out is refused with the one sentence that says so.
     """
     if not path:
         return ""
-    text = wordsfile.read_words(path, base_id)
-    if text is None:
+    claim = wordsfile.claim_words(path, base_id)
+    if claim is None:
         raise record_change.Refused(wordsfile.NOT_OURS, code=wordsfile.CODE_NOT_OURS)
-    return text
+    claims.append(claim)
+    return claim.text
 
 
 def record_a_change(options, resolution):
@@ -247,18 +250,26 @@ def record_a_change(options, resolution):
         return EXIT_DONE
 
     if step == "show":
-        what = _words(options.what_changed_file, base_id)
-        why = _words(options.reason_file, base_id)
-        source = _words(options.source_file, base_id)
-        shown = record_change.preview(
-            root,
-            base_id,
-            what,
-            why,
-            source,
-            options.documents,
-            happened_on=options.happened_on,
-        )
+        claims = []
+        try:
+            what = _claim(options.what_changed_file, base_id, claims)
+            why = _claim(options.reason_file, base_id, claims)
+            source = _claim(options.source_file, base_id, claims)
+            shown = record_change.preview(
+                root,
+                base_id,
+                what,
+                why,
+                source,
+                options.documents,
+                happened_on=options.happened_on,
+            )
+        except BaseException:
+            for claim in claims:
+                wordsfile.release_words(claim)
+            raise
+        for claim in claims:
+            wordsfile.consume_claim(claim)
         sys.stdout.write(shown.proposed.summary + "\n\n")
         sys.stdout.write(join_flow.NOTED_BY_IS_THE_BASES_RECORD + "\n")
         sys.stdout.write("\n" + shown.proposed.artifact + "\n")

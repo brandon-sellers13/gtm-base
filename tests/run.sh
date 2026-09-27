@@ -83,6 +83,9 @@ python3 -m unittest -v \
   test_record_change.TestTheAsk \
   test_record_change.TestTheDocuments \
   test_record_change.TestTheWords \
+  test_record_change.TestNamesTheBaseCannotVouchFor \
+  test_record_change.TestTheKeptChangeIsReadAgain \
+  test_record_change.TestTheSaveGoingWrong \
   test_record_change.TestTheIdentifier \
   test_record_change.TestBothLayouts \
   test_record_change.TestABaseWithASharedCopy \

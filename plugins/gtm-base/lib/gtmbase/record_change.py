@@ -42,6 +42,7 @@ from __future__ import annotations
 
 import datetime
 import os
+import re
 from typing import List, Optional, Sequence, Tuple
 
 from . import (
@@ -76,6 +77,11 @@ FIRST_TIMES = 3
 COUNT_FILE = "context-changes-recorded.json"
 # The one entry shown and waiting for a yes, per base.
 WAITING_FILE = "context-change-waiting.json"
+# The documents the yes asked about, per base and per change. An answer is
+# taken only about a document on this list, and each one only once (the
+# security review of 0.3.3, finding S2: without it, one command could settle
+# any document for any change the base holds, with nobody asked).
+ASKED_FILE = "context-change-asked.json"
 
 # Most characters any one of the three answers may hold. A person answering in
 # a sentence or two writes far less than this.
@@ -113,6 +119,15 @@ CODE_NO_ADDRESS = review.CODE_OWNER_MISSING
 CODE_BAD_ANSWER = "answer-not-one-we-know"
 CODE_NOT_A_DOCUMENT = moment.CODE_NOT_A_CONTEXT_FILE
 CODE_NO_ROOM = review.CODE_NO_ROOM_FOR_A_CHANGE
+CODE_NOT_ASKED = "not-asked-about-here"
+
+# What a document is called in anything this path says, when its file name is
+# not one a sentence may safely repeat (finding S1 of the same review).
+UNNAMED_DOCUMENT = names.DOCUMENT_WITHOUT_A_PLAIN_NAME
+# A file name read out in a sentence is at most a few plain words, lower case,
+# joined by hyphens or underscores. Anything else is not repeated back.
+_SAFE_STEM_RE = re.compile(r"^[a-z0-9]+(?:[-_][a-z0-9]+){0,5}$")
+SAFE_STEM_CHARS = 40
 
 # --- The sentences a person reads -------------------------------------------
 
@@ -210,6 +225,10 @@ ANSWER_UNKNOWN = (
     "That answer has to be yes, no, or not now, so nothing was recorded. Ask "
     "again and run this with the answer they gave."
 )
+NOT_ASKED = (
+    "GTM Base did not ask about that document for that context change, or it "
+    "was answered already, so nothing was recorded."
+)
 
 
 class Refused(GtmBaseError):
@@ -278,6 +297,48 @@ def ask(long: bool = False) -> List[str]:
 # --- Step 2: which documents -------------------------------------------------
 
 
+def safe_name(path: str) -> str:
+    """What a document is called in anything this path says out loud.
+
+    The documents the product knows keep their own names, and a file named in
+    a few plain lower-case words is called by those words. Every other name is
+    "one of your documents", because a file name is whatever somebody typed,
+    and a name shaped like an instruction was read out as one (the same class
+    0.3.2 closed for the refusal that names unsaved files).
+    """
+    normalized = str(path or "").replace(os.sep, "/")
+    if normalized in names.KNOWN_DOCUMENTS:
+        return names.KNOWN_DOCUMENTS[normalized]
+    stem = os.path.basename(normalized)
+    if stem.endswith(".md"):
+        stem = stem[: -len(".md")]
+    if len(stem) > SAFE_STEM_CHARS or not _SAFE_STEM_RE.match(stem):
+        return UNNAMED_DOCUMENT
+    try:
+        return names.document_name(normalized)
+    except ValueError:
+        return UNNAMED_DOCUMENT
+
+
+def can_be_asked_about(path: str) -> bool:
+    """Whether the questions and answers may name this document at all.
+
+    Every sentence the questions and the answers print names the document the
+    way the closing does, so only a document whose name is safe to repeat, and
+    whose name has no space in it (which no confirmation line can carry yet),
+    is asked about. Any other stays flagged for the review, which names it.
+    """
+    try:
+        closing_name = names.document_name(path)
+    except ValueError:
+        return False
+    return (
+        not formats.name_has_a_space(path)
+        and safe_name(path) == closing_name
+        and closing_name != UNNAMED_DOCUMENT
+    )
+
+
 def documents(base_root: str) -> List[Tuple[int, str, str]]:
     """The base's context documents, numbered, with the name a person reads.
 
@@ -298,11 +359,7 @@ def documents(base_root: str) -> List[Tuple[int, str, str]]:
                 continue
         except (PathError, ValidationError):
             continue
-        try:
-            name = names.document_name(path)
-        except ValueError:
-            continue
-        found.append((len(found) + 1, path, name))
+        found.append((len(found) + 1, path, safe_name(path)))
     return found
 
 
@@ -370,22 +427,30 @@ def _named_anywhere(base_root: str, entry_id: str) -> bool:
 
     The closing's rule is that an identifier is free when no folder of changes
     holds it. A change somebody took out of the base by hand leaves its name
-    behind in the confirmation lines that named it, and a new change under
+    behind in the confirmation lines that named it, in the record of what was
+    corrected, and in any prepared change made from it, and a new change under
     that name would inherit every one of them, settling documents nobody was
-    asked about. So a name any confirmation line still carries is taken too.
+    asked about. So a name any of those still carries is taken too.
     """
     relative, _text = base_reader.entry_path_and_text(base_root, entry_id)
     if relative is not None:
         return True
-    folder = os.path.join(base_root, constants.CONFIRMATIONS_DIR.replace("/", os.sep))
-    try:
-        listed = sorted(os.listdir(folder))
-    except OSError:
-        return False
-    for name in listed:
-        text = read_text(os.path.join(folder, name))
-        if text and entry_id in text:
-            return True
+    for where in (
+        constants.CONFIRMATIONS_DIR,
+        constants.CORRECTIONS_DIR,
+        constants.PROPOSALS_PENDING_DIR,
+        constants.PROPOSALS_OPENED_DIR,
+        constants.PROPOSALS_DROPPED_DIR,
+    ):
+        folder = os.path.join(base_root, where.replace("/", os.sep))
+        try:
+            listed = sorted(os.listdir(folder))
+        except OSError:
+            continue
+        for name in listed:
+            text = read_text(os.path.join(folder, name))
+            if text and entry_id in text:
+                return True
     return False
 
 
@@ -471,23 +536,32 @@ def build_entry(
         formats.ChangeEntry.parse(text).validate(today)
     except (ValidationError, PathError):
         raise _refuse(NEEDS_WORDS, CODE_NO_WORDS)
-    # The whole entry through the closing's own screen, as it will be written,
-    # with the base's address let through on the line that carries it.
-    codes = review.screen(
-        _ScreenedDraft(text), address
-    )
-    if codes:
-        raise _refuse(SCREENED_NEXT, CODE_SCREENED)
+    _screened_whole(text, address, allowlist)
     return entry
 
 
-class _ScreenedDraft(object):
-    """The shape `review.screen` reads: a document with a settings block."""
+def _screened_whole(text: str, address: str, allowlist) -> None:
+    """The whole entry, as it will be written, read the way the words were.
 
-    __slots__ = ("text",)
-
-    def __init__(self, text: str):
-        self.text = text
+    The classes the closing's screen refuses, with the base's own list of
+    allowed words, so the two readings never disagree; the one line that
+    carries the base's own address is let through, as the closing lets it
+    through (the correctness review of 0.3.3, finding 3).
+    """
+    exempt = set()
+    for number, line in enumerate(text.split("\n"), start=1):
+        name, _sep, value = line.partition(":")
+        if name.strip() == "noted_by" and value.strip() == address:
+            exempt.add(number)
+    hits = [
+        hit
+        for hit in scan.scan_text(
+            text, allowlist, "what you said", review.SKIPPED_CLASSES
+        )
+        if hit.line_number not in exempt
+    ]
+    if hits:
+        raise _refuse(hits[0].sentence() + " " + SCREENED_NEXT, CODE_SCREENED)
 
 
 def why_when_none(entry) -> str:
@@ -538,6 +612,10 @@ def preview(
     git = runner_or_default(runner)
     day = today or state.today()
     refuse_a_shared_copy(base_root, runner=git)
+    # A new showing replaces the one before it even when it is refused, so a
+    # yes can never land on a version the person was in the middle of
+    # correcting (the correctness review of 0.3.3).
+    remove(_waiting_path(base_id))
     affects = chosen_documents(base_root, numbers)
     entry = build_entry(
         base_root, what, why, source, affects, day, happened_on, runner=git
@@ -591,6 +669,59 @@ def _take_it_back(base_root: str, relative: str, git: GitRunner) -> None:
     remove(os.path.join(base_root, relative.replace("/", os.sep)))
 
 
+def _head(base_root: str, git: GitRunner) -> str:
+    return git.run(["rev-parse", "HEAD"], cwd=base_root).out()
+
+
+def _asked_path(base_id: str) -> str:
+    return os.path.join(paths.seat_dir(base_id), ASKED_FILE)
+
+
+def _asked(base_id: str) -> dict:
+    payload = read_json(_asked_path(base_id))
+    held = payload.get("asked") if isinstance(payload, dict) else None
+    if not isinstance(held, dict):
+        return {}
+    return {
+        str(entry_id): [str(path) for path in documents if isinstance(path, str)]
+        for entry_id, documents in held.items()
+        if isinstance(documents, list)
+    }
+
+
+def _save_asked(base_id: str, held: dict) -> None:
+    kept = {entry_id: documents for entry_id, documents in held.items() if documents}
+    atomic_write_json(_asked_path(base_id), {"schema": 1, "asked": kept})
+
+
+def _inside_the_base(base_root: str, full: str) -> bool:
+    """Whether the folder a file goes in really sits inside the base."""
+    root = os.path.realpath(base_root)
+    folder = os.path.realpath(os.path.dirname(full))
+    return folder == root or folder.startswith(root + os.sep)
+
+
+def _still_what_this_path_writes(base_root: str, entry, text: str, git) -> bool:
+    """The kept entry read again as strictly as when it was built.
+
+    The kept entry lives where no file tool may write, and it is read back
+    here as though it could have been, so the yes never depends on that alone
+    (the security review of 0.3.3).
+    """
+    if entry.run_id is not None or entry.origin != ORIGIN:
+        return False
+    if entry.noted_by != (base_reader.repo_email(base_root, git) or ""):
+        return False
+    if not entry.affects or constants.MAP_PATH in entry.affects:
+        return False
+    allowlist, _code = scan.load_allowlist(base_root)
+    try:
+        _screened_whole(text, entry.noted_by, allowlist)
+    except Refused:
+        return False
+    return True
+
+
 def record(
     base_root: str,
     base_id: str,
@@ -616,10 +747,13 @@ def record(
     try:
         entry = formats.ChangeEntry.parse(text).validate(day)
         for path in entry.affects:
-            paths.canonical_context_path(base_root, path)
+            if paths.canonical_context_path(base_root, path) != path:
+                raise PathError("moved", code=CODE_MOVED_ON)
     except (ValidationError, PathError):
         raise _refuse(MOVED_ON, CODE_MOVED_ON)
-    if entry.run_id is not None or _named_anywhere(base_root, entry.id):
+    if not _still_what_this_path_writes(base_root, entry, text, git):
+        raise _refuse(MOVED_ON, CODE_MOVED_ON)
+    if _named_anywhere(base_root, entry.id):
         raise _refuse(MOVED_ON, CODE_MOVED_ON)
 
     try:
@@ -638,19 +772,36 @@ def record(
     full = os.path.join(base_root, relative.replace("/", os.sep))
     if os.path.lexists(full):
         raise _refuse(MOVED_ON, CODE_MOVED_ON)
+    folder = os.path.dirname(full)
     try:
-        folder = os.path.dirname(full)
         if not os.path.isdir(folder):
             os.makedirs(folder)
+    except OSError:
+        raise _refuse(COULD_NOT_SAVE, CODE_COULD_NOT_SAVE)
+    if not _inside_the_base(base_root, full):
+        # A folder of changes that leads out of the base through a link is
+        # never written through.
+        raise _refuse(COULD_NOT_SAVE, CODE_COULD_NOT_SAVE)
+    before = _head(base_root, git)
+    try:
         with open(full, "x", encoding="utf-8", newline="\n") as handle:
             handle.write(text)
+    except FileExistsError:
+        # Somebody else's file arrived in between. It is left exactly as it is.
+        raise _refuse(MOVED_ON, CODE_MOVED_ON)
+    except OSError:
+        raise _refuse(COULD_NOT_SAVE, CODE_COULD_NOT_SAVE)
+    try:
         git.check(["add", "--", relative], cwd=base_root)
         git.check(
             ["commit", "-q", "-m", SAVE_MESSAGE, "--", relative], cwd=base_root
         )
     except (GtmBaseError, OSError):
-        _take_it_back(base_root, relative, git)
-        raise _refuse(COULD_NOT_SAVE, CODE_COULD_NOT_SAVE)
+        if _head(base_root, git) == before:
+            _take_it_back(base_root, relative, git)
+            raise _refuse(COULD_NOT_SAVE, CODE_COULD_NOT_SAVE)
+        # The save went through although the command said it had not. The
+        # change is written, and it is not taken out again.
 
     remove(_waiting_path(base_id))
     try:
@@ -659,9 +810,26 @@ def record(
         # The change is written. A count that could not be kept only means
         # the whole explanation is given once more than it had to be.
         pass
-    plan = join_flow.reconcile_plan(
-        base_root, base_id, entry.affects, today=day, runner=git, every_document=True
-    )
+    try:
+        plan = join_flow.reconcile_plan(
+            base_root,
+            base_id,
+            entry.affects,
+            today=day,
+            runner=git,
+            every_document=True,
+            ask_only=can_be_asked_about,
+        )
+    except (GtmBaseError, OSError):
+        # The change is written. Every document it affects stays flagged,
+        # which is what the review then picks up.
+        plan = join_flow.Reconciliation([], list(entry.affects))
+    held = _asked(base_id)
+    held[entry.id] = list(plan.ask_about)
+    try:
+        _save_asked(base_id, held)
+    except (GtmBaseError, OSError):
+        plan = join_flow.Reconciliation([], list(entry.affects))
     return Recorded(entry, relative, plan)
 
 
@@ -689,29 +857,45 @@ def answer(
     relative = moment.context_path_of(base_root, document)
     if relative is None or relative == constants.MAP_PATH:
         raise _refuse(moment.NOT_A_CONTEXT_FILE, CODE_NOT_A_DOCUMENT)
-    named = names.document_name(relative)
-    day = now or state.today()
-    if isinstance(day, datetime.datetime):
-        day = day.date()
+    # Only a document the yes asked about, for the change it asked about, and
+    # only once. Everything below may then name the document, because only a
+    # document whose name is safe to say is ever asked about.
+    held = _asked(base_id)
+    if relative not in held.get(str(entry_id), []):
+        raise _refuse(NOT_ASKED, CODE_NOT_ASKED)
+    named = safe_name(relative)
+    day = state.today(now) if isinstance(now, datetime.datetime) else (now or state.today())
     entry, _file = join_flow.entry_in_base(base_root, base_id, entry_id, day)
     if entry is None:
         raise _refuse(
             confirm.CHANGE_NOT_IN_THE_BASE % named, confirm.CODE_ENTRY_MISSING
         )
-    if relative not in list(entry.affects):
-        raise _refuse(
-            confirm.CHANGE_IS_NOT_ABOUT_IT % named, confirm.CODE_NOT_ABOUT_THIS_FILE
-        )
+    if (
+        relative not in list(entry.affects)
+        or entry.origin != ORIGIN
+        or entry.run_id is not None
+    ):
+        raise _refuse(NOT_ASKED, CODE_NOT_ASKED)
     if given == ANSWER_NOT_NOW:
-        return join_flow.Reconciled(relative, False, LEFT_FLAGGED % _capital(named))
-    if given == ANSWER_YES:
-        return join_flow.reconcile_yes(
+        result = join_flow.Reconciled(relative, False, LEFT_FLAGGED % _capital(named))
+    elif given == ANSWER_YES:
+        result = join_flow.reconcile_yes(
             base_root, base_id, relative, entry_id, now=now, runner=git,
             any_document=True,
         )
-    return join_flow.reconcile_no(
-        base_root, base_id, relative, entry_id, now=now, runner=git
-    )
+        if not result.answered_yes:
+            # A refused yes can be given again once what stood in the way is
+            # dealt with, so the question stays open.
+            return result
+    else:
+        result = join_flow.reconcile_no(
+            base_root, base_id, relative, entry_id, now=now, runner=git
+        )
+    held[str(entry_id)] = [
+        path for path in held.get(str(entry_id), []) if path != relative
+    ]
+    _save_asked(base_id, held)
+    return result
 
 
 def _capital(text: str) -> str:

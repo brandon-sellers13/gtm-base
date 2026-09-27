@@ -854,6 +854,7 @@ PYTHON_SENTENCES = (
     ("record_change", "NO_ADDRESS"),
     ("record_change", "NO_ROOM"),
     ("record_change", "ANSWER_UNKNOWN"),
+    ("record_change", "NOT_ASKED"),
 )
 
 # Constants that read like a sentence but that no person ever reads. Each one

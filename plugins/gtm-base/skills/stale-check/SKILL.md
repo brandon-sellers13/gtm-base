@@ -263,6 +263,9 @@ python3 scripts/stale_check.py --record-change answer --change <the change it pr
   below says, then hand it to the local approval step.
 - `not-now` writes nothing. The document stays flagged when it is about to be
   used and in the next review.
+- Each question takes one answer, and only a question the yes printed takes
+  one at all. A document it did not ask about, such as one somebody else owns
+  or one whose name GTM Base will not read out, stays flagged for the review.
 
 ## Improving a prepared change before it goes anywhere
 

@@ -1749,6 +1749,7 @@ def reconcile_plan(
     today=None,
     runner: Optional[GitRunner] = None,
     every_document: bool = False,
+    ask_only=None,
 ) -> Reconciliation:
     """Work out which documents the closing asks about, one question each.
 
@@ -1785,6 +1786,14 @@ def reconcile_plan(
             left_flagged.append(path)
             continue
         if not os.path.isfile(os.path.join(base_root, path.replace("/", os.sep))):
+            left_flagged.append(path)
+            continue
+        if every_document and (
+            formats.name_has_a_space(path)
+            or (ask_only is not None and not ask_only(path))
+        ):
+            # No yes could be recorded about it, or its name is not one the
+            # question may say, so it is left for the review to name.
             left_flagged.append(path)
             continue
         if every_document and (
