@@ -449,28 +449,40 @@ def ready_to_write(base_root: str, git: GitRunner) -> None:
 # a link in place of one of the folders on the way. So a new file is put down
 # the one way that cannot be redirected. The folders are walked one at a time
 # from the top of the base, each opened with links refused and the next found
-# inside the one already open, and the file is created inside the last of them
-# only if nothing at all is there, a link included. What was created is known
-# by its identity on the disk, so taking it back later removes that file and
-# never one somebody put in its place.
+# inside the one already open. The bytes are written whole to a temporary name
+# in the last of them, made only where nothing is, and then given their real
+# name in one step that fails when anything at all is already there, a link
+# included. So the real name only ever holds the whole of the bytes or nothing,
+# however the run stops (the correctness review of Unit 1.7d, finding 1). What
+# was created is known by its identity on the disk, so taking it back later
+# removes that file and never one somebody put in its place.
 
 _NO_FOLLOW = getattr(os, "O_NOFOLLOW", 0)
 _DIRECTORY = getattr(os, "O_DIRECTORY", 0)
-# Whether this computer can open a name inside a folder already open. Where it
-# cannot, the ordinary checks above are all there is, and that is said.
+_NONBLOCK = getattr(os, "O_NONBLOCK", 0)
+# What a temporary name starts with. A run that stopped between writing one
+# and naming it leaves it behind, and it is swept before the next write.
+TEMPORARY_PREFIX = ".gtmbase-new-"
+# Whether this computer can open, make, name, and remove a name inside a
+# folder already open. Where it cannot, the ordinary checks above are all
+# there is, and that is said.
 DESCRIPTOR_WRITES = (
     os.open in os.supports_dir_fd
     and os.mkdir in os.supports_dir_fd
     and os.unlink in os.supports_dir_fd
+    and os.stat in os.supports_dir_fd
+    and os.stat in os.supports_follow_symlinks
+    and os.link in os.supports_dir_fd
+    and os.link in os.supports_follow_symlinks
     and bool(_NO_FOLLOW)
 )
 
 
 def _open_folders(base_root: str, parts, make: bool):
-    """Open each folder on the way down, links refused, and return the last.
+    """Open each folder on the way down, links refused, and return them all.
 
-    Returns the open folders in order; the caller closes them. A folder that
-    is a link, or a name on the way that is not a folder, is refused.
+    The caller closes them. A folder that is a link, or a name on the way that
+    is not a folder, is refused.
     """
     opened = [os.open(os.path.realpath(base_root), os.O_RDONLY | _DIRECTORY)]
     try:
@@ -495,8 +507,7 @@ def _open_folders(base_root: str, parts, make: bool):
                 )
         return opened
     except BaseException:
-        for handle in opened:
-            os.close(handle)
+        _close_all(opened)
         raise
 
 
@@ -508,8 +519,17 @@ def _close_all(opened) -> None:
             pass
 
 
+def _write_whole(handle, data: bytes):
+    with os.fdopen(handle, "wb") as stream:
+        stream.write(data)
+        stream.flush()
+        os.fsync(stream.fileno())
+        found = os.fstat(stream.fileno())
+    return (found.st_dev, found.st_ino)
+
+
 def _create_new(base_root: str, relative: str, data: bytes):
-    """Create one file that was not there, and return who it is on the disk.
+    """Create one file that was not there, whole, and return who it is on the disk.
 
     Nothing already at the name is ever opened, truncated, or followed: a
     file, a link, or anything else there refuses the write.
@@ -524,41 +544,71 @@ def _create_new(base_root: str, relative: str, data: bytes):
             handle = os.open(full, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o666)
         except FileExistsError:
             raise ReviewError(CODE_FILE_EXISTS, code=CODE_FILE_EXISTS)
-        with os.fdopen(handle, "wb") as stream:
-            stream.write(data)
-            stream.flush()
-            os.fsync(stream.fileno())
-            found = os.fstat(stream.fileno())
-        return (found.st_dev, found.st_ino)
+        return _write_whole(handle, data)
     opened = _open_folders(base_root, parts[:-1], make=True)
+    folder = opened[-1]
+    temporary = TEMPORARY_PREFIX + os.urandom(8).hex()
     try:
+        handle = os.open(
+            temporary,
+            os.O_WRONLY | os.O_CREAT | os.O_EXCL | _NO_FOLLOW,
+            0o666,
+            dir_fd=folder,
+        )
         try:
-            handle = os.open(
+            identity = _write_whole(handle, data)
+            # The real name is given in one step, which fails when anything
+            # at all is already there.
+            os.link(
+                temporary,
                 parts[-1],
-                os.O_WRONLY | os.O_CREAT | os.O_EXCL | _NO_FOLLOW,
-                0o666,
-                dir_fd=opened[-1],
+                src_dir_fd=folder,
+                dst_dir_fd=folder,
+                follow_symlinks=False,
             )
-        except OSError:
-            # Something is already at the name: a file, a link, or anything
-            # else. It is never opened.
+        except FileExistsError:
             raise ReviewError(CODE_FILE_EXISTS, code=CODE_FILE_EXISTS)
-        try:
-            with os.fdopen(handle, "wb") as stream:
-                stream.write(data)
-                stream.flush()
-                os.fsync(stream.fileno())
-                found = os.fstat(stream.fileno())
-        except BaseException:
-            # A file only half put down is this call's own, and goes.
+        finally:
             try:
-                os.unlink(parts[-1], dir_fd=opened[-1])
+                os.unlink(temporary, dir_fd=folder)
             except OSError:
                 pass
-            raise
-        return (found.st_dev, found.st_ino)
+        return identity
     finally:
         _close_all(opened)
+
+
+def sweep_temporary(base_root: str, folder_relative: str) -> List[str]:
+    """Take away the temporary names a stopped write left in one folder.
+
+    Only names this plugin gives its own temporary files, only ordinary files,
+    and only in the one folder named, reached the same way a write reaches it.
+    """
+    removed: List[str] = []
+    if not DESCRIPTOR_WRITES:
+        return removed
+    try:
+        opened = _open_folders(base_root, folder_relative.split("/"), make=False)
+    except (ReviewError, OSError):
+        return removed
+    try:
+        for name in os.listdir(opened[-1]):
+            if not name.startswith(TEMPORARY_PREFIX):
+                continue
+            try:
+                found = os.stat(name, dir_fd=opened[-1], follow_symlinks=False)
+            except OSError:
+                continue
+            if not stat.S_ISREG(found.st_mode):
+                continue
+            try:
+                os.unlink(name, dir_fd=opened[-1])
+                removed.append(name)
+            except OSError:
+                pass
+    finally:
+        _close_all(opened)
+    return removed
 
 
 def installed(base_root: str, relative: str):
@@ -566,7 +616,8 @@ def installed(base_root: str, relative: str):
 
     Read without following a link, in the folder reached the same way a new
     file is written, so what is read is what the write would have touched.
-    Anything that is not an ordinary file comes back as None.
+    Anything that is not an ordinary file comes back as None, and opening it
+    never waits, so a pipe put at the name cannot hold a run up.
     """
     parts = relative.split("/")
     if not DESCRIPTOR_WRITES:
@@ -580,11 +631,13 @@ def installed(base_root: str, relative: str):
         return data, (found.st_dev, found.st_ino)
     try:
         opened = _open_folders(base_root, parts[:-1], make=False)
-    except ReviewError:
+    except (ReviewError, OSError):
         return None
     try:
         try:
-            handle = os.open(parts[-1], os.O_RDONLY | _NO_FOLLOW, dir_fd=opened[-1])
+            handle = os.open(
+                parts[-1], os.O_RDONLY | _NO_FOLLOW | _NONBLOCK, dir_fd=opened[-1]
+            )
         except OSError:
             return None
         with os.fdopen(handle, "rb") as stream:
@@ -612,7 +665,7 @@ def _remove_if_ours(base_root: str, relative: str, identity) -> bool:
         return fsutil.remove(full)
     try:
         opened = _open_folders(base_root, parts[:-1], make=False)
-    except ReviewError:
+    except (ReviewError, OSError):
         return False
     try:
         try:
@@ -797,6 +850,9 @@ def approve_adopted(
     codes = screen(text, address, frontmatter_line_numbers(text))
     if codes:
         raise ReviewError(CODE_SCREENED, codes=codes)
+    # A write that stopped between putting its bytes down and naming them
+    # leaves a temporary name behind, which is this plugin's own and goes.
+    sweep_temporary(base_root, relative.rsplit("/", 1)[0])
     ready_to_write(base_root, git)
     _segment_file_is_free(base_root, relative)
     if _already_there(base_root, relative):
@@ -851,7 +907,9 @@ UNKNOWN = "unknown"
 def head_now(git: GitRunner, base_root: str) -> Optional[str]:
     found = git.run(["rev-parse", "--verify", "-q", "HEAD"], cwd=base_root)
     value = found.out() if found.ok else ""
-    return value if len(value) == 40 else None
+    if len(value) in (40, 64) and all(c in "0123456789abcdef" for c in value):
+        return value
+    return None
 
 
 def blob_id(data: bytes) -> str:
@@ -935,16 +993,25 @@ def _save_adopted(git, base_root, base_id, relative, blob, before, confirmations
     raise ReviewError(CODE_SAVE_UNCERTAIN, code=CODE_SAVE_UNCERTAIN)
 
 
+def _unstage(git: GitRunner, base_root: str, *names) -> bool:
+    """Take names off the staging, and say whether git really did it."""
+    return git.run(["reset", "-q", "--"] + list(names), cwd=base_root).ok
+
+
 def _take_back(git, base_root, relative, confirmations, kept, created=None) -> None:
     """Put a base back as it was before one page was written into it.
 
-    Only ever called while nothing has been saved. The page is removed only
-    when the file at its name is still the very file this run created, so a
-    file somebody put there in the meantime is left where it is. The line
-    recording the yes goes back to what the file held before, written the
-    way every file in a base is, so no link at its name is followed.
+    Only ever called while nothing has been saved. When git will not take the
+    page and its line off the staging, nothing on the disk is touched either,
+    so what is staged and what is on the disk never disagree, and the next
+    attempt reads the base and finishes the page. Otherwise the page is
+    removed only when the file at its name is still the very file this run
+    created, and the line recording the yes goes back to what the file held
+    before, written the way every file in a base is, with no link at its name
+    followed.
     """
-    git.run(["reset", "-q", "--", relative, confirmations], cwd=base_root)
+    if not _unstage(git, base_root, relative, confirmations):
+        return
     _remove_if_ours(base_root, relative, created)
     held = os.path.join(base_root, confirmations.replace("/", os.sep))
     if kept is None:
@@ -960,36 +1027,74 @@ def _take_back(git, base_root, relative, confirmations, kept, created=None) -> N
 PAGE_SAVED = "saved"
 PAGE_WRITTEN = "written"
 PAGE_ABSENT = "absent"
+PAGE_EDITED = "edited-before-the-save"
 PAGE_OTHER = "other-bytes"
 
 
-def _text_at_head(git: GitRunner, base_root: str, relative: str) -> Optional[str]:
-    found = git.run(["cat-file", "-p", "HEAD:" + relative], cwd=base_root)
+def _text_at(git: GitRunner, base_root: str, spec: str) -> Optional[str]:
+    found = git.run(["cat-file", "-p", spec], cwd=base_root)
     return found.stdout if found.ok else None
+
+
+def _text_at_head(git: GitRunner, base_root: str, relative: str) -> Optional[str]:
+    return _text_at(git, base_root, "HEAD:" + relative)
+
+
+def held_at_head(git: GitRunner, base_root: str, relative: str) -> bool:
+    """Whether the saved work the base stands at holds anything at this name."""
+    return _text_at_head(git, base_root, relative) is not None
+
+
+def _digest_of(text: Optional[str]) -> Optional[str]:
+    return hashlib.sha256(text.encode("utf-8")).hexdigest() if text is not None else None
+
+
+def _saved_once(git: GitRunner, base_root: str, relative: str, digest: str) -> bool:
+    """Whether any saved piece of work on this line ever held these bytes at the name.
+
+    A page this import saved and the person edited afterward, by a prepared
+    change or by hand, was still saved by this import, and is never reported
+    as a page that was not.
+    """
+    found = git.run(["log", "--format=%H", "--", relative], cwd=base_root)
+    if not found.ok:
+        return False
+    for saved in found.out().split():
+        if _digest_of(_text_at(git, base_root, "%s:%s" % (saved, relative))) == digest:
+            return True
+    return False
+
+
+def _staged_is_ours(git: GitRunner, base_root: str, relative: str, digest: str) -> bool:
+    """Whether what is staged at the name is exactly the approved bytes."""
+    return _digest_of(_text_at(git, base_root, ":" + relative)) == digest
 
 
 def page_state(git: GitRunner, base_root: str, relative: str, digest: str) -> str:
     """How far one page with a yes got, read from what the base holds.
 
-    Saved: the base has saved these bytes at the name. Written: the bytes sit
-    at the name and are not saved yet, staged or not, with its line or not.
-    Absent: nothing is at the name and nothing is saved there. Other bytes:
-    something else is at the name, saved or not, which is never written over.
+    Saved: some saved piece of work held these bytes at the name, whatever the
+    name holds now. Written: the bytes sit at the name, unsaved, staged or
+    not, with its line or not. Edited before the save: this import staged or
+    recorded the page, and the file at the name was changed before the save.
+    Absent: nothing at the name and nothing saved there. Other bytes:
+    something else is at the name, which is never written over.
     """
-    at_head = _text_at_head(git, base_root, relative)
-    here = installed(base_root, relative)
-    if at_head is not None:
-        if hashlib.sha256(at_head.encode("utf-8")).hexdigest() != digest:
-            return PAGE_OTHER
-        if here is not None and hashlib.sha256(here[0]).hexdigest() != digest:
-            return PAGE_OTHER
+    if _saved_once(git, base_root, relative, digest):
         return PAGE_SAVED
+    if _text_at_head(git, base_root, relative) is not None:
+        return PAGE_OTHER
+    here = installed(base_root, relative)
     full = os.path.join(base_root, relative.replace("/", os.sep))
     if here is None:
         return PAGE_OTHER if os.path.lexists(full) else PAGE_ABSENT
-    if hashlib.sha256(here[0]).hexdigest() != digest:
-        return PAGE_OTHER
-    return PAGE_WRITTEN
+    if hashlib.sha256(here[0]).hexdigest() == digest:
+        return PAGE_WRITTEN
+    if _staged_is_ours(git, base_root, relative, digest) or (
+        _line_state(git, base_root, relative) == "ours"
+    ):
+        return PAGE_EDITED
+    return PAGE_OTHER
 
 
 def _line_state(git: GitRunner, base_root: str, relative: str) -> str:
@@ -1030,9 +1135,11 @@ def _line_state(git: GitRunner, base_root: str, relative: str) -> str:
 def _only_this_pages_edits(git: GitRunner, base_root: str, relative: str) -> str:
     """The state of the page's line, when nothing but this page is half done.
 
-    Anything else unsaved in the base is the person's, and is refused.
+    Anything else unsaved in the base is the person's, and is refused, apart
+    from the temporary names a stopped write leaves, which are swept first.
     """
     confirmations = confirm.confirmations_path_for(relative)
+    sweep_temporary(base_root, relative.rsplit("/", 1)[0])
     status = git.run(["status", "--porcelain", "-z", "--untracked-files=all"], cwd=base_root)
     entries = status_entries(status.stdout) if status.ok else None
     if entries is None:
@@ -1046,6 +1153,19 @@ def _only_this_pages_edits(git: GitRunner, base_root: str, relative: str) -> str
     return line
 
 
+def _restore_line(git: GitRunner, base_root: str, relative: str, line: str) -> None:
+    """Put this run's own line back to what was saved, and nothing else."""
+    if line != "ours":
+        return
+    confirmations = confirm.confirmations_path_for(relative)
+    saved = _text_at_head(git, base_root, confirmations)
+    held = os.path.join(base_root, confirmations.replace("/", os.sep))
+    if saved is None:
+        fsutil.remove(held)
+    else:
+        fsutil.atomic_write_bytes(held, saved.encode("utf-8"), mode=0o644, inside=base_root)
+
+
 def put_back_unwritten(base_root: str, relative: str, runner: Optional[GitRunner] = None) -> None:
     """Clear what an import left of a page that is no longer at its name.
 
@@ -1054,15 +1174,45 @@ def put_back_unwritten(base_root: str, relative: str, runner: Optional[GitRunner
     """
     git = runner_or_default(runner)
     line = _only_this_pages_edits(git, base_root, relative)
+    status = git.run(["status", "--porcelain", "-z", "--untracked-files=all"], cwd=base_root)
+    if status.ok and not status.stdout.strip("\0"):
+        # Nothing is half done at all, which is the ordinary case.
+        return
     confirmations = confirm.confirmations_path_for(relative)
-    git.run(["reset", "-q", "--", relative, confirmations], cwd=base_root)
-    if line == "ours":
-        saved = _text_at_head(git, base_root, confirmations)
-        held = os.path.join(base_root, confirmations.replace("/", os.sep))
-        if saved is None:
-            fsutil.remove(held)
-        else:
-            fsutil.atomic_write_bytes(held, saved.encode("utf-8"), mode=0o644, inside=base_root)
+    if not _unstage(git, base_root, relative, confirmations):
+        raise ReviewError(CODE_GIT_FAILED, code=CODE_GIT_FAILED)
+    _restore_line(git, base_root, relative, line)
+
+
+def take_back_unsaved(
+    base_root: str, relative: str, digest: str, runner: Optional[GitRunner] = None
+) -> None:
+    """Take back what an import did toward a page that was never saved.
+
+    Its staging and its own line are taken back. The file at the name is
+    removed only when it still holds exactly the approved bytes, which this
+    import wrote; a file changed since is the person's, and stays. Nothing is
+    done while anything else is half done in the base.
+    """
+    git = runner_or_default(runner)
+    if _saved_once(git, base_root, relative, digest):
+        return
+    confirmations = confirm.confirmations_path_for(relative)
+    sweep_temporary(base_root, relative.rsplit("/", 1)[0])
+    status = git.run(["status", "--porcelain", "-z", "--untracked-files=all"], cwd=base_root)
+    entries = status_entries(status.stdout) if status.ok else None
+    if entries is None:
+        raise ReviewError(CODE_GIT_FAILED, code=CODE_GIT_FAILED)
+    for _letters, named in entries:
+        if any(name not in (relative, confirmations) for name in named):
+            raise ReviewError(CODE_UNSAVED_EDITS, code=CODE_UNSAVED_EDITS)
+    line = _line_state(git, base_root, relative)
+    if not _unstage(git, base_root, relative, confirmations):
+        raise ReviewError(CODE_GIT_FAILED, code=CODE_GIT_FAILED)
+    _restore_line(git, base_root, relative, line)
+    here = installed(base_root, relative)
+    if here is not None and hashlib.sha256(here[0]).hexdigest() == digest:
+        _remove_if_ours(base_root, relative, here[1])
 
 
 def finish_adopted(
@@ -1120,12 +1270,12 @@ def finish_adopted(
     except Exception:
         # Taken back to where this call found it: unstaged, and the line file
         # as it was. The page stays, because this call did not make it.
-        git.run(["reset", "-q", "--", relative, confirmations], cwd=base_root)
-        held = os.path.join(base_root, confirmations.replace("/", os.sep))
-        if kept is None:
-            fsutil.remove(held)
-        else:
-            fsutil.atomic_write_bytes(held, kept, mode=0o644, inside=base_root)
+        if _unstage(git, base_root, relative, confirmations):
+            held = os.path.join(base_root, confirmations.replace("/", os.sep))
+            if kept is None:
+                fsutil.remove(held)
+            else:
+                fsutil.atomic_write_bytes(held, kept, mode=0o644, inside=base_root)
         raise
     return _save_adopted(
         git, base_root, base_id, relative, blob, before, confirmations, kept, None

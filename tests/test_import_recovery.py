@@ -171,6 +171,7 @@ def marks(state):
 # that fires straight after it for the page in the middle of twelve.
 STEPS = (
     ("the yes written down", lambda: StopAfter(segments, "mark", marks(segments.STATE_APPROVED))),
+    ("the bytes put down under a temporary name", lambda: StopAfter(review, "_write_whole")),
     ("the page written", lambda: StopAfter(review, "_create_new", middle_page)),
     ("the page staged", lambda: StopAfter(review, "_stage_bytes", middle_page)),
     ("its line added", lambda: StopAfter(confirm, "_append_line", middle_page)),
@@ -345,7 +346,7 @@ class TestAStopAfterEveryStep(RecoveryCase):
     def test_a_stop_inside_the_next_run_is_finished_by_the_one_after(self):
         """The recovery's own steps are stopped too, and recovered again."""
         expected = self.uninterrupted()
-        for label, make_stop in STEPS[1:6]:
+        for label, make_stop in STEPS[1:7]:
             with self.subTest(step=label):
                 self.snapshot.restore()
                 company = self.company
@@ -534,6 +535,10 @@ class TestAnotherFileWhereThePageWouldGo(RecoveryCase):
         _run, resumed = self.resume()
         self.assertEqual([MIDDLE], [s.name for s in resumed.taken])
         self.assertEqual("somebody's own words\n", support.read(full))
+        # An unsaved file is the person's to deal with, so the yes still
+        # stands for when it is gone, and nothing is settled for them.
+        record = segments.load_import(company.base_id)
+        self.assertEqual(segments.STATE_APPROVED, record.state_of(segments.slug_for(MIDDLE)))
 
     def test_a_half_written_page_beside_the_persons_own_edit_is_refused(self):
         """A tree dirtied by the person, not only by this import, is refused."""
@@ -545,9 +550,11 @@ class TestAnotherFileWhereThePageWouldGo(RecoveryCase):
                 approve(company.run, company, MIDDLE, shown.digest)
         self.assertTrue(stop.fired)
         support.write(os.path.join(company.root, "context", "positioning.md"), "my own edit\n")
-        with self.assertRaises(ReviewError) as caught:
-            self.resume()
-        self.assertEqual(review.CODE_UNSAVED_EDITS, caught.exception.code)
+        _run, resumed = self.resume()
+        self.assertEqual(MIDDLE, resumed.stopped[0].name)
+        self.assertEqual(review.CODE_UNSAVED_EDITS, resumed.stopped[1])
+        self.assertIn(adopt.UNSAVED_EDITS, resumed.sentences())
+        self.assertEqual([], resumed.finished)
         self.assertEqual("my own edit\n", company.read("context/positioning.md"))
         # The page this import wrote is still there, untouched, to finish later.
         self.assertIsNotNone(company.read(company.destination(MIDDLE)))
@@ -713,7 +720,10 @@ class TestTheRecord(RecoveryCase):
         old = os.path.getmtime(path + ".lock") - 3600
         os.utime(path + ".lock", (old, old))
         segments.mark(company.base_id, segments.slug_for(ORDER[0]), segments.STATE_LEFT_OUT)
-        self.assertFalse(os.path.exists(path + ".lock"))
+        # The lock is the operating system's, held by a live writer only, so
+        # a file left behind by a run that died stops nobody.
+        record = segments.load_import(company.base_id)
+        self.assertEqual(segments.STATE_LEFT_OUT, record.state_of(segments.slug_for(ORDER[0])))
 
     def test_a_record_edited_into_something_no_run_writes_is_not_read_or_written_over(self):
         company = self.company
@@ -722,12 +732,17 @@ class TestTheRecord(RecoveryCase):
         payload["consent"]["paths"].append("/etc/passwd")
         fsutil.atomic_write_json(path, payload)
         self.assertIsNone(segments.load_import(company.base_id))
-        self.assertIsNone(join_flow._carry(company.run, company.base_id))
-        self.assertIn("/etc/passwd", support.read(path))
-        with self.assertRaises(adopt.AdoptionRefused) as caught:
-            self.resume()
-        self.assertEqual(join_flow.CODE_IMPORT_UNREADABLE, caught.exception.code)
-        self.assertEqual(join_flow.RESUME_UNREADABLE, caught.exception.sentence)
+        # Finishing sets it aside, renamed and never deleted, and says so.
+        _run, resumed = self.resume()
+        self.assertTrue(resumed.set_aside)
+        self.assertIn(join_flow.RESUME_UNREADABLE, resumed.sentences())
+        self.assertFalse(segments.has_import(company.base_id))
+        self.assertIn("/etc/passwd", support.read(path + segments.UNREADABLE_SUFFIX))
+        # And the next page shown keeps a new record for the import.
+        fsutil.atomic_write_json(path, payload)
+        show(company.run, company, ORDER[0])
+        self.assertIsNotNone(segments.load_import(company.base_id))
+        self.assertIn("/etc/passwd", support.read(path + segments.UNREADABLE_SUFFIX))
 
     def test_the_kept_yes_reaches_only_the_pages_to_take_in(self):
         company = self.company
@@ -750,6 +765,341 @@ class TestTheRecord(RecoveryCase):
 
         self.resume()
         self.assertTrue(marker.marker_matches_session(SESSION_TWO))
+
+
+# --- What the correctness and data-integrity reviews of Unit 1.7d found --------
+
+
+def stop_at_the_yes(company, run_id, name):
+    """Show a page, say yes, and stop straight after the yes is written down."""
+    shown = show(run_id, company, name)
+    with StopAfter(
+        segments, "mark",
+        lambda b, s, st, *r, **k: s == segments.slug_for(name) and st == segments.STATE_APPROVED,
+    ) as stop:
+        try:
+            approve(run_id, company, name, shown.digest)
+        except Stopped:
+            pass
+    assert stop.fired
+    return shown
+
+
+class TestTheReviews(RecoveryCase):
+    def test_a_folder_moved_and_left_as_a_link_keeps_the_record_readable(self):
+        """Data-integrity 1 and correctness 6: the record is read as it was kept."""
+        company = self.company
+        adopt_in(company.run, company, ORDER[0])
+        stop_at_the_yes(company, company.run, ORDER[1])
+        moved = company.content + "-moved"
+        shutil.move(company.content, moved)
+        os.symlink(moved, company.content)
+        record = segments.load_import(company.base_id)
+        self.assertIsNotNone(record)
+        self.assertEqual(segments.STATE_APPROVED, record.state_of(segments.slug_for(ORDER[1])))
+        # The page itself no longer reads the same way, so its yes is kept
+        # for next time and nothing is thrown away.
+        _run, resumed = self.resume()
+        self.assertEqual([ORDER[1]], [s.name for s in resumed.unreadable])
+        record = segments.load_import(company.base_id)
+        self.assertEqual(segments.STATE_APPROVED, record.state_of(segments.slug_for(ORDER[1])))
+
+    def test_a_page_saved_and_then_edited_is_saved_and_never_called_not_saved(self):
+        """Data-integrity 2A and correctness 3."""
+        company = self.company
+        name = ORDER[0]
+        shown = show(company.run, company, name)
+        # The save lands and the run stops before it is written down.
+        with StopGit(is_commit) as stop:
+            with self.assertRaises(Stopped):
+                approve(company.run, company, name, shown.digest)
+        self.assertTrue(stop.fired)
+        relative = company.destination(name)
+        support.commit(company.root, relative, ["# Edited later", "", "## Part", "", "Mine."], "my edit")
+        _run, resumed = self.resume()
+        self.assertEqual([name], [s.name for s in resumed.finished])
+        self.assertEqual([], resumed.taken)
+        record = segments.load_import(company.base_id)
+        self.assertEqual(segments.STATE_COMMITTED, record.state_of(segments.slug_for(name)))
+
+    def test_a_page_changed_before_its_save_is_taken_back_and_the_copy_left(self):
+        """Data-integrity 2B and correctness 2."""
+        company = self.company
+        name = ORDER[0]
+        relative = company.destination(name)
+        shown = show(company.run, company, name)
+        with StopGit(adds_a_line_file) as stop:
+            with self.assertRaises(Stopped):
+                approve(company.run, company, name, shown.digest)
+        self.assertTrue(stop.fired)
+        full = os.path.join(company.root, relative)
+        with open(full, "a") as handle:
+            handle.write("\nA line of my own.\n")
+        changed = support.read(full)
+        _run, resumed = self.resume()
+        self.assertEqual([name], [s.name for s in resumed.edited])
+        self.assertIn(join_flow.RESUME_EDITED % {"name": name}, resumed.sentences())
+        # Nothing this import started is left staged, the line recording a
+        # yes is gone, and the person's copy is exactly as they left it.
+        self.assertEqual("", git_out(["diff", "--cached", "--name-only"], company.root))
+        self.assertIsNone(company.read(confirm.confirmations_path_for(relative)))
+        self.assertEqual(changed, support.read(full))
+        record = segments.load_import(company.base_id)
+        self.assertEqual(segments.STATE_APPROVED, record.state_of(segments.slug_for(name)))
+        # Once the copy is gone, the page is written from the yes.
+        os.remove(full)
+        run_three, again = self.resume()
+        self.assertEqual([name], [s.name for s in again.finished])
+        self.assertEqual(shown.digest, hashlib.sha256(company.read(relative).encode("utf-8")).hexdigest())
+
+    def test_an_original_unreadable_for_a_moment_keeps_its_yes(self):
+        """Data-integrity 3."""
+        company = self.company
+        name = ORDER[0]
+        stop_at_the_yes(company, company.run, name)
+        source = company.pages[name]
+        os.chmod(source, 0)
+        try:
+            _run, resumed = self.resume()
+        finally:
+            os.chmod(source, 0o644)
+        self.assertEqual([name], [s.name for s in resumed.unreadable])
+        self.assertEqual([], resumed.changed)
+        self.assertIn(join_flow.RESUME_CANNOT_READ % {"name": name}, resumed.sentences())
+        record = segments.load_import(company.base_id)
+        self.assertEqual(segments.STATE_APPROVED, record.state_of(segments.slug_for(name)))
+        _run, later = self.resume()
+        self.assertEqual([name], [s.name for s in later.finished])
+
+    def test_a_resume_handed_a_live_run_leaves_it_alone(self):
+        """Data-integrity 4."""
+        company = self.company
+        fsutil.remove(segments.import_path(company.base_id))
+        with self.assertRaises(adopt.AdoptionRefused) as caught:
+            join_flow.resume_import(company.run, company.root, SESSION_TWO, now=NOW)
+        self.assertEqual(join_flow.CODE_RUN_HAS_ITS_OWN, caught.exception.code)
+        self.assertIsNotNone(join_flow.load_inventory(company.run))
+        self.assertIsNotNone(join_flow.load_consent(company.run))
+
+    def test_one_page_is_written_at_a_time_in_one_base(self):
+        """Data-integrity 6: the writing lock, held while a page is written."""
+        company = self.company
+        name = ORDER[0]
+        shown = show(company.run, company, name)
+        lock = os.path.join(
+            os.path.dirname(segments.import_path(company.base_id)), join_flow.WRITING_LOCK
+        )
+
+        def quickly(path):
+            return fsutil.HeldLock(path, wait_seconds=0.2)
+
+        with fsutil.HeldLock(lock):
+            with mock.patch.object(join_flow, "HeldLock", quickly):
+                with self.assertRaises(ReviewError) as caught:
+                    approve(company.run, company, name, shown.digest)
+        self.assertEqual(join_flow.CODE_LOCKED, caught.exception.code)
+        self.assertIsNone(company.read(company.destination(name)))
+        approve(company.run, company, name, shown.digest)
+        self.assertIsNotNone(company.read(company.destination(name)))
+
+    def test_a_record_is_only_written_for_the_import_it_belongs_to(self):
+        """Data-integrity 7."""
+        company = self.company
+        with self.assertRaises(segments.InventoryRefused):
+            segments.mark(
+                company.base_id, segments.slug_for(ORDER[0]), segments.STATE_LEFT_OUT,
+                run="run-2026-09-26-0000beef",
+            )
+        record = segments.load_import(company.base_id)
+        self.assertEqual(segments.STATE_NOT_ANSWERED, record.state_of(segments.slug_for(ORDER[0])))
+
+    def test_a_saved_page_is_never_marked_left_out_or_refused(self):
+        """Data-integrity 8 and correctness 11: checked with the lock held."""
+        company = self.company
+        adopt_in(company.run, company, ORDER[0])
+        slug = segments.slug_for(ORDER[0])
+        for state in (segments.STATE_LEFT_OUT, segments.STATE_REFUSED):
+            segments.mark(company.base_id, slug, state)
+            self.assertEqual(
+                segments.STATE_COMMITTED, segments.load_import(company.base_id).state_of(slug)
+            )
+        self.assertEqual(
+            join_flow.ALREADY_SAVED,
+            join_flow.adoption_leave_out(company.run, slug, company.root),
+        )
+
+    def test_a_take_back_git_would_not_do_touches_nothing_on_the_disk(self):
+        """Data-integrity 9: the staging and the disk never disagree."""
+        company = self.company
+        name = ORDER[0]
+        relative = company.destination(name)
+        shown = show(company.run, company, name)
+
+        class NoSaveNoReset(GitRunner):
+            def run(inner, args, cwd=None, timeout=20, input=None):
+                if list(args)[:1] == ["reset"]:
+                    return GitResult(128, "", "index.lock")
+                return GitRunner.run(inner, args, cwd=cwd, timeout=timeout, input=input)
+
+            def check(inner, args, cwd=None, timeout=20, input=None):
+                if list(args)[:1] == ["commit"]:
+                    raise RuntimeError("the save failed")
+                return GitRunner.check(inner, args, cwd=cwd, timeout=timeout, input=input)
+
+        with self.assertRaises(ReviewError):
+            approve(company.run, company, name, shown.digest, runner=NoSaveNoReset())
+        staged = git_out(["diff", "--cached", "--name-only"], company.root).split()
+        self.assertIn(relative, staged)
+        self.assertIsNotNone(company.read(relative))
+        self.assertEqual(1, len(lines_for(company, relative)[0]))
+        # The next attempt reads the base and finishes it.
+        approve(company.run, company, name, shown.digest)
+        self.assertEqual("", company.status())
+        self.assertEqual(1, len(lines_for(company, relative)[0]))
+
+    def test_the_resumed_run_may_read_only_the_pages_still_to_finish(self):
+        """Data-integrity 10."""
+        company = self.company
+        for name in ORDER[:5]:
+            adopt_in(company.run, company, name)
+        run_two, _resumed = self.resume()
+        seeded = join_flow.load_consent(run_two)
+        wanted = sorted(os.path.realpath(company.pages[n]) for n in ORDER[5:])
+        self.assertEqual(wanted, sorted(seeded.paths))
+        record = segments.load_import(company.base_id)
+        used = set(s.number for s in record.inventory.segments if s.number is not None)
+        self.assertEqual(used, set(c.number for c in record.candidates))
+
+    def test_a_page_stopped_between_its_bytes_and_its_name_leaves_no_page(self):
+        """Correctness 1: the real name only ever holds the whole of the bytes."""
+        company = self.company
+        name = ORDER[0]
+        relative = company.destination(name)
+        shown = show(company.run, company, name)
+        with StopAfter(review, "_write_whole") as stop:
+            with self.assertRaises(Stopped):
+                approve(company.run, company, name, shown.digest)
+        self.assertTrue(stop.fired)
+        self.assertIsNone(company.read(relative))
+        folder = os.path.join(company.root, constants.SEGMENTS_DIR)
+        self.assertEqual(
+            [], [n for n in os.listdir(folder) if n.startswith(review.TEMPORARY_PREFIX)],
+            "the temporary name is taken away even when the naming is what stopped",
+        )
+
+    def test_a_temporary_name_a_stopped_run_left_is_swept(self):
+        company = self.company
+        folder = os.path.join(company.root, constants.SEGMENTS_DIR)
+        support.write(os.path.join(folder, review.TEMPORARY_PREFIX + "00ff"), "half of a page")
+        stop_at_the_yes(company, company.run, ORDER[0])
+        _run, resumed = self.resume()
+        self.assertEqual([ORDER[0]], [s.name for s in resumed.finished])
+        self.assertEqual(
+            [], [n for n in os.listdir(folder) if n.startswith(review.TEMPORARY_PREFIX)]
+        )
+        self.assertEqual("", company.status())
+
+    def test_showing_a_page_already_said_yes_to_finishes_it(self):
+        """Correctness 4."""
+        company = self.company
+        name = ORDER[0]
+        shown = show(company.run, company, name)
+        with StopAfter(review, "_stage_bytes", lambda *a, **k: True) as stop:
+            with self.assertRaises(Stopped):
+                approve(company.run, company, name, shown.digest)
+        self.assertTrue(stop.fired)
+        with self.assertRaises(adopt.AdoptionRefused) as caught:
+            show(company.run, company, name)
+        self.assertEqual(join_flow.CODE_ALREADY_SAVED, caught.exception.code)
+        self.assertEqual(join_flow.ALREADY_SAVED, caught.exception.sentence)
+        self.assertEqual("", company.status())
+        self.assertEqual(
+            segments.STATE_COMMITTED,
+            segments.load_import(company.base_id).state_of(segments.slug_for(name)),
+        )
+
+    def test_leaving_out_a_page_written_and_not_saved_takes_it_back(self):
+        """Correctness 4 and data-integrity 2: nothing half done is left."""
+        company = self.company
+        name = ORDER[0]
+        relative = company.destination(name)
+        shown = show(company.run, company, name)
+        with StopAfter(confirm, "_append_line", lambda *a, **k: True) as stop:
+            with self.assertRaises(Stopped):
+                approve(company.run, company, name, shown.digest)
+        self.assertTrue(stop.fired)
+        said = join_flow.adoption_leave_out(company.run, segments.slug_for(name), company.root)
+        self.assertEqual(join_flow.LEFT_OUT_SAID, said)
+        self.assertEqual("", company.status())
+        self.assertIsNone(company.read(relative))
+        self.assertEqual(
+            segments.STATE_LEFT_OUT,
+            segments.load_import(company.base_id).state_of(segments.slug_for(name)),
+        )
+
+    def test_another_import_still_waiting_refuses_rather_than_losing_its_yes(self):
+        """Correctness 5 and 12."""
+        company = self.company
+        stop_at_the_yes(company, company.run, ORDER[0])
+        record = segments.load_import(company.base_id)
+        fewer = segments.Inventory(record.inventory.segments[:3])
+        with self.assertRaises(segments.InventoryRefused) as caught:
+            segments.carry_import(company.base_id, "run-2026-09-26-0000beef", fewer, record.candidates, {})
+        self.assertEqual(segments.CODE_ANOTHER_IMPORT, caught.exception.code)
+        self.assertEqual(record.to_payload(), segments.load_import(company.base_id).to_payload())
+        self.assertTrue(join_flow.IMPORT_PENDING)
+        # Once every page of it is settled, a new import replaces it.
+        for segment in record.to_adopt():
+            segments.mark(company.base_id, segment.slug, segments.STATE_LEFT_OUT)
+        fresh = segments.carry_import(
+            company.base_id, "run-2026-09-26-0000beef", fewer, record.candidates, {}
+        )
+        self.assertEqual(fewer, fresh.inventory)
+
+    def test_finishing_that_stops_at_one_page_still_says_what_it_finished(self):
+        """Correctness 7."""
+        company = self.company
+        first, second = ORDER[0], ORDER[1]
+        stop_at_the_yes(company, company.run, first)
+        stop_at_the_yes(company, company.run, second)
+        original = review.approve_adopted
+        calls = []
+
+        def fails_the_second(*args, **kwargs):
+            calls.append(args[2])
+            if len(calls) == 2:
+                raise ReviewError(review.CODE_GIT_FAILED, code=review.CODE_GIT_FAILED)
+            return original(*args, **kwargs)
+
+        with mock.patch.object(review, "approve_adopted", fails_the_second):
+            run_two, resumed = self.resume()
+        self.assertEqual([first], [s.name for s in resumed.finished])
+        self.assertEqual(second, resumed.stopped[0].name)
+        said = resumed.sentences()
+        self.assertIn(join_flow.RESUME_FINISHED_ONE, said)
+        self.assertIn(join_flow.WRITE_FAILED, said)
+        self.assertIn(join_flow.RESUME_STOPPED % {"name": second}, said)
+        _run, again = self.resume(run_two)
+        self.assertEqual([second], [s.name for s in again.finished])
+
+    def test_a_pipe_at_the_page_name_never_holds_a_run_up(self):
+        """Correctness 13."""
+        company = self.company
+        full = os.path.join(company.root, company.destination(ORDER[0]))
+        os.mkfifo(full)
+        self.assertIsNone(review.installed(company.root, company.destination(ORDER[0])))
+
+    def test_a_day_that_is_not_on_the_calendar_is_not_read(self):
+        """Correctness 14."""
+        company = self.company
+        path = segments.import_path(company.base_id)
+        payload = fsutil.read_json(path)
+        payload["files"] = {
+            segments.slug_for(ORDER[0]): {
+                "state": segments.STATE_APPROVED, "approved": "a" * 64, "day": "2026-02-30",
+            }
+        }
+        self.assertIsNone(segments.record_from(payload, company.base_id))
 
 
 # --- Astra's finding 2 on Unit 1.7c: nothing put in the way is followed ---------
@@ -1089,6 +1439,14 @@ NEW_SENTENCES = (
     "CLOSING_IMPORT_UNFINISHED",
     "SAVE_UNCERTAIN",
     "PAGE_REPLACED",
+    "RESUME_EDITED",
+    "RESUME_CANNOT_READ",
+    "RESUME_STOPPED",
+    "PAGE_EDITED_SAID",
+    "ALREADY_SAVED",
+    "IMPORT_PENDING",
+    "LOCKED",
+    "WRITE_FAILED",
 )
 
 

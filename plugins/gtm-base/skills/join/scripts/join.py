@@ -78,6 +78,7 @@ from gtmbase.errors import (  # noqa: E402
     GtmBaseError,
     IdentityNeeded,
     LocationError,
+    PathError,
     ReviewError,
     StateError,
     ValidationError,
@@ -1538,15 +1539,7 @@ def an_adoption_refusal(refusal, out):
     return EXIT_REFUSED
 
 
-ADOPTION_BASE_REFUSALS = {
-    review.CODE_UNSAVED_EDITS: adopt.UNSAVED_EDITS,
-    review.CODE_NOT_DEFAULT_BRANCH: adopt.NOT_ON_THE_MAIN_LINE,
-    segments.CODE_FILE_TAKEN: segments.FILE_TAKEN,
-    review.CODE_FILE_EXISTS: segments.FILE_TAKEN,
-    segments.CODE_FOLDER_NOT_ORDINARY: segments.FOLDER_NOT_ORDINARY,
-    review.CODE_SAVE_UNCERTAIN: join_flow.SAVE_UNCERTAIN,
-    review.CODE_PAGE_REPLACED: join_flow.PAGE_REPLACED,
-}
+ADOPTION_BASE_REFUSALS = join_flow.BASE_REFUSALS
 
 
 def an_adoption_base_refusal(refusal, out):
@@ -1621,7 +1614,7 @@ def run_adopt(options, out):
         )
     except adopt.AdoptionRefused as refusal:
         return an_adoption_refusal(refusal, out)
-    except ReviewError as refusal:
+    except (ReviewError, PathError) as refusal:
         return an_adoption_base_refusal(refusal, out)
     line(out, "base", result.root)
     line(out, "file", result.path)
@@ -1642,6 +1635,8 @@ def run_adopt_leave(options, out):
         sentence = join_flow.adoption_leave_out(run_id, slug, root)
     except adopt.AdoptionRefused as refusal:
         return an_adoption_refusal(refusal, out)
+    except (ReviewError, PathError) as refusal:
+        return an_adoption_base_refusal(refusal, out)
     out.write(sentence + "\n")
     return EXIT_DONE
 
@@ -1659,13 +1654,17 @@ def run_resume(options, out):
         resumed = join_flow.resume_import(run_id, root, session, email=options.email)
     except adopt.AdoptionRefused as refusal:
         return an_adoption_refusal(refusal, out)
-    except ReviewError as refusal:
+    except (ReviewError, PathError) as refusal:
         return an_adoption_base_refusal(refusal, out)
+    if resumed.stopped is not None:
+        line(out, "codes", resumed.stopped[1])
     for segment in resumed.to_show:
         line(out, "segment", segment.slug)
+    for segment in resumed.unreadable:
+        line(out, "unreadable", segment.slug)
     for sentence in resumed.sentences():
         out.write(sentence + "\n")
-    return EXIT_DONE
+    return EXIT_REFUSED if resumed.stopped is not None else EXIT_DONE
 
 
 def base_and_id(options, out):

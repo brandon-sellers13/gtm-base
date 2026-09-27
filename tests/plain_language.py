@@ -959,6 +959,14 @@ PYTHON_SENTENCES = (
     ("join_flow", "CLOSING_IMPORT_UNFINISHED"),
     ("join_flow", "SAVE_UNCERTAIN"),
     ("join_flow", "PAGE_REPLACED"),
+    ("join_flow", "RESUME_EDITED"),
+    ("join_flow", "RESUME_CANNOT_READ"),
+    ("join_flow", "RESUME_STOPPED"),
+    ("join_flow", "PAGE_EDITED_SAID"),
+    ("join_flow", "ALREADY_SAVED"),
+    ("join_flow", "IMPORT_PENDING"),
+    ("join_flow", "LOCKED"),
+    ("join_flow", "WRITE_FAILED"),
 )
 
 # Constants that read like a sentence but that no person ever reads. Each one

@@ -630,6 +630,8 @@ python3 scripts/join.py adopt --segment <segment> --run <run identifier> --base 
   page again and ask again.
 - `codes=save-outcome-unknown`: say the sentence. When they ask again, run the
   same adopt; it finishes the save or says what it found.
+- `codes=already-saved` from adopt-show: they said yes before and the page is
+  now saved. Say the sentence and go on to the next page.
 - A page they leave out is not written, and nothing else changes. Write their
   no down with
   `python3 scripts/join.py adopt-leave --segment <segment> --run <run identifier> --base <base folder>`
@@ -834,6 +836,11 @@ python3 scripts/join.py resume --run <run identifier> --base <base folder> --ses
   exactly as step 6d does, with this run identifier, and ask its question.
 - When every page is answered, run the same `resume` again. It lets go of what
   it kept and says nothing is left to finish.
+- Each `unreadable=` line is a page whose original could not be read just
+  now. Its yes stands for next time. If they say it is gone for good, leave
+  it out with `adopt-leave` exactly as step 6d does.
+- A `codes=` line means finishing stopped at one page. Say every sentence it
+  printed; what was finished before it is saved.
 - A refusal is one sentence. Say it. After `codes=unsaved-edits` nothing was
   touched, because something of theirs is half done in the base.
 
