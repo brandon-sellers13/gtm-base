@@ -1482,3 +1482,11 @@ Review: docs/reviews/2026-09-27-unit-1-7c-1-7d-verify-astra.md, all eight closed
 - [x] 2. No clock: every temporary-file writer holds a shared folder ownership lock (fsutil.FolderLock) for its write and move; the sweep reclaims only when it can take the lock exclusively. Tested with a child stopped with SIGSTOP (its file survives and its move succeeds after SIGCONT) and one killed with SIGKILL (reclaimed at once).
 - [x] 3. Only real markup refuses a page; CAC<LTV., a<b, x <y, LTV<3x and <3 pass; the oversized tag, with or without a value, is refused.
 - [x] Full suite after the confirmation-pass fixes: 2436 tests OK in 1325 seconds, then 115 from a linked folder OK in 131 seconds (tests/run.sh exit 0).
+
+#### Astra's second confirmation pass on the merged units (2026-09-27)
+Review: docs/reviews/2026-09-27-unit-1-7c-1-7d-verify-2-astra.md, five findings, not ready. Tests in tests/test_import_astra_verify_2.py, committed failing first.
+- [x] 1. Folder locks in the seat folder's own locks folder, one for every session; seat and locks folders refused when a link, not this account's, or writable by others.
+- [x] 2. A writer that cannot take its lock refuses with a sentence (no-writing-lock).
+- [x] 3. Claims settled only when their names validate exactly; malformed ones, including a superscript digit and a nested claim, are left alone and counted as somebody's unsaved work.
+- [x] 4. Markup decided by Python's HTML reader, plus a leftover comment opener or closing tag; a quoted value with a blank line is refused; the comparisons still pass.
+- [x] 5. A put-back stopped after its link finishes by removing only the claim.
