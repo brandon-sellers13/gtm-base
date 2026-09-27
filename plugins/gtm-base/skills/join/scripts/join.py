@@ -1566,7 +1566,6 @@ def run_adopt_show(options, out):
     except adopt.AdoptionRefused as refusal:
         return an_adoption_refusal(refusal, out)
     line(out, "segment", shown.segment.slug)
-    line(out, "cleaned", shown.path)
     line(out, "hash", shown.digest)
     if shown.cleaned.questions:
         line(out, "questions", shown.cleaned.questions)

@@ -946,6 +946,10 @@ class TestTheSkillsAsTheyAreWritten(unittest.TestCase):
                 for line in printed.split("\n")
                 if line.startswith("file=")
             ]
+            # The document the reconciling step reads before writing its
+            # wording, through the reader that holds it apart as data.
+            if state["ask_about"]:
+                state.setdefault("document", state["ask_about"][0])
         prepared = self.value_of(printed, "prepared")
         if prepared:
             state["staged"] = prepared

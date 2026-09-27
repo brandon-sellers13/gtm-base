@@ -3370,7 +3370,9 @@ def _the_whole_difference(artifact):
     import re as _re
 
     after = artifact.split("which is all of what saying yes to this writes down:")[1]
-    match = _re.search(r"\n(`{3,})diff\n(.*?)\n\1\n", after, _re.S)
+    # Inside the data fence since the second round of Astra's review of Unit
+    # 1.7c, which is built the same way the fence for the difference was.
+    match = _re.search(r"\n(`{3,})data\n(.*?)\n\1\n", after, _re.S)
     if match is None:
         raise AssertionError("the whole difference is not in a fenced block:\n" + after)
     return match.group(1), match.group(2), after

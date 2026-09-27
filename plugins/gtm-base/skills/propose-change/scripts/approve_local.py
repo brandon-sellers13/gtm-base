@@ -50,12 +50,14 @@ from gtmbase import (  # noqa: E402
     approve_local,
     compose_proposal,
     machine,
+    moment,
     names,
     paths,
     state,
     wordsfile,
 )
 from gtmbase.errors import GtmBaseError  # noqa: E402
+from gtmbase.fsutil import read_text  # noqa: E402
 
 EXIT_DONE = 0
 EXIT_REFUSED = 1
@@ -122,6 +124,11 @@ def build_parser():
         "--sections",
         action="store_true",
         help="list the parts of the document this change is about, numbered",
+    )
+    parser.add_argument(
+        "--read",
+        action="store_true",
+        help="read the prepared change as it is written, held apart as data",
     )
     parser.add_argument(
         "--wording",
@@ -201,13 +208,37 @@ def main(argv=None):
         except GtmBaseError as failure:
             sys.stderr.write(str(failure) + "\n")
             return EXIT_REFUSED
+        listed = []
         for number, (path, heading, _which) in enumerate(
             compose_proposal.parts_of(resolution.root, staging), start=1
         ):
             sys.stdout.write(
-                "section=%d document=%s heading=%s\n"
-                % (number, names.document_name(path), heading.lstrip("#").strip())
+                "section=%d document=%s\n" % (number, names.document_name(path))
             )
+            listed.append("%d. %s" % (number, heading.lstrip("#").strip()))
+        # A heading comes out of the document, which may be a page somebody
+        # adopted, so the headings are held apart as data (Astra's review of
+        # Unit 1.7c, finding 1).
+        if listed:
+            sys.stdout.write(moment.fenced("\n".join(listed)) + "\n")
+        return EXIT_DONE
+
+    if options.read:
+        # The prepared change quotes the part of the document it changes, and
+        # that part may be adopted text, so it is only ever read through here,
+        # inside the fence, and never opened directly (finding 1).
+        try:
+            resolved, _named = approve_local.checked_staging_path(
+                resolution.root, staged
+            )
+        except GtmBaseError as failure:
+            sys.stderr.write(str(failure) + "\n")
+            return EXIT_REFUSED
+        text = read_text(resolved)
+        if text is None:
+            sys.stderr.write(approve_local.UNREADABLE + "\n")
+            return EXIT_REFUSED
+        sys.stdout.write(moment.fenced(text.rstrip("\n")) + "\n")
         return EXIT_DONE
 
     if options.wording:
