@@ -2087,6 +2087,15 @@ CLEANED_AGAIN_SAID = (
     "GTM Base now checks finished documents more closely than when you said "
     "yes to that one, so nothing was saved. Show it again, then ask again."
 )
+# Said when somebody else's file was found where one of the person's
+# documents was being put, and could not go back under its own name because
+# that name had been taken again.
+KEPT_ASIDE = (
+    "Another file was found where one of your documents was being saved, and "
+    "its name had been taken again, so it was kept beside it under the same "
+    "name with the words kept aside added. Nothing of it was lost. Look at "
+    "it, then ask again."
+)
 # Said when another window holds the base for a moment.
 LOCKED = (
     "Another window is saving into your base right now, so nothing more was "
@@ -2112,6 +2121,7 @@ BASE_REFUSALS = {
     CODE_PAGE_EDITED: PAGE_EDITED_SAID,
     CODE_LOCKED: LOCKED,
     CODE_CLEANED_AGAIN: CLEANED_AGAIN_SAID,
+    review.CODE_KEPT_ASIDE: KEPT_ASIDE,
 }
 
 

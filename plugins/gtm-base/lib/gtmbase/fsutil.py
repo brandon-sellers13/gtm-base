@@ -55,6 +55,85 @@ def _check_inside(folder: str, inside: str) -> None:
         )
 
 
+# --- Who owns the temporary files in a folder ---------------------------------
+#
+# A writer puts its bytes in a temporary file beside the real one and then
+# moves it into place. A writer that dies between the two leaves the
+# temporary file behind, and something has to take it away; a writer that is
+# only paused must keep it. Age cannot tell the two apart, and neither can a
+# clock that is set forward or back (Astra's confirmation pass on the merged
+# Units 1.7c and 1.7d, finding 2). So every writer holds a shared lock on the
+# folder it writes into for the whole of its write and its move, and a sweep
+# takes that lock exclusively, without waiting, only when no writer holds it.
+# The operating system lets go of a writer's lock the moment it dies, so a
+# sweep that gets the lock knows every temporary file in the folder belongs to
+# a writer that is gone. A sweep that does not get it takes nothing.
+#
+# The lock files live in a folder of this person's own under the folder this
+# computer keeps temporary work in, one per folder written into, never in the
+# folder itself, so nothing appears in a base.
+
+
+def _folder_lock_path(folder: str) -> str:
+    import hashlib
+
+    home = ensure_dir(
+        os.path.join(tempfile.gettempdir(), "gtmbase-folder-locks-%d" % os.getuid())
+    )
+    key = hashlib.sha256(os.path.realpath(folder).encode("utf-8")).hexdigest()[:40]
+    return os.path.join(home, key + ".lock")
+
+
+class FolderLock(object):
+    """A shared hold on a folder while writing into it, or an exclusive one to sweep it.
+
+    `exclusive=True` never waits: `held` says whether it was taken.
+    """
+
+    def __init__(self, folder: str, exclusive: bool = False):
+        self.folder = folder
+        self.exclusive = exclusive
+        self.handle = None
+        self.held = False
+
+    def __enter__(self):
+        try:
+            import fcntl
+        except ImportError:
+            # Nowhere to take a lock: a writer goes ahead, and a sweep takes
+            # nothing, which is the safe half of each.
+            self.held = not self.exclusive
+            return self
+        try:
+            self.handle = os.open(
+                _folder_lock_path(self.folder),
+                os.O_CREAT | os.O_RDWR | getattr(os, "O_NOFOLLOW", 0),
+                FILE_MODE,
+            )
+        except OSError:
+            self.held = not self.exclusive
+            return self
+        if self.exclusive:
+            try:
+                fcntl.flock(self.handle, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                self.held = True
+            except OSError:
+                self.held = False
+        else:
+            fcntl.flock(self.handle, fcntl.LOCK_SH)
+            self.held = True
+        return self
+
+    def __exit__(self, *_exc):
+        if self.handle is not None:
+            try:
+                os.close(self.handle)
+            except OSError:
+                pass
+            self.handle = None
+        return False
+
+
 def atomic_write_text(
     path: str, text: str, mode: int = FILE_MODE, inside: Optional[str] = None
 ) -> str:
@@ -67,20 +146,21 @@ def atomic_write_text(
     ensure_dir(folder)
     if inside:
         _check_inside(folder, inside)
-    handle, temp_path = tempfile.mkstemp(prefix=".gtmbase-", dir=folder)
-    try:
-        with os.fdopen(handle, "w", encoding="utf-8", newline="\n") as stream:
-            stream.write(text)
-            stream.flush()
-            os.fsync(stream.fileno())
-        os.chmod(temp_path, mode)
-        os.replace(temp_path, path)
-    except BaseException:
+    with FolderLock(folder):
+        handle, temp_path = tempfile.mkstemp(prefix=".gtmbase-", dir=folder)
         try:
-            os.unlink(temp_path)
-        except OSError:
-            pass
-        raise
+            with os.fdopen(handle, "w", encoding="utf-8", newline="\n") as stream:
+                stream.write(text)
+                stream.flush()
+                os.fsync(stream.fileno())
+            os.chmod(temp_path, mode)
+            os.replace(temp_path, path)
+        except BaseException:
+            try:
+                os.unlink(temp_path)
+            except OSError:
+                pass
+            raise
     _sync_folder(folder)
     return path
 
@@ -147,21 +227,22 @@ def atomic_write_bytes(
     if inside is not None:
         _check_inside(folder, inside)
     ensure_dir(folder)
-    handle, temporary = tempfile.mkstemp(dir=folder, prefix=".tmp-")
-    try:
-        with os.fdopen(handle, "wb") as stream:
-            stream.write(data)
-            stream.flush()
-            os.fsync(stream.fileno())
-        os.chmod(temporary, mode)
-        os.replace(temporary, path)
-        _sync_folder(folder)
-    except BaseException:
+    with FolderLock(folder):
+        handle, temporary = tempfile.mkstemp(dir=folder, prefix=".tmp-")
         try:
-            os.unlink(temporary)
-        except OSError:
-            pass
-        raise
+            with os.fdopen(handle, "wb") as stream:
+                stream.write(data)
+                stream.flush()
+                os.fsync(stream.fileno())
+            os.chmod(temporary, mode)
+            os.replace(temporary, path)
+            _sync_folder(folder)
+        except BaseException:
+            try:
+                os.unlink(temporary)
+            except OSError:
+                pass
+            raise
     return path
 
 

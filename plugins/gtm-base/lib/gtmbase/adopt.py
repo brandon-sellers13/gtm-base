@@ -579,9 +579,18 @@ _SKIP_ALL_BUT_TIGHT = tuple(
 _WRAP_RE = re.compile(r"[ \t]*\n(?![ \t]*\n)[ \t]*")
 
 
-# The start of a tag, opening or closing, anywhere in the page. After hidden
-# content is taken out, one left is markup the cleaning could not consume.
-_RESIDUAL_MARKUP_RE = re.compile(r"</?[a-zA-Z]")
+# Markup the cleaning could not take out, read across the whole page: a
+# comment opener, a closing tag, or an opening tag whose name is followed by
+# a space, a slash or its own closing mark, reaching that mark within its
+# paragraph however long it runs. After hidden content is taken out, one left
+# is a tag longer than the cleaning reads. A comparison such as `CAC<LTV.` or
+# `a<b` is not a tag, and is taken in as it stands (Astra's confirmation pass
+# on the merged units, finding 3).
+_RESIDUAL_MARKUP_RE = re.compile(
+    r"<!--"
+    r"|</[a-zA-Z]"
+    r"|<[a-zA-Z][a-zA-Z0-9-]*(?:[\s/](?:[^>\n]|\n(?![ \t]*\n))*)?>"
+)
 
 
 def _without_selectors(text: str) -> str:

@@ -547,10 +547,12 @@ def _create_new(base_root: str, relative: str, data: bytes):
             handle = os.open(full, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o666)
         except FileExistsError:
             raise ReviewError(CODE_FILE_EXISTS, code=CODE_FILE_EXISTS)
-        return _write_whole(handle, data)
+        return tuple(_write_whole(handle, data)) + (hashlib.sha256(data).hexdigest(),)
     opened = _open_folders(base_root, parts[:-1], make=True)
     folder = opened[-1]
     temporary = TEMPORARY_PREFIX + os.urandom(8).hex()
+    owning = fsutil.FolderLock(_real_folder(base_root, parts[:-1]))
+    owning.__enter__()
     try:
         handle = os.open(
             temporary,
@@ -576,18 +578,21 @@ def _create_new(base_root: str, relative: str, data: bytes):
                 os.unlink(temporary, dir_fd=folder)
             except OSError:
                 pass
-        return identity
+        return tuple(identity) + (hashlib.sha256(data).hexdigest(),)
     finally:
+        owning.__exit__(None, None, None)
         _close_all(opened)
+
+
+def _real_folder(base_root: str, parts) -> str:
+    """The folder a name sits in, as the ownership lock names it."""
+    return os.path.realpath(os.path.join(base_root, *parts)) if parts else os.path.realpath(base_root)
 
 
 # The names every writer here gives a file before it is complete: a page
 # (above), and a whole file put down in one move by `fsutil`, which is how a
 # confirmations file is written. A claimed name is never among them.
 _TEMPORARY_PREFIXES = (TEMPORARY_PREFIX, ".gtmbase-", ".tmp-")
-# How old a temporary file has to be before it is taken as left by a writer
-# that died, so one another window is writing this very moment is left to it.
-TEMPORARY_AGE_SECONDS = 5.0
 
 
 def _is_temporary(name: str) -> bool:
@@ -595,41 +600,46 @@ def _is_temporary(name: str) -> bool:
 
 
 def sweep_temporary(base_root: str, folder_relative: str) -> List[str]:
-    """Take away the temporary files a writer that died left in one folder.
+    """Take away the temporary files writers that died left in one folder.
 
-    Only names this plugin gives its own temporary files, only ordinary files
-    old enough that no live writer is still on them, and only in the one
-    folder named, reached the same way a write reaches it. A process killed
-    between writing such a file and naming it leaves one behind, and nothing
-    else ever would take it away (Astra's review of the merged units,
-    finding 6).
+    Every writer of such a file holds the folder's ownership lock for its
+    whole write and move, and the operating system lets go of it the moment
+    the writer dies. The sweep takes that lock exclusively without waiting:
+    when it gets it, no writer is alive in the folder, so every temporary
+    file there was left by one that died, and each goes; when it does not,
+    nothing is taken, however old anything looks. No clock is read (Astra's
+    confirmation pass on the merged units, finding 2). A cleanup that stopped
+    after moving a file to its private name is settled here too.
     """
-    import time
-
     removed: List[str] = []
     if not DESCRIPTOR_WRITES:
         return removed
+    parts = folder_relative.split("/")
     try:
-        opened = _open_folders(base_root, folder_relative.split("/"), make=False)
+        opened = _open_folders(base_root, parts, make=False)
     except (ReviewError, OSError):
         return removed
     try:
-        for name in os.listdir(opened[-1]):
-            if not _is_temporary(name):
-                continue
-            try:
-                found = os.stat(name, dir_fd=opened[-1], follow_symlinks=False)
-            except OSError:
-                continue
-            if not stat.S_ISREG(found.st_mode):
-                continue
-            if time.time() - found.st_mtime < TEMPORARY_AGE_SECONDS:
-                continue
-            try:
-                os.unlink(name, dir_fd=opened[-1])
-                removed.append(name)
-            except OSError:
-                pass
+        with fsutil.FolderLock(_real_folder(base_root, parts), exclusive=True) as sweeping:
+            if not sweeping.held:
+                return removed
+            for name in os.listdir(opened[-1]):
+                if name.startswith(CLAIM_PREFIX):
+                    _settle_claim(opened[-1], name)
+                    continue
+                if not _is_temporary(name):
+                    continue
+                try:
+                    found = os.stat(name, dir_fd=opened[-1], follow_symlinks=False)
+                except OSError:
+                    continue
+                if not stat.S_ISREG(found.st_mode):
+                    continue
+                try:
+                    os.unlink(name, dir_fd=opened[-1])
+                    removed.append(name)
+                except OSError:
+                    pass
     finally:
         _close_all(opened)
     return removed
@@ -680,9 +690,99 @@ def installed(base_root: str, relative: str):
         _close_all(opened)
 
 
-# What a name is moved to while cleanup looks at who it is. It is never swept,
-# so a file moved there and found not to be this run's is never lost.
+# What a name is moved to while cleanup looks at who it is. The private name
+# carries what a later run needs to settle it if this one stops there: who the
+# file this run made is on the disk, the hash of what it made, and the name
+# the file came from. It is never swept as a temporary file; a sweep settles
+# it instead (Astra's confirmation pass on the merged units, finding 1).
 CLAIM_PREFIX = ".gtmbase-claim-"
+# What a file that could not go back under its own name is kept under, beside
+# it: the name it had, this mark, a number, and its ending.
+KEPT_MARK = ".kept-aside-"
+# Somebody else's file could not go back under its name and was kept aside.
+CODE_KEPT_ASIDE = "kept-aside"
+
+
+def _claim_name(identity, original: str) -> str:
+    inode = str(int(identity[1])) if identity and len(identity) > 1 else "0"
+    digest = str(identity[2])[:16] if identity and len(identity) > 2 else "0" * 16
+    return "%s%s-%s-%s" % (CLAIM_PREFIX, inode, digest, original)
+
+
+def _claim_parts(name: str):
+    rest = name[len(CLAIM_PREFIX):]
+    pieces = rest.split("-", 2)
+    if len(pieces) != 3 or not pieces[0].isdigit() or not pieces[2]:
+        return None
+    return int(pieces[0]), pieces[1], pieces[2]
+
+
+def _is_the_claimed_own(folder: int, claimed: str, inode: int, digest: str) -> bool:
+    try:
+        found = os.stat(claimed, dir_fd=folder, follow_symlinks=False)
+    except OSError:
+        return False
+    if not stat.S_ISREG(found.st_mode) or found.st_ino != inode:
+        return False
+    try:
+        handle = os.open(claimed, os.O_RDONLY | _NO_FOLLOW | _NONBLOCK, dir_fd=folder)
+    except OSError:
+        return False
+    with os.fdopen(handle, "rb") as stream:
+        if os.fstat(stream.fileno()).st_ino != inode:
+            return False
+        return hashlib.sha256(stream.read()).hexdigest()[:16] == digest
+
+
+def _put_back(folder: int, claimed: str, original: str) -> bool:
+    """Give a claimed file that is not this run's its name back, or keep it aside.
+
+    It goes back under its own name only when that name is free, so nothing
+    put there since is written over. Otherwise it is kept beside it under a
+    plain name that says so, never deleted, and the caller is told.
+    """
+    try:
+        os.link(claimed, original, src_dir_fd=folder, dst_dir_fd=folder, follow_symlinks=False)
+    except OSError:
+        stem, dot, ending = original.rpartition(".")
+        if not dot:
+            stem, ending = original, ""
+        for number in range(1, 1000):
+            kept = "%s%s%d%s" % (stem, KEPT_MARK, number, ("." + ending) if ending else "")
+            try:
+                os.link(claimed, kept, src_dir_fd=folder, dst_dir_fd=folder, follow_symlinks=False)
+            except FileExistsError:
+                continue
+            except OSError:
+                return False
+            try:
+                os.unlink(claimed, dir_fd=folder)
+            except OSError:
+                pass
+            return False
+        return False
+    try:
+        os.unlink(claimed, dir_fd=folder)
+    except OSError:
+        pass
+    return True
+
+
+def _settle_claim(folder: int, claimed: str) -> None:
+    """Settle a claim a stopped cleanup left: remove it if it is that run's own
+    file, otherwise give it its name back, or keep it aside and say so."""
+    parts = _claim_parts(claimed)
+    if parts is None:
+        return
+    inode, digest, original = parts
+    if _is_the_claimed_own(folder, claimed, inode, digest):
+        try:
+            os.unlink(claimed, dir_fd=folder)
+        except OSError:
+            pass
+        return
+    if not _put_back(folder, claimed, original):
+        raise ReviewError(CODE_KEPT_ASIDE, code=CODE_KEPT_ASIDE)
 
 
 def _remove_if_ours(base_root: str, relative: str, identity) -> bool:
@@ -691,10 +791,13 @@ def _remove_if_ours(base_root: str, relative: str, identity) -> bool:
     The name is first moved, in one step, to a private name nobody else uses,
     so whatever is looked at is exactly what will be removed: a file somebody
     puts at the page's name after that move is a different entry and is never
-    touched (Astra's review of the merged units, finding 2). The moved file is
-    removed only when it is this run's own; anything else is put back under
-    its name, or, when its name has been taken again meanwhile, kept under the
-    private name, where nothing ever removes it.
+    touched (Astra's review of the merged units, finding 2). The private name
+    carries who this run's file is and the hash of what it holds, so a run
+    that stops after the move is settled by the next one. The moved file is
+    removed only when it is this run's own; anything else goes back under its
+    name, or, when that name has been taken again meanwhile, is kept beside it
+    under a plain name and the caller is told, never left under the private
+    name (Astra's confirmation pass on the merged units, finding 1).
     """
     if identity is None:
         return False
@@ -705,7 +808,7 @@ def _remove_if_ours(base_root: str, relative: str, identity) -> bool:
             found = os.lstat(full)
         except OSError:
             return False
-        if (found.st_dev, found.st_ino) != tuple(identity) or not stat.S_ISREG(found.st_mode):
+        if (found.st_dev, found.st_ino) != tuple(identity)[:2] or not stat.S_ISREG(found.st_mode):
             return False
         return fsutil.remove(full)
     try:
@@ -713,36 +816,30 @@ def _remove_if_ours(base_root: str, relative: str, identity) -> bool:
     except (ReviewError, OSError):
         return False
     folder = opened[-1]
-    claimed = CLAIM_PREFIX + os.urandom(8).hex()
+    claimed = _claim_name(identity, parts[-1])
     try:
-        try:
-            os.rename(parts[-1], claimed, src_dir_fd=folder, dst_dir_fd=folder)
-        except OSError:
-            return False
-        try:
-            found = os.stat(claimed, dir_fd=folder, follow_symlinks=False)
-        except OSError:
-            return False
-        if (found.st_dev, found.st_ino) == tuple(identity) and stat.S_ISREG(found.st_mode):
+        with fsutil.FolderLock(_real_folder(base_root, parts[:-1])):
             try:
-                os.unlink(claimed, dir_fd=folder)
-                return True
+                os.rename(parts[-1], claimed, src_dir_fd=folder, dst_dir_fd=folder)
             except OSError:
                 return False
-        # Not this run's: it goes back under its own name, never over
-        # anything that has since been put there.
-        try:
-            os.link(
-                claimed, parts[-1], src_dir_fd=folder, dst_dir_fd=folder,
-                follow_symlinks=False,
-            )
-        except OSError:
+            try:
+                found = os.stat(claimed, dir_fd=folder, follow_symlinks=False)
+            except OSError:
+                return False
+            if (found.st_dev, found.st_ino) == tuple(identity)[:2] and stat.S_ISREG(
+                found.st_mode
+            ):
+                try:
+                    os.unlink(claimed, dir_fd=folder)
+                except OSError:
+                    # Left under its private name, which says it is this
+                    # run's own, for the next sweep to remove.
+                    return False
+                return True
+            if not _put_back(folder, claimed, parts[-1]):
+                raise ReviewError(CODE_KEPT_ASIDE, code=CODE_KEPT_ASIDE)
             return False
-        try:
-            os.unlink(claimed, dir_fd=folder)
-        except OSError:
-            pass
-        return False
     finally:
         _close_all(opened)
 
@@ -1009,7 +1106,7 @@ def _still_the_page(base_root: str, relative: str, data: bytes, identity) -> Non
     found = installed(base_root, relative)
     if found is None or found[0] != data:
         raise ReviewError(CODE_PAGE_REPLACED, code=CODE_PAGE_REPLACED)
-    if identity is not None and tuple(found[1]) != tuple(identity):
+    if identity is not None and tuple(found[1]) != tuple(identity)[:2]:
         raise ReviewError(CODE_PAGE_REPLACED, code=CODE_PAGE_REPLACED)
 
 
@@ -1299,7 +1396,9 @@ def take_back_unsaved(
     _restore_line(git, base_root, relative, line)
     here = installed(base_root, relative)
     if here is not None and hashlib.sha256(here[0]).hexdigest() == digest:
-        _remove_if_ours(base_root, relative, here[1])
+        _remove_if_ours(
+            base_root, relative, tuple(here[1]) + (hashlib.sha256(here[0]).hexdigest(),)
+        )
 
 
 def confirm_saved(
