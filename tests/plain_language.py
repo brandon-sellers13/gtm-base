@@ -961,6 +961,7 @@ PYTHON_SENTENCES = (
     ("join_flow", "PAGE_REPLACED"),
     ("join_flow", "RESUME_EDITED"),
     ("join_flow", "RESUME_CANNOT_READ"),
+    ("join_flow", "RESUME_RECHECKED"),
     ("join_flow", "RESUME_STOPPED"),
     ("join_flow", "PAGE_EDITED_SAID"),
     ("join_flow", "ALREADY_SAVED"),

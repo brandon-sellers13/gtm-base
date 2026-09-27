@@ -1714,14 +1714,30 @@ def _owner_address(root, email, git) -> str:
     return address
 
 
-def _cleaned_page(run_id, segment, root, address, day):
+def _original_digest(run_id, segment) -> Optional[str]:
+    """The hash of a page's original file as it is now, or None when unreadable.
+
+    It is kept beside the yes, so a later run can tell an original that
+    changed from one that GTM Base now cleans differently.
+    """
+    try:
+        real = sources_module.read_allowed(load_consent(run_id), segment.source)
+    except ConsentError:
+        return None
+    held = read_bytes(real)
+    return hashlib.sha256(held).hexdigest() if held is not None else None
+
+
+def _cleaned_page(run_id, segment, root, address, day, check_destination=True):
     """Run the whole contract on one settled segment's page, in its order.
 
     Clause one, the destination, comes first. The page is then read through
     the same check every read in setup goes through, so a page no longer on
-    the agreed list is never opened, and one bounded read is made of it.
+    the agreed list is never opened, and one bounded read is made of it. A
+    resume checking a page this import already wrote at its name leaves the
+    destination out, because that page is what stands there.
     """
-    problem = adopt.destination_problem(root, segment.slug)
+    problem = adopt.destination_problem(root, segment.slug) if check_destination else None
     if problem == adopt.CODE_RESERVED_NAME:
         raise adopt.AdoptionRefused(
             problem, segments.RESERVED_NAME % {"name": segment.name}
@@ -1941,7 +1957,7 @@ def adoption_approve(
         raise adopt.AdoptionRefused(adopt.CODE_QUESTIONS_OPEN)
     kept = segments.mark(
         base_id, segment.slug, segments.STATE_APPROVED, record["shown"], record["day"],
-        run=kept.run,
+        run=kept.run, original=_original_digest(run_id, segment),
     )
     return _finish_one(root, base_id, segment, kept, cleaned.text, git, now, address)
 
@@ -1994,6 +2010,11 @@ RESUME_EDITED = (
     "%(name)s was changed before it could be saved, so what GTM Base had "
     "started for it was taken back, and your changed copy was left exactly "
     "as it is."
+)
+RESUME_RECHECKED = (
+    "%(name)s will be shown to you again before anything is saved, because "
+    "GTM Base now checks finished documents more closely than when you said "
+    "yes to it, and would not save exactly what you saw."
 )
 RESUME_CANNOT_READ = (
     "%(name)s could not be read just now, so it was left for next time, and "
@@ -2212,6 +2233,7 @@ class Resumed(object):
         "taken",
         "edited",
         "unreadable",
+        "rechecked",
         "to_show",
         "done",
         "set_aside",
@@ -2229,12 +2251,14 @@ class Resumed(object):
         unreadable=(),
         set_aside=False,
         stopped=None,
+        rechecked=(),
     ):
         self.finished = list(finished)
         self.changed = list(changed)
         self.taken = list(taken)
         self.edited = list(edited)
         self.unreadable = list(unreadable)
+        self.rechecked = list(rechecked)
         self.to_show = list(to_show)
         self.done = bool(done)
         self.set_aside = bool(set_aside)
@@ -2262,6 +2286,8 @@ class Resumed(object):
             return said
         for segment in self.changed:
             said.append(RESUME_CHANGED % {"name": segment.name})
+        for segment in self.rechecked:
+            said.append(RESUME_RECHECKED % {"name": segment.name})
         if len(self.to_show) == 1:
             said.append(RESUME_TO_SHOW_ONE)
         elif self.to_show:
@@ -2388,6 +2414,41 @@ def resume_import(
         _finish_one(root, base_id, segment, record, text, git, now, address)
         result.finished.append(segment)
 
+    def still_the_yes(segment, yes, written):
+        """Clean the original again and say whether the yes still stands.
+
+        A yes binds to the exact bytes the person was shown. Cleaned again
+        today, the page has to come out to those bytes; otherwise it is
+        shown again and never saved under the old yes. What is said depends
+        on why: the original itself changed, or the original is the same and
+        GTM Base now cleans or refuses it differently, which is never blamed
+        on the person's original.
+        """
+        original = _original_digest(run_id, segment)
+        if original is None:
+            return "unreadable", None
+        day = datetime.date.fromisoformat(yes["day"])
+        try:
+            cleaned = _cleaned_page(
+                run_id, segment, root, address, day, check_destination=not written
+            )
+        except adopt.AdoptionRefused as refusal:
+            if refusal.code in _COULD_NOT_READ:
+                return "unreadable", None
+            cleaned = None
+        if cleaned is not None and cleaned.digest == yes["approved"]:
+            return "same", cleaned
+        if yes.get("original") == original:
+            return "rechecked", None
+        return "changed", None
+
+    def show_again(segment, why, written, yes):
+        if written:
+            review.take_back_unsaved(root, segment.destination, yes["approved"], runner=git)
+        segments.clear(base_id, segment.slug, run=record.run)
+        (result.rechecked if why == "rechecked" else result.changed).append(segment)
+        result.to_show.append(segment)
+
     # Pages already at their name come first: finishing one clears the only
     # unsaved work an import can leave, and every other write needs a base
     # with nothing half done in it.
@@ -2414,28 +2475,29 @@ def resume_import(
                     root, segment.destination, yes["approved"], runner=git
                 )
                 result.edited.append(segment)
-            elif where in (review.PAGE_SAVED, review.PAGE_WRITTEN):
+            elif where == review.PAGE_SAVED:
                 finish(segment, None)
+            elif where == review.PAGE_WRITTEN:
+                # Written under the yes and not saved: saved only when the
+                # page still cleans to exactly the bytes the yes was to.
+                verdict, _cleaned = still_the_yes(segment, yes, written=True)
+                if verdict == "same":
+                    finish(segment, None)
+                elif verdict == "unreadable":
+                    result.unreadable.append(segment)
+                else:
+                    show_again(segment, verdict, True, yes)
             else:
                 waiting.append((segment, yes))
         for segment, yes in waiting:
             current = segment
-            day = datetime.date.fromisoformat(yes["day"])
-            try:
-                cleaned = _cleaned_page(run_id, segment, root, address, day)
-            except adopt.AdoptionRefused as refusal:
-                if refusal.code in _COULD_NOT_READ:
-                    result.unreadable.append(segment)
-                    continue
-                cleaned = None
-            if cleaned is None or cleaned.digest != yes["approved"]:
-                # The original is not what the person said yes to any more,
-                # so the yes no longer stands and the page is shown again.
-                segments.clear(base_id, segment.slug, run=record.run)
-                result.changed.append(segment)
-                result.to_show.append(segment)
-                continue
-            finish(segment, cleaned.text)
+            verdict, cleaned = still_the_yes(segment, yes, written=False)
+            if verdict == "unreadable":
+                result.unreadable.append(segment)
+            elif verdict == "same":
+                finish(segment, cleaned.text)
+            else:
+                show_again(segment, verdict, False, yes)
     except (ReviewError, adopt.AdoptionRefused, segments.InventoryRefused, PathError) as refusal:
         code = getattr(refusal, "code", None) or review.CODE_GIT_FAILED
         sentence = getattr(refusal, "sentence", "") or BASE_REFUSALS.get(code) or ""

@@ -60,5 +60,6 @@ python3 -m unittest -v \
   test_words_files.TestTheDraftFileToo \
   test_open_questions.TestTheScriptAsksAndPrepares \
   test_adoption.TestAdoptedTextStaysData \
-  test_import_recovery.TestTheResumeScript
+  test_import_recovery.TestTheResumeScript \
+  test_import_recovery.TestResumeSaysNamesAndNeverPageText
 exit $?

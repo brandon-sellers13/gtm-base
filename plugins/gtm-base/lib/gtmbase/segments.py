@@ -825,6 +825,10 @@ def _files_from(value, slugs: Sequence[str]) -> Optional[Dict[str, dict]]:
             if not _is_a_day(item.get("day")):
                 return None
             files[slug] = {"state": state, "approved": item["approved"], "day": item["day"]}
+            if item.get("original") is not None:
+                if not _DIGEST_RE.match(str(item.get("original"))):
+                    return None
+                files[slug]["original"] = item["original"]
         else:
             files[slug] = {"state": state}
     return files
@@ -955,12 +959,15 @@ def carry_import(
 
 
 def mark(
-    base_id: str, slug: str, state: str, approved=None, day=None, run=None
+    base_id: str, slug: str, state: str, approved=None, day=None, run=None, original=None
 ) -> ImportRecord:
     """Write down how far one page got, with no other writer in between.
 
     `approved` and `day` go with the yes and with a save: the hash of the
-    bytes approved and the day those bytes were shown. `run` is the import
+    bytes approved and the day those bytes were shown. `original` is the
+    hash of the original file as it was when the yes was given, so a later
+    run can tell an original that changed from one cleaned differently by a
+    later release (Unit 1.7d, after Unit 1.7c's stricter cleaning). `run` is the import
     the caller is working for, and a record for any other import is refused,
     so a yes is never written into somebody else's list. A page already
     saved is never marked left out or refused, and the check is made with
@@ -974,6 +981,10 @@ def mark(
         item["day"] = str(day or "")
         if not _DIGEST_RE.match(item["approved"]) or not _is_a_day(item["day"]):
             raise ValueError("a yes needs its hash and its day")
+        if original is not None:
+            if not _DIGEST_RE.match(str(original)):
+                raise ValueError("not the hash of an original")
+            item["original"] = str(original)
     with _record_lock(base_id):
         record = load_import(base_id)
         if record is None or slug not in [s.slug for s in record.to_adopt()]:
@@ -984,6 +995,14 @@ def mark(
             record.state_of(slug) == STATE_COMMITTED
         ):
             return record
+        held = record.files.get(slug) or {}
+        if (
+            state == STATE_COMMITTED
+            and "original" not in item
+            and held.get("approved") == item.get("approved")
+            and held.get("original")
+        ):
+            item["original"] = held["original"]
         record.files[slug] = item
         _keep_import(record)
         return record
