@@ -104,6 +104,17 @@ them, one short paragraph each, and every segment you said to draft gets a
 document of its own at full depth, which you read whole and approve like any
 other. A segment you left out is named in the profile as still to come.
 
+A finished document you said to use is taken into your base as it stands
+rather than drafted again, and your original is never changed or moved. You
+are told what was taken out of it, such as settings at its top or a comment
+nobody reading it would see, you see its first lines, and the whole cleaned
+document is kept where you can read it in full before you answer. Nothing is
+saved until you say yes to it, and your yes is to exactly what you were
+shown. A document holding an email address, a phone number, or something
+shaped like a key, one whose headings a later change could not find, or one
+covering more than the part of the company your base is for is not taken in,
+and you are offered a draft of that segment instead.
+
 A draft sometimes leaves a question only you can answer, marked in it where it
 comes up. You are told how many there are before you read it, and you can
 answer them there or approve the draft with them left open. A document with a

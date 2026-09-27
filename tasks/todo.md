@@ -1390,3 +1390,14 @@ Plan: docs/plans/2026-09-19-001-feat-base-that-produces-work-plan.md, Unit 1.7b 
 - [ ] Orchestrator: review, merge into release-b, then 1.7c and 1.7d before release B ships.
 
 Review: the plan's `tests/test_drafting.py`, `test_base_reader.py`, `test_confirm.py` and `test_prompt_guards_join.py` scenarios live in the two new test modules instead, because each crosses more than one of those modules; the existing prompt guards now cover the two new prompts through `drafting.STEPS`. The closing's finding names how many questions are open rather than the question itself, because the question comes out of the file and the closing sentence is said without a fence.
+
+### 2026-09-26, Unit 1.7c: guarded adoption
+Plan: docs/plans/2026-09-19-001-feat-base-that-produces-work-plan.md, Unit 1.7c (requirements P20 to P23), with call 11's paths: each adopted segment at `context/icps/<slug>.md`. Built on its own branch, `unit-1-7c`, from `release-b` (1.5b, 1.6, 1.7a and 1.7b merged); not merged, not released. Test-first: every clause of the contract has a hostile fixture under `tests/fixtures/adoption/` that fails it, and a clause with no failing fixture is not built.
+- [ ] Fixtures and failing tests first: tests/test_adoption.py over every plan scenario and every fixture.
+- [ ] `adopt.py`: the contract in order (destination; the original settings discarded, malformed refused; hidden content removed and counted, then the fence-marker, contact and key screens; the heading grammar the proposal editor supports; the recorded scope; open questions; the library's own settings; the hash of the exact bytes).
+- [ ] Showing: what was removed, the opening lines, and where the whole cleaned file is, kept in the run's own folder with the hash; the yes bound to that hash, and a changed source or cleaned file asks again; a yes covering several only after each was shown.
+- [ ] Writing: `review.approve_adopted`, clean tree, default branch, absent only, the segment folder and name checks, one confirmation line, one saved piece of work; the original never touched.
+- [ ] A refused segment may be drafted instead; the join skill gains step 6d before the closing, because the inventory lives in the run folder the closing clears.
+- [ ] The fence on every path that hands a context file to the model, proved with a hostile adopted document.
+- [ ] Lint registry, atlas figures 1 and 7 (not republished), the join guide, the draft Unreleased CHANGELOG with the residual-risk sentence.
+- [ ] Full suite, both runs; a correctness review and a security review of the diff, fixes with tests, suite again.
