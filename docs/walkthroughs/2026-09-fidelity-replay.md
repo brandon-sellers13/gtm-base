@@ -56,11 +56,7 @@ key is not written here and is never to be written here.**
 
 The answer key is kept outside this repository, at a path Brandon chooses. The default, unless he names another, is the same private folder as the corpora: `~/GTM Bases/Gridwise/fidelity-replay/`.
 
-**[TO FREEZE: the path where the answer key is kept. Brandon names one folder
-outside this repository, the answer key for each case below is written there,
-and that path is recorded here as a plain sentence, with no key content. Until
-this is done, no case can be scored, because there is nothing to score
-against.]**
+The answer key is kept at `~/GTM Bases/Gridwise/fidelity-replay/`, the folder Brandon named on 2026-09-27. Claude drafts it there from the frozen files, Brandon corrects it, and it is frozen with its own sha256 recorded in that folder before any case runs. Case two is scored against the facts of the same twelve finished pages as case one, so one key serves both; case three has a key of its own from its seventeen files. No key content is written in this repository. Until the key is frozen, no case can be scored.
 
 ## The corpora
 
