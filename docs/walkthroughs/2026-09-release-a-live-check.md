@@ -174,3 +174,27 @@ From the fourth time on:
 > I'll keep a record of this edit so your other documents can be checked against it. What changed, why, and where did it come from? If it was only a wording fix, say so.
 
 At any time, "why are you asking this?" gets the long version. One answer supplies the what, the why and the source; the script's source and what-changed inputs are filled from it. "Only a wording fix" is the typo path of step 6. The word stays "context change", never "decision".
+
+**Step 5, Brandon's answer and a second decision (2026-09-27, for the plan's For Brandon table).** To "what changed, and why?" Brandon answered that nothing about the business changed: a review showed the company can now claim over 1 million drivers where it used to cite 500k a year. The session filed the edit as a correction and recorded no context change, which is the product as built. The gap: a corrected fact is exactly what other documents repeat, and a correction flags none of them, so any document still saying 500k stays unflagged. **Brandon decided the three-answer version:**
+
+| The person's answer | What GTM Base does |
+|---|---|
+| Something about the business changed | Records a context change and checks the other documents against it |
+| A fact the company states was corrected (500k a year becomes over 1 million) | Records a context change as well, for example "Our verified driver count is over 1 million since 2017, replacing the 500k a year we used to cite", so every document repeating the old fact is flagged |
+| Only the wording changed | Records nothing (step 6) |
+
+The decided hand-edit wording above changes in one place to match: the question asks "what changed (in the business, or in a fact you state about it), why, and where did it come from?", and the way out stays for a fix to wording only.
+
+**Step 5, the showing (four findings).** The difference was exactly Brandon's one edit in "What we sell", and only the positioning was affected, on the local-approval path. But:
+1. For a five-word edit the showing printed the whole paragraph as it reads now, again as it would read, and again in the difference, which is not readable in seconds. Fix for a hand edit: the changed sentence once, with the change marked, and the section named; the whole text on request.
+2. The assistant shortened the difference with ellipses and explained that the rest matched. The difference is relayed as printed (fix 1 removes the need).
+3. "What changed:" carried the first line of the edit, cut off mid-number ("from over 1..."). For a correction it says what changed in plain words.
+4. "Why: The owner read the source quoted below and brought the file in line with it by hand." names the person in the third person and points at a source that is not quoted. It uses the person's own source sentence.
+
+**Step 5, approval refused: blocking finding.** Approving was refused with "You have edits in your base you have not saved, so nothing was applied. Put those somewhere safe and ask again." A read-only look at the base by Claude the same day found the only files besides the edit: an untracked `.DS_Store`, which macOS Finder writes into any folder opened in Finder. The approval's clean-tree check counts it as unsaved work, so anyone on a Mac who browses their base in Finder, as this step asks, cannot approve a hand edit. Fix: the clean-tree checks ignore operating-system clutter (`.DS_Store`, `._*`, `Thumbs.db`, `desktop.ini`), and a base's ignore file lists them from the start (the existing base gains them through an offered change, never silently).
+
+Two further findings from the same turn:
+1. The refusal sentence does not say which files are unsaved. It names them in plain words and says when one is only a file the computer made.
+2. The assistant then broke the relay rules: it narrated internals ("GTM Base blocks my commands from its own records folder"), listed guesses, and asked Brandon to find the base and run a version-control command himself. Naming the files in the refusal removes the reason to go looking; the skill says never to send the person to a command line.
+
+Workaround for this run: delete the `.DS_Store` file and ask again, without opening the folder in Finder before approving.
