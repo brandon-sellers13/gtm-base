@@ -1474,3 +1474,4 @@ Review: docs/reviews/2026-09-27-unit-1-7c-1-7d-astra.md, not ready, eight findin
 - [x] 7. The removal notice names the segment, never the file; the numbered documents at the segments step are fenced.
 - [x] 8. Candidate and inventory numbers must be positive counting numbers; a record holding anything else is set aside.
 - [ ] Full suite after the fixes.
+- [x] Full suite after Astra's merged-line fixes: 2427 tests OK in 1219 seconds, then 115 from a linked folder OK in 101 seconds (tests/run.sh exit 0).
