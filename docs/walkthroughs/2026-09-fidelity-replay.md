@@ -56,11 +56,7 @@ key is not written here and is never to be written here.**
 
 The answer key is kept outside this repository, at a path Brandon chooses. The default, unless he names another, is the same private folder as the corpora: `~/GTM Bases/Gridwise/fidelity-replay/`.
 
-**[TO FREEZE: the path where the answer key is kept. Brandon names one folder
-outside this repository, the answer key for each case below is written there,
-and that path is recorded here as a plain sentence, with no key content. Until
-this is done, no case can be scored, because there is nothing to score
-against.]**
+The answer key is kept at `~/GTM Bases/Gridwise/fidelity-replay/`, the folder Brandon named on 2026-09-27. Claude drafts it there from the frozen files, Brandon corrects it, and it is frozen with its own sha256 recorded in that folder before any case runs. Case two is scored against the facts of the same twelve finished pages as case one, so one key serves both; case three has a key of its own from its seventeen files. No key content is written in this repository. Until the key is frozen, no case can be scored.
 
 ## The corpora
 
@@ -73,8 +69,8 @@ What that file holds, without the names:
 | Case | What it is | Frozen? |
 |---|---|---|
 | One | The twelve finished segment pages the third real run read: eleven segments in twelve files, two of which are two versions of one segment. Taken from the `sources` field the plugin wrote into the real base | Yes, twelve files |
-| Two | A company with several segments and no finished pages, so every segment is drafted. Recommended: the same Gridwise material with the twelve pages held out of consent, scored against those pages | **No.** The full list the third run consented to lived in that run's working folder, which the plugin deletes when a run ends. Brandon either points setup at the same folder again so the list is frozen afresh, or supplies a second real company. Until then the gate is incomplete |
-| Three | Everything the positioning draft read on the third run: the twelve files of case one plus five more, replayed with the amount one request may read lowered | Files yes, seventeen. **The lowered amount is not set yet.** It is set before the case runs and written in both the private file and the result |
+| Two | A company with several segments and no finished pages, so every segment is drafted. Recommended: the same Gridwise material with the twelve pages held out of consent, scored against those pages | **Material decided, list not yet frozen.** Brandon decided on 2026-09-27: the same Gridwise folder with the twelve pages held out of consent. The list is frozen at the start of the case two run: setup surveys that folder as the product really would, the twelve pages are dropped from consent, and the remaining list is written into the private folder with one sha256 per file before anything is drafted. Until then the gate is incomplete |
+| Three | Everything the positioning draft read on the third run: the twelve files of case one plus five more, replayed with the amount one request may read lowered | Files yes, seventeen. The private list both says the positioning draft read only the final version of the segment that has two, and lists both versions among the seventeen; Brandon decided on 2026-09-27 to keep all seventeen as frozen, so the release's own handling of an older version is tested along the way. **The lowered amount is not set yet.** Proposed: 40,000 characters per request, about half of the seventeen files, where the shipped limit is 240,000 and all seventeen fit. It is set before the case runs and written in both the private file and the result |
 
 Case one is replayed against the shipped plugin as it stands today, in a session Brandon starts, as soon as the answer key exists, so a failure is known before the drafting work is built on top of it.
 
