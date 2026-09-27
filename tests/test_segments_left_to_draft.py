@@ -679,6 +679,173 @@ class TestAStopAtEveryStep(Case):
         self.assertFalse(segments.has_import(company.base_id))
 
 
+# --- The correctness review of this work ---------------------------------------
+
+
+class TestTheCorrectnessReview(Case):
+    """Each finding of the correctness review of call 29, failing first."""
+
+    def a_run_with_a_yes(self, company, name):
+        run_id, _shown = listed(company, name)
+        join_flow.draft_freeze(run_id, SESSION_TWO, today=TODAY)
+        return run_id
+
+    def assert_refused(self, code, call, *args, **kwargs):
+        with self.assertRaises(ReviewError) as caught:
+            call(*args, **kwargs)
+        self.assertEqual(code, caught.exception.code)
+
+    def test_1_a_run_made_for_one_segment_drafts_no_other(self):
+        company = a_company()
+        set_up_and_close(company, draft_one=False)
+        run_id = self.a_run_with_a_yes(company, LATER)
+        self.assert_refused(
+            join_flow.CODE_DRAFT_NOT_AGREED, join_flow.assemble_step,
+            drafting.STEP_SEGMENT, run_id, "Acme", EMAIL, today=TODAY,
+            segment=slug(DRAFTED),
+        )
+        self.assert_refused(
+            join_flow.CODE_DRAFT_NOT_AGREED, approve, run_id, company, DRAFTED
+        )
+        self.assert_refused(
+            join_flow.CODE_DRAFT_NOT_AGREED, join_flow.preview_step,
+            run_id, drafting.STEP_UMBRELLA, today=TODAY,
+        )
+        self.assertIsNone(company.read(company.destination(DRAFTED)))
+        self.assertEqual(
+            [DRAFTED, LATER], [s.name for s in record_of(company).drafts_unfinished()]
+        )
+
+    def test_2_the_run_that_finishes_pages_drafts_no_segment(self):
+        company = a_company()
+        set_up_and_close(company)
+        run_two, resumed = resume(company)
+        self.assertEqual([LATER], [s.name for s in resumed.to_draft])
+        self.assert_refused(
+            join_flow.CODE_DRAFT_NOT_AGREED, join_flow.assemble_step,
+            drafting.STEP_SEGMENT, run_two, "Acme", EMAIL, today=TODAY,
+            segment=slug(LATER),
+        )
+        self.assert_refused(
+            join_flow.CODE_DRAFT_NOT_AGREED, approve, run_two, company, LATER
+        )
+        self.assertIsNone(company.read(company.destination(LATER)))
+
+    def test_3_a_segment_left_out_is_never_written_by_a_run_holding_a_yes(self):
+        company = a_company()
+        set_up_and_close(company, draft_one=False)
+        run_id = self.a_run_with_a_yes(company, LATER)
+        join_flow.draft_leave_out(slug(LATER), company.root)
+        self.assert_refused(join_flow.CODE_NOT_TO_FINISH, approve, run_id, company, LATER)
+        self.assertIsNone(company.read(company.destination(LATER)))
+        self.assertEqual(
+            segments.STATE_LEFT_OUT, record_of(company).state_of(slug(LATER))
+        )
+
+    def test_4_a_segment_saved_by_this_import_with_no_state_is_noted_as_saved(self):
+        company = a_company()
+        company.adopt(TAKEN_IN)
+        approve(company.run, company, DRAFTED)
+        close(company)
+        # A record kept before its segments had states of their own.
+        path = segments.import_path(company.base_id)
+        with io.open(path, encoding="utf-8") as handle:
+            payload = json.load(handle)
+        payload["files"].pop(slug(DRAFTED))
+        with io.open(path, "w", encoding="utf-8") as handle:
+            json.dump(payload, handle)
+        _run, resumed = resume(company)
+        self.assertEqual([], resumed.taken)
+        self.assertEqual([LATER], [s.name for s in resumed.to_draft])
+        self.assertEqual(
+            segments.STATE_COMMITTED, record_of(company).state_of(slug(DRAFTED))
+        )
+
+    def test_4_a_record_that_cannot_be_reached_is_never_passed_over(self):
+        from unittest import mock
+        from gtmbase.errors import PathError
+
+        company = a_company()
+        refusal = PathError("locked", code="locked")
+        with mock.patch.object(join_flow, "_carry", side_effect=refusal):
+            with self.assertRaises(PathError):
+                approve(company.run, company, DRAFTED)
+        self.assertIsNone(company.read(company.destination(DRAFTED)))
+
+    def test_5_a_copy_changed_before_its_save_is_not_offered_to_draft_again(self):
+        company = a_company()
+        set_up_and_close(company)
+        run_id = self.a_run_with_a_yes(company, LATER)
+        with recovery.StopAfter(review, "_create_new") as stop:
+            with self.assertRaises(recovery.Stopped):
+                approve(run_id, company, LATER)
+        self.assertTrue(stop.fired)
+        full = os.path.join(company.root, company.destination(LATER))
+        with io.open(full, "a", encoding="utf-8") as handle:
+            handle.write("\nA line the person added.\n")
+        _run, resumed = resume(company)
+        self.assertEqual([LATER], [s.name for s in resumed.edited])
+        self.assertEqual([], resumed.to_draft)
+        with self.assertRaises(ConsentError) as caught:
+            listed(company, LATER)
+        self.assertEqual(segments.CODE_FILE_TAKEN, caught.exception.code)
+
+    def test_6_adding_the_home_folder_needs_the_second_yes(self):
+        company = a_company()
+        set_up_and_close(company)
+        _run, shown = listed(company, LATER, added=[os.environ["HOME"]])
+        self.assertTrue(shown.needs_second_yes)
+
+    def test_7_a_temporary_file_a_stopped_write_left_does_not_block_asking_again(self):
+        company = a_company()
+        set_up_and_close(company)
+        run_id = self.a_run_with_a_yes(company, LATER)
+        with recovery.StopAfter(review, "_write_whole") as stop:
+            with self.assertRaises(recovery.Stopped):
+                approve(run_id, company, LATER)
+        self.assertTrue(stop.fired)
+        approve(run_id, company, LATER)
+        self.assertIsNotNone(company.read(company.destination(LATER)))
+        self.assertEqual("", company.status())
+
+    def test_8_a_save_that_landed_is_reported_even_when_its_note_is_not(self):
+        from unittest import mock
+        from gtmbase.errors import PathError
+
+        company = a_company()
+        set_up_and_close(company)
+        run_id = self.a_run_with_a_yes(company, LATER)
+        real = segments.mark
+
+        def mark(base_id, which, written, *args, **kwargs):
+            if written == segments.STATE_COMMITTED:
+                raise PathError("locked", code="locked")
+            return real(base_id, which, written, *args, **kwargs)
+
+        with mock.patch.object(segments, "mark", side_effect=mark):
+            result = approve(run_id, company, LATER)
+        self.assertEqual(company.destination(LATER), result.path)
+        _run, resumed = resume(company)
+        self.assertEqual([LATER], [s.name for s in resumed.drafts_saved])
+
+    def test_9_a_resume_with_only_segments_left_reads_nothing_so_marks_nothing(self):
+        from gtmbase import marker
+
+        company = a_company()
+        set_up_and_close(company)
+        resume(company)
+        self.assertFalse(marker.marker_matches_session(SESSION_TWO))
+
+    def test_a_resume_run_never_makes_a_record_once_it_is_let_go(self):
+        company = a_company()
+        set_up_and_close(company)
+        run_two, _resumed = resume(company)
+        join_flow.draft_leave_out(slug(LATER), company.root)
+        self.assertFalse(segments.has_import(company.base_id))
+        self.assertIsNone(join_flow._carry(run_two, company.base_id))
+        self.assertFalse(segments.has_import(company.base_id))
+
+
 # --- Through the script, as the assistant runs it -------------------------------
 
 
