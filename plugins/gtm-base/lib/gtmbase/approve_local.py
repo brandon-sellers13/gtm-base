@@ -55,6 +55,7 @@ from . import (
     review,
     stale_check,
     state,
+    unsaved,
 )
 from .errors import GitError, GtmBaseError, PathError, ReviewError, ValidationError
 from .fsutil import (
@@ -68,7 +69,7 @@ from .fsutil import (
     read_text_exactly,
     remove,
 )
-from .gitcmd import GitRunner, runner_or_default, status_entries
+from .gitcmd import GitRunner, runner_or_default
 from .validate import find_marker, validate_owner
 
 # How a run of this module can end.
@@ -214,6 +215,12 @@ COULD_NOT_KEEP = (
 UNSAVED_EDITS = (
     "You have edits in your base you have not saved, so nothing was applied. "
     "Put those somewhere safe and ask again."
+)
+# The same refusal with the unsaved files said in it (release A live check,
+# step 5). The one sentence naming them goes where the `%s` is.
+UNSAVED_EDITS_NAMED = (
+    "You have edits in your base you have not saved, so nothing was applied. "
+    "%s Put those somewhere safe and ask again."
 )
 NOT_ON_MAIN = (
     "Your base is not on its main line right now, so nothing was applied."
@@ -2007,7 +2014,13 @@ def _finish_unfinished_work(
     if theirs:
         # Their own words are sitting on a path this run wrote to, so the note
         # stays and they are asked to deal with it. Nothing of theirs is lost.
-        return _refused(STATUS_REFUSED, CODE_UNSAVED_EDITS, UNSAVED_EDITS, its_id)
+        said = unsaved.where_sentence(theirs, base_root)
+        return _refused(
+            STATUS_REFUSED,
+            CODE_UNSAVED_EDITS,
+            UNSAVED_EDITS_NAMED % said if said else UNSAVED_EDITS,
+            its_id,
+        )
     _clear_journal(base_id)
     codes.append(CODE_UNDONE)
     return None
@@ -2102,23 +2115,24 @@ def _ready_to_write_here(
     on_default, _code = paths.head_is_default_branch(base_root, runner=git)
     if not on_default:
         return CODE_NOT_DEFAULT_BRANCH, NOT_ON_MAIN
-    # Entries end in a NUL and names come out exactly as they are. Without it
-    # git quotes a name holding an accent or a space, the quoted form never
-    # matched the file the change is about, and every hand edit to such a
-    # document was refused as unsaved work.
-    status = git.run(["status", "--porcelain", "-z"], cwd=base_root)
-    if not status.ok:
+    # The shared look reads names exactly as they are, so a document whose
+    # name holds an accent or a space matches the file the change is about,
+    # and it leaves out the files the computer made on its own, so a Finder
+    # file beside the edit no longer refuses it (release A live check, step 5).
+    status = unsaved.look(base_root, git)
+    if not status.ran:
         return CODE_GIT_FAILED, COULD_NOT_SAVE
     allowed = set(changing) if by_hand else set()
-    entries = status_entries(status.stdout)
-    if entries is None:
+    if status.entries is None:
         # Output nobody here can read is treated as unsaved work it may not
         # write over. Guessing at it would be the one way this check could let
         # something through.
         return CODE_UNSAVED_EDITS, UNSAVED_EDITS
-    for _letters, named in entries:
+    for _letters, named in status.entries:
         if any(item not in allowed for item in named):
-            return CODE_UNSAVED_EDITS, UNSAVED_EDITS
+            return CODE_UNSAVED_EDITS, unsaved.refusal(
+                UNSAVED_EDITS_NAMED, UNSAVED_EDITS, status, allowed
+            )
     return None
 
 

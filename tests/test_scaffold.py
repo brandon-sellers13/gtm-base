@@ -135,7 +135,7 @@ class TestManifests(unittest.TestCase):
         )
 
         self.assertEqual("gtm-base", plugin["name"])
-        self.assertEqual("0.3.1", plugin["version"])
+        self.assertEqual("0.3.2", plugin["version"])
         self.assertEqual("Brandon Sellers", plugin["author"]["name"])
         self.assertEqual("MIT", plugin["license"])
         self.assertTrue(plugin["keywords"])
@@ -226,7 +226,15 @@ class TestManifests(unittest.TestCase):
 
 class TestTemplateTree(unittest.TestCase):
     def test_template_holds_every_required_folder(self):
+        # The inbox and the proposals folder are ignored by the template's own
+        # ignore file, so no checkout of this repository or of the installed
+        # plugin ever holds them. Setting a base up makes every folder in
+        # TEMPLATE_TREE_DIRS itself, which tests/test_create_base.py asserts
+        # from a plugin checkout that lacks them too, so only the
+        # folders a checkout can carry are asked of the template here.
         for relative in constants.TEMPLATE_TREE_DIRS:
+            if relative in constants.TRANSIENT_DIRS:
+                continue
             path = os.path.join(TEMPLATE_DIR, relative)
             self.assertTrue(os.path.isdir(path), "missing folder: %s" % relative)
 
@@ -365,7 +373,7 @@ class TestPlainLanguage(unittest.TestCase):
         with open(atlas, encoding="utf-8") as handle:
             text = handle.read()
         self.assertNotIn("(proposed)", text)
-        self.assertIn("plugin 0.3.1", text)
+        self.assertIn("plugin 0.3.2", text)
         self.assertIn("built in 0.2.6", text)
 
     def test_the_lint_itself_catches_what_it_should(self):
@@ -425,7 +433,7 @@ class TestFakeGh(unittest.TestCase):
 
 class TestConstants(unittest.TestCase):
     def test_constants_import_and_every_path_is_relative(self):
-        self.assertEqual("0.3.1", __import__("gtmbase").__version__)
+        self.assertEqual("0.3.2", __import__("gtmbase").__version__)
         for name in dir(constants):
             if name.startswith("_"):
                 continue

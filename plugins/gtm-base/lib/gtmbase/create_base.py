@@ -33,6 +33,7 @@ from . import (
     machine,
     paths,
     state,
+    unsaved,
 )
 from .errors import CreateFailed, GtmBaseError, IdentityNeeded, ValidationError
 from .gitcmd import GitRunner, runner_or_default
@@ -204,6 +205,10 @@ def _copy_template(source: str, destination: str, email: str) -> None:
             )
             repo_relative = repo_relative.replace(os.sep, "/")
             if repo_relative == constants.SETTINGS_PATH:
+                continue
+            # A Finder file in the installed template is not part of it, and
+            # the first save of a new base must never carry one in.
+            if unsaved.is_clutter_file(source_file):
                 continue
             text = _read(source_file)
             if text is None:

@@ -38,6 +38,7 @@ from . import (
     redaction_patterns,
     scan,
     state,
+    unsaved,
 )
 from .errors import PathError, ReviewError
 from .gitcmd import GitRunner, runner_or_default
@@ -385,10 +386,12 @@ def ready_to_write(base_root: str, git: GitRunner) -> None:
     on_default, _code = paths.head_is_default_branch(base_root, runner=git)
     if not on_default:
         raise ReviewError(CODE_NOT_DEFAULT_BRANCH)
-    status = git.run(["status", "--porcelain"], cwd=base_root)
-    if not status.ok:
+    # The shared look, which leaves out the files the computer made on its
+    # own. What it counts is the same everywhere a base is written to.
+    status = unsaved.look(base_root, git)
+    if not status.ran:
         raise ReviewError(CODE_GIT_FAILED)
-    if status.out():
+    if not status.clean:
         raise ReviewError(CODE_UNSAVED_EDITS)
 
 

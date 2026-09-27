@@ -229,7 +229,9 @@ class TestAListOfPeopleIsNeverOffered(unittest.TestCase):
             )
 
     def test_naming_the_prospect_list_by_hand_does_not_pull_it_back_in(self):
-        with TempFolder(copy_fixtures=True) as temp:
+        # A seat folder of its own: the yes records itself there, and a test
+        # never writes into the real one.
+        with support.TempHome(), TempFolder(copy_fixtures=True) as temp:
             listing = sources.list_folder(temp.folder, today=TODAY)
             consent = sources.ConsentList.freeze(listing, "s-contact")
 

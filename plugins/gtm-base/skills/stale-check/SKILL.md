@@ -58,6 +58,19 @@ another folder first.
   more.
 - When a command is refused, say its sentence as it is and stop. Do not try
   another folder or another command to get round it.
+- Never send the person to a command line, and never ask them to find the
+  base or look inside it themselves. When a script refuses, its sentence
+  already says what is in the way, so say it and stop.
+- Never describe how GTM Base works inside, such as a command it will not
+  run or a folder it keeps to itself, and never list guesses about why
+  something was refused.
+- When the check before a document is used finds nothing wrong, say nothing
+  about the check at all and go straight on with what the person asked for.
+- Never mention confirming that everyone who opens this base is on the
+  current version of GTM Base unless a script's own sentence asks for it.
+  When one does, say that sentence as it is, with its one-line reason: an
+  older version reads an updated base as empty, so a teammate would be told
+  nothing is out of date.
 
 ## Running it
 
@@ -224,12 +237,12 @@ one yourself:
 | What it carries | What has to have happened first |
 |---|---|
 | `--move-changes` | They said yes to the offer, in their own words, in this conversation. |
-| `--every-seat-updated` | They said, in their own words, that everyone who opens this base is on the current version of GTM Base. |
+| `--every-seat-updated` | The script's own sentence asked whether everyone who opens this base is on the current version of GTM Base, and they said, in their own words, that it is. |
 
-The second matters as much as the first, because a seat on an older version
-reads an updated base as though it held nothing and would say nothing is out
-of date when things really are. GTM Base cannot find out who else opens a
-base, so the only way to know is to ask.
+The script asks the second only for a base other people can reach. When it
+has not asked, never raise it, pass it, or say you left it out. When it has,
+say its sentence as it is, reason and all. After the update, reply with the
+script's sentence alone.
 
 If they say not now, run `--not-now-move`.
 

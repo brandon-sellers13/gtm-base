@@ -321,6 +321,7 @@ class TestTheSecondRunCoversEveryClassThatStartsAScript(unittest.TestCase):
         "test_names_with_a_space": ("run_moment", "where_a_script_runs"),
         "test_third_look": ("run_script",),
         "test_words_files": ("script",),
+        "test_os_clutter": ("run_in",),
     }
 
     def listed(self):
