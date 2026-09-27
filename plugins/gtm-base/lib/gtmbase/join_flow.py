@@ -27,6 +27,7 @@ from __future__ import annotations
 
 import datetime
 import hashlib
+import hmac
 import json
 import os
 import shutil
@@ -35,6 +36,7 @@ import tempfile
 from typing import List, Optional, Sequence
 
 from . import (
+    adopt,
     base_reader,
     callmarkers,
     confirm,
@@ -69,7 +71,14 @@ from .errors import (
     StateError,
     ValidationError,
 )
-from .fsutil import atomic_write_json, atomic_write_text, ensure_dir, read_json, read_text
+from .fsutil import (
+    atomic_write_json,
+    atomic_write_text,
+    ensure_dir,
+    read_bytes,
+    read_json,
+    read_text,
+)
 from .gitcmd import GitRunner, runner_or_default
 
 # What the run folder holds.
@@ -1547,7 +1556,15 @@ def segment_to_draft(run_id: str, slug: Optional[str]) -> segments.Segment:
     inventory = several_segments(run_id)
     if inventory is not None and slug:
         for segment in inventory.segments:
-            if segment.slug == slug and segment.answer == constants.SEGMENT_DRAFT:
+            if segment.slug != slug:
+                continue
+            if segment.answer == constants.SEGMENT_DRAFT:
+                return segment
+            # A finished page the adoption contract refused may be drafted
+            # instead, which is the offer every such refusal makes (Unit 1.7c).
+            if segment.answer == constants.SEGMENT_ADOPT and adopt.was_refused(
+                scratch_dir(run_id), slug
+            ):
                 return segment
     raise ReviewError(segments.CODE_NOT_TO_DRAFT, code=segments.CODE_NOT_TO_DRAFT)
 
@@ -1610,6 +1627,252 @@ def _extra_for(run_id: str, step: str, segment) -> dict:
     except SourceRejected:
         raise DraftError(step, "unusable-name")
     return extra
+
+
+# --- Taking a finished page into the base (Unit 1.7c) --------------------------
+
+
+def segment_to_adopt(run_id: str, slug: Optional[str]) -> segments.Segment:
+    """The one settled segment to take from its finished page, or a refusal.
+
+    It has to be a segment the person said to take from a finished document,
+    named with that document's number, in an inventory of more than one. A
+    company with one segment keeps only the profile, at full depth.
+    """
+    inventory = several_segments(run_id)
+    if inventory is not None and slug:
+        for segment in inventory.segments:
+            if (
+                segment.slug == slug
+                and segment.answer == constants.SEGMENT_ADOPT
+                and segment.number is not None
+                and segment.source
+            ):
+                return segment
+    raise adopt.AdoptionRefused(adopt.CODE_NOT_TO_ADOPT)
+
+
+def adoption_file(run_id: str, slug: str) -> str:
+    """Where the whole cleaned page is kept for the person to read before a yes.
+
+    It sits beside the run's drafts, in the folder that is this person's
+    alone, and is worked out here from the run and the segment's file name,
+    both checked, and never chosen by the assistant.
+    """
+    if segments.slug_problem(slug) is not None:
+        raise adopt.AdoptionRefused(adopt.CODE_NOT_TO_ADOPT)
+    return os.path.join(drafts_dir(run_id), "adopt-%s.md" % slug)
+
+
+def _adoption_base(base_root: Optional[str], git: GitRunner):
+    """The base a page is taken into, once both required documents are in it.
+
+    Adoption runs after the umbrella and the positioning, because the
+    umbrella is what creates the base and names every segment first.
+    """
+    if not base_root:
+        raise adopt.AdoptionRefused(adopt.CODE_BASE_NOT_READY)
+    resolution = paths.resolve_base(base_root, machine.load_machine_state(), git)
+    if not resolution.active or not resolution.root or not resolution.base_id:
+        raise adopt.AdoptionRefused(adopt.CODE_BASE_NOT_READY)
+    # Each required document has been answered: written, or, for the
+    # positioning, written down as skipped. Both steps come before this one.
+    by_path = dict((info.path, info) for info in base_reader.context_files(resolution.root))
+    for required in constants.REQUIRED_CONTEXT_FILES:
+        held = [
+            by_path.get(candidate)
+            for candidate in (required, layout.older_of(required))
+            if candidate
+        ]
+        if not any(info is not None and info.exists for info in held):
+            raise adopt.AdoptionRefused(adopt.CODE_BASE_NOT_READY)
+    return resolution.root, resolution.base_id
+
+
+def _dropped_places(run_id: str) -> List[str]:
+    payload = _consent_payload(run_id) or {}
+    held = payload.get("dropped")
+    return [str(item) for item in held] if isinstance(held, list) else []
+
+
+def _cleaned_page(run_id, segment, root, address, day):
+    """Run the whole contract on one settled segment's page, in its order.
+
+    Clause one, the destination, comes first. The page is then read through
+    the same check every read in setup goes through, so a page no longer on
+    the agreed list is never opened, and one bounded read is made of it.
+    """
+    problem = adopt.destination_problem(root, segment.slug)
+    if problem == adopt.CODE_RESERVED_NAME:
+        raise adopt.AdoptionRefused(
+            problem, segments.RESERVED_NAME % {"name": segment.name}
+        )
+    if problem is not None:
+        raise adopt.AdoptionRefused(problem)
+    consent = load_consent(run_id)
+    try:
+        real = sources_module.read_allowed(consent, segment.source)
+    except ConsentError:
+        raise adopt.AdoptionRefused(adopt.CODE_UNREADABLE)
+    if not adopt.is_markdown(real):
+        raise adopt.AdoptionRefused(adopt.CODE_NOT_MARKDOWN)
+    try:
+        raw, _notes = extract.extract(real, "markdown")
+    except SourceRejected:
+        raise adopt.AdoptionRefused(adopt.CODE_UNREADABLE)
+    when = sources_module.date_for_file(real, today=day).date
+    return adopt.clean(
+        raw,
+        _label_for(real),
+        day,
+        address,
+        adopt.source_line_for(segment.label, when),
+        covers=held_scope(run_id),
+        dropped=_dropped_places(run_id),
+    )
+
+
+class Shown(object):
+    """One page as the person is shown it: what went, the first lines, where."""
+
+    __slots__ = ("segment", "cleaned", "path")
+
+    def __init__(self, segment, cleaned, path):
+        self.segment = segment
+        self.cleaned = cleaned
+        self.path = path
+
+    @property
+    def digest(self) -> str:
+        return self.cleaned.digest
+
+    def sentences(self) -> List[str]:
+        """What is said about the page, in order, ending in the one ask."""
+        said = [adopt.SHOW_OPENING % {"name": self.segment.name}]
+        if self.cleaned.settings_set_aside:
+            said.append(adopt.SETTINGS_SET_ASIDE)
+        hidden = sources_module.removed_sentence(self.cleaned.label, self.cleaned.removed)
+        if hidden:
+            said.append(hidden)
+        if not self.cleaned.settings_set_aside and not hidden:
+            said.append(adopt.NOTHING_TAKEN_OUT)
+        said.append(adopt.OPENING_SAID)
+        said.append(adopt.WHOLE_FILE)
+        if self.cleaned.questions == 1:
+            said.append(adopt.ONE_QUESTION)
+        elif self.cleaned.questions > 1:
+            said.append(adopt.QUESTIONS % self.cleaned.questions)
+        said.append(adopt.ASK_WITH_QUESTIONS if self.cleaned.questions else adopt.ASK)
+        return said
+
+    def __repr__(self) -> str:
+        return "Shown(%r)" % (self.segment.slug,)
+
+
+def adoption_show(
+    run_id: str,
+    slug: Optional[str],
+    base_root: Optional[str],
+    email: Optional[str] = None,
+    runner: Optional[GitRunner] = None,
+    today=None,
+) -> Shown:
+    """Run the contract on one page and keep the result for the person to read.
+
+    Nothing is written into the base. The whole cleaned page is written into
+    the run's own folder, and the hash of exactly those bytes is kept beside
+    the day it was shown, which is what a later yes is bound to. A page the
+    contract refuses is remembered as refused, so it can be drafted instead.
+    """
+    segment = segment_to_adopt(run_id, slug)
+    git = runner_or_default(runner)
+    root, _base_id = _adoption_base(base_root, git)
+    day = today or state.today()
+    address = _address_for(root, email, git)
+    if not address:
+        raise ReviewError(review.CODE_OWNER_MISSING, code=review.CODE_OWNER_MISSING)
+    path = adoption_file(run_id, segment.slug)
+    try:
+        cleaned = _cleaned_page(run_id, segment, root, address, day)
+    except adopt.AdoptionRefused as refusal:
+        if refusal.code in adopt.OFFERS_A_DRAFT:
+            adopt.record_refused(
+                scratch_dir(run_id), segment.slug, refusal.code, paths.seat_home()
+            )
+        raise
+    atomic_write_text(path, cleaned.text, inside=drafts_dir(run_id))
+    adopt.record_shown(
+        scratch_dir(run_id),
+        segment.slug,
+        cleaned.digest,
+        day.isoformat() if hasattr(day, "isoformat") else str(day),
+        paths.seat_home(),
+    )
+    return Shown(segment, cleaned, path)
+
+
+def adoption_approve(
+    run_id: str,
+    slug: Optional[str],
+    base_root: Optional[str],
+    shown_digest: str,
+    questions_open: bool = False,
+    email: Optional[str] = None,
+    runner: Optional[GitRunner] = None,
+    now: Optional[datetime.datetime] = None,
+):
+    """Write one page the person said yes to, exactly as they were shown it.
+
+    The yes is bound to the hash kept when the page was shown. The contract is
+    run again from the original, on the day it was shown, and the cleaned file
+    the person could read is read again, and both have to come out to that
+    same hash, so a page or a cleaned file that changed after the showing is
+    asked about again rather than written. A yes covering several pages
+    counts only for the pages that were each shown this way.
+    """
+    segment = segment_to_adopt(run_id, slug)
+    git = runner_or_default(runner)
+    root, base_id = _adoption_base(base_root, git)
+    record = adopt.shown(scratch_dir(run_id), segment.slug)
+    if record is None:
+        raise adopt.AdoptionRefused(adopt.CODE_NOT_SHOWN)
+    if not hmac.compare_digest(str(shown_digest or ""), record["shown"]):
+        raise adopt.AdoptionRefused(adopt.CODE_CHANGED)
+    try:
+        day = datetime.date.fromisoformat(record["day"])
+    except (TypeError, ValueError):
+        raise adopt.AdoptionRefused(adopt.CODE_NOT_SHOWN)
+    address = _address_for(root, email, git)
+    if not address:
+        raise ReviewError(review.CODE_OWNER_MISSING, code=review.CODE_OWNER_MISSING)
+    try:
+        cleaned = _cleaned_page(run_id, segment, root, address, day)
+    except adopt.AdoptionRefused as refusal:
+        if refusal.code in adopt.OFFERS_A_DRAFT:
+            adopt.record_refused(
+                scratch_dir(run_id), segment.slug, refusal.code, paths.seat_home()
+            )
+        raise
+    on_disk = read_bytes(adoption_file(run_id, segment.slug))
+    if (
+        cleaned.digest != record["shown"]
+        or on_disk is None
+        or hashlib.sha256(on_disk).hexdigest() != record["shown"]
+    ):
+        raise adopt.AdoptionRefused(adopt.CODE_CHANGED)
+    if cleaned.questions and not questions_open:
+        raise adopt.AdoptionRefused(adopt.CODE_QUESTIONS_OPEN)
+    return review.approve_adopted(
+        root,
+        base_id,
+        segment.destination,
+        cleaned.text,
+        record["shown"],
+        run_id,
+        runner=git,
+        now=now,
+        email=address,
+    )
 
 
 class SourcesRead(object):

@@ -56,6 +56,7 @@ if _lib not in sys.path:
 import argparse  # noqa: E402
 
 from gtmbase import (  # noqa: E402
+    adopt,
     constants,
     create_base,
     drafting,
@@ -63,8 +64,10 @@ from gtmbase import (  # noqa: E402
     join_flow,
     location,
     machine,
+    moment,
     offer_answer,
     paths,
+    review,
     segments,
     sources,
     wordsfile,
@@ -418,6 +421,10 @@ def build_parser():
     parser.add_argument(
         "--segments-file",
         help="a file holding one line per segment: the answer, a number, a name",
+    )
+    parser.add_argument(
+        "--hash",
+        help="the hash adopt-show printed for the page the person said yes to",
     )
     return parser
 
@@ -1518,6 +1525,88 @@ def run_skip(options, out):
     return EXIT_DONE
 
 
+def an_adoption_refusal(refusal, out):
+    """Say why a page was not taken in: the code, then the one sentence.
+
+    The sentence names the class of what was found and never the value, and
+    a refusal about the page itself ends in the offer to draft it instead.
+    """
+    line(out, "codes", refusal.code)
+    if refusal.code in adopt.OFFERS_A_DRAFT:
+        line(out, "draft-instead", "yes")
+    out.write(refusal.sentence + "\n")
+    return EXIT_REFUSED
+
+
+ADOPTION_BASE_REFUSALS = {
+    review.CODE_UNSAVED_EDITS: adopt.UNSAVED_EDITS,
+    review.CODE_NOT_DEFAULT_BRANCH: adopt.NOT_ON_THE_MAIN_LINE,
+    segments.CODE_FILE_TAKEN: segments.FILE_TAKEN,
+    segments.CODE_FOLDER_NOT_ORDINARY: segments.FOLDER_NOT_ORDINARY,
+}
+
+
+def run_adopt_show(options, out):
+    """Clean one finished page and show what was removed and how it starts."""
+    run_id = need(options, "run", out)
+    slug = need(options, "segment", out)
+    if not run_id or not slug:
+        return EXIT_ERROR
+    root = base_folder(options, out)
+    if root is None:
+        return EXIT_REFUSED
+    try:
+        shown = join_flow.adoption_show(run_id, slug, root, email=options.email)
+    except adopt.AdoptionRefused as refusal:
+        return an_adoption_refusal(refusal, out)
+    line(out, "segment", shown.segment.slug)
+    line(out, "cleaned", shown.path)
+    line(out, "hash", shown.digest)
+    if shown.cleaned.questions:
+        line(out, "questions", shown.cleaned.questions)
+    for sentence in shown.sentences():
+        out.write(sentence + "\n")
+        if sentence == adopt.OPENING_SAID:
+            # The first lines are the person's own writing, so they are held
+            # apart as data, however they are fenced themselves.
+            out.write(moment.fenced("\n".join(shown.cleaned.opening())) + "\n")
+    return EXIT_DONE
+
+
+def run_adopt(options, out):
+    """Write one page the person said yes to, bound to the hash they were shown."""
+    run_id = need(options, "run", out)
+    slug = need(options, "segment", out)
+    digest = need(options, "hash", out)
+    if not run_id or not slug or not digest:
+        return EXIT_ERROR
+    root = base_folder(options, out)
+    if root is None:
+        return EXIT_REFUSED
+    try:
+        result = join_flow.adoption_approve(
+            run_id,
+            slug,
+            root,
+            digest,
+            questions_open=options.questions_open,
+            email=options.email,
+        )
+    except adopt.AdoptionRefused as refusal:
+        return an_adoption_refusal(refusal, out)
+    except ReviewError as refusal:
+        sentence = ADOPTION_BASE_REFUSALS.get(getattr(refusal, "code", None))
+        if sentence is None:
+            raise
+        line(out, "codes", refusal.code)
+        out.write(sentence + "\n")
+        return EXIT_REFUSED
+    line(out, "base", result.root)
+    line(out, "file", result.path)
+    out.write(adopt.TAKEN_IN + "\n")
+    return EXIT_DONE
+
+
 def base_and_id(options, out):
     """The base this step works in, and the name this account knows it by."""
     root = options.base or os.getcwd()
@@ -1768,6 +1857,8 @@ MODES = {
     "what-is-wrong": run_what_is_wrong,
     "approve": run_approve,
     "skip": run_skip,
+    "adopt-show": run_adopt_show,
+    "adopt": run_adopt,
     "closing-question": run_closing_question,
     "preview-change": run_preview_change,
     "reconcile": run_reconcile,

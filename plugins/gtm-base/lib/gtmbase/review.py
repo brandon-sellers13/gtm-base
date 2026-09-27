@@ -23,6 +23,7 @@ piece of work, so a base can never hold a file nobody approved.
 from __future__ import annotations
 
 import datetime
+import hashlib
 import os
 from typing import List, Optional
 
@@ -82,6 +83,9 @@ CODE_BAD_AFFECTED_PATH = "bad-affected-path"
 # Every identifier this plugin can work out for a context change is already
 # taken on this base, so there is nowhere to write another one.
 CODE_NO_ROOM_FOR_A_CHANGE = "no-room-for-another-change"
+# A finished page handed in to be written is not the one the person was shown
+# and said yes to (Unit 1.7c).
+CODE_NOT_WHAT_WAS_SHOWN = "not-what-was-shown"
 
 # What the saved work is called when a file is written during setup.
 SAVE_MESSAGE = "Add %s from setup"
@@ -570,6 +574,48 @@ def approve(
     return _write_and_save(
         base_root, base_id, relative, draft.text, run_id, moment, git
     )
+
+
+def approve_adopted(
+    base_root: str,
+    base_id: Optional[str],
+    relative: str,
+    text: str,
+    digest: str,
+    run_id: str,
+    runner: Optional[GitRunner] = None,
+    now: Optional[datetime.datetime] = None,
+    email: Optional[str] = None,
+) -> ApproveResult:
+    """Write a finished page the person said yes to, bound to its exact bytes.
+
+    Unit 1.7c. The page was cleaned and shown by `adopt`, and the person's yes
+    is to the hash of exactly those bytes, so they are hashed again here and
+    nothing is written unless they are the same. Everything a drafted segment
+    meets before it is written, this meets too, in the same order: the screen
+    over the whole file with only the owner's own line let through, the line
+    of work the team shares with nothing else half done on it, an ordinary
+    folder, no file already there whose name folds to the same one, and the
+    page and the line recording the yes saved together as one piece of work.
+    """
+    git = runner_or_default(runner)
+    moment = now or state.now_utc()
+    if not base_root:
+        raise ReviewError(CODE_NO_BASE)
+    address = email or base_reader.repo_email(base_root, git) or ""
+    if not address:
+        raise ReviewError(CODE_OWNER_MISSING, code=CODE_OWNER_MISSING)
+    text = str(text)
+    if hashlib.sha256(text.encode("utf-8")).hexdigest() != str(digest or ""):
+        raise ReviewError(CODE_NOT_WHAT_WAS_SHOWN, code=CODE_NOT_WHAT_WAS_SHOWN)
+    codes = screen(text, address, frontmatter_line_numbers(text))
+    if codes:
+        raise ReviewError(CODE_SCREENED, codes=codes)
+    ready_to_write(base_root, git)
+    _segment_file_is_free(base_root, relative)
+    if _already_there(base_root, relative):
+        raise ReviewError(CODE_FILE_EXISTS)
+    return _write_and_save(base_root, base_id, relative, text, run_id, moment, git)
 
 
 def skip(
