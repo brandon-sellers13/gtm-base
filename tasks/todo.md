@@ -1308,3 +1308,14 @@ One correctness review of the diff. Fixed, each with a test in tests/test_os_clu
 - [x] Finding 3: refusals never repeat an arbitrary name. Context documents by `names.document_name` (now `fullmatch`), everything else counted; the read-the-name branch is gone. Astra's instruction-shaped name and a trailing newline are tested.
 - [x] The seat folder: tests/support.py points the seat folder at a temporary one before any test runs, always; tests/run.sh makes that folder, and fails the run if either run wrote into it. tests/test_seat_isolation.py proves it inside temporary folders; the real seat folder is never read. The guard's first full run caught two offenders, both now given a temporary seat folder: test_sources (wrote its read marker) and test_gate's check of this repository (made the seat folder). test_paths got the same guard as on the unit-1-7d line.
 - [ ] Orchestrator: review, release as 0.3.2.
+
+### 2026-09-27, 0.3.3: record a context change at any time (branch fix-0-3-3, on fix-0-3-2)
+Built on fix-0-3-2 (the clutter fix and the seat-folder guard), which releases as 0.3.2; this is 0.3.3. Item 2 of the brief (clutter) is fix-0-3-2's and is not touched here.
+- [ ] Library: `record_change.py` for the any-time path, reusing the closing's pieces (the four lines and the whole-entry showing, the free identifier, the entry written with no run, `where_to_write_the_entry`, `reconcile_plan`/`reconcile_yes`/`reconcile_no`, `unsaved.where_sentence`). The entry is built from the person's words (never through the model-draft parser, which refuses a person's own dash or word), screened for contact details and keys, held in the seat folder between the showing and the yes, and bound to what was shown.
+- [ ] `reconcile_plan` and `confirm.against_change` take the any-time path's wider set (every affected context document this seat owns), the closing's two-document rule unchanged.
+- [ ] stale_check.py: `--new-words-file`, `--record-change-ask`, `--record-change-documents`, `--record-change-preview`, `--record-change`, `--record-change-leave`, `--record-change-answer`.
+- [ ] A base with a shared copy is refused with one sentence at every step (the closing only ever writes a local save and has no path to a shared copy).
+- [ ] stale-check SKILL.md section "Record a context change", description triggers; injection.md one line for the assistant.
+- [ ] Tests: tests/test_record_change.py end to end through the real script, from the base and from a linked folder (run.sh list and test_linked_folder runner map), both layouts, shared copy, yes/no/not now, nothing written before the yes, no run id, flagged at the moment of use and in the review.
+- [ ] Lint registry, CHANGELOG "Unreleased (0.3.3)", logic atlas figures 5 and 7.
+- [ ] Two reviews (correctness, security), fixes with tests, full suite twice OK.

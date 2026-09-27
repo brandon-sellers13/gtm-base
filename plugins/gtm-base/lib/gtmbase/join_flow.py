@@ -209,6 +209,17 @@ OTHERS_FLAGGED_ONE = (
 OTHERS_FLAGGED_MANY = (
     "%d other documents this change affects are left flagged for your next review."
 )
+# Said by the step that records a context change at any time, about the
+# documents it affects that somebody else owns. This person's review never
+# lists somebody else's document, so "your next review" would not be true.
+NOT_OWNED_FLAGGED_ONE = (
+    "One document this context change affects is not recorded as yours, so "
+    "it stays flagged until its owner answers for it."
+)
+NOT_OWNED_FLAGGED_MANY = (
+    "%d documents this context change affects are not recorded as yours, so "
+    "they stay flagged until their owners answer for them."
+)
 # Skip is a whole answer. Requirement P7.
 SKIP_RECORDED = (
     "Nothing was written down, and GTM Base will not mention the quiet record "
@@ -1589,8 +1600,13 @@ def _what_changed(entry) -> str:
     return names.change_name(entry.body, None)
 
 
-def _why_of(entry) -> str:
-    """The reason the change gives, or the plain truth when it gives none."""
+def _why_of(entry, why_when_none: str = WHY_FROM_THE_CLOSING) -> str:
+    """The reason the change gives, or the plain truth when it gives none.
+
+    What the plain truth is depends on where the change came from, so the
+    caller says it. The closing's is the default, because a sentence given at
+    the closing with no reason in it was given while setting the base up.
+    """
     lines = [line.strip() for line in str(entry.body or "").split("\n")]
     seen_first = False
     for line in lines:
@@ -1600,10 +1616,10 @@ def _why_of(entry) -> str:
             seen_first = True
             continue
         return _one_line(line)
-    return WHY_FROM_THE_CLOSING
+    return why_when_none
 
 
-def four_lines_for(entry) -> str:
+def four_lines_for(entry, why_when_none: str = WHY_FROM_THE_CLOSING) -> str:
     """One context change as the four labeled lines, and nothing else.
 
     Every value comes out of a file somebody typed into and is read out inside
@@ -1614,7 +1630,7 @@ def four_lines_for(entry) -> str:
     """
     values = (
         moment._one_line(_what_changed(entry)),
-        moment._one_line(_why_of(entry)),
+        moment._one_line(_why_of(entry, why_when_none)),
         moment._one_line(
             ", ".join(names.document_name(path) for path in entry.affects)
             or "nothing yet"
@@ -1663,7 +1679,18 @@ def preview_change(
     draft = review.stamp_entry(
         draft, None, address, entry_name=review.free_entry_id(base_root)
     )
-    entry = formats.ChangeEntry.parse(draft.text)
+    return show_entry(draft.text)
+
+
+def show_entry(text: str, why_when_none: str = WHY_FROM_THE_CLOSING) -> ProposedChange:
+    """One finished context change, shown whole, exactly as it will be written.
+
+    The closing and the step that records a context change at any other time
+    both show a change this way, so what a person reads before saying yes is
+    the same in both places: the four lines and the three facts that are
+    theirs to correct, held apart as data, and then the whole entry.
+    """
+    entry = formats.ChangeEntry.parse(text)
     affected = ", ".join(names.document_name(path) for path in entry.affects)
     details = (
         (DETAIL_LABELS[0], str(entry.happened_on)),
@@ -1671,12 +1698,12 @@ def preview_change(
         (DETAIL_LABELS[2], str(entry.review_by)),
     )
     artifact = "\n".join(
-        [ARTIFACT_OPEN, moment.fenced(draft.text.rstrip("\n")), ARTIFACT_CLOSE]
+        [ARTIFACT_OPEN, moment.fenced(text.rstrip("\n")), ARTIFACT_CLOSE]
     ) + "\n"
     # Finding V9. The four lines and the three facts are read straight out of
     # a file somebody typed into, so all of them are held apart as data and
     # not only the whole change underneath them.
-    four = four_lines_for(entry)
+    four = four_lines_for(entry, why_when_none)
     summary = moment.fenced(
         "\n".join(
             [four, ""] + ["%s: %s" % (label, value) for label, value in details]
@@ -1693,12 +1720,16 @@ def preview_change(
 class Reconciliation(object):
     """Which documents the closing asks about, and which it leaves flagged."""
 
-    __slots__ = ("ask_about", "left_flagged", "sentence")
+    __slots__ = ("ask_about", "left_flagged", "sentence", "not_owned")
 
-    def __init__(self, ask_about, left_flagged, sentence=None):
+    def __init__(self, ask_about, left_flagged, sentence=None, not_owned=()):
         self.ask_about = list(ask_about)
         self.left_flagged = list(left_flagged)
         self.sentence = sentence
+        # The documents left flagged because somebody else owns them. They
+        # are among `left_flagged` too, and said in a sentence of their own,
+        # because this person's review never lists somebody else's document.
+        self.not_owned = list(not_owned)
 
     def questions(self) -> List[str]:
         """The one question to ask about each document, in the order asked."""
@@ -1717,6 +1748,7 @@ def reconcile_plan(
     affects: Sequence[str],
     today=None,
     runner: Optional[GitRunner] = None,
+    every_document: bool = False,
 ) -> Reconciliation:
     """Work out which documents the closing asks about, one question each.
 
@@ -1726,6 +1758,12 @@ def reconcile_plan(
     `docs/plans/2026-09-19-001-acceptance-matrix.md`). Everything else the
     change affects is left flagged and said in one line, and the review picks
     it up.
+
+    A context change recorded at any other time asks about `every_document`
+    it affects instead, because the person has just said which documents
+    those are, one by one. Only the ones this seat owns are asked about there,
+    because only an owner can say a document already says it; a document
+    somebody else owns is left flagged for them.
 
     A document a context change is written down twice about is left flagged
     too and never asked about, because settling it would settle a change
@@ -1737,13 +1775,23 @@ def reconcile_plan(
         day = day.date()
     ask_about: List[str] = []
     left_flagged: List[str] = []
+    not_owned: List[str] = []
     required = list(constants.REQUIRED_CONTEXT_FILES)
+    address = (
+        (base_reader.repo_email(base_root, git) or "") if every_document else ""
+    )
     for path in affects:
-        if path not in required:
+        if not every_document and path not in required:
             left_flagged.append(path)
             continue
         if not os.path.isfile(os.path.join(base_root, path.replace("/", os.sep))):
             left_flagged.append(path)
+            continue
+        if every_document and (
+            not address or address not in confirm.owners_of(base_root, path)
+        ):
+            left_flagged.append(path)
+            not_owned.append(path)
             continue
         if confirm.refusal_while_written_twice(
             base_root, base_id, path, day, git=git
@@ -1751,13 +1799,20 @@ def reconcile_plan(
             left_flagged.append(path)
             continue
         ask_about.append(path)
-    ask_about.sort(key=required.index)
-    sentence = None
-    if len(left_flagged) == 1:
-        sentence = OTHERS_FLAGGED_ONE
-    elif left_flagged:
-        sentence = OTHERS_FLAGGED_MANY % len(left_flagged)
-    return Reconciliation(ask_about, left_flagged, sentence)
+    if not every_document:
+        ask_about.sort(key=required.index)
+    said = []
+    others = len(left_flagged) - len(not_owned)
+    if others == 1:
+        said.append(OTHERS_FLAGGED_ONE)
+    elif others:
+        said.append(OTHERS_FLAGGED_MANY % others)
+    if len(not_owned) == 1:
+        said.append(NOT_OWNED_FLAGGED_ONE)
+    elif not_owned:
+        said.append(NOT_OWNED_FLAGGED_MANY % len(not_owned))
+    sentence = " ".join(said) or None
+    return Reconciliation(ask_about, left_flagged, sentence, not_owned)
 
 
 class Reconciled(object):
@@ -1795,8 +1850,13 @@ def reconcile_yes(
     entry_id: str,
     now=None,
     runner: Optional[GitRunner] = None,
+    any_document: bool = False,
 ) -> Reconciled:
-    """The person says this document already says what the change says."""
+    """The person says this document already says what the change says.
+
+    `any_document` is for a context change recorded at any time, which asks
+    about every document it affects rather than only the two a base needs.
+    """
     if formats.name_has_a_space(path):
         return Reconciled(
             path,
@@ -1805,7 +1865,13 @@ def reconcile_yes(
             codes=[formats.CODE_NAME_WITH_A_SPACE],
         )
     result = confirm.against_change(
-        base_root, base_id, path, entry_id, now=now, runner=runner
+        base_root,
+        base_id,
+        path,
+        entry_id,
+        now=now,
+        runner=runner,
+        any_affected_document=any_document,
     )
     if result.status != confirm.STATUS_RECORDED:
         return Reconciled(path, False, result.reasons[0] if result.reasons else "",

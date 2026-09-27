@@ -1046,6 +1046,7 @@ def against_change(
     entry_id: str,
     now: Optional[datetime.datetime] = None,
     runner: Optional[GitRunner] = None,
+    any_affected_document: bool = False,
 ) -> ConfirmResult:
     """Record that one document already says what one context change said.
 
@@ -1070,6 +1071,12 @@ def against_change(
     Adding one line to a file stages the whole file, so a line about another
     change that somebody had written and not saved would be saved here as the
     owner's yes about that other change as well.
+
+    A context change recorded at any time, rather than at the closing, asks
+    about every document it affects, and says so with
+    `any_affected_document`. That lifts the one rule about the two documents
+    and nothing else: the change still has to name the document, and the
+    document still has to be this seat's.
     """
     git = runner_or_default(runner)
     moment = now or state.now_utc()
@@ -1084,7 +1091,13 @@ def against_change(
         return _refused(formats.CODE_NAME_WITH_A_SPACE, formats.NAME_WITH_A_SPACE)
     document = names.document_name(relative_context)
 
-    if relative_context not in constants.REQUIRED_CONTEXT_FILES:
+    if any_affected_document and relative_context == constants.MAP_PATH:
+        # The map is never asked about, whoever asks (Unit 1.2 of 0.3.0).
+        return _refused(CODE_DROPPED_PATH, DROPPED_PATH)
+    if (
+        not any_affected_document
+        and relative_context not in constants.REQUIRED_CONTEXT_FILES
+    ):
         return _refused(CODE_NOT_ONE_OF_THE_TWO, NOT_ONE_OF_THE_TWO % document)
 
     entry = _entry_the_base_holds(base_root, base_id, entry_id, today, git)
@@ -1181,6 +1194,11 @@ def _entry_the_base_holds(base_root, base_id, entry_id, today, git):
         if item.entry is not None and item.entry.id == entry_id:
             return item.entry
     return None
+
+
+def owners_of(base_root: str, relative: str) -> List[str]:
+    """The addresses written on one context file as owning it."""
+    return _owners_of(base_root, relative)
 
 
 def _owners_of(base_root: str, relative: str) -> List[str]:

@@ -47,12 +47,15 @@ import argparse  # noqa: E402
 
 from gtmbase import (  # noqa: E402
     changes,
+    join_flow,
     machine,
     moment,
     paths,
+    record_change,
     report,
     stale_check,
     state,
+    wordsfile,
 )
 from gtmbase.errors import GtmBaseError  # noqa: E402
 
@@ -65,6 +68,7 @@ NOT_JOINED = (
     "here to check."
 )
 WENT_WRONG = "GTM Base could not finish the check, so nothing was prepared."
+NOT_RECORDED = "GTM Base could not finish that step, so nothing was written."
 
 
 def build_parser():
@@ -128,7 +132,50 @@ def build_parser():
         "--show-document",
         help="print one context file, with the check run before it is read",
     )
+    parser.add_argument(
+        "--new-words-file",
+        help="hand out a file to put somebody's own words in, of one kind",
+    )
+    parser.add_argument(
+        "--record-change",
+        choices=RECORD_STEPS,
+        help="one step of recording a context change without editing a document",
+    )
+    parser.add_argument(
+        "--long",
+        action="store_true",
+        help="give the whole explanation, as when somebody asks why",
+    )
+    parser.add_argument(
+        "--what-changed-file", help="a file holding what changed, in their words"
+    )
+    parser.add_argument(
+        "--reason-file", help="a file holding why it changed, in their words"
+    )
+    parser.add_argument(
+        "--source-file", help="a file holding where it came from, in their words"
+    )
+    parser.add_argument(
+        "--documents",
+        action="append",
+        default=[],
+        help="the numbers of the documents it affects, separated by commas",
+    )
+    parser.add_argument(
+        "--happened-on", help="the day it happened, as year-month-day"
+    )
+    parser.add_argument("--shown", help="the shown value the yes is bound to")
+    parser.add_argument("--change", help="the context change an answer is about")
+    parser.add_argument("--document", help="the document an answer is about")
+    parser.add_argument(
+        "--answer", help="yes, no, or not-now, about one document"
+    )
     return parser
+
+
+# The steps of recording a context change without editing a document, in the
+# order they happen.
+RECORD_STEPS = ("ask", "documents", "show", "record", "leave", "answer")
 
 
 def print_review(result):
@@ -158,6 +205,94 @@ def print_review(result):
                 % (item.path, item.entry_id or "-")
             )
     return EXIT_REFUSED if result.stopped else EXIT_DONE
+
+
+def _words(path, base_id):
+    """Somebody's own words, from a file this script handed out, or nothing.
+
+    A path it did not hand out is refused with the one sentence that says so,
+    and an empty answer is the same as no answer.
+    """
+    if not path:
+        return ""
+    text = wordsfile.read_words(path, base_id)
+    if text is None:
+        raise record_change.Refused(wordsfile.NOT_OURS, code=wordsfile.CODE_NOT_OURS)
+    return text
+
+
+def record_a_change(options, resolution):
+    """One step of recording a context change, from the folder the person is in.
+
+    Every step refuses a base with a shared copy first, so nobody is asked a
+    question whose answer could not be written down.
+    """
+    root, base_id = resolution.root, resolution.base_id
+    step = options.record_change
+    record_change.refuse_a_shared_copy(root)
+
+    if step == "ask":
+        for sentence in record_change.ask(long=options.long):
+            sys.stdout.write(sentence + "\n")
+        return EXIT_DONE
+
+    if step == "documents":
+        listed = record_change.documents(root)
+        if not listed:
+            sys.stdout.write(record_change.NO_DOCUMENTS + "\n")
+            return EXIT_REFUSED
+        sys.stdout.write(record_change.DOCUMENTS_INTRO + "\n")
+        for number, _path, name in listed:
+            sys.stdout.write("%d. %s\n" % (number, name))
+        return EXIT_DONE
+
+    if step == "show":
+        what = _words(options.what_changed_file, base_id)
+        why = _words(options.reason_file, base_id)
+        source = _words(options.source_file, base_id)
+        shown = record_change.preview(
+            root,
+            base_id,
+            what,
+            why,
+            source,
+            options.documents,
+            happened_on=options.happened_on,
+        )
+        sys.stdout.write(shown.proposed.summary + "\n\n")
+        sys.stdout.write(join_flow.NOTED_BY_IS_THE_BASES_RECORD + "\n")
+        sys.stdout.write("\n" + shown.proposed.artifact + "\n")
+        sys.stdout.write(record_change.PREVIEW_ASK + "\n")
+        sys.stdout.write("   [for the assistant] shown=%s\n" % shown.shown)
+        return EXIT_DONE
+
+    if step == "leave":
+        sys.stdout.write(record_change.leave(base_id) + "\n")
+        return EXIT_DONE
+
+    if step == "record":
+        done = record_change.record(root, base_id, options.shown or "")
+        sys.stdout.write(record_change.RECORDED + "\n")
+        for path, question in zip(done.plan.ask_about, done.plan.questions()):
+            sys.stdout.write(question + "\n")
+            sys.stdout.write(
+                "   [for the assistant] path=%s change=%s\n" % (path, done.entry.id)
+            )
+        if done.plan.sentence:
+            sys.stdout.write(done.plan.sentence + "\n")
+        return EXIT_DONE
+
+    # The one answer about one document.
+    given = (options.answer or "").strip().lower().replace(" ", "-")
+    result = record_change.answer(
+        root, base_id, options.change or "", options.document or "", given
+    )
+    sys.stdout.write(result.sentence + "\n")
+    if result.staging_path:
+        sys.stdout.write("   [for the assistant] prepared=%s\n" % result.staging_path)
+    if given == record_change.ANSWER_YES and not result.answered_yes:
+        return EXIT_REFUSED
+    return EXIT_DONE
 
 
 def _item_for(result, sentence):
@@ -191,6 +326,30 @@ def main(argv=None):
     if not resolution.active or not resolution.root or not resolution.base_id:
         sys.stderr.write(NOT_JOINED + "\n")
         return EXIT_ERROR
+
+    if options.new_words_file:
+        if options.new_words_file not in wordsfile.KINDS:
+            sys.stdout.write(wordsfile.NOT_OURS + "\n")
+            return EXIT_REFUSED
+        wordsfile.ensure_words_dir(resolution.base_id)
+        sys.stdout.write(
+            "words=%s\n"
+            % wordsfile.new_words_path(resolution.base_id, options.new_words_file)
+        )
+        return EXIT_DONE
+
+    if options.record_change:
+        try:
+            return record_a_change(options, resolution)
+        except record_change.Refused as refusal:
+            sys.stdout.write(str(refusal) + "\n")
+            return EXIT_REFUSED
+        except GtmBaseError as failure:
+            sys.stderr.write(str(failure) + "\n")
+            return EXIT_REFUSED
+        except Exception:
+            sys.stderr.write(NOT_RECORDED + "\n")
+            return EXIT_ERROR
 
     if options.show_document:
         seat, _problems = state.load_seat(resolution.base_id)

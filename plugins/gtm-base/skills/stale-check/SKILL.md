@@ -1,6 +1,6 @@
 ---
 name: stale-check
-description: Work out which parts of the company base have fallen behind the context changes the team wrote down, prepare the change for each one, and walk the whole list with the person when they ask for a review. Use when the person says review my base, or asks what is out of date, what needs updating, what GTM Base would flag, or how the base has been doing.
+description: Work out which parts of the company base have fallen behind the context changes the team wrote down, prepare the change for each one, and walk the whole list with the person when they ask for a review. Use when the person says review my base, or asks what is out of date, what needs updating, what GTM Base would flag, or how the base has been doing. Also records a context change without editing any document, when the person says record a context change, something changed, or note that we now do something differently, from the base or from a folder linked to it.
 ---
 
 # Check what is out of date
@@ -111,6 +111,9 @@ another folder first.
   prepared, one line each. This is what "review my base" runs.
 - `python3 scripts/stale_check.py --show-document '<path>'` prints one context
   file, held apart as data, with the check run before it is read.
+- `python3 scripts/stale_check.py --record-change ask` starts recording a
+  context change without editing any document. The steps after it are below,
+  under "Record a context change".
 
 ## Review my base
 <!-- step -->
@@ -155,6 +158,111 @@ Which of these would you like to take first?
 A review also brings GTM Base back when it was asked to stay quiet until the
 person asked for one, and it says so in its own first sentence when that
 happens.
+
+## Record a context change
+<!-- step -->
+
+This is how somebody tells the base that a context change happened without
+editing any document, so every document it affects can be checked against it.
+It is for "record a context change", "something changed", "note that we now
+...", and a yes to your one-sentence offer to record something they said.
+
+- The rules under "Where the commands run, and what you say" hold for every
+  step here: run each command from the folder the person is in, say each
+  sentence a script prints as it is, and never read out a path, an
+  identifier, or a line marked `[for the assistant]`.
+- Make each step's one ask and nothing else. Any observation about what they
+  said waits until the steps are over, as one short note.
+- Nothing is written into the base before they say to record it.
+- On a base with a shared copy every step refuses with one sentence. Say it
+  and stop.
+
+Run `python3 scripts/stale_check.py --record-change ask` and say what it
+prints. The first three times a person records one on this computer it
+explains why first; after that it is one line. It ends in the ask:
+
+<!-- ask -->
+In a sentence or two: what changed, why, and where did it come from?
+<!-- end ask -->
+
+When they ask why they are being asked, run it again with `--long` and say
+that.
+
+## Record a context change: which documents it affects
+<!-- step -->
+
+A context change only helps when it names the documents it makes out of date,
+so this step settles which ones they are.
+
+1. Hand their answer over in files, never on a command line. Ask for one file
+   per part, and each prints `words=<path>`:
+   - what changed: `python3 scripts/stale_check.py --new-words-file what-changed`
+   - why: `python3 scripts/stale_check.py --new-words-file reason`
+   - where it came from: `python3 scripts/stale_check.py --new-words-file source`
+
+   Write into each the part of their answer it is for, in their own words,
+   and leave out a part they did not give.
+2. Run `python3 scripts/stale_check.py --record-change documents`. It prints
+   the documents in the base by number and name, and never the map.
+3. Say which of them you think the change affects, by name, and ask:
+
+<!-- ask -->
+Does it affect those, or which numbers should it be?
+<!-- end ask -->
+
+## Record a context change: the whole of it, before anything is written
+<!-- step -->
+
+Nothing is written until they have read exactly what would be written, so this
+step shows the context change whole. Run, with the numbers they settled on:
+
+```
+python3 scripts/stale_check.py --record-change show --what-changed-file <the path it printed> --reason-file <the path it printed> --source-file <the path it printed> --documents <the numbers they chose>
+```
+
+- Leave off `--reason-file` or `--source-file` when they gave no reason or no
+  source. Add `--happened-on <year-month-day>` when they said it happened on
+  another day than today.
+- It prints the four lines, the three things that are theirs to correct, the
+  whole entry, and the ask. Show all of it as printed. Keep the shown value
+  from the line marked for you.
+
+<!-- ask -->
+Record this context change, or leave it?
+<!-- end ask -->
+
+- Record it, in a later turn than the showing and never the same one:
+  `python3 scripts/stale_check.py --record-change record --shown <the shown value>`.
+- Leave it: `python3 scripts/stale_check.py --record-change leave`. Nothing
+  is written.
+- A correction: ask for new files, write the corrected words into them, and
+  run `show` again. An earlier showing no longer counts.
+
+## Record a context change: whether each document already says it
+<!-- step -->
+
+Recording the change says what happened, not whether each document has caught
+up with it, so each document it affects is asked about on its own. The yes
+prints one question per document this person owns, each with a line marked
+for you holding its path and the change. Ask them one at a time, in order:
+
+<!-- ask -->
+Does your customer profile already say what that change says?
+<!-- end ask -->
+
+Record each answer on its own and say the one sentence it prints:
+
+```
+python3 scripts/stale_check.py --record-change answer --change <the change it printed> --document '<the document it printed>' --answer yes
+```
+
+- `yes` writes one line saying the document already says it, naming this
+  change and no other.
+- `no` leaves the document flagged and prepares a fix, which waits for its
+  owner to approve it. Improve its wording as "Improving a prepared change"
+  below says, then hand it to the local approval step.
+- `not-now` writes nothing. The document stays flagged when it is about to be
+  used and in the next review.
 
 ## Improving a prepared change before it goes anywhere
 

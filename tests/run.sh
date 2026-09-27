@@ -77,6 +77,16 @@ python3 -m unittest -v \
   test_words_files.TestAPathTheScriptsDidNotHandOut \
   test_words_files.TestThePathTheScriptsDoHandOut \
   test_words_files.TestTheDraftFileToo \
-  test_os_clutter.TestTheApprovalScriptPastClutter
+  test_os_clutter.TestTheApprovalScriptPastClutter \
+  test_record_change.TestTheWholeFlowThroughTheScript \
+  test_record_change.TestNothingIsWrittenBeforeTheYes \
+  test_record_change.TestTheAsk \
+  test_record_change.TestTheDocuments \
+  test_record_change.TestTheWords \
+  test_record_change.TestTheIdentifier \
+  test_record_change.TestBothLayouts \
+  test_record_change.TestABaseWithASharedCopy \
+  test_record_change.TestWhatStandsInTheWay \
+  test_record_change.TestFromALinkedFolderEveryTime
 nothing_written_to_a_seat_nobody_made
 rm -rf "$UNOWNED_SEAT"

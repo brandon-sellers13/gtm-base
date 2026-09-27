@@ -208,6 +208,16 @@ ASSIGNED = {
         ADD,
     ),
     ("stale-check/SKILL.md", "--not-now-move"): ("stale_check.py --not-now-move", NAMED),
+    # 0.3.3: a context change recorded with no reason, or with no source, is
+    # the showing command with that one file left off.
+    ("stale-check/SKILL.md", "--reason-file"): (
+        "stale_check.py --record-change show",
+        ("drop", "--reason-file <the path it printed>"),
+    ),
+    ("stale-check/SKILL.md", "--source-file"): (
+        "stale_check.py --record-change show",
+        ("drop", "--source-file <the path it printed>"),
+    ),
 }
 
 
@@ -786,6 +796,15 @@ class TestTheSkillsAsTheyAreWritten(unittest.TestCase):
         "<the path it printed for the words>": lambda self, state, command: state.get("words"),
         "<path to the prepared change>": lambda self, state, command: state.get("staged"),
         "<the shown value>": lambda self, state, command: state.get("shown"),
+        # 0.3.3: recording a context change without editing a document.
+        "<the numbers they chose>": lambda self, state, command: "1",
+        "<year-month-day>": lambda self, state, command: "2026-01-15",
+        "<the change it printed>": lambda self, state, command: state.get(
+            "recorded_change"
+        ),
+        "<the document it printed>": lambda self, state, command: state.get(
+            "recorded_document"
+        ),
     }
 
     # --- what each command needs before it, and what it leaves behind ------
@@ -905,6 +924,19 @@ class TestTheSkillsAsTheyAreWritten(unittest.TestCase):
                 shown = line[len("Shown value: ") :].strip()
         if shown:
             state["shown"] = shown
+        # The lines the step that records a context change marks for the
+        # assistant: the value its yes is bound to, and each document it asks
+        # about with the change it asks about.
+        for line in printed.split("\n"):
+            found = re.search(r"\[for the assistant\] shown=(\S+)", line)
+            if found:
+                state["shown"] = found.group(1)
+            found = re.search(
+                r"\[for the assistant\] path=(\S+) change=(\S+)", line
+            )
+            if found and "recorded_document" not in state:
+                state["recorded_document"] = found.group(1)
+                state["recorded_change"] = found.group(2)
         if mode == "list-sources":
             for line in printed.split("\n"):
                 if line.startswith("folder=") and " number=" in line:
@@ -1073,7 +1105,19 @@ class TestTheSkillsAsTheyAreWritten(unittest.TestCase):
 
     def walk(self, lines, index):
         ran = []
+        # The stand-in for gh writes down every call it gets, and by default
+        # into the folder it was started in, which here is the base. A file
+        # left there is unsaved work in the base, and the step that records a
+        # context change (0.3.3) rightly refuses to write beside it, so the
+        # stand-in writes its notes in the sandbox instead.
+        saved_log = os.environ.get("GH_FAKE_LOG")
+        self.addCleanup(
+            lambda: os.environ.pop("GH_FAKE_LOG", None)
+            if saved_log is None
+            else os.environ.__setitem__("GH_FAKE_LOG", saved_log)
+        )
         with support.Sandbox() as sandbox:
+            os.environ["GH_FAKE_LOG"] = os.path.join(sandbox.path, "gh-calls.jsonl")
             state = {
                 "cwd": os.path.join(sandbox.path, "work"),
                 "material": self.material(),
