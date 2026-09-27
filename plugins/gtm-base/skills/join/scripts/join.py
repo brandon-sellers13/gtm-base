@@ -1755,6 +1755,10 @@ def run_draft_list(options, out):
         out.write(
             "left-out=%s count=%d\n" % (safe_value(reason), shown.left_out[reason])
         )
+    if shown.needs_second_yes:
+        out.write("needs-second-yes=true\n")
+    if shown.appears_multi_company:
+        out.write("appears-multi-company=true\n")
     return EXIT_REFUSED if shown.code else EXIT_DONE
 
 

@@ -1508,3 +1508,14 @@ Brandon's call 29: a later session asks again for consent to the material and fi
 - [ ] Tests failing first: survives the closing and finished after a fresh consent; a changed list asks again; missing material said with the two choices; leave-out ends it; one notice; a stop at every mutation step resumes cleanly. run.sh linked-folder list and its guard for any new script-starting class.
 - [ ] Join skill, lint registry, atlas figure 7 (not republished), join guide and closing rules if they describe it, the draft Unreleased CHANGELOG.
 - [ ] Full suite, both runs; a correctness review of release-b to HEAD, fixes with tests, suite again.
+
+#### Progress and review, call 29 (2026-09-27)
+- [x] Record: `segments.ImportRecord.to_draft`, `drafts_unfinished`, `pages_unfinished`; `unfinished` covers both; kept from the first approval even with no page to take in. No second record; names, answers, and the approved draft's hash and day only.
+- [x] Step 6c and later drafts both go through `join_flow._approve_a_segment` (yes written down, `review.approve_adopted`, saved written down); resume settles each with `_settle_a_draft`.
+- [x] Later session: `join.py draft-list`, `draft-freeze`, `draft-leave` in a run of its own; `resume` prints `to-draft=`; `close` prints one sentence; one notice (`finish-import.md` segment blocks).
+- [x] Tests: tests/test_segments_left_to_draft.py (committed failing first), the linked-folder run and its guard, the skill walk leaves one segment for the later session.
+- [x] Join skill, lint registry, atlas figure 7 (not republished), join guide, closing rules, draft Unreleased CHANGELOG.
+- [x] Full suite before the review: 2484 tests OK, then 120 from a linked folder OK (tests/run.sh exit 0).
+- [x] Correctness review (subagent): three medium, two medium-low, four low findings; all fixed with a test in TestTheCorrectnessReview, committed failing first.
+- [x] Full suite after the review fixes: 2495 tests OK in 1339 seconds, then 120 from a linked folder OK in 193 seconds (tests/run.sh exit 0).
+- [ ] Brandon: the new sentences, and a live run that closes with a segment undrafted and finishes it in the next session.

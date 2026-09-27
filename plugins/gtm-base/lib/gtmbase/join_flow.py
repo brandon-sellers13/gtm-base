@@ -1603,17 +1603,33 @@ def _step_is_this_runs(run_id: str, step: str, segment: Optional[str] = None):
         raise ReviewError(CODE_UMBRELLA_INSTEAD, code=CODE_UMBRELLA_INSTEAD)
     if step == drafting.STEP_UMBRELLA and several_segments(run_id) is None:
         raise ReviewError(CODE_NO_SEVERAL_SEGMENTS, code=CODE_NO_SEVERAL_SEGMENTS)
+    _drafts_only_what_was_agreed(run_id, step, segment)
     if step == drafting.STEP_SEGMENT:
-        settled = segment_to_draft(run_id, segment)
-        if _finishing(run_id) is not None:
-            # A run a later session made to draft one segment holds no yes
-            # until the person gives one to the list it shows, and a segment
-            # is never drafted from nothing (call 29).
-            consent = load_consent(run_id)
-            if consent is None or not consent.paths:
-                raise ReviewError(CODE_DRAFT_NOT_AGREED, code=CODE_DRAFT_NOT_AGREED)
-        return settled
+        return segment_to_draft(run_id, segment)
     return None
+
+
+def _drafts_only_what_was_agreed(run_id: str, step: str, segment: Optional[str]) -> None:
+    """Refuse a draft the yes this run holds was never given for (call 29).
+
+    A run a later session made to draft one segment drafts that segment and
+    nothing else, and only once the person has said yes to the list it
+    showed, because a segment is never drafted from nothing. A run that
+    finishes pages holds a yes carried over for those pages only, so it
+    drafts no segment at all: that asks for a yes of its own, in a run of its
+    own. The correctness review of call 29, findings 1 and 2.
+    """
+    finishing = _finishing(run_id)
+    if finishing is not None:
+        if step != drafting.STEP_SEGMENT or segment != finishing["segment"]:
+            raise ReviewError(CODE_DRAFT_NOT_AGREED, code=CODE_DRAFT_NOT_AGREED)
+        consent = load_consent(run_id)
+        if consent is None or not consent.paths:
+            raise ReviewError(CODE_DRAFT_NOT_AGREED, code=CODE_DRAFT_NOT_AGREED)
+        return
+    payload = _consent_payload(run_id)
+    if step == drafting.STEP_SEGMENT and payload is not None and payload.get("resumed"):
+        raise ReviewError(CODE_DRAFT_NOT_AGREED, code=CODE_DRAFT_NOT_AGREED)
 
 
 def _what_the_base_is_for(run_id: str) -> str:
@@ -2182,6 +2198,14 @@ def _carry(run_id: str, base_id: Optional[str]):
         ):
             return None
         return held
+    carried = _consent_payload(run_id) or {}
+    if carried.get("resumed"):
+        # A run a resume seeded finishes the record it was seeded from and
+        # never makes one, so a record let go stays let go.
+        held = segments.load_import(base_id)
+        if held is None or held.run != carried["resumed"] or held.inventory != inventory:
+            return None
+        return held
     try:
         record = segments.carry_import(
             base_id,
@@ -2546,7 +2570,11 @@ def _seed_run(run_id: str, record, session_id: str) -> None:
     if not _run_is_free(run_id, record.run):
         raise adopt.AdoptionRefused(CODE_RUN_HAS_ITS_OWN, RESUME_RUN_HAS_ITS_OWN)
     still = set(segment.source for segment in record.pages_unfinished())
-    marker.write_sources_read_marker(session_id)
+    if still:
+        # Only a run that may open pages holds the person's writing; one
+        # left with segments to draft reads nothing until a fresh yes
+        # (the correctness review of call 29, finding 9).
+        marker.write_sources_read_marker(session_id)
     atomic_write_json(
         os.path.join(folder, CONSENT_FILE),
         {
@@ -2847,6 +2875,7 @@ DRAFT_SENTENCES = {
     CODE_DRAFT_LIST_CHANGED: DRAFT_LIST_CHANGED,
     CODE_DRAFT_NO_LIST: DRAFT_NO_LIST,
     CODE_DRAFT_NOT_AGREED: DRAFT_NOT_AGREED,
+    segments.CODE_FILE_TAKEN: segments.FILE_TAKEN,
 }
 
 
@@ -2962,9 +2991,24 @@ def _list_manifest(paths_) -> str:
 class DraftList(object):
     """The files a segment's draft would read, shown before any yes."""
 
-    __slots__ = ("segment", "entries", "left_out", "gone")
+    __slots__ = (
+        "segment",
+        "entries",
+        "left_out",
+        "gone",
+        "needs_second_yes",
+        "appears_multi_company",
+    )
 
-    def __init__(self, segment, entries, left_out=None, gone=False):
+    def __init__(
+        self,
+        segment,
+        entries,
+        left_out=None,
+        gone=False,
+        needs_second_yes=False,
+        appears_multi_company=False,
+    ):
         self.segment = segment
         self.entries = list(entries)
         # How many files of each folder added were left out, by reason.
@@ -2972,6 +3016,11 @@ class DraftList(object):
         # Whether the document named for the segment is gone, or has changed
         # so that it can no longer be read.
         self.gone = bool(gone)
+        # A folder added that is the home folder or above it, or that looks
+        # like several companies' material, is asked about a second time, as
+        # in setup (the correctness review, finding 6).
+        self.needs_second_yes = bool(needs_second_yes)
+        self.appears_multi_company = bool(appears_multi_company)
 
     @property
     def paths(self) -> List[str]:
@@ -3018,9 +3067,12 @@ def draft_list(
     """
     git = runner_or_default(runner)
     day = today or state.today()
-    _root, base_id = _adoption_base(base_root, git)
+    root, base_id = _adoption_base(base_root, git)
     record = segments.load_import(base_id)
     segment = _to_finish(record, slug)
+    if segments.already_in_base(root, segment.slug) is not None:
+        # Nothing drafted could be saved there, so nothing is listed or read.
+        raise _draft_refusal(segments.CODE_FILE_TAKEN)
     _seed_draft_run(run_id, record, segment)
 
     kept = _kept_document(record, segment)
@@ -3044,6 +3096,8 @@ def draft_list(
     chosen = [path for path in start if path not in wanted]
 
     left_out = {}
+    second_yes = bool(shown and shown.get("finishing") == segment.slug and shown.get("note"))
+    several = False
     for folder in added or ():
         root = os.path.realpath(os.path.abspath(os.path.expanduser(str(folder or ""))))
         if not folder or not os.path.isdir(root):
@@ -3055,6 +3109,8 @@ def draft_list(
                 chosen.append(real)
         for reason, count in listing.excluded_counts.items():
             left_out[reason] = left_out.get(reason, 0) + count
+        second_yes = second_yes or listing.needs_second_yes
+        several = several or listing.appears_multi_company
 
     entries = []
     for path in chosen:
@@ -3063,7 +3119,7 @@ def draft_list(
             left_out[code] = left_out.get(code, 0) + 1
             continue
         entries.append(entry)
-    result = DraftList(segment, entries, left_out, gone)
+    result = DraftList(segment, entries, left_out, gone, second_yes, several)
 
     paths_ = result.paths
     atomic_write_json(
@@ -3071,7 +3127,9 @@ def draft_list(
         {
             "root": "",
             "digest": _list_digest(entries),
-            "note": False,
+            # Kept so a list grown from a folder that needs a second yes
+            # still says so when a file is later dropped from it.
+            "note": second_yes,
             "narrow_first": False,
             "choice": constants.CHOICE_EXPLICIT,
             "named": [],
@@ -3163,17 +3221,21 @@ def _approve_a_segment(run_id, draft, slug, base_root, email, git, now):
     root = resolution.root or base_root
     base_id = resolution.base_id
     finishing = _finishing(run_id)
+    _drafts_only_what_was_agreed(run_id, drafting.STEP_SEGMENT, slug)
     if finishing is not None:
-        consent = load_consent(run_id)
-        if consent is None or not consent.paths:
-            raise ReviewError(CODE_DRAFT_NOT_AGREED, code=CODE_DRAFT_NOT_AGREED)
         try:
             _refuse_a_yes_given_to_another_list(run_id)
         except ConsentError:
             raise ReviewError(CODE_DRAFT_NOT_AGREED, code=CODE_DRAFT_NOT_AGREED)
     try:
         record = _carry(run_id, base_id)
-    except GtmBaseError:
+    except adopt.AdoptionRefused as refusal:
+        # Only an earlier import still waiting keeps this run's segments out
+        # of the record, and then the segment is written the way it always
+        # was. Anything else, such as a lock not taken, is said, never passed
+        # over (the correctness review of call 29, finding 4).
+        if refusal.code != CODE_ANOTHER_IMPORT:
+            raise
         record = None
     if finishing is not None and record is None:
         raise ReviewError(CODE_NOT_TO_FINISH, code=CODE_NOT_TO_FINISH)
@@ -3187,6 +3249,10 @@ def _approve_a_segment(run_id, draft, slug, base_root, email, git, now):
     day = state.today(now) if now else state.today()
     with _Writing(base_id):
         record = segments.load_import(base_id) or record
+        if record.state_of(segment.slug) in segments.ANSWERED_AND_DONE:
+            # Saved, left out, or refused since this run began: a segment
+            # left out is never written (the correctness review, finding 3).
+            raise ReviewError(CODE_NOT_TO_FINISH, code=CODE_NOT_TO_FINISH)
         # Every check the write makes, before the yes is written down, so a
         # refusal leaves nothing written anywhere.
         review.check_segment_write(root, relative, git)
@@ -3211,10 +3277,15 @@ def _approve_a_segment(run_id, draft, slug, base_root, email, git, now):
             ):
                 segments.clear(base_id, segment.slug, run=record.run)
             raise
-        segments.mark(
-            base_id, segment.slug, segments.STATE_COMMITTED, digest, day.isoformat(),
-            run=record.run,
-        )
+        try:
+            segments.mark(
+                base_id, segment.slug, segments.STATE_COMMITTED, digest,
+                day.isoformat(), run=record.run,
+            )
+        except GtmBaseError:
+            # The segment is saved. The next finish reads that from the base
+            # and writes it down (the correctness review, finding 8).
+            return result
     if finishing is not None:
         # The yes to read was this run's alone, and the segment is saved.
         clear_scratch(run_id)
@@ -3240,6 +3311,17 @@ def _settle_a_draft(root, base_id, segment, record, git, now, address, result) -
         if found is None:
             result.to_draft.append(segment)
             return
+        saved = review.saved_by_run(git, root, found, record.run) if found == relative else None
+        if saved is not None:
+            # Saved by this import with its line, before a record kept a
+            # state for it: it is written down as saved and said to be
+            # nothing else (the correctness review, finding 4).
+            segments.mark(
+                base_id, segment.slug, segments.STATE_COMMITTED, saved,
+                state.today(now).isoformat() if now else state.today().isoformat(),
+                run=record.run,
+            )
+            return
         result.taken.append(segment)
         if review.held_at_head(git, root, found):
             segments.mark(base_id, segment.slug, segments.STATE_REFUSED, run=record.run)
@@ -3258,10 +3340,12 @@ def _settle_a_draft(root, base_id, segment, record, git, now, address, result) -
         result.to_draft.append(segment)
         return
     if where == review.PAGE_EDITED:
+        # The person's changed copy stays where it is, so nothing drafted
+        # could be saved there; it is named, as a page would be, and not
+        # offered to draft (the correctness review, finding 5).
         review.take_back_unsaved(root, relative, digest, runner=git)
         segments.clear(base_id, segment.slug, run=record.run)
         result.edited.append(segment)
-        result.to_draft.append(segment)
         return
     if where == review.PAGE_SAVED_UNCONFIRMED:
         review.confirm_saved(root, base_id, relative, record.run, runner=git, now=now)

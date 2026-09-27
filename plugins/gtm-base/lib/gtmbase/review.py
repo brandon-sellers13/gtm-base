@@ -428,10 +428,28 @@ def check_segment_write(base_root: str, relative: str, git: GitRunner) -> None:
     yes is written down (Brandon's call 29), so a refusal leaves nothing
     written anywhere.
     """
+    # A write that stopped between putting its bytes down and naming them
+    # leaves a temporary name behind, which is this plugin's own and goes
+    # first (the correctness review of call 29, finding 7).
+    sweep_for_a_page(base_root, relative)
     ready_to_write(base_root, git)
     _segment_file_is_free(base_root, relative)
     if _already_there(base_root, relative):
         raise ReviewError(CODE_FILE_EXISTS)
+
+
+def saved_by_run(git: GitRunner, base_root: str, relative: str, run: str) -> Optional[str]:
+    """The hash of a page the base holds at HEAD with a drafted line naming `run`.
+
+    None when the base holds nothing there, or holds it without a line
+    recording a yes from that run, which is somebody else's document.
+    """
+    text = _text_at_head(git, base_root, relative)
+    if text is None:
+        return None
+    if not any(line.run == run for line in _drafted_lines_at_head(git, base_root, relative)):
+        return None
+    return _digest_of(text)
 
 
 def path_for(draft, base_root: Optional[str] = None) -> str:

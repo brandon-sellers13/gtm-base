@@ -776,7 +776,9 @@ class TestTheCorrectnessReview(Case):
         company = a_company()
         set_up_and_close(company)
         run_id = self.a_run_with_a_yes(company, LATER)
-        with recovery.StopAfter(review, "_create_new") as stop:
+        # Staged, so the copy the person then changes is known as this
+        # import's own page changed before its save.
+        with recovery.StopAfter(review, "_stage_bytes") as stop:
             with self.assertRaises(recovery.Stopped):
                 approve(run_id, company, LATER)
         self.assertTrue(stop.fired)

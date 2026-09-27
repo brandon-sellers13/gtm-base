@@ -878,6 +878,10 @@ python3 scripts/join.py draft-list --run <run identifier> --segment <segment> --
 - `codes=material-gone` or `codes=nothing-on-the-list`: the sentence names
   two choices, a folder to add or leaving the segment out. Ask which. Nothing
   is ever drafted from nothing.
+- `needs-second-yes=true` or `appears-multi-company=true` after a folder was
+  added: follow `references/reading-rules.md` before asking.
+- `codes=segment-file-taken`: something already stands where the segment
+  would go. Say the sentence; leaving it out is the answer left.
 
 <!-- ask -->
 I will read these files, and I will not copy them anywhere, not even into your base, or change them.
