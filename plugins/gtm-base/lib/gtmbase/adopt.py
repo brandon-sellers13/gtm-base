@@ -53,7 +53,7 @@ from typing import Dict, List, Optional, Sequence
 from . import callmarkers, constants, formats, redaction_patterns, review, segments
 from . import sources as sources_module
 from .errors import GtmBaseError, PathError, SourceRejected, ValidationError
-from .fsutil import atomic_write_json, read_json
+from .fsutil import HeldLock, atomic_write_json, read_json
 
 # What an adopted file says it is. It carries no freshness of its own: the
 # owner's dated yes is what confirms it, exactly as it confirms a drafted file.
@@ -697,18 +697,26 @@ def _keep(folder: str, held: Dict[str, dict], inside: str) -> None:
     )
 
 
+def _change(folder: str, slug: str, item: dict, inside: str) -> None:
+    """Change one segment's line, with no other writer between the read and the write.
+
+    Two pages shown at once in two windows each read the file and each wrote
+    it back, so one of them lost its line (Unit 1.7c's note to Unit 1.7d).
+    """
+    with HeldLock(os.path.join(folder, STATE_FILE)):
+        held = _state(folder)
+        held[slug] = item
+        _keep(folder, held, inside)
+
+
 def record_shown(folder: str, slug: str, digest: str, day: str, inside: str) -> None:
     """Keep the hash of what the person was shown, which their yes is bound to."""
-    held = _state(folder)
-    held[slug] = {"shown": str(digest), "day": str(day)}
-    _keep(folder, held, inside)
+    _change(folder, slug, {"shown": str(digest), "day": str(day)}, inside)
 
 
 def record_refused(folder: str, slug: str, code: str, inside: str) -> None:
     """Keep that the contract refused this page, so it may be drafted instead."""
-    held = _state(folder)
-    held[slug] = {"refused": str(code)}
-    _keep(folder, held, inside)
+    _change(folder, slug, {"refused": str(code)}, inside)
 
 
 def is_a_digest(value) -> bool:

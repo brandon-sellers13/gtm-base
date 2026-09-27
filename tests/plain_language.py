@@ -942,6 +942,23 @@ PYTHON_SENTENCES = (
     ("adopt", "QUESTIONS_NOT_LEFT_OPEN"),
     ("adopt", "UNSAVED_EDITS"),
     ("adopt", "NOT_ON_THE_MAIN_LINE"),
+    # Unit 1.7d: finishing an import that stopped, a page left out, the
+    # closing's line about pages still to come, and a save that cannot be
+    # read or a page something was put in place of.
+    ("join_flow", "LEFT_OUT_SAID"),
+    ("join_flow", "RESUME_NOTHING"),
+    ("join_flow", "RESUME_UNREADABLE"),
+    ("join_flow", "RESUME_RUN_HAS_ITS_OWN"),
+    ("join_flow", "RESUME_FINISHED_ONE"),
+    ("join_flow", "RESUME_FINISHED"),
+    ("join_flow", "RESUME_CHANGED"),
+    ("join_flow", "RESUME_TAKEN"),
+    ("join_flow", "RESUME_TO_SHOW_ONE"),
+    ("join_flow", "RESUME_TO_SHOW"),
+    ("join_flow", "RESUME_DONE"),
+    ("join_flow", "CLOSING_IMPORT_UNFINISHED"),
+    ("join_flow", "SAVE_UNCERTAIN"),
+    ("join_flow", "PAGE_REPLACED"),
 )
 
 # Constants that read like a sentence but that no person ever reads. Each one

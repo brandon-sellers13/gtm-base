@@ -176,6 +176,61 @@ def read_json(path: str) -> Any:
         return None
 
 
+# How long a writer waits for another to finish with one small file, and how
+# old a lock has to be before it is taken as left behind by a run that died.
+LOCK_WAIT_SECONDS = 10.0
+LOCK_STALE_SECONDS = 60.0
+
+
+class HeldLock(object):
+    """One writer at a time for one small file, for as long as it is held.
+
+    The lock is a file of its own beside the file it guards, made only when no
+    other writer holds it. A lock older than a minute was left by a run that
+    stopped, and is taken over. Waiting longer than the limit gives up with a
+    refusal rather than writing without it, because a record two writers
+    each read and then each wrote is a record one of them lost.
+    """
+
+    def __init__(self, path: str, wait_seconds: float = LOCK_WAIT_SECONDS):
+        self.path = path + ".lock"
+        self.wait_seconds = wait_seconds
+        self.handle = None
+
+    def __enter__(self):
+        import time
+
+        ensure_dir(os.path.dirname(os.path.abspath(self.path)))
+        deadline = time.time() + self.wait_seconds
+        while True:
+            try:
+                self.handle = os.open(
+                    self.path, os.O_CREAT | os.O_EXCL | os.O_WRONLY, FILE_MODE
+                )
+                return self
+            except OSError as failure:
+                if failure.errno != errno.EEXIST:
+                    raise PathError("the lock could not be taken", code="locked")
+            try:
+                age = time.time() - os.lstat(self.path).st_mtime
+            except OSError:
+                age = 0.0
+            if age > LOCK_STALE_SECONDS:
+                remove(self.path)
+                continue
+            if time.time() >= deadline:
+                raise PathError("another writer holds the file", code="locked")
+            time.sleep(0.05)
+
+    def __exit__(self, *_exc):
+        try:
+            os.close(self.handle)
+        except (OSError, TypeError):
+            pass
+        remove(self.path)
+        return False
+
+
 def remove(path: str) -> bool:
     """Delete a file if it is there. Return whether anything was deleted."""
     try:

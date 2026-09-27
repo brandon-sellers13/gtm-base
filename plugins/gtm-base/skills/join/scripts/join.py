@@ -1542,8 +1542,21 @@ ADOPTION_BASE_REFUSALS = {
     review.CODE_UNSAVED_EDITS: adopt.UNSAVED_EDITS,
     review.CODE_NOT_DEFAULT_BRANCH: adopt.NOT_ON_THE_MAIN_LINE,
     segments.CODE_FILE_TAKEN: segments.FILE_TAKEN,
+    review.CODE_FILE_EXISTS: segments.FILE_TAKEN,
     segments.CODE_FOLDER_NOT_ORDINARY: segments.FOLDER_NOT_ORDINARY,
+    review.CODE_SAVE_UNCERTAIN: join_flow.SAVE_UNCERTAIN,
+    review.CODE_PAGE_REPLACED: join_flow.PAGE_REPLACED,
 }
+
+
+def an_adoption_base_refusal(refusal, out):
+    """Say why the base would not take a page, or hand the failure on."""
+    sentence = ADOPTION_BASE_REFUSALS.get(getattr(refusal, "code", None))
+    if sentence is None:
+        raise refusal
+    line(out, "codes", refusal.code)
+    out.write(sentence + "\n")
+    return EXIT_REFUSED
 
 
 def run_adopt_show(options, out):
@@ -1609,15 +1622,49 @@ def run_adopt(options, out):
     except adopt.AdoptionRefused as refusal:
         return an_adoption_refusal(refusal, out)
     except ReviewError as refusal:
-        sentence = ADOPTION_BASE_REFUSALS.get(getattr(refusal, "code", None))
-        if sentence is None:
-            raise
-        line(out, "codes", refusal.code)
-        out.write(sentence + "\n")
-        return EXIT_REFUSED
+        return an_adoption_base_refusal(refusal, out)
     line(out, "base", result.root)
     line(out, "file", result.path)
     out.write(adopt.TAKEN_IN + "\n")
+    return EXIT_DONE
+
+
+def run_adopt_leave(options, out):
+    """Write down that the person left one finished page out."""
+    run_id = need(options, "run", out)
+    slug = need(options, "segment", out)
+    if not run_id or not slug:
+        return EXIT_ERROR
+    root = base_folder(options, out)
+    if root is None:
+        return EXIT_REFUSED
+    try:
+        sentence = join_flow.adoption_leave_out(run_id, slug, root)
+    except adopt.AdoptionRefused as refusal:
+        return an_adoption_refusal(refusal, out)
+    out.write(sentence + "\n")
+    return EXIT_DONE
+
+
+def run_resume(options, out):
+    """Finish an import that stopped, and name the pages still to be shown."""
+    run_id = need(options, "run", out)
+    session = need(options, "session", out)
+    if not run_id or not session:
+        return EXIT_ERROR
+    root = base_folder(options, out)
+    if root is None:
+        return EXIT_REFUSED
+    try:
+        resumed = join_flow.resume_import(run_id, root, session, email=options.email)
+    except adopt.AdoptionRefused as refusal:
+        return an_adoption_refusal(refusal, out)
+    except ReviewError as refusal:
+        return an_adoption_base_refusal(refusal, out)
+    for segment in resumed.to_show:
+        line(out, "segment", segment.slug)
+    for sentence in resumed.sentences():
+        out.write(sentence + "\n")
     return EXIT_DONE
 
 
@@ -1754,6 +1801,8 @@ def run_close(options, out):
             out.write(join_flow.NOTE_NOT_WRITTEN + "\n")
         line(out, "note-code", ",".join(result.note_codes))
     out.write(result.closing)
+    if result.import_unfinished:
+        out.write(join_flow.CLOSING_IMPORT_UNFINISHED + "\n")
     return EXIT_DONE
 
 
@@ -1874,6 +1923,8 @@ MODES = {
     "adopt-show": run_adopt_show,
     "adopt-read": run_adopt_read,
     "adopt": run_adopt,
+    "adopt-leave": run_adopt_leave,
+    "resume": run_resume,
     "closing-question": run_closing_question,
     "preview-change": run_preview_change,
     "reconcile": run_reconcile,
