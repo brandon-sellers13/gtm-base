@@ -160,3 +160,17 @@ He then said "review my base" again, and the answer was the review's own sentenc
 3. "Your positioning doc passed its check, and nothing has overtaken it." said out loud. The check before use is silent when it finds nothing. Fix: the skill says nothing about a check that found nothing.
 4. Editorial advice inside the flow. **Brandon decided on 2026-09-27 (for the plan's For Brandon table):** inside any GTM Base flow the assistant makes only the step's one ask; editorial observations about the content wait until after the approval, as one short note ("two things you may want to check"), and never before or between the flow's own questions. Runner-up, not chosen: inline, capped at one sentence.
 5. The before and after the assistant showed were its own summary with ellipses; the whole difference from the script is still to come in this step.
+
+**Step 5, Brandon's decision on the hand-edit questions (2026-09-27, for the plan's For Brandon table).** "What changed, and why?" did not say what it was asking or what the answer is for. Brandon: people starting out need the reason explained, and people who have done it a few times do not. Decided wording, which replaces the separate source question and the bare "What changed, and why?" (fixes findings 1 and 2 above):
+
+The first three times a person keeps a hand edit (counted per person on this computer):
+
+> Because you changed a document in your base, GTM Base keeps a short record of it. That gives you a history of why your context changed, and it lets GTM Base check your other documents against it, so anything that still says the old thing gets flagged. The record holds four things: what changed about the business, why, where it came from, and which documents it affects. I work out the last one myself.
+>
+> So, in a sentence or two: what changed, why, and where did it come from? If this was only a wording fix and nothing about the business changed, just say so and nothing is recorded.
+
+From the fourth time on:
+
+> I'll keep a record of this edit so your other documents can be checked against it. What changed, why, and where did it come from? If it was only a wording fix, say so.
+
+At any time, "why are you asking this?" gets the long version. One answer supplies the what, the why and the source; the script's source and what-changed inputs are filled from it. "Only a wording fix" is the typo path of step 6. The word stays "context change", never "decision".
