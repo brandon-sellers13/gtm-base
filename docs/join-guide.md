@@ -104,6 +104,28 @@ them, one short paragraph each, and every segment you said to draft gets a
 document of its own at full depth, which you read whole and approve like any
 other. A segment you left out is named in the profile as still to come.
 
+A finished document you said to use is taken into your base as it stands
+rather than drafted again, and your original is never changed or moved. You
+are told what was taken out of it, such as settings at its top or a comment
+nobody reading it would see, you see its first lines, and the whole cleaned
+document is kept where you can read it in full before you answer. Nothing is
+saved until you say yes to it, and your yes is to exactly what you were
+shown. A document holding an email address, a phone number, or something
+shaped like a key, one whose headings a later change could not find, or one
+covering more than the part of the company your base is for is not taken in,
+and you are offered a draft of that segment instead.
+
+If a session stops while your finished documents are being taken in, even in
+the middle of saving one of them, nothing is lost and nothing is saved twice.
+Your list of segments and your answers are kept on this computer, outside your
+base, where the end of setup does not clear them, and the next session tells
+you once that taking them in stopped. Say "finish setting up my base" and
+every document you already said yes to is saved without being asked about
+again, unless its original changed since, in which case you see it again
+first. You are then shown only the documents you had not answered for yet. A
+file already sitting where a document would go is never written over, and you
+are told which document that was.
+
 A draft sometimes leaves a question only you can answer, marked in it where it
 comes up. You are told how many there are before you read it, and you can
 answer them there or approve the draft with them left open. A document with a
@@ -301,6 +323,13 @@ without being read. A tool that writes to GitHub directly through its web
 interface or its programming interface never touches your computer at all, so
 neither layer of the check ever sees it. Use the terminal or Claude Code for
 anything you want checked.
+
+The first time a base is backed up, you will be asked to look over what is
+about to leave your computer. That look was planned for a base holding two or
+three documents, and a base that took in a dozen finished segment pages holds
+far more than anybody can read through in one sitting. So that first look is
+being redesigned for a base with many files before backing up arrives, and
+backing up does not ship until it is.
 
 ## Removing someone's access
 

@@ -58,5 +58,11 @@ python3 -m unittest -v \
   test_words_files.TestAPathTheScriptsDidNotHandOut \
   test_words_files.TestThePathTheScriptsDoHandOut \
   test_words_files.TestTheDraftFileToo \
-  test_open_questions.TestTheScriptAsksAndPrepares
+  test_open_questions.TestTheScriptAsksAndPrepares \
+  test_adoption.TestAdoptedTextStaysData \
+  test_import_recovery.TestTheResumeScript \
+  test_import_recovery.TestResumeSaysNamesAndNeverPageText \
+  test_adoption.TestAstraFindingOne \
+  test_adoption.TestTheApprovalShowing \
+  test_import_astra_merged.TestNoFileNameOutsideTheFence
 exit $?

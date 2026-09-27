@@ -28,6 +28,7 @@ recompute them and check that they match.
 | `machine.json` | Account state: the answer to the offer and the list of joined bases. |
 | `seat.json` | Seat state for one base on one machine. |
 | `sources/template-with-comments.md` | A marketing template carrying three authoring comments, which are taken out of the text rather than costing the whole document. |
+| `adoption/` | Finished segment pages for Unit 1.7c. `clean-profile.md` passes the adoption contract; every other file exists to fail one clause of it: settings of its own at the top (discarded) or never closed (refused), a fence marker hidden inside a comment, contact details or a private key in the body, a heading used twice, a heading inside a block of code, underlined headings, no parts at all, a question above the first part, a question under a part (kept only on the person's say), two product lines, a name that folds into a file already in the base, a page whose folder the test makes a link, and a page that is not Markdown. |
 
 The two identifiers that run through the whole set are the source,
 `src-f9b4fc4d3b3d46561948ee51`, and the proposal, `stg-0d15637d82690cc7`. The

@@ -56,6 +56,7 @@ if _lib not in sys.path:
 import argparse  # noqa: E402
 
 from gtmbase import (  # noqa: E402
+    adopt,
     constants,
     create_base,
     drafting,
@@ -63,8 +64,10 @@ from gtmbase import (  # noqa: E402
     join_flow,
     location,
     machine,
+    moment,
     offer_answer,
     paths,
+    review,
     segments,
     sources,
     wordsfile,
@@ -75,6 +78,7 @@ from gtmbase.errors import (  # noqa: E402
     GtmBaseError,
     IdentityNeeded,
     LocationError,
+    PathError,
     ReviewError,
     StateError,
     ValidationError,
@@ -418,6 +422,10 @@ def build_parser():
     parser.add_argument(
         "--segments-file",
         help="a file holding one line per segment: the answer, a number, a name",
+    )
+    parser.add_argument(
+        "--hash",
+        help="the hash adopt-show printed for the page the person said yes to",
     )
     return parser
 
@@ -872,8 +880,18 @@ def run_segments(options, out):
             "candidate=%s number=%d\n" % (safe_value(candidate.path), candidate.number)
         )
     out.write(segments.FOUND_SENTENCE % {"count": len(found)} + "\n")
-    for candidate in found:
-        out.write("%d. %s\n" % (candidate.number, plain_value(candidate.label)))
+    # A document's name is whatever somebody typed when they saved it, so the
+    # numbered list is held apart as data like the documents themselves
+    # (Astra's review of the merged Units 1.7c and 1.7d, finding 7).
+    out.write(
+        moment.fenced(
+            "\n".join(
+                "%d. %s" % (candidate.number, plain_value(candidate.label))
+                for candidate in found
+            )
+        )
+        + "\n"
+    )
     out.write(segments.ASK_SENTENCE + "\n")
     return EXIT_DONE
 
@@ -1518,6 +1536,146 @@ def run_skip(options, out):
     return EXIT_DONE
 
 
+def an_adoption_refusal(refusal, out):
+    """Say why a page was not taken in: the code, then the one sentence.
+
+    The sentence names the class of what was found and never the value, and
+    a refusal about the page itself ends in the offer to draft it instead.
+    """
+    line(out, "codes", refusal.code)
+    if refusal.code in adopt.OFFERS_A_DRAFT:
+        line(out, "draft-instead", "yes")
+    out.write(refusal.sentence + "\n")
+    return EXIT_REFUSED
+
+
+ADOPTION_BASE_REFUSALS = join_flow.BASE_REFUSALS
+
+
+def an_adoption_base_refusal(refusal, out):
+    """Say why the base would not take a page, or hand the failure on."""
+    sentence = ADOPTION_BASE_REFUSALS.get(getattr(refusal, "code", None))
+    if sentence is None:
+        raise refusal
+    line(out, "codes", refusal.code)
+    out.write(sentence + "\n")
+    return EXIT_REFUSED
+
+
+def run_adopt_show(options, out):
+    """Clean one finished page and show what was removed and how it starts."""
+    run_id = need(options, "run", out)
+    slug = need(options, "segment", out)
+    if not run_id or not slug:
+        return EXIT_ERROR
+    root = base_folder(options, out)
+    if root is None:
+        return EXIT_REFUSED
+    try:
+        shown = join_flow.adoption_show(run_id, slug, root, email=options.email)
+    except adopt.AdoptionRefused as refusal:
+        return an_adoption_refusal(refusal, out)
+    line(out, "segment", shown.segment.slug)
+    line(out, "hash", shown.digest)
+    if shown.cleaned.questions:
+        line(out, "questions", shown.cleaned.questions)
+    for sentence in shown.sentences():
+        out.write(sentence + "\n")
+        if sentence == adopt.OPENING_SAID:
+            # The first lines are the person's own writing, so they are held
+            # apart as data, however they are fenced themselves.
+            out.write(moment.fenced("\n".join(shown.cleaned.opening())) + "\n")
+    return EXIT_DONE
+
+
+def run_adopt_read(options, out):
+    """Show the whole cleaned page, held apart as data, if it is the one shown."""
+    run_id = need(options, "run", out)
+    slug = need(options, "segment", out)
+    if not run_id or not slug:
+        return EXIT_ERROR
+    try:
+        text = join_flow.adoption_read(run_id, slug)
+    except adopt.AdoptionRefused as refusal:
+        return an_adoption_refusal(refusal, out)
+    out.write(moment.fenced(text.rstrip("\n")) + "\n")
+    return EXIT_DONE
+
+
+def run_adopt(options, out):
+    """Write one page the person said yes to, bound to the hash they were shown."""
+    run_id = need(options, "run", out)
+    slug = need(options, "segment", out)
+    digest = need(options, "hash", out)
+    if not run_id or not slug or not digest:
+        return EXIT_ERROR
+    root = base_folder(options, out)
+    if root is None:
+        return EXIT_REFUSED
+    try:
+        result = join_flow.adoption_approve(
+            run_id,
+            slug,
+            root,
+            digest,
+            questions_open=options.questions_open,
+            email=options.email,
+        )
+    except adopt.AdoptionRefused as refusal:
+        return an_adoption_refusal(refusal, out)
+    except (ReviewError, PathError) as refusal:
+        return an_adoption_base_refusal(refusal, out)
+    line(out, "base", result.root)
+    line(out, "file", result.path)
+    out.write(adopt.TAKEN_IN + "\n")
+    return EXIT_DONE
+
+
+def run_adopt_leave(options, out):
+    """Write down that the person left one finished page out."""
+    run_id = need(options, "run", out)
+    slug = need(options, "segment", out)
+    if not run_id or not slug:
+        return EXIT_ERROR
+    root = base_folder(options, out)
+    if root is None:
+        return EXIT_REFUSED
+    try:
+        sentence = join_flow.adoption_leave_out(run_id, slug, root)
+    except adopt.AdoptionRefused as refusal:
+        return an_adoption_refusal(refusal, out)
+    except (ReviewError, PathError) as refusal:
+        return an_adoption_base_refusal(refusal, out)
+    out.write(sentence + "\n")
+    return EXIT_DONE
+
+
+def run_resume(options, out):
+    """Finish an import that stopped, and name the pages still to be shown."""
+    run_id = need(options, "run", out)
+    session = need(options, "session", out)
+    if not run_id or not session:
+        return EXIT_ERROR
+    root = base_folder(options, out)
+    if root is None:
+        return EXIT_REFUSED
+    try:
+        resumed = join_flow.resume_import(run_id, root, session, email=options.email)
+    except adopt.AdoptionRefused as refusal:
+        return an_adoption_refusal(refusal, out)
+    except (ReviewError, PathError) as refusal:
+        return an_adoption_base_refusal(refusal, out)
+    if resumed.stopped is not None:
+        line(out, "codes", resumed.stopped[1])
+    for segment in resumed.to_show:
+        line(out, "segment", segment.slug)
+    for segment in resumed.unreadable:
+        line(out, "unreadable", segment.slug)
+    for sentence in resumed.sentences():
+        out.write(sentence + "\n")
+    return EXIT_REFUSED if resumed.stopped is not None else EXIT_DONE
+
+
 def base_and_id(options, out):
     """The base this step works in, and the name this account knows it by."""
     root = options.base or os.getcwd()
@@ -1651,6 +1809,8 @@ def run_close(options, out):
             out.write(join_flow.NOTE_NOT_WRITTEN + "\n")
         line(out, "note-code", ",".join(result.note_codes))
     out.write(result.closing)
+    if result.import_unfinished:
+        out.write(join_flow.CLOSING_IMPORT_UNFINISHED + "\n")
     return EXIT_DONE
 
 
@@ -1768,6 +1928,11 @@ MODES = {
     "what-is-wrong": run_what_is_wrong,
     "approve": run_approve,
     "skip": run_skip,
+    "adopt-show": run_adopt_show,
+    "adopt-read": run_adopt_read,
+    "adopt": run_adopt,
+    "adopt-leave": run_adopt_leave,
+    "resume": run_resume,
     "closing-question": run_closing_question,
     "preview-change": run_preview_change,
     "reconcile": run_reconcile,

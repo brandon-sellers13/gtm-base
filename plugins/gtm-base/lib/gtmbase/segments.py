@@ -34,7 +34,7 @@ from typing import Dict, List, Optional, Sequence
 
 from . import constants, trust_surface
 from .errors import GtmBaseError
-from .fsutil import atomic_write_json, read_json
+from .fsutil import HeldLock, atomic_write_json, read_json, remove
 
 # The file inside a run's folder holding the candidates shown, and the one
 # holding the settled inventory.
@@ -277,16 +277,28 @@ def save_candidates(folder: str, candidates: Sequence[Candidate], inside: str) -
 def load_candidates(folder: str) -> Optional[List[Candidate]]:
     """The numbered documents this run showed, or None when none were shown."""
     payload = read_json(os.path.join(folder, CANDIDATES_FILE))
-    if not isinstance(payload, dict) or not isinstance(payload.get("candidates"), list):
+    if not isinstance(payload, dict):
+        return None
+    return candidates_from(payload.get("candidates"))
+
+
+def candidates_from(items) -> Optional[List[Candidate]]:
+    """The numbered documents read back from a kept list, or None."""
+    if not isinstance(items, list):
         return None
     found: List[Candidate] = []
-    for item in payload["candidates"]:
+    for item in items:
         if not isinstance(item, dict):
             return None
-        try:
-            found.append(Candidate(item["number"], item["path"], item["label"]))
-        except (KeyError, TypeError, ValueError):
+        number = item.get("number")
+        # A counting number and nothing else: not a truth value, not a
+        # fraction, not a number so large it reads as infinity (Astra's review
+        # of the merged units, finding 8).
+        if not isinstance(number, int) or isinstance(number, bool) or number < 1:
             return None
+        if not isinstance(item.get("path"), str) or not isinstance(item.get("label"), str):
+            return None
+        found.append(Candidate(number, item["path"], item["label"]))
     return found
 
 
@@ -485,7 +497,17 @@ def load(folder: str) -> Optional[Inventory]:
     again from the name and compared, so an inventory somebody edited by hand
     into something that could not have been settled is not read at all.
     """
-    payload = read_json(os.path.join(folder, INVENTORY_FILE))
+    return inventory_from(
+        read_json(os.path.join(folder, INVENTORY_FILE)), load_candidates(folder) or []
+    )
+
+
+def inventory_from(payload, candidates: Sequence[Candidate]) -> Optional[Inventory]:
+    """An inventory read back from what was kept, settled again, or None.
+
+    The same check `load` makes, for an inventory kept anywhere: in the run's
+    own folder, or in the record an import keeps past the closing (Unit 1.7d).
+    """
     if not isinstance(payload, dict):
         return None
     if payload.get("version") != INVENTORY_VERSION:
@@ -499,7 +521,7 @@ def load(folder: str) -> Optional[Inventory]:
             return None
         number = item.get("number")
         if number is not None and (
-            not isinstance(number, int) or isinstance(number, bool)
+            not isinstance(number, int) or isinstance(number, bool) or number < 1
         ):
             return None
         lines.append((item.get("answer"), number, item.get("name")))
@@ -510,7 +532,7 @@ def load(folder: str) -> Optional[Inventory]:
     if any(answer not in constants.SEGMENT_ANSWERS for answer, _n, _name in lines):
         return None
     try:
-        again = settle(lines, load_candidates(folder) or [])
+        again = settle(lines, candidates)
     except InventoryRefused:
         return None
     if again.to_payload() != payload:
@@ -604,3 +626,419 @@ def folder_is_ordinary(base_root: str) -> bool:
             return False
     real = os.path.realpath(here)
     return real == here or real.startswith(root + os.sep)
+
+
+# --- The import, kept past the closing (Unit 1.7d) ---------------------------
+#
+# Everything above keeps the inventory in the run's own folder, and the closing
+# deletes that folder, as does the next run started on a later day. An import
+# that stopped partway, in the middle of one page or between two, has to be
+# finished by a later session that knows nothing of the run it started in, and
+# Brandon's call 18 is that the inventory outlives the closing so that it can.
+#
+# So once a base exists, what the import needs is kept in this seat's own
+# folder for that base, beside the other things this seat remembers about it.
+# Not in the base: nothing in it is the team's, it names files on this one
+# computer, and a record in the base would be shared with every seat, which is
+# exactly what a second seat must not depend on. Not in the run folder: that
+# is what the closing clears. It holds the settled inventory, the numbered
+# documents its numbers point at, the narrowest yes that can still read the
+# pages to take in (those pages and no other file), what the base is for, the
+# run the import belongs to, and one line per page saying how far that page
+# got. It is read and written with one writer at a time.
+#
+# Only four states are ever written down: the person's yes (the hash of the
+# bytes they approved and the day those bytes were shown), saved, left out
+# (their no), and refused by the contract. Whether a page with a yes has been
+# written, staged or given its line is read from the base itself every time,
+# because a state written down beside each of those steps is one more step a
+# run can stop after, and the base already says.
+
+IMPORT_FILE = "segments-import.json"
+IMPORT_VERSION = 1
+
+# What is written down about one page.
+STATE_APPROVED = "approved"
+STATE_COMMITTED = "committed"
+STATE_LEFT_OUT = "left-out"
+STATE_REFUSED = "refused"
+STORED_STATES = (STATE_APPROVED, STATE_COMMITTED, STATE_LEFT_OUT, STATE_REFUSED)
+# A page nobody has answered for yet.
+STATE_NOT_ANSWERED = "not-answered"
+# The states in which nothing more is asked or written for a page.
+ANSWERED_AND_DONE = (STATE_COMMITTED, STATE_LEFT_OUT, STATE_REFUSED)
+
+_DIGEST_RE = re.compile(r"\A[0-9a-f]{64}\Z")
+_EMPTY_CONSENT = {
+    "root": "",
+    "paths": [],
+    "dropped": [],
+    "scope": None,
+    "frozen_at": "",
+    "choice": "",
+}
+# What a record nobody can read is renamed to, so a new one can be kept.
+UNREADABLE_SUFFIX = ".unreadable"
+
+
+def _is_a_day(value) -> bool:
+    """Whether a value is a real calendar day written the one way days are."""
+    import datetime
+
+    text = str(value or "")
+    if not re.match(r"\A\d{4}-\d{2}-\d{2}\Z", text):
+        return False
+    try:
+        datetime.date.fromisoformat(text)
+    except ValueError:
+        return False
+    return True
+
+
+class ImportRecord(object):
+    """What an import needs to be finished by a later session, and how far it got."""
+
+    __slots__ = ("base_id", "run", "inventory", "candidates", "consent", "files")
+
+    def __init__(self, base_id, run, inventory, candidates, consent, files=None):
+        self.base_id = base_id
+        self.run = run
+        self.inventory = inventory
+        self.candidates = list(candidates)
+        self.consent = dict(consent)
+        self.files = dict((slug, dict(item)) for slug, item in (files or {}).items())
+
+    def to_adopt(self) -> List[Segment]:
+        """The segments settled to be taken from their finished page, in order."""
+        if self.inventory.is_single:
+            return []
+        return [
+            segment
+            for segment in self.inventory.segments
+            if segment.answer == constants.SEGMENT_ADOPT
+            and segment.number is not None
+            and segment.source
+        ]
+
+    def state_of(self, slug: str) -> str:
+        item = self.files.get(slug)
+        if not item:
+            return STATE_NOT_ANSWERED
+        return item["state"]
+
+    def approved(self, slug: str) -> Optional[dict]:
+        """The yes kept for one page, its hash and the day it was shown, or None."""
+        item = self.files.get(slug)
+        if not item or item.get("state") not in (STATE_APPROVED, STATE_COMMITTED):
+            return None
+        return item
+
+    def unfinished(self) -> List[Segment]:
+        """Every page to take in that is not yet saved, left out, or refused."""
+        return [
+            segment
+            for segment in self.to_adopt()
+            if self.state_of(segment.slug) not in ANSWERED_AND_DONE
+        ]
+
+    def to_payload(self) -> Dict[str, object]:
+        return {
+            "version": IMPORT_VERSION,
+            "base_id": self.base_id,
+            "run": self.run,
+            "inventory": self.inventory.to_payload(),
+            "candidates": [candidate.to_payload() for candidate in self.candidates],
+            "consent": dict(self.consent),
+            "files": dict((slug, dict(item)) for slug, item in self.files.items()),
+        }
+
+    def __repr__(self) -> str:
+        return "ImportRecord(pages=%d, unfinished=%d)" % (
+            len(self.to_adopt()),
+            len(self.unfinished()),
+        )
+
+
+def import_path(base_id: str) -> str:
+    """Where this seat keeps the import of one base, past the closing.
+
+    Working the place out makes nothing, so a session start that only asks
+    whether an import stopped writes nothing to find out.
+    """
+    from . import ids, paths
+
+    ids.check_base_id(base_id)
+    return os.path.join(paths.seat_home_path(), "bases", base_id, IMPORT_FILE)
+
+
+def _record_lock(base_id: str) -> HeldLock:
+    """The lock on the record, with its folders made owner only, one at a time."""
+    from . import paths
+
+    paths.seat_dir(base_id)
+    return HeldLock(import_path(base_id))
+
+
+def _consent_from(value, sources: Sequence[str]) -> Optional[dict]:
+    """The narrow yes kept for an import, checked, or None.
+
+    It may name only the pages to take in, each by the real path it had when
+    the person settled the list, so a later session that finishes the import
+    can read those pages and nothing else of what the person once agreed to.
+    The paths are compared as they were kept and never worked out again from
+    the disk, so a folder moved and left behind as a link does not make the
+    record unreadable; the check every read goes through looks at the disk
+    when a page is read (the reviews of Unit 1.7d).
+    """
+    if not isinstance(value, dict):
+        return None
+    wanted = value.get("paths")
+    if not isinstance(wanted, list) or not all(isinstance(p, str) for p in wanted):
+        return None
+    allowed = set(str(source) for source in sources)
+    if any(path not in allowed for path in wanted):
+        return None
+    dropped = value.get("dropped") or []
+    if not isinstance(dropped, list) or not all(isinstance(d, str) for d in dropped):
+        return None
+    for key in ("root", "scope", "frozen_at", "choice"):
+        if value.get(key) is not None and not isinstance(value.get(key), str):
+            return None
+    return {
+        "root": value.get("root") or "",
+        "paths": list(wanted),
+        "dropped": list(dropped),
+        "scope": value.get("scope"),
+        "frozen_at": value.get("frozen_at") or "",
+        "choice": value.get("choice") or "",
+    }
+
+
+def _files_from(value, slugs: Sequence[str]) -> Optional[Dict[str, dict]]:
+    if not isinstance(value, dict):
+        return None
+    files: Dict[str, dict] = {}
+    for slug, item in value.items():
+        if slug not in slugs or not isinstance(item, dict):
+            return None
+        state = item.get("state")
+        if state not in STORED_STATES:
+            return None
+        if state in (STATE_APPROVED, STATE_COMMITTED):
+            if not _DIGEST_RE.match(str(item.get("approved") or "")):
+                return None
+            if not _is_a_day(item.get("day")):
+                return None
+            files[slug] = {"state": state, "approved": item["approved"], "day": item["day"]}
+            if item.get("original") is not None:
+                if not _DIGEST_RE.match(str(item.get("original"))):
+                    return None
+                files[slug]["original"] = item["original"]
+        else:
+            files[slug] = {"state": state}
+    return files
+
+
+def record_from(payload, base_id: str) -> Optional[ImportRecord]:
+    """An import record read back and checked whole, or None.
+
+    Every part is checked again the way it was checked when it was settled,
+    so a record somebody edited by hand into something no run could have
+    written is not read at all, and nothing is written from it.
+    """
+    from . import ids
+
+    if not isinstance(payload, dict) or payload.get("version") != IMPORT_VERSION:
+        return None
+    if payload.get("base_id") != base_id or not ids.is_run_id(payload.get("run")):
+        return None
+    candidates = candidates_from(payload.get("candidates"))
+    if candidates is None:
+        return None
+    inventory = inventory_from(payload.get("inventory"), candidates)
+    if inventory is None:
+        return None
+    record = ImportRecord(base_id, payload["run"], inventory, candidates, {})
+    consent = _consent_from(
+        payload.get("consent"), [segment.source for segment in record.to_adopt()]
+    )
+    if consent is None:
+        return None
+    files = _files_from(payload.get("files", {}), [s.slug for s in record.to_adopt()])
+    if files is None:
+        return None
+    record.consent = consent
+    record.files = files
+    return record
+
+
+def load_import(base_id: str) -> Optional[ImportRecord]:
+    """The import this seat keeps for one base, or None when there is none."""
+    return record_from(read_json(import_path(base_id)), base_id)
+
+
+def has_import(base_id: str) -> bool:
+    """Whether anything, readable or not, is kept for an import of this base."""
+    return os.path.lexists(import_path(base_id))
+
+
+def _keep_import(record: ImportRecord) -> None:
+    from . import paths
+
+    atomic_write_json(
+        import_path(record.base_id), record.to_payload(), inside=paths.seat_home()
+    )
+
+
+def _set_aside(base_id: str) -> None:
+    """Rename a record nobody can read out of the way, never deleting it."""
+    path = import_path(base_id)
+    if os.path.lexists(path) and load_import(base_id) is None:
+        os.replace(path, path + UNREADABLE_SUFFIX)
+
+
+def set_aside_unreadable(base_id: str) -> bool:
+    """Put an unreadable record aside so the base can keep a new one.
+
+    The record is renamed rather than deleted, so whatever it held is still
+    there to look at by hand, and a record that can be read is never touched.
+    """
+    with _record_lock(base_id):
+        if not has_import(base_id) or load_import(base_id) is not None:
+            return False
+        _set_aside(base_id)
+        return True
+
+
+def _referred_to(inventory: Inventory, candidates) -> List[Candidate]:
+    """Only the numbered documents the settled list points at, and no others."""
+    used = set(segment.number for segment in inventory.segments if segment.number is not None)
+    return [candidate for candidate in candidates if candidate.number in used]
+
+
+# What `carry_import` found when another import is kept for the base and
+# still waits on a page, so this run's pages cannot be kept beside it.
+CODE_ANOTHER_IMPORT = "another-import-unfinished"
+
+
+def carry_import(
+    base_id: str, run_id: str, inventory: Inventory, candidates, consent: dict
+) -> Optional[ImportRecord]:
+    """Keep what this run's import needs past the closing, and return the record.
+
+    Nothing is kept when the inventory takes no finished page in. A record
+    already kept for this list is left exactly as it is, because it holds how
+    far the import got and the run it belongs to; a later run is seeded from
+    it rather than writing over it. A record for another list is replaced
+    only when nothing in it is still waiting on a page: every page settled,
+    or none answered at all (a setup that stopped before any page and was
+    set up again). One still waiting refuses, because its yes must not be
+    lost. A record nobody can read is renamed aside, never deleted, and a new
+    one is kept.
+    """
+    fresh = ImportRecord(
+        base_id, run_id, inventory, _referred_to(inventory, candidates or []), {}
+    )
+    pages = fresh.to_adopt()
+    if not pages:
+        return None
+    wanted = set(segment.source for segment in pages)
+    given = dict(consent or {})
+    given["paths"] = [
+        path for path in (given.get("paths") or []) if isinstance(path, str) and path in wanted
+    ]
+    fresh.consent = _consent_from(given, [segment.source for segment in pages]) or dict(
+        _EMPTY_CONSENT
+    )
+    with _record_lock(base_id):
+        held = load_import(base_id)
+        if held is not None:
+            if held.inventory == inventory:
+                return held
+            if held.files and held.unfinished():
+                raise InventoryRefused(CODE_ANOTHER_IMPORT)
+        elif has_import(base_id):
+            _set_aside(base_id)
+        _keep_import(fresh)
+    return fresh
+
+
+def mark(
+    base_id: str, slug: str, state: str, approved=None, day=None, run=None, original=None
+) -> ImportRecord:
+    """Write down how far one page got, with no other writer in between.
+
+    `approved` and `day` go with the yes and with a save: the hash of the
+    bytes approved and the day those bytes were shown. `original` is the
+    hash of the original file as it was when the yes was given, so a later
+    run can tell an original that changed from one cleaned differently by a
+    later release (Unit 1.7d, after Unit 1.7c's stricter cleaning). `run` is the import
+    the caller is working for, and a record for any other import is refused,
+    so a yes is never written into somebody else's list. A page already
+    saved is never marked left out or refused, and the check is made with
+    the lock held, so a save another window has just written down stands.
+    """
+    if state not in STORED_STATES:
+        raise ValueError("not a state an import keeps")
+    item = {"state": state}
+    if state in (STATE_APPROVED, STATE_COMMITTED):
+        item["approved"] = str(approved or "")
+        item["day"] = str(day or "")
+        if not _DIGEST_RE.match(item["approved"]) or not _is_a_day(item["day"]):
+            raise ValueError("a yes needs its hash and its day")
+        if original is not None:
+            if not _DIGEST_RE.match(str(original)):
+                raise ValueError("not the hash of an original")
+            item["original"] = str(original)
+    with _record_lock(base_id):
+        record = load_import(base_id)
+        if record is None or slug not in [s.slug for s in record.to_adopt()]:
+            raise InventoryRefused(CODE_UNREADABLE)
+        if run is not None and record.run != run:
+            raise InventoryRefused(CODE_ANOTHER_IMPORT)
+        if state in (STATE_LEFT_OUT, STATE_REFUSED) and (
+            record.state_of(slug) == STATE_COMMITTED
+        ):
+            return record
+        held = record.files.get(slug) or {}
+        if (
+            state == STATE_COMMITTED
+            and "original" not in item
+            and held.get("approved") == item.get("approved")
+            and held.get("original")
+        ):
+            item["original"] = held["original"]
+        record.files[slug] = item
+        _keep_import(record)
+        return record
+
+
+def clear(base_id: str, slug: str, run=None) -> ImportRecord:
+    """Take one page back to not answered, because the yes no longer stands.
+
+    Used only when the original changed after the yes, so the page is shown
+    again. A page already saved is never taken back to not answered.
+    """
+    with _record_lock(base_id):
+        record = load_import(base_id)
+        if record is None:
+            raise InventoryRefused(CODE_UNREADABLE)
+        if run is not None and record.run != run:
+            raise InventoryRefused(CODE_ANOTHER_IMPORT)
+        if record.state_of(slug) != STATE_COMMITTED:
+            record.files.pop(slug, None)
+            _keep_import(record)
+        return record
+
+
+def forget_import(base_id: str) -> bool:
+    """Take the record away once every page is saved, left out, or refused.
+
+    It names files on this computer, so it is not kept a moment longer than
+    the import needs it. A record still waiting on a page is never taken.
+    """
+    with _record_lock(base_id):
+        record = load_import(base_id)
+        if record is None or record.unfinished():
+            return False
+        return remove(import_path(base_id))

@@ -1390,3 +1390,108 @@ Plan: docs/plans/2026-09-19-001-feat-base-that-produces-work-plan.md, Unit 1.7b 
 - [ ] Orchestrator: review, merge into release-b, then 1.7c and 1.7d before release B ships.
 
 Review: the plan's `tests/test_drafting.py`, `test_base_reader.py`, `test_confirm.py` and `test_prompt_guards_join.py` scenarios live in the two new test modules instead, because each crosses more than one of those modules; the existing prompt guards now cover the two new prompts through `drafting.STEPS`. The closing's finding names how many questions are open rather than the question itself, because the question comes out of the file and the closing sentence is said without a fence.
+
+### 2026-09-26, Unit 1.7c: guarded adoption
+Plan: docs/plans/2026-09-19-001-feat-base-that-produces-work-plan.md, Unit 1.7c (requirements P20 to P23), with call 11's paths: each adopted segment at `context/icps/<slug>.md`. Built on its own branch, `unit-1-7c`, from `release-b` (1.5b, 1.6, 1.7a and 1.7b merged); not merged, not released. Test-first: every clause of the contract has a hostile fixture under `tests/fixtures/adoption/` that fails it, and a clause with no failing fixture is not built.
+- [ ] Fixtures and failing tests first: tests/test_adoption.py over every plan scenario and every fixture.
+- [ ] `adopt.py`: the contract in order (destination; the original settings discarded, malformed refused; hidden content removed and counted, then the fence-marker, contact and key screens; the heading grammar the proposal editor supports; the recorded scope; open questions; the library's own settings; the hash of the exact bytes).
+- [ ] Showing: what was removed, the opening lines, and where the whole cleaned file is, kept in the run's own folder with the hash; the yes bound to that hash, and a changed source or cleaned file asks again; a yes covering several only after each was shown.
+- [ ] Writing: `review.approve_adopted`, clean tree, default branch, absent only, the segment folder and name checks, one confirmation line, one saved piece of work; the original never touched.
+- [ ] A refused segment may be drafted instead; the join skill gains step 6d before the closing, because the inventory lives in the run folder the closing clears.
+- [ ] The fence on every path that hands a context file to the model, proved with a hostile adopted document.
+- [ ] Lint registry, atlas figures 1 and 7 (not republished), the join guide, the draft Unreleased CHANGELOG with the residual-risk sentence.
+- [ ] Full suite, both runs; a correctness review and a security review of the diff, fixes with tests, suite again.
+
+#### Progress and review, Unit 1.7c (2026-09-26)
+- [x] Fixtures and failing tests first: tests/fixtures/adoption (one per clause, plus a question under a part, a question above every part, no parts, and a page that is not Markdown) and tests/test_adoption.py; the first run failed on the missing module, as it should.
+- [x] `adopt.py`: the contract in order; `join.py adopt-show`, `adopt-read`, `adopt`; `review.approve_adopted`; a page the contract refused may be drafted instead.
+- [x] The yes bound to the hash of the exact bytes: the page cleaned again from the original and the cleaned file read again at the yes; a yes to several counts only for pages each shown.
+- [x] The fence on every path that hands the page to the model, proved with a hostile adopted page; the session's context carries none of it.
+- [x] Join skill step 6d (before the closing), adoption rules, lint registry, the skill walk adopts a page, the linked-folder second run covers the class that starts scripts.
+- [x] Atlas figures 1 and 7 (not republished), the join guide, the draft Unreleased CHANGELOG with the residual-risk sentence.
+- [x] Full suite before the reviews: 2314 tests OK, then 103 from a linked folder OK (tests/run.sh exit 0).
+- [x] Correctness review and security review of the diff (subagents): eleven findings and two smaller ones from their residual risks, each fixed with a test that failed before (tests/test_adoption.py, TestTheCorrectnessReview and TestTheSecurityReview).
+- [ ] Full suite after the fixes.
+- [ ] Brandon: the words listed in the hand-back report, the question marker call, and the live replay of the Gridwise pages.
+- [ ] Orchestrator: review, merge into release-b, then 1.7d, which must keep the record of what was shown past the closing.
+
+Review: the contract's scope clause is a heading naming a place dropped for the scope, because 1.7a settled that no filter reads the words of a document and the places dropped are what apply the scope. A `[your call: ...]` question in a finished page is kept as an open question rather than refused, only under a heading and only on the person's say, because adoption never edits the page and P27 already makes such a file unconfirmed until it is answered.
+- [x] Full suite after the review fixes: 2330 tests OK in 861 seconds, then 103 from a linked folder OK in 85 seconds (tests/run.sh exit 0).
+
+#### Astra's review of Unit 1.7c (2026-09-26), findings 1, 3, 4, 6 and 7
+Review: docs/reviews/2026-09-26-unit-1-7c-astra.md in the main checkout. Findings 2 and 5 (the write path and the take-back after a save) are the Unit 1.7d agent's, who owns recovery and the write. Each fix below has a test in tests/test_adoption.py that failed at the commit holding only the tests.
+- [x] 1 The prepared change is read through `approve_local.py --read`, inside the fence; `--sections` prints its headings inside the fence; the wording command writes the Before and After lines; the stale-check skill and join step 9 never open a prepared file or a document themselves.
+- [x] 3 The screens also read an inspection copy (selectors out, character codes decoded, compatibility forms folded, wrapped lines joined); the saved bytes are the approved bytes; a set of ordinary marketing lines still passes.
+- [x] 4 Hidden markup is found across the whole text, never across a blank line, and closing tags count; the cleaned bytes and the count are asserted for a tag over two lines.
+- [x] 6 A question marker split over two lines refuses the page; the same question on one line is open, unconfirmed and listed.
+- [x] 7 A question on a heading line refuses the page, with the round trip that shows an answer there leaves it open and the one under the heading that settles it.
+- [x] Call 23: the whole-file sentence drops "or tell you where it is"; the script prints no location; the skill says never to give it.
+- [x] Full suite after these fixes: 2346 tests OK in 937 seconds, then 107 from a linked folder OK in 108 seconds (tests/run.sh exit 0).
+- [x] Follow-up (coordinator): the approval showing (`approve_local.py --show`) holds every piece of document text inside the data fence (the four labeled lines, the context change it carries, each part with its heading before and after, the whole difference); only GTM Base's sentences and the shown value are outside. New sentences for each part; the R8 difference test reads the data fence. tests/test_adoption.py TestTheApprovalShowing fails against the old renderer and passes now.
+- [x] Full suite after the follow-up: 2348 tests OK in 997 seconds, then 109 from a linked folder OK in 101 seconds (tests/run.sh exit 0).
+
+### 2026-09-26, Unit 1.7d: recovery of an interrupted import
+Plan: docs/plans/2026-09-19-001-feat-base-that-produces-work-plan.md, Unit 1.7d (requirements P19 and P22), with call 11's paths and call 18 (the segment inventory outlives the closing). Built on its own branch, `unit-1-7d`, from `unit-1-7c`; not merged, not released. Also carries Astra's findings 2 and 5 on Unit 1.7c (the write and the save of an adopted page), assigned here because they sit in the write and recovery path.
+- [ ] Where the import is kept: one record per base in this seat's own folder for that base, never in the base and never in the run folder, holding the settled inventory, the numbered documents, the narrowest consent that can read the pages to adopt (those pages only), the scope, the run the import belongs to, and each page's state; read and written under a lock, so two adoptions at once cannot lose a record.
+- [ ] Per-file state: the yes (the approved hash and the day it was shown) is written before anything touches the base, and committed after the save; written, staged and confirmed are read from the base itself; a no and a refusal are kept so they are never asked again.
+- [ ] The write (Astra 2): folders walked one descriptor at a time with no link followed, the page created only where nothing is, the verified bytes staged rather than whatever is on disk, the installed file checked against the hash before the save, and a take-back that removes only the file this write created.
+- [ ] The save (Astra 5): a failure before the save is put back; a save that landed, or one whose outcome cannot be read, is never put back, and is finished or reported from what the base really holds.
+- [ ] Recovery per file: a page whose bytes match the yes is finished (staged, its line, saved); a page with other bytes is never written over and is reported; a tree dirtied only by this import's own step is recovered, one the person dirtied is refused; a yes whose source changed asks again; the others proceed.
+- [ ] Resume in a later session: a fresh run is seeded from the record, finishes what was already said yes to without asking, and shows only what was never answered; the next session is told once that the import stopped.
+- [ ] The first-backup review recorded as a condition of release two in the closing rules and the join guide.
+- [ ] Tests with a stop injected after every mutation step (journal, write, stage, confirmation line, its staging, save, state), each asserted to have fired, each resumed run byte-identical in content, index and state to an uninterrupted run; every scenario of the plan's list.
+- [ ] Join skill, lint registry, atlas figure 7 (not republished), the draft Unreleased CHANGELOG.
+- [ ] Full suite, both runs; a correctness review and a data-integrity review of the diff, fixes with tests, suite again.
+
+#### Progress and review, Unit 1.7d (2026-09-26)
+- [x] Where the import is kept: `segments.ImportRecord`, one file per base in this seat's own folder for that base, carried from the run when the profile creates the base, at every page shown or approved, and at the closing; let go once every page is saved, left out, or refused. Its yes reaches only the pages to take in. Read and written under `fsutil.HeldLock`, as is the run folder's record of what was shown.
+- [x] Per-file state: approved (hash and day) before the base is touched, committed after the save lands, left out (`join.py adopt-leave`), refused; written, staged and confirmed read from the base (`review.page_state`).
+- [x] The write (Astra 2): `review._create_new` walks the folders with no link followed and creates only where nothing is; `_stage_bytes` stages the approved bytes from memory, checked against git's own name for them; `_still_the_page` before staging and again before the save; `_take_back` removes only the file this write created. Every setup write goes through `_create_new`.
+- [x] The save (Astra 5): `review.saved_state` reads the base after any failure at the save: landed is kept, plainly not landed is put back, unknown is left untouched and said (`save-outcome-unknown`), and the next attempt or session finishes it.
+- [x] Recovery per file: `review.finish_adopted` finishes a written page from its own bytes, keeping this run's own line; `put_back_unwritten` clears only this page's staging and this run's own line; other bytes are never written over and are named once; a tree the person dirtied is refused.
+- [x] Resume: `join.py resume` seeds a fresh run from the record, finishes every yes, shows a changed original again, and names only the pages never answered; the next session start says so once, beside unsaved edits too.
+- [x] The first-backup review recorded as a condition of release two in the closing rules and the join guide.
+- [x] Tests: tests/test_import_recovery.py (new), a stop after each of the seven mutation steps of an adoption, after five steps inside the resumed run, and after each of the three writes that seed it; each asserted to fire, each resumed run byte-identical to an uninterrupted one in files, staging, saved work and the record; every plan scenario; findings 2 and 5 at each boundary. The walk leaves a page out; the linked-folder run covers the new script class.
+- [x] Join skill, the lint registry, atlas figure 7 (not republished), the join guide, the closing rules, the draft Unreleased CHANGELOG.
+- [ ] Full suite, both runs; a correctness review and a data-integrity review of the diff, fixes with tests, suite again.
+- [ ] Brandon: the words listed in the hand-back report, the new trigger sentence, and the live run where he stops an import on purpose.
+
+Review: the plan named tests/test_adoption.py, test_segments.py and test_join_setup_flow.py; the scenarios live in one new module instead, because each crosses the record, the write, the save, the run and the session start. The per-file states written, staged and confirmed are read from the base rather than written down, because the plan's lifecycle table says every state is observable from the file and the base's own records, and a state written beside each step would be one more step to stop after. A page finished in a later session carries the import's own run on its line, so the result is byte-identical to an uninterrupted run.
+- [x] Full suite before the reviews: 2368 tests OK, then 106 from a linked folder OK (tests/run.sh exit 0).
+- [x] Correctness review and data-integrity review of the diff (subagents): fourteen and ten findings, overlapping; all fixed with a test in tests/test_import_recovery.py (TestTheReviews) except a yes to several pages written down one at a time and a line not recognized under changed line endings, both recorded in the CHANGELOG. The lock is now the operating system's (fcntl), one page at a time is written into a base, a page is put down under a temporary name and then named, a page saved at any point is saved, a page changed before its save is taken back and left, an unreadable original keeps its yes, a live run is never cleared by a resume, the record is read as kept and an unreadable one is set aside.
+- [ ] Full suite after the review fixes.
+- Both reviewers noted that `unit-1-7c` gained two commits after this branch was cut (Astra's findings 1, 3, 4, 6 and 7); the orchestrator merges them, and the combined code has not been tested together here.
+- [x] Full suite after the review fixes: 2386 tests OK in 1005 seconds, then 106 from a linked folder OK in 95 seconds (tests/run.sh exit 0).
+
+#### Astra's review of the merged Units 1.7c and 1.7d (2026-09-27)
+Review: docs/reviews/2026-09-27-unit-1-7c-1-7d-astra.md, not ready, eight findings including the two partial closures. Each has a test in tests/test_import_astra_merged.py that failed on eb8999d and passes after.
+- [x] 1. Every take-back (leave out, resume, finishing) holds the per-base writing lock, reentrant per thread, reads the page and the record again inside it, and keeps it through the record update.
+- [x] 2. Cleanup moves the file to a private name, removes it only when its identity is this write's, and otherwise puts it back.
+- [x] 3. One revalidation (`join_flow._revalidate`: today's cleaning and inspection copy, bytes equal to the yes) for every route that finishes an unsaved page: resume, showing again, approving again.
+- [x] 4. A saved page is a finished adoption only with a drafted line naming the import's run; one saved without it gets the line (`review.confirm_saved`).
+- [x] 5. Markup the cleaning could not take out refuses the page, including an opening tag longer than the pattern reads.
+- [x] 6. Temporary files a killed writer left, in the page's folder and the confirmations folder, are swept under the writing lock once older than five seconds; tested with a child process killed with SIGKILL inside the confirmation write.
+- [x] 7. The removal notice names the segment, never the file; the numbered documents at the segments step are fenced.
+- [x] 8. Candidate and inventory numbers must be positive counting numbers; a record holding anything else is set aside.
+- [ ] Full suite after the fixes.
+- [x] Full suite after Astra's merged-line fixes: 2427 tests OK in 1219 seconds, then 115 from a linked folder OK in 101 seconds (tests/run.sh exit 0).
+
+#### Astra's confirmation pass on the merged units (2026-09-27)
+Review: docs/reviews/2026-09-27-unit-1-7c-1-7d-verify-astra.md, all eight closed, three new medium findings, not ready. Tests in tests/test_import_astra_verify.py, committed failing first.
+- [x] 1. Claims carry the inode, the hash and the original name; a sweep settles any claim left by a stop (own file removed, another put back, or kept aside under a plain name with a sentence); a failed put-back is kept aside and reported.
+- [x] 2. No clock: every temporary-file writer holds a shared folder ownership lock (fsutil.FolderLock) for its write and move; the sweep reclaims only when it can take the lock exclusively. Tested with a child stopped with SIGSTOP (its file survives and its move succeeds after SIGCONT) and one killed with SIGKILL (reclaimed at once).
+- [x] 3. Only real markup refuses a page; CAC<LTV., a<b, x <y, LTV<3x and <3 pass; the oversized tag, with or without a value, is refused.
+- [x] Full suite after the confirmation-pass fixes: 2436 tests OK in 1325 seconds, then 115 from a linked folder OK in 131 seconds (tests/run.sh exit 0).
+
+#### Astra's second confirmation pass on the merged units (2026-09-27)
+Review: docs/reviews/2026-09-27-unit-1-7c-1-7d-verify-2-astra.md, five findings, not ready. Tests in tests/test_import_astra_verify_2.py, committed failing first.
+- [x] 1. Folder locks in the seat folder's own locks folder, one for every session; seat and locks folders refused when a link, not this account's, or writable by others.
+- [x] 2. A writer that cannot take its lock refuses with a sentence (no-writing-lock).
+- [x] 3. Claims settled only when their names validate exactly; malformed ones, including a superscript digit and a nested claim, are left alone and counted as somebody's unsaved work.
+- [x] 4. Markup decided by Python's HTML reader, plus a leftover comment opener or closing tag; a quoted value with a blank line is refused; the comparisons still pass.
+- [x] 5. A put-back stopped after its link finishes by removing only the claim.
+
+#### Astra's third confirmation pass on the merged units (2026-09-27)
+Review: docs/reviews/2026-09-27-unit-1-7c-1-7d-verify-3-astra.md, ready with one change. Tests in tests/test_import_astra_verify_3.py, committed failing first.
+- [x] A start tag is markup only with an element name (the HTML standard, older names browsers honor, SVG and MathML), a custom element name, or an attribute with a value; end tags, comments, declarations and processing instructions always refuse. Comparisons before a quoted reply or a later greater-than sign pass; the script, div, oversized span, custom element and valued made up tag cases still refuse.
+- [x] LOCKS_NOT_PRIVATE reworded, the orchestrator's call open to Brandon's veto.

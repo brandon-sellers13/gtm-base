@@ -570,6 +570,25 @@ class TestTheSkillsAsTheyAreWritten(unittest.TestCase):
             "# Who we sell to\n\nSmall teams selling to other businesses.\n",
         )
         support.write(
+            os.path.join(folder, "customers", "icp-credit-unions.md"),
+            "# Credit unions\n\n## Firmographics\n\nCredit unions with more "
+            "than a billion dollars in assets.\n",
+        )
+        # The same finished page in the other place too, because one pass
+        # of the walk keeps only that place and one drops it, and every pass
+        # has a page to take in (Unit 1.7c).
+        support.write(
+            os.path.join(folder, "positioning", "icp-thrift-lenders.md"),
+            "# Credit unions\n\n## Firmographics\n\nCredit unions and thrifts "
+            "with more than a billion dollars in assets.\n",
+        )
+        # With one document describing customers no list is numbered, so
+        # that place holds a second one.
+        support.write(
+            os.path.join(folder, "positioning", "icp-savings-banks.md"),
+            "# Savings banks\n\n## Firmographics\n\nSavings banks in one state.\n",
+        )
+        support.write(
             os.path.join(folder, "customers", "personas.md"),
             "# Buyer personas\n\nThe head of marketing.\n",
         )
@@ -784,7 +803,13 @@ class TestTheSkillsAsTheyAreWritten(unittest.TestCase):
             if "--document" in shlex.split(command)
             else state.get("staged")
         ),
-        "<segment>": lambda self, state, command: state.get("segment"),
+        "<segment>": lambda self, state, command: (
+            state.get("adopt_segment")
+            if shlex.split(command)[1:2]
+            in (["adopt-show"], ["adopt-read"], ["adopt"], ["adopt-leave"])
+            else state.get("segment")
+        ),
+        "<hash>": lambda self, state, command: state.get("hash"),
         "<question>": lambda self, state, command: self.an_open_question(state),
         "<a short label>": lambda self, state, command: "a note from the call",
         "<file you wrote it to>": lambda self, state, command: state.get("paste"),
@@ -901,6 +926,8 @@ class TestTheSkillsAsTheyAreWritten(unittest.TestCase):
         text = self.WORDS.get(kind)
         if kind == "folder":
             text = state["material"]
+        if kind == "segments" and state.get("adopt_number"):
+            text += "adopt %s Credit unions\n" % state["adopt_number"]
         self.assertIsNotNone(kind, command)
         support.write(path, text or "Acme")
         state["words"] = path
@@ -919,6 +946,10 @@ class TestTheSkillsAsTheyAreWritten(unittest.TestCase):
                 for line in printed.split("\n")
                 if line.startswith("file=")
             ]
+            # The document the reconciling step reads before writing its
+            # wording, through the reader that holds it apart as data.
+            if state["ask_about"]:
+                state.setdefault("document", state["ask_about"][0])
         prepared = self.value_of(printed, "prepared")
         if prepared:
             state["staged"] = prepared
@@ -943,7 +974,21 @@ class TestTheSkillsAsTheyAreWritten(unittest.TestCase):
             held = self.value_of(printed, "paste")
             if held:
                 state["held_paste"] = held
+        if mode == "segments":
+            for line in printed.split("\n"):
+                if line.startswith("candidate=") and (
+                    "icp-credit-unions" in line or "icp-thrift-lenders" in line
+                ):
+                    state["adopt_number"] = line.split(" number=")[1].strip()
+                    break
+        if mode == "adopt-show":
+            digest = self.value_of(printed, "hash")
+            if digest:
+                state["hash"] = digest
         if mode == "segments-settle":
+            for line in printed.split("\n"):
+                if line.startswith("segment=") and " answer=adopt" in line:
+                    state["adopt_segment"] = line[len("segment=") :].split(" ")[0]
             # More than one segment means the profile is drafted across them,
             # and the first one to draft is the segment the later step drafts
             # (Unit 1.7b).
@@ -975,7 +1020,8 @@ class TestTheSkillsAsTheyAreWritten(unittest.TestCase):
             # The walk settles two segments: one drafted, one left out.
             if step == "umbrella":
                 return umbrella.umbrella_text(
-                    drafted=("Fintech lenders",), left_out=("Regional banks",)
+                    drafted=("Fintech lenders", "Credit unions"),
+                    left_out=("Regional banks",),
                 )
             return umbrella.segment_text("Fintech lenders")
         return flow.captured("icp.md" if step == "icp" else "positioning.md")

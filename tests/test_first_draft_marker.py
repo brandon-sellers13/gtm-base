@@ -240,9 +240,11 @@ class TestTheObsoleteClaimIsGone(unittest.TestCase):
             printed = listed.stdout.decode("utf-8")
             self.assertIn("Firmographics", printed)
             number = None
+            # The headings are listed inside the data fence, each after its
+            # number (Astra's review of Unit 1.7c, finding 1).
             for line in printed.split("\n"):
-                if line.startswith("section=") and "Firmographics" in line:
-                    number = line[len("section=") :].split(" ")[0]
+                if line.endswith(". Firmographics"):
+                    number = line.split(".", 1)[0]
             self.assertIsNotNone(number, printed)
 
             handed = run_script(root, ["--new-words-file", "answer"])
