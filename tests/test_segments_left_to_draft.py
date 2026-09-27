@@ -42,7 +42,7 @@ from gtmbase import (
     segments,
     session_start,
 )
-from gtmbase.errors import ConsentError, DraftError, ReviewError
+from gtmbase.errors import ConsentError, ReviewError
 
 TODAY = adoption.TODAY
 NOW = adoption.NOW
@@ -187,8 +187,9 @@ class TestItSurvivesTheClosing(Case):
         payload = json.dumps(record.to_payload())
         # Names and settled answers only: no material, no draft, no yes to read it.
         self.assertNotIn("Firmographics", payload)
+        # The only yes it keeps reaches the finished pages still to take in,
+        # which is Unit 1.7d's; the segment to draft gets none.
         self.assertNotIn(os.path.realpath(company.pages[LATER]), record.consent["paths"])
-        self.assertEqual([], record.consent["paths"])
 
         # The next session is told once, and finishing names the segment.
         run_two, resumed = resume(company)
@@ -200,11 +201,12 @@ class TestItSurvivesTheClosing(Case):
         run_three, shown = listed(company, LATER)
         self.assertEqual([os.path.realpath(company.pages[LATER])], shown.paths)
         self.assertIn(join_flow.DRAFT_LIST_OFFER % {"name": LATER}, shown.sentences())
-        with self.assertRaises(DraftError):
+        with self.assertRaises(ReviewError) as caught:
             join_flow.assemble_step(
                 drafting.STEP_SEGMENT, run_three, "Acme", EMAIL, today=TODAY,
                 segment=slug(LATER),
             )
+        self.assertEqual(join_flow.CODE_DRAFT_NOT_AGREED, caught.exception.code)
         with self.assertRaises(ReviewError) as caught:
             approve(run_three, company, LATER)
         self.assertEqual(join_flow.CODE_DRAFT_NOT_AGREED, caught.exception.code)
@@ -218,10 +220,14 @@ class TestItSurvivesTheClosing(Case):
             ).path
         )
         # The page is read inside the data fence, and it is the only file read.
-        fence_opens = constants.SOURCE_FENCE_HEADER.split("%")[0]
-        self.assertEqual(1, request.count(fence_opens))
-        self.assertLess(request.index(fence_opens), request.index("# %s" % LATER))
-        self.assertNotIn("# %s" % TAKEN_IN, request)
+        opened = constants.SOURCE_FENCE_HEADER % ("icp-%s.md" % slug(LATER))
+        self.assertEqual(1, request.count(opened))
+        start = request.index(opened)
+        end = request.index(constants.SOURCE_FENCE_FOOTER, start)
+        self.assertLess(start, request.index("# %s" % LATER, start), request[start:end])
+        self.assertLess(request.index("# %s" % LATER, start), end)
+        for name in (TAKEN_IN, DRAFTED):
+            self.assertNotIn(constants.SOURCE_FENCE_HEADER % ("icp-%s.md" % slug(name)), request)
 
         result = approve(run_three, company, LATER)
         self.assertEqual(company.destination(LATER), result.path)
@@ -360,11 +366,12 @@ class TestMissingMaterial(Case):
         with self.assertRaises(ConsentError) as caught:
             join_flow.draft_freeze(run_id, SESSION_TWO, today=TODAY)
         self.assertEqual(join_flow.CODE_NOTHING_ON_THE_LIST, caught.exception.code)
-        with self.assertRaises(DraftError):
+        with self.assertRaises(ReviewError) as refused:
             join_flow.assemble_step(
                 drafting.STEP_SEGMENT, run_id, "Acme", EMAIL, today=TODAY,
                 segment=slug(LATER),
             )
+        self.assertEqual(join_flow.CODE_DRAFT_NOT_AGREED, refused.exception.code)
         self.assertIsNone(company.read(company.destination(LATER)))
 
     def test_a_document_that_is_gone_is_said_with_the_two_choices(self):
@@ -573,6 +580,8 @@ class TestAStopAtEveryStep(Case):
     def finish_everything(self, company):
         """What a later session does: finish, draft what is left, finish again."""
         for _round in range(3):
+            if not segments.has_import(company.base_id):
+                return None
             run_id, resumed = resume(company)
             if resumed.done:
                 return resumed

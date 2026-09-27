@@ -418,6 +418,22 @@ def _segment_file_is_free(base_root: str, relative: str) -> None:
         raise ReviewError(segments.CODE_FILE_TAKEN, code=segments.CODE_FILE_TAKEN)
 
 
+def check_segment_write(base_root: str, relative: str, git: GitRunner) -> None:
+    """Refuse a segment's file for every reason the write itself would refuse it.
+
+    The same checks, in the same order, as `approve_adopted` makes before it
+    writes: the line of work the team shares with nothing half done on it, an
+    ordinary folder, and no file already there whose name folds to the same
+    one. A segment drafted with a record kept for it runs these before its
+    yes is written down (Brandon's call 29), so a refusal leaves nothing
+    written anywhere.
+    """
+    ready_to_write(base_root, git)
+    _segment_file_is_free(base_root, relative)
+    if _already_there(base_root, relative):
+        raise ReviewError(CODE_FILE_EXISTS)
+
+
 def path_for(draft, base_root: Optional[str] = None) -> str:
     """Where in the base a draft belongs, whichever step it came from."""
     if draft.step == drafting.STEP_CHANGE:

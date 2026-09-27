@@ -974,6 +974,27 @@ PYTHON_SENTENCES = (
     ("join_flow", "IMPORT_PENDING"),
     ("join_flow", "LOCKED"),
     ("join_flow", "WRITE_FAILED"),
+    # Brandon's call 29: a segment settled to be drafted and not drafted
+    # before the closing, finished by a later session after a fresh yes.
+    ("join_flow", "CLOSING_DRAFTS_UNFINISHED"),
+    ("join_flow", "RESUME_DRAFT_SAVED_ONE"),
+    ("join_flow", "RESUME_DRAFT_SAVED"),
+    ("join_flow", "RESUME_DRAFT_AGAIN"),
+    ("join_flow", "RESUME_TO_DRAFT_ONE"),
+    ("join_flow", "RESUME_TO_DRAFT"),
+    ("join_flow", "RESUME_ALL_SETTLED"),
+    ("join_flow", "DRAFT_LIST_OFFER"),
+    ("join_flow", "DRAFT_MATERIAL_GONE"),
+    ("join_flow", "DRAFT_NOTHING_ON_THE_LIST"),
+    ("join_flow", "DRAFT_NOT_TO_FINISH"),
+    ("join_flow", "DRAFT_RUN_TAKEN"),
+    ("join_flow", "DRAFT_IN_PROGRESS"),
+    ("join_flow", "DRAFT_NO_SUCH_NUMBER"),
+    ("join_flow", "DRAFT_FOLDER_MISSING"),
+    ("join_flow", "DRAFT_LIST_CHANGED"),
+    ("join_flow", "DRAFT_NO_LIST"),
+    ("join_flow", "DRAFT_NOT_AGREED"),
+    ("join_flow", "DRAFT_LEFT_OUT"),
 )
 
 # Constants that read like a sentence but that no person ever reads. Each one

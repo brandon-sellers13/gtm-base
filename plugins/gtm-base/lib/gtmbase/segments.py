@@ -653,6 +653,14 @@ def folder_is_ordinary(base_root: str) -> bool:
 # written, staged or given its line is read from the base itself every time,
 # because a state written down beside each of those steps is one more step a
 # run can stop after, and the base already says.
+#
+# Brandon's call 29 adds each segment settled to be drafted, because drafting
+# reads the person's material under the yes the closing clears, and a segment
+# nobody drafted before the closing has to be finished by a later session. It
+# is kept as what the inventory already holds, its name and its answer, with
+# the same states: the yes to its approved draft (the hash and the day, never
+# the draft), saved, and left out. The yes to read its material is never
+# kept; a later session asks for a new one.
 
 IMPORT_FILE = "segments-import.json"
 IMPORT_VERSION = 1
@@ -720,6 +728,36 @@ class ImportRecord(object):
             and segment.source
         ]
 
+    def to_draft(self) -> List[Segment]:
+        """The segments settled to be drafted, in order (Brandon's call 29).
+
+        A segment nobody drafted before the closing is finished by a later
+        session, so it is kept here beside the pages. What is kept about it is
+        its name and its settled answer, which the inventory already holds,
+        and one state; never the material it is drafted from, never a draft,
+        and never a yes to read anything.
+        """
+        if self.inventory.is_single:
+            return []
+        return [
+            segment
+            for segment in self.inventory.segments
+            if segment.answer == constants.SEGMENT_DRAFT
+        ]
+
+    def kept(self) -> List[Segment]:
+        """Every segment the record keeps a state for: the pages, then the drafts."""
+        return self.to_adopt() + self.to_draft()
+
+    def find(self, slug: str) -> Optional[Segment]:
+        for segment in self.kept():
+            if segment.slug == slug:
+                return segment
+        return None
+
+    def is_a_draft(self, slug: str) -> bool:
+        return any(segment.slug == slug for segment in self.to_draft())
+
     def state_of(self, slug: str) -> str:
         item = self.files.get(slug)
         if not item:
@@ -733,13 +771,28 @@ class ImportRecord(object):
             return None
         return item
 
-    def unfinished(self) -> List[Segment]:
+    def pages_unfinished(self) -> List[Segment]:
         """Every page to take in that is not yet saved, left out, or refused."""
         return [
             segment
             for segment in self.to_adopt()
             if self.state_of(segment.slug) not in ANSWERED_AND_DONE
         ]
+
+    def drafts_unfinished(self) -> List[Segment]:
+        """Every segment to draft that is not yet saved, left out, or refused.
+
+        A segment left out is not one still to finish (call 29).
+        """
+        return [
+            segment
+            for segment in self.to_draft()
+            if self.state_of(segment.slug) not in ANSWERED_AND_DONE
+        ]
+
+    def unfinished(self) -> List[Segment]:
+        """Everything still to finish: the pages first, then the segments to draft."""
+        return self.pages_unfinished() + self.drafts_unfinished()
 
     def to_payload(self) -> Dict[str, object]:
         return {
@@ -753,8 +806,9 @@ class ImportRecord(object):
         }
 
     def __repr__(self) -> str:
-        return "ImportRecord(pages=%d, unfinished=%d)" % (
+        return "ImportRecord(pages=%d, drafts=%d, unfinished=%d)" % (
             len(self.to_adopt()),
+            len(self.to_draft()),
             len(self.unfinished()),
         )
 
@@ -864,7 +918,7 @@ def record_from(payload, base_id: str) -> Optional[ImportRecord]:
     )
     if consent is None:
         return None
-    files = _files_from(payload.get("files", {}), [s.slug for s in record.to_adopt()])
+    files = _files_from(payload.get("files", {}), [s.slug for s in record.kept()])
     if files is None:
         return None
     record.consent = consent
@@ -926,7 +980,9 @@ def carry_import(
 ) -> Optional[ImportRecord]:
     """Keep what this run's import needs past the closing, and return the record.
 
-    Nothing is kept when the inventory takes no finished page in. A record
+    Nothing is kept when the inventory takes no finished page in and has no
+    segment to draft (call 29: a segment settled to be drafted is kept too, so
+    one nobody drafted before the closing can be finished later). A record
     already kept for this list is left exactly as it is, because it holds how
     far the import got and the run it belongs to; a later run is seeded from
     it rather than writing over it. A record for another list is replaced
@@ -940,7 +996,7 @@ def carry_import(
         base_id, run_id, inventory, _referred_to(inventory, candidates or []), {}
     )
     pages = fresh.to_adopt()
-    if not pages:
+    if not pages and not fresh.to_draft():
         return None
     wanted = set(segment.source for segment in pages)
     given = dict(consent or {})
@@ -992,7 +1048,7 @@ def mark(
             item["original"] = str(original)
     with _record_lock(base_id):
         record = load_import(base_id)
-        if record is None or slug not in [s.slug for s in record.to_adopt()]:
+        if record is None or record.find(slug) is None:
             raise InventoryRefused(CODE_UNREADABLE)
         if run is not None and record.run != run:
             raise InventoryRefused(CODE_ANOTHER_IMPORT)
