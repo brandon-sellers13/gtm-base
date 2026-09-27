@@ -126,3 +126,18 @@ To resume: quit Claude Code and open it again, open it in ~/Gridwise, and start 
 > Your context changes are stored the old way. Updating them takes one step and changes nothing they say. Shall I do it?
 
 Every line reads in seconds. No path, identifier, "up to date", or added advice appeared, and the offer that 0.3.0 never made appeared once. All three 0.3.1 root causes are confirmed fixed in the real run. Not yet confirmed: the expanded command, to see that it ran from ~/Gridwise without an error.
+
+**Step 2, Brandon's note on the offer (2026-09-27).** At first glance the offer reads like a plugin update. It is really a change to how the base stores its files, made necessary by a newer version, and it names neither the version nor what moves. Finding for the build: the offer says which version introduced the change and what moves, in release-notes style, from the real base. Proposed for 0.3: "GTM Base 0.3 stores context changes in a new folder, and your base still keeps its one context change in the old one. Moving it changes nothing it says, and your base works either way until you do. Shall I move it now?" The Unit 1.5b offer has the same problem at a larger scale and should name the version and each kind of thing it moves, with counts and document names from the real base. Brandon has not yet approved these words.
+
+**Step 3, look before moving anything: passed, with two findings.** Brandon asked what the update would do without doing it. The session previewed without writing and said:
+
+> This would update one of your context changes and write one dated record of it under today's date, 2026-09-27. It would be saved as two separate pieces of work. Nothing has been written.
+>
+> As things stand, GTM Base would offer this.
+>
+> When you want to go ahead, I'll also need you to confirm that everyone who opens this base is on the current version of GTM Base.
+
+The first sentence is the script's own, with no identifier (0.3.1's fix to finding 4 works), and nothing in the base changed.
+
+1. "As things stand, GTM Base would offer this." is the script's own sentence (`changes.OFFER_STATE_NOW`), relayed correctly, but it is written for the builder rather than the person and means nothing to Brandon. Fix: say nothing when the offer would be made, and when it would not, say the plain reason (unsaved edits, a change written twice, a shared base whose seats are not yet updated).
+2. The third sentence was added by the assistant and is wrong for this base. The script did not print it. `changes.migrate` asks for the every-seat confirmation only when the base has a shared copy (`paths.remote_url` is set), and the Gridwise base has none. The assistant took it from the stale-check skill's table of commands, which lists `--every-seat-updated` without saying it applies only to a shared base. This breaks 0.3.1's rule that the assistant adds no claim of its own. Fix: the skill says to ask about other seats only when the script's own sentence asks it, and the shared-base sentence keeps its one-line reason (an older version reads an updated base as empty, so a teammate would be told nothing is out of date). Brandon asked for that reason to be stated whenever the confirmation is asked.
