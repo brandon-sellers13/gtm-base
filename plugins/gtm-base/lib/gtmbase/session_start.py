@@ -908,8 +908,10 @@ def _daily_work(
             before = git.run(
                 ["rev-parse", "HEAD"], cwd=root, timeout=LOCAL_TIMEOUT_SECONDS
             ).out()
+            # Never write over a file this seat ignores, which git does by
+            # default (Astra's review of 0.3.2, finding 2).
             merged = git.run(
-                ["merge", "--ff-only", target],
+                ["merge", "--ff-only", "--no-overwrite-ignore", target],
                 cwd=root,
                 timeout=constants.FETCH_TIMEOUT_SECONDS,
             )

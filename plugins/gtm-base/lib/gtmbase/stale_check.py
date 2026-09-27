@@ -831,8 +831,10 @@ def _fast_forward(base_root: str, branch: str, git: GitRunner, result) -> bool:
             unsaved.refusal(UNSAVED_EDITS_NAMED, UNSAVED_EDITS, status)
         )
         return False
+    # Never write over a file this seat ignores, which git does by default
+    # (Astra's review of 0.3.2, finding 2).
     merged = git.run(
-        ["merge", "--ff-only", target],
+        ["merge", "--ff-only", "--no-overwrite-ignore", target],
         cwd=base_root,
         timeout=constants.FETCH_TIMEOUT_SECONDS,
     )

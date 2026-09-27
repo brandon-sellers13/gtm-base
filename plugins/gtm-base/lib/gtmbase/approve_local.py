@@ -2014,7 +2014,7 @@ def _finish_unfinished_work(
     if theirs:
         # Their own words are sitting on a path this run wrote to, so the note
         # stays and they are asked to deal with it. Nothing of theirs is lost.
-        said = unsaved.where_sentence(theirs)
+        said = unsaved.where_sentence(theirs, base_root)
         return _refused(
             STATUS_REFUSED,
             CODE_UNSAVED_EDITS,

@@ -4,10 +4,6 @@ work/proposals/
 # Files a computer makes on its own when a folder is opened. They are never
 # part of the base.
 .DS_Store
-._*
 Thumbs.db
 desktop.ini
 Icon[^ -~]
-.Spotlight-V100/
-.Trashes/
-.fseventsd/

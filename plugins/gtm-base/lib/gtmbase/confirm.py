@@ -780,7 +780,11 @@ def _add_to_the_local_copy(
     # The shared look, which leaves out the files the computer made on its own.
     if not unsaved.look(base_root, git).clean:
         return _hold(base_id, line, path, codes, CODE_UNSAVED_EDITS, UNSAVED_EDITS)
-    moved = git.run(["merge", "--ff-only", made.branch], cwd=base_root)
+    # Never write over a file this seat ignores, which git does by default
+    # (Astra's review of 0.3.2, finding 2).
+    moved = git.run(
+        ["merge", "--ff-only", "--no-overwrite-ignore", made.branch], cwd=base_root
+    )
     if not moved.ok:
         return _hold(base_id, line, path, codes, CODE_PUSH_FAILED)
     return ConfirmResult(
@@ -1131,7 +1135,7 @@ def against_change(
     except GtmBaseError as refusal:
         if refusal.code == review_module.CODE_NOT_DEFAULT_BRANCH:
             return _refused(CODE_NO_DEFAULT_BRANCH, NOT_ON_THE_MAIN_LINE % document)
-        said = unsaved.where_sentence(unsaved.look(base_root, git).paths())
+        said = unsaved.where_sentence(unsaved.look(base_root, git).paths(), base_root)
         if said:
             return _refused(
                 CODE_UNSAVED_EDITS, UNSAVED_EDITS_HERE_NAMED % (document, said)

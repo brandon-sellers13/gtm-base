@@ -82,7 +82,7 @@ def document_name(path: str) -> str:
     stem = os.path.basename(normalized)
     if stem.endswith(".md"):
         stem = stem[: -len(".md")]
-    if not _PLAIN_STEM_RE.match(stem):
+    if not _PLAIN_STEM_RE.fullmatch(stem):
         return DOCUMENT_WITHOUT_A_PLAIN_NAME
     words = _words(stem)
     if not words:

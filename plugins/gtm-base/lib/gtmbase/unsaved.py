@@ -13,6 +13,16 @@ else, was enough to refuse approving a hand edit, on the very step that asks
 the person to open their base in an editor. Nobody wrote those files and
 nobody can act on them, so they are not unsaved work.
 
+What counts as one is kept as narrow as it can be, because everything left
+out here is something a write may then save around without anybody reading it
+(Astra's review of 0.3.2, finding 1: a markdown document named `._notes.md`,
+or kept inside a folder called `.Trashes`, was left out and could be saved by
+an approval that showed none of it). A file counts only when it is a regular
+file, never a link or a folder, and either carries one of four exact names or
+is an AppleDouble file, which is told by the four bytes every one of them
+starts with rather than by its name. No folder is left out, and nothing is left
+out for the folder it sits in.
+
 They are only left out while they are untracked. A clutter file somebody saved
 into the base once is part of what the base holds, and a change to it is a
 change to the base like any other: leaving it out would let a write save over
@@ -24,7 +34,7 @@ file the computer made.
 from __future__ import annotations
 
 import os
-import re
+import stat
 from typing import List, Optional, Sequence, Tuple
 
 from . import constants, names
@@ -32,59 +42,64 @@ from .gitcmd import DEFAULT_TIMEOUT_SECONDS, GitRunner, status_entries
 
 # --- The files an operating system makes on its own ---------------------------
 
-# Files, by their exact name, compared without regard to letter case because
-# Windows writes both `desktop.ini` and `Desktop.ini`. `Icon\r` is the file a
-# Mac writes when a folder is given a custom icon; its name really does end in
-# a carriage return.
+# Files, by their exact name. `Icon\r` is the file a Mac writes when a folder is
+# given a custom icon; its name really does end in a carriage return.
 CLUTTER_FILE_NAMES = (".DS_Store", "Thumbs.db", "desktop.ini", "Icon\r")
-# Folders a Mac keeps at the top of a disk, and anything inside them.
-CLUTTER_FOLDER_NAMES = (".Spotlight-V100", ".Trashes", ".fseventsd")
-# The start of every AppleDouble file, the `._` copy a Mac writes beside a file
-# on a disk that cannot hold its extra details.
+# The start of every AppleDouble file's name, the `._` copy a Mac writes beside
+# a file on a disk that cannot hold its extra details, and the four bytes every
+# such file begins with. The name alone proves nothing.
 APPLEDOUBLE_PREFIX = "._"
+APPLEDOUBLE_MAGIC = b"\x00\x05\x16\x07"
 
-_FILES_FOLDED = frozenset(name.casefold() for name in CLUTTER_FILE_NAMES)
-_FOLDERS_FOLDED = frozenset(name.casefold() for name in CLUTTER_FOLDER_NAMES)
-
-# The lines a new base's ignore file carries for the same files. `Icon\r` is
-# written as a pattern rather than as its name, because a carriage return in
-# the template would be read back as the end of a line, and `Icon` alone would
-# hide a file somebody named Icon. The bracket matches exactly one character
-# that is not a printable one, which is the carriage return and nothing a
-# person types.
-IGNORE_LINES = (
-    ".DS_Store",
-    "._*",
-    "Thumbs.db",
-    "desktop.ini",
-    "Icon[^ -~]",
-    ".Spotlight-V100/",
-    ".Trashes/",
-    ".fseventsd/",
-)
+# The lines a new base's ignore file carries for the same files: the exact
+# names and nothing wider. An AppleDouble file is not ignored, because a
+# pattern for it would hide a real document that happens to be named that way
+# from every check, and from git's own care when an update arrives (finding 2).
+# `Icon\r` is written as a pattern rather than as its name, because a carriage
+# return in the template would be read back as the end of a line, and `Icon`
+# alone would hide a file somebody named Icon. The bracket matches exactly one
+# character that is not a printable one, which is the carriage return and
+# nothing a person types.
+IGNORE_LINES = (".DS_Store", "Thumbs.db", "desktop.ini", "Icon[^ -~]")
 
 
-def is_clutter(path: str) -> bool:
-    """Whether a path is a file the operating system made, or inside one of its folders."""
-    parts = [part for part in str(path).replace(os.sep, "/").split("/") if part]
-    if not parts:
+def is_clutter_file(full_path: str) -> bool:
+    """Whether the file at this place on the disk is one the computer made."""
+    name = os.path.basename(str(full_path))
+    exact = name in CLUTTER_FILE_NAMES
+    double = name.startswith(APPLEDOUBLE_PREFIX) and len(name) > len(APPLEDOUBLE_PREFIX)
+    if not exact and not double:
         return False
-    for part in parts:
-        if part.casefold() in _FOLDERS_FOLDED:
-            return True
-    last = parts[-1]
-    if last.casefold() in _FILES_FOLDED:
+    try:
+        mode = os.lstat(full_path).st_mode
+    except OSError:
+        return False
+    if not stat.S_ISREG(mode):
+        return False
+    if exact:
         return True
-    return last.startswith(APPLEDOUBLE_PREFIX) and len(last) > len(APPLEDOUBLE_PREFIX)
+    try:
+        with open(full_path, "rb") as handle:
+            return handle.read(len(APPLEDOUBLE_MAGIC)) == APPLEDOUBLE_MAGIC
+    except OSError:
+        return False
+
+
+def is_clutter(relative: str, base_root: str) -> bool:
+    """Whether a path inside a base is a file the computer made on its own."""
+    relative = str(relative)
+    if not relative or relative.endswith("/"):
+        return False
+    return is_clutter_file(os.path.join(base_root, relative.replace("/", os.sep)))
 
 
 # --- Asking git ---------------------------------------------------------------
 
 # Every untracked file is listed on its own rather than folded into the folder
 # it sits in. Folded, a new folder holding nothing but a `.DS_Store` came back
-# as the folder's name, which is not clutter by its name, and the check would
-# have refused on it. `-z` keeps each name exactly as it is on the disk, which
-# is how `Icon\r` and a name with an accent are compared as themselves.
+# as the folder's name, and the check would have refused on it. `-z` keeps each
+# name exactly as it is on the disk, which is how `Icon\r` and a name with an
+# accent are compared as themselves.
 STATUS_ARGS = ("status", "--porcelain", "-z", "--untracked-files=all")
 
 
@@ -97,11 +112,17 @@ class Status(object):
     untracked clutter already left out, each as (its two letters, its paths).
     """
 
-    __slots__ = ("ran", "entries")
+    __slots__ = ("ran", "entries", "root")
 
-    def __init__(self, ran: bool, entries: Optional[List[Tuple[str, List[str]]]]):
+    def __init__(
+        self,
+        ran: bool,
+        entries: Optional[List[Tuple[str, List[str]]]],
+        root: Optional[str] = None,
+    ):
         self.ran = ran
         self.entries = entries
+        self.root = root
 
     @property
     def clean(self) -> bool:
@@ -117,26 +138,24 @@ class Status(object):
         return found
 
 
-def _is_untracked_clutter(letters: str, named: Sequence[str]) -> bool:
-    return letters == "??" and all(is_clutter(one) for one in named)
-
-
 def look(
     base_root: str, git: GitRunner, timeout: int = DEFAULT_TIMEOUT_SECONDS
 ) -> Status:
     """The unsaved work in a base, leaving out files the computer made on its own."""
     result = git.run(list(STATUS_ARGS), cwd=base_root, timeout=timeout)
     if not result.ok:
-        return Status(False, None)
+        return Status(False, None, base_root)
     entries = status_entries(result.stdout)
     if entries is None:
-        return Status(True, None)
+        return Status(True, None, base_root)
     kept = [
         (letters, named)
         for letters, named in entries
-        if not _is_untracked_clutter(letters, named)
+        if not (
+            letters == "??" and all(is_clutter(one, base_root) for one in named)
+        )
     ]
-    return Status(True, kept)
+    return Status(True, kept, base_root)
 
 
 # --- Saying which files it is -------------------------------------------------
@@ -148,16 +167,18 @@ WHERE = "They are in %s."
 # one a person can be read.
 COMPUTER_MADE_ONE = "a file your computer made on its own"
 COMPUTER_MADE_MANY = "%s files your computer made on their own"
-# What a file is called when its name cannot be read out safely.
+# What every other file is called. A name is never repeated back (Astra,
+# finding 3): a file named like an instruction was read out as one, inside a
+# sentence the skills tell the assistant to relay word for word.
 ONE_OF_YOUR_FILES = "one of your files"
 SOME_OF_YOUR_FILES = "%s of your files"
 ONE_OTHER_FILE = "one other file"
+OTHER_FILES = "%s other files"
 # What a file holding one context change is called when a sentence names it on
 # its own. Its file name is the change's identifier, which is never read out.
 ONE_OF_YOUR_CONTEXT_CHANGES = "one of your context changes"
-OTHER_FILES = "%s other files"
 
-# How many files are named before the rest are counted.
+# How many documents are named before the rest are counted.
 MOST_NAMED = 3
 
 _COUNT_WORDS = (
@@ -174,17 +195,6 @@ _COUNT_WORDS = (
     "ten",
 )
 
-# A file name that may be read out: plain letters, digits, spaces, dots and
-# hyphens, and nothing else. Anything more is not repeated back, because a
-# name is read out in the middle of words the assistant relays. It has to
-# start and end with a letter or a digit, so a name made only of dots or
-# spaces, or one ending in a dot, never turns the sentence into punctuation.
-_PLAIN_FILE_NAME_RE = re.compile(r"^[A-Za-z0-9](?:[A-Za-z0-9 .-]{0,78}[A-Za-z0-9])?$")
-
-# The folders GTM Base keeps its own records in. A file there is named by what
-# it is not, because its name is an identifier and nobody works in there.
-_OWN_FOLDERS = ("work/", constants.CORRECTIONS_DIR + "/", ".claude/")
-
 
 def _counted(number: int) -> str:
     if 0 <= number < len(_COUNT_WORDS):
@@ -192,35 +202,44 @@ def _counted(number: int) -> str:
     return str(number)
 
 
-def _name_for(path: str) -> Optional[str]:
-    """What one unsaved file is called, or None when it cannot be named."""
+def _document_name(path: str) -> Optional[str]:
+    """What a context document is called, or None for every other file.
+
+    Only a document in the context folder has a name a person uses for it, and
+    that name comes from `names.document_name`, the one place names are made.
+    A document it cannot name plainly is counted, never named.
+    """
     normalized = str(path).replace(os.sep, "/")
-    stem = normalized.rstrip("/").rsplit("/", 1)[-1]
-    if normalized.startswith(constants.CONTEXT_DIR + "/") and normalized.endswith(".md"):
-        # The document's own name only when its file name is plain words, so
-        # a name such as `-.md` is counted rather than read out as nothing.
-        if not _PLAIN_FILE_NAME_RE.match(stem[: -len(".md")]):
-            return None
-        try:
-            return names.document_name(normalized)
-        except ValueError:
-            return None
-    if normalized.startswith(_OWN_FOLDERS):
+    if not (
+        normalized.startswith(constants.CONTEXT_DIR + "/") and normalized.endswith(".md")
+    ):
         return None
-    if _PLAIN_FILE_NAME_RE.match(stem):
-        return stem
-    return None
+    stem = normalized.rsplit("/", 1)[-1][: -len(".md")]
+    # A name with no letter or digit in it reads out as punctuation.
+    if not any(char.isascii() and char.isalnum() for char in stem):
+        return None
+    try:
+        name = names.document_name(normalized)
+    except ValueError:
+        return None
+    if name == names.DOCUMENT_WITHOUT_A_PLAIN_NAME:
+        return None
+    return name
 
 
-def plain_name(path: str) -> str:
+def _computer_made(path: str, base_root: Optional[str]) -> bool:
+    return bool(base_root) and is_clutter(path, base_root)
+
+
+def plain_name(path: str, base_root: Optional[str] = None) -> str:
     """What one file is called when a sentence names it on its own."""
-    if is_clutter(path):
+    if _computer_made(path, base_root):
         return COMPUTER_MADE_ONE
     normalized = str(path).replace(os.sep, "/")
     for folder in (constants.CHANGES_DIR, constants.LEGACY_CHANGES_DIR):
         if normalized.startswith(folder + "/"):
             return ONE_OF_YOUR_CONTEXT_CHANGES
-    return _name_for(path) or ONE_OF_YOUR_FILES
+    return _document_name(path) or ONE_OF_YOUR_FILES
 
 
 def _joined(pieces: Sequence[str]) -> str:
@@ -229,16 +248,16 @@ def _joined(pieces: Sequence[str]) -> str:
     return "%s and %s" % (", ".join(pieces[:-1]), pieces[-1])
 
 
-def where(paths: Sequence[str]) -> str:
+def where(paths: Sequence[str], base_root: Optional[str] = None) -> str:
     """The unsaved files as a person says them, for example "your positioning"."""
     named: List[str] = []
     unnamed = 0
     computer_made = 0
     for path in paths:
-        if is_clutter(path):
+        if _computer_made(path, base_root):
             computer_made += 1
             continue
-        name = _name_for(path)
+        name = _document_name(path)
         # Two files that read out the same are two files, so the second one
         # is counted rather than folded into the first.
         if name is None or name in named or len(named) >= MOST_NAMED:
@@ -268,9 +287,9 @@ def where(paths: Sequence[str]) -> str:
     return _joined(pieces)
 
 
-def where_sentence(paths: Sequence[str]) -> str:
+def where_sentence(paths: Sequence[str], base_root: Optional[str] = None) -> str:
     """The one sentence naming the unsaved files, or nothing when none are known."""
-    said = where(paths)
+    said = where(paths, base_root)
     return WHERE % said if said else ""
 
 
@@ -284,8 +303,9 @@ def refusal(template: str, fallback: str, status: Status, allowed=()) -> str:
     """
     if status.entries is None:
         return fallback
-    left = [one for one in status.paths() if one not in set(allowed)]
-    sentence = where_sentence(left)
+    allowed = set(allowed)
+    left = [one for one in status.paths() if one not in allowed]
+    sentence = where_sentence(left, status.root)
     if not sentence:
         return fallback
     return template % sentence

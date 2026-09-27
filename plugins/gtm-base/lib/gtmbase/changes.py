@@ -1001,7 +1001,9 @@ def _put_back(base_root: str, journal: dict, git: GitRunner) -> Optional[str]:
     """
     sorted_out = _sort_out(base_root, journal, git)
     if sorted_out.theirs:
-        return THEIR_WORDS % unsaved.plain_name(sorted(sorted_out.theirs)[0])
+        return THEIR_WORDS % unsaved.plain_name(
+            sorted(sorted_out.theirs)[0], base_root
+        )
     if sorted_out.unrecoverable:
         return CANNOT_PUT_BACK % sorted(sorted_out.unrecoverable)[0]
 
@@ -1030,7 +1032,7 @@ def _put_back(base_root: str, journal: dict, git: GitRunner) -> Optional[str]:
         # the classification above and this moment, and their save must not
         # be undone by a decision made about what was there before it.
         if ids.exact_hash(current) != _what_this_run_wrote(journal, relative):
-            return THEIR_WORDS % unsaved.plain_name(relative)
+            return THEIR_WORDS % unsaved.plain_name(relative, base_root)
         try:
             if in_head:
                 git.check(["checkout", "HEAD", "--", relative], cwd=base_root)
@@ -1408,7 +1410,7 @@ def _theirs_before_finishing(base_root, journal, git) -> Optional[str]:
         if current is None:
             continue
         if ids.exact_hash(current) not in allowed:
-            return THEIR_WORDS % unsaved.plain_name(relative)
+            return THEIR_WORDS % unsaved.plain_name(relative, base_root)
 
     # The shared look names paths exactly as they are, so a path with an
     # accent or a space in it is its own name here and not git's quoted form,
@@ -1421,7 +1423,7 @@ def _theirs_before_finishing(base_root, journal, git) -> Optional[str]:
         # is the thing that moved it.
         for piece in named:
             for unexplained in _what_is_really_there(base_root, piece, ours):
-                return THEIR_WORDS % unsaved.plain_name(unexplained)
+                return THEIR_WORDS % unsaved.plain_name(unexplained, base_root)
     return None
 
 
@@ -1447,7 +1449,7 @@ def _what_is_really_there(base_root: str, named: str, ours) -> List[str]:
         for name in sorted(files):
             full = os.path.join(where, name)
             relative = os.path.relpath(full, base_root).replace(os.sep, "/")
-            if relative not in ours and not unsaved.is_clutter(relative):
+            if relative not in ours and not unsaved.is_clutter_file(full):
                 left.append(relative)
     return left
 

@@ -190,10 +190,7 @@ def _copy_template(source: str, destination: str, email: str) -> None:
     list of text the outgoing check lets through. Every other file is copied as
     it is, and the empty folders keep their marker files so they survive.
     """
-    for folder, subfolders, filenames in os.walk(source):
-        # A folder a Mac keeps to itself is never walked into, so it is never
-        # made in the new base either.
-        subfolders[:] = [name for name in subfolders if not unsaved.is_clutter(name)]
+    for folder, _subfolders, filenames in os.walk(source):
         relative = os.path.relpath(folder, source)
         target_folder = (
             destination if relative == "." else os.path.join(destination, relative)
@@ -211,7 +208,7 @@ def _copy_template(source: str, destination: str, email: str) -> None:
                 continue
             # A Finder file in the installed template is not part of it, and
             # the first save of a new base must never carry one in.
-            if unsaved.is_clutter(repo_relative):
+            if unsaved.is_clutter_file(source_file):
                 continue
             text = _read(source_file)
             if text is None:

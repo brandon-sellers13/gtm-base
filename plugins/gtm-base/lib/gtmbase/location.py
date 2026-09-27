@@ -186,7 +186,7 @@ def _holds_content(folder: str) -> bool:
         if name.casefold() == constants.BASE_FOLDER_NAME:
             continue
         # A file the computer made on its own is nothing the person put there.
-        if unsaved.is_clutter(name):
+        if unsaved.is_clutter_file(os.path.join(folder, name)):
             continue
         return True
     return False
