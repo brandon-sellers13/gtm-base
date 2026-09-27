@@ -1416,3 +1416,4 @@ Plan: docs/plans/2026-09-19-001-feat-base-that-produces-work-plan.md, Unit 1.7c 
 - [ ] Orchestrator: review, merge into release-b, then 1.7d, which must keep the record of what was shown past the closing.
 
 Review: the contract's scope clause is a heading naming a place dropped for the scope, because 1.7a settled that no filter reads the words of a document and the places dropped are what apply the scope. A `[your call: ...]` question in a finished page is kept as an open question rather than refused, only under a heading and only on the person's say, because adoption never edits the page and P27 already makes such a file unconfirmed until it is answered.
+- [x] Full suite after the review fixes: 2330 tests OK in 861 seconds, then 103 from a linked folder OK in 85 seconds (tests/run.sh exit 0).
