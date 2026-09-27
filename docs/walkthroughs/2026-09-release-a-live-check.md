@@ -114,3 +114,15 @@ All three root causes above are fixed in 0.3.1 (commit on main the same day, ins
 Not verified by Claude: the release against the real Gridwise base, because a read-only run from ~/Gridwise was blocked by the session's permission mode. Step 2 of this check is that verification.
 
 To resume: quit Claude Code and open it again, open it in ~/Gridwise, and start again at step 2. Expected at step 2 now: no command fails before the answer, the answer is the review's own sentence ("Nothing in your base is due a look today, and no change is waiting for you to approve it."), followed (after the quiet-record question, if that is due) by the offer: "Your context changes are stored the old way. Updating them takes one step and changes nothing they say. Shall I do it?"
+
+### 0.3.1 live check, run 2026-09-27 (from Brandon's screenshot of a new session opened in ~/Gridwise, plugin 0.3.1)
+
+**Step 1, a quiet start: passed.** Brandon said "hey what's up". The reply offered his weekly-planning skill and named the branch and uncommitted files in ~/Gridwise, which come from his own setup in that folder, not from GTM Base. Nothing was asked on the base's behalf and nothing was said about the map.
+
+**Step 2, review my base: passed.** Brandon said "review my base". The session ran one command and used one tool, with no failed command shown and no search for the base. Its whole answer was the review's own two sentences, word for word:
+
+> Nothing in your base is due a look today, and no change is waiting for you to approve it.
+>
+> Your context changes are stored the old way. Updating them takes one step and changes nothing they say. Shall I do it?
+
+Every line reads in seconds. No path, identifier, "up to date", or added advice appeared, and the offer that 0.3.0 never made appeared once. All three 0.3.1 root causes are confirmed fixed in the real run. Not yet confirmed: the expanded command, to see that it ran from ~/Gridwise without an error.
