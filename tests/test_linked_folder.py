@@ -322,6 +322,7 @@ class TestTheSecondRunCoversEveryClassThatStartsAScript(unittest.TestCase):
         "test_third_look": ("run_script",),
         "test_words_files": ("script",),
         "test_open_questions": ("run_script",),
+        "test_adoption": ("run_script",),
     }
 
     def listed(self):
