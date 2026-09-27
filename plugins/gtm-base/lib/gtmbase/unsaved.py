@@ -34,6 +34,7 @@ file the computer made.
 from __future__ import annotations
 
 import os
+import re
 import stat
 from typing import List, Optional, Sequence, Tuple
 
@@ -174,6 +175,13 @@ ONE_OF_YOUR_FILES = "one of your files"
 SOME_OF_YOUR_FILES = "%s of your files"
 ONE_OTHER_FILE = "one other file"
 OTHER_FILES = "%s other files"
+# What a document in the context folder is called when it is not one the
+# product knows. Its file name is never read out either (Astra's confirmation
+# of 0.3.2: an ordinary `.md` name under the context folder was).
+ONE_OF_YOUR_DOCUMENTS = "one of your documents"
+SOME_OF_YOUR_DOCUMENTS = "%s of your documents"
+ONE_OTHER_DOCUMENT = "one other document"
+OTHER_DOCUMENTS = "%s other documents"
 # What a file holding one context change is called when a sentence names it on
 # its own. Its file name is the change's identifier, which is never read out.
 ONE_OF_YOUR_CONTEXT_CHANGES = "one of your context changes"
@@ -202,29 +210,49 @@ def _counted(number: int) -> str:
     return str(number)
 
 
-def _document_name(path: str) -> Optional[str]:
-    """What a context document is called, or None for every other file.
+# The documents the product itself knows, each with a fixed label: the two a
+# base needs, the map, and the nine documents of the context standard a base
+# is being moved to (plan revision 2.2, Unit 1.5b), so a refusal there names
+# them too. Nothing here is read out of a file name.
+KNOWN_DOCUMENT_LABELS = dict(names.KNOWN_DOCUMENTS)
+KNOWN_DOCUMENT_LABELS.update(
+    {
+        "context/goals.md": "your goals",
+        "context/product.md": "your product",
+        "context/icps.md": "your customer profiles",
+        "context/buyer-personas.md": "your buyer personas",
+        "context/positioning.md": "your positioning",
+        "context/messaging.md": "your messaging",
+        "context/voice.md": "your voice",
+        "context/design.md": "your design",
+        "context/metrics.md": "your metrics",
+    }
+)
 
-    Only a document in the context folder has a name a person uses for it, and
-    that name comes from `names.document_name`, the one place names are made.
-    A document it cannot name plainly is counted, never named.
-    """
+# A segment's file name, checked whole: lowercase words of letters and digits
+# joined by single hyphens, at most five of them. It is read out as the
+# segment's name ("your mid market segment"), so nothing else is let through.
+_SAFE_SLUG_RE = re.compile(r"[a-z0-9]+(?:-[a-z0-9]+){0,4}")
+_SAFE_SLUG_MOST = 40
+
+
+def _known_label(path: str) -> Optional[str]:
+    """The fixed label of a document the product knows, or None."""
     normalized = str(path).replace(os.sep, "/")
-    if not (
-        normalized.startswith(constants.CONTEXT_DIR + "/") and normalized.endswith(".md")
-    ):
+    label = KNOWN_DOCUMENT_LABELS.get(normalized)
+    if label:
+        return label
+    folder, _slash, name = normalized.rpartition("/")
+    if folder != names.SEGMENTS_DIR or not name.endswith(".md"):
         return None
-    stem = normalized.rsplit("/", 1)[-1][: -len(".md")]
-    # A name with no letter or digit in it reads out as punctuation.
-    if not any(char.isascii() and char.isalnum() for char in stem):
+    slug = name[: -len(".md")]
+    if len(slug) > _SAFE_SLUG_MOST or not _SAFE_SLUG_RE.fullmatch(slug):
         return None
-    try:
-        name = names.document_name(normalized)
-    except ValueError:
-        return None
-    if name == names.DOCUMENT_WITHOUT_A_PLAIN_NAME:
-        return None
-    return name
+    return "your %s segment" % slug.replace("-", " ")
+
+
+def _is_a_document(path: str) -> bool:
+    return str(path).replace(os.sep, "/").startswith(constants.CONTEXT_DIR + "/")
 
 
 def _computer_made(path: str, base_root: Optional[str]) -> bool:
@@ -239,7 +267,10 @@ def plain_name(path: str, base_root: Optional[str] = None) -> str:
     for folder in (constants.CHANGES_DIR, constants.LEGACY_CHANGES_DIR):
         if normalized.startswith(folder + "/"):
             return ONE_OF_YOUR_CONTEXT_CHANGES
-    return _document_name(path) or ONE_OF_YOUR_FILES
+    label = _known_label(path)
+    if label:
+        return label
+    return ONE_OF_YOUR_DOCUMENTS if _is_a_document(path) else ONE_OF_YOUR_FILES
 
 
 def _joined(pieces: Sequence[str]) -> str:
@@ -251,30 +282,44 @@ def _joined(pieces: Sequence[str]) -> str:
 def where(paths: Sequence[str], base_root: Optional[str] = None) -> str:
     """The unsaved files as a person says them, for example "your positioning"."""
     named: List[str] = []
-    unnamed = 0
+    documents = 0
+    files = 0
     computer_made = 0
     for path in paths:
         if _computer_made(path, base_root):
             computer_made += 1
             continue
-        name = _document_name(path)
+        label = _known_label(path)
         # Two files that read out the same are two files, so the second one
         # is counted rather than folded into the first.
-        if name is None or name in named or len(named) >= MOST_NAMED:
-            unnamed += 1
+        if label is not None and label not in named and len(named) < MOST_NAMED:
+            named.append(label)
+        elif _is_a_document(path):
+            documents += 1
         else:
-            named.append(name)
+            files += 1
     pieces = list(named)
-    if unnamed:
+    if documents:
         if named:
             pieces.append(
-                ONE_OTHER_FILE if unnamed == 1 else OTHER_FILES % _counted(unnamed)
+                ONE_OTHER_DOCUMENT
+                if documents == 1
+                else OTHER_DOCUMENTS % _counted(documents)
             )
         else:
             pieces.append(
-                ONE_OF_YOUR_FILES
-                if unnamed == 1
-                else SOME_OF_YOUR_FILES % _counted(unnamed)
+                ONE_OF_YOUR_DOCUMENTS
+                if documents == 1
+                else SOME_OF_YOUR_DOCUMENTS % _counted(documents)
+            )
+    if files:
+        if named:
+            pieces.append(
+                ONE_OTHER_FILE if files == 1 else OTHER_FILES % _counted(files)
+            )
+        else:
+            pieces.append(
+                ONE_OF_YOUR_FILES if files == 1 else SOME_OF_YOUR_FILES % _counted(files)
             )
     if computer_made:
         pieces.append(

@@ -368,7 +368,7 @@ class TestTheStateOfTheFolder(unittest.TestCase):
             )
 
             self.assertEqual(approve_local.STATUS_REFUSED, applied.status)
-            self.assertEqual([approve_local.UNSAVED_EDITS_NAMED % "They are in your notes."], applied.reasons)
+            self.assertEqual([approve_local.UNSAVED_EDITS_NAMED % "They are in one of your documents."], applied.reasons)
             self.assertEqual([], corrections_in(root))
             self.assertIn("Companies of any size.", support.read(os.path.join(root, ICP)))
             self.assertTrue(
@@ -518,7 +518,7 @@ class TestARunThatStoppedHalfway(unittest.TestCase):
             # This run's own leavings were undone, the person's edit was not,
             # and the person's edit is what stopped the run.
             self.assertEqual(approve_local.STATUS_REFUSED, applied.status)
-            self.assertEqual([approve_local.UNSAVED_EDITS_NAMED % "They are in your notes."], applied.reasons)
+            self.assertEqual([approve_local.UNSAVED_EDITS_NAMED % "They are in one of your documents."], applied.reasons)
             self.assertEqual(
                 "Something I was in the middle of.\n", support.read(mine)[9:]
             )
