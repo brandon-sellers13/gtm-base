@@ -40,6 +40,7 @@ from gtmbase import (
     session_start,
     stale_check,
     state,
+    unsaved,
 )
 
 ICP = moment_tests.ICP
@@ -706,16 +707,21 @@ class TestWhatStandsInTheWay(LocalCase):
 
     def test_real_unsaved_work_stops_it_and_is_named(self):
         _code, out, _err = self.flow.show("1")
-        support.write(os.path.join(self.base.root, "context", "notes.md"), "draft\n")
+        full = os.path.join(self.base.root, POSITIONING)
+        support.write(full, support.read(full) + "\nA sentence not saved yet.\n")
         before = head_of(self.base.root)
         code, said, _err = self.flow.run(
             ["--record-change", "record", "--shown", value_on(out, "shown")]
         )
         self.assertEqual(1, code)
+        # The files are named the way 0.3.2's shared refusal names them.
         self.assertEqual(
-            record_change.UNSAVED_NAMED % "They are in your notes.", said.strip()
+            record_change.UNSAVED_NAMED
+            % unsaved.where_sentence([POSITIONING], self.base.root),
+            said.strip(),
         )
-        self.assertNotIn("context/notes.md", said)
+        self.assertIn("your positioning", said)
+        self.assertNotIn(POSITIONING, said)
         self.assertEqual(before, head_of(self.base.root))
         self.assertEqual([], entry_files(self.base.root))
 
