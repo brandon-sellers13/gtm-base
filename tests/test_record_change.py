@@ -108,6 +108,13 @@ def run_script(argv, cwd):
     return code, out.getvalue(), err.getvalue()
 
 
+def names_cap():
+    """How long the short name a change is called by may be."""
+    from gtmbase import names
+
+    return names.CHANGE_LINE_CHARS
+
+
 def value_on(printed, name):
     found = re.search(r"\b%s=(\S+)" % re.escape(name), printed)
     return found.group(1) if found else None
@@ -724,6 +731,45 @@ class TestTheWords(LocalCase):
         self.assertIn("Why: This was written down on", out)
         self.assertNotIn("source:", out)
         self.assertNotIn(join_flow.WHY_FROM_THE_CLOSING, out)
+
+    def test_what_changed_is_shown_whole_and_never_cut(self):
+        """Live check step 5, finding 3: a "What changed" cut off mid-number."""
+        long = (
+            "Our verified driver count is over 1 million since 2017, replacing "
+            "the 500k a year we used to cite in every deck and on the website."
+        )
+        self.assertGreater(len(long), names_cap())
+        code, out, err = self.flow.show("1", what=long)
+        self.assertEqual(0, code, out + err)
+        self.assertIn("What changed: " + long + "\n", out)
+        said = out.split("[for the assistant]")[0]
+        self.assertNotIn("...", said)
+
+    def test_the_cap_and_the_refusal_agree(self):
+        cap = record_change.SHOWN_CHARS
+        at_the_cap = ("a" * (cap - 2)) + " b"
+        code, out, err = self.flow.show("1", what=at_the_cap, why="x" * cap)
+        self.assertEqual(0, code, out + err)
+        self.assertIn("What changed: " + at_the_cap + "\n", out)
+        self.assertIn("Why: " + "x" * cap + "\n", out)
+        self.assertNotIn("...", out.split("[for the assistant]")[0])
+        for what, why in (("a" * (cap + 1), None), ("fine", "y" * (cap + 1))):
+            code, out, _err = self.flow.show("1", what=what, why=why)
+            self.assertEqual(1, code)
+            self.assertEqual(record_change.TOO_LONG, out.strip())
+        # Taking a marker apart makes it longer, and the cap is counted after.
+        marked = "<!--" + "c" * (cap - 5)
+        self.assertLessEqual(len(marked), cap)
+        self.assertGreater(len(record_change.as_shown(marked)), cap)
+        code, out, _err = self.flow.show("1", what=marked)
+        self.assertEqual(1, code)
+        self.assertEqual(record_change.TOO_LONG, out.strip())
+
+    def test_the_closing_still_shows_the_short_name(self):
+        entry = formats.ChangeEntry.parse(
+            moment_tests.entry_text(body="x " * 60 + "\nWhy it happened.")
+        )
+        self.assertIn("...", join_flow.four_lines_for(entry))
 
     def test_nothing_about_what_changed_is_refused(self):
         code, out, _err = self.flow.show("1", what="   ")

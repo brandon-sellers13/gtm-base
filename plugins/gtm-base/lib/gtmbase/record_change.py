@@ -86,6 +86,11 @@ ASKED_FILE = "context-change-asked.json"
 # Most characters any one of the three answers may hold. A person answering in
 # a sentence or two writes far less than this.
 WORDS_CHARS = constants.MAX_EXCERPT_CHARS
+# What changed and why are shown whole in the four lines, and a value there is
+# cut at the cap that keeps the fence safe. So those two are held to that same
+# cap, counted as they will be shown, and anything longer is refused before it
+# is shown: nothing that gets past the refusal is ever cut in the showing.
+SHOWN_CHARS = moment.VALUE_CHARS
 
 # What the saved work is called.
 SAVE_MESSAGE = "Record a context change"
@@ -392,6 +397,17 @@ def _one_line(text: Optional[str]) -> str:
     return " ".join(str(text or "").split())
 
 
+def as_shown(text: Optional[str]) -> str:
+    """One answer the way the four lines will show it, before any cap.
+
+    One line, with anything shaped like a marker taken apart, which is
+    `moment._one_line` without its cut. Taking a marker apart adds spaces, so
+    this, and not the words as typed, is what the cap is measured against.
+    """
+    single = _one_line(text)
+    return moment._MARKERS_RE.sub(lambda found: " ".join(found.group(0)), single)
+
+
 def _screened(text: str, allowlist) -> None:
     """Refuse a person's words holding a contact detail or a key.
 
@@ -504,6 +520,8 @@ def build_entry(
     if not what:
         raise _refuse(NEEDS_WORDS, CODE_NO_WORDS)
     if any(len(words) > WORDS_CHARS for words in (what, why, source)):
+        raise _refuse(TOO_LONG, CODE_TOO_LONG)
+    if any(len(as_shown(words)) > SHOWN_CHARS for words in (what, why)):
         raise _refuse(TOO_LONG, CODE_TOO_LONG)
     allowlist, _code = scan.load_allowlist(base_root)
     for words in (what, why, source):
@@ -631,7 +649,9 @@ def preview(
     text = entry.render()
     # The four lines come from this entry and from nothing else, the closing's
     # own `four_lines_for` reading the very text that will be written.
-    showing = moment.fenced(join_flow.four_lines_for(entry, why_when_none(entry)))
+    showing = moment.fenced(
+        join_flow.four_lines_for(entry, why_when_none(entry), what_in_full=True)
+    )
     # The yes is bound to the whole entry rather than to the four lines. That
     # is safe to do although the person reads only the four lines, because
     # the four lines are worked out from this one entry and nothing else, and

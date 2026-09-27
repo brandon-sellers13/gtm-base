@@ -1595,6 +1595,14 @@ def _one_line(text: str) -> str:
     return " ".join(str(text or "").split())
 
 
+def _first_line(entry) -> str:
+    """The first line of the change, whole, with nothing cut from it."""
+    for line in str(entry.body or "").split("\n"):
+        if line.strip():
+            return line.strip()
+    return names.CHANGE_WITHOUT_A_LINE
+
+
 def _what_changed(entry) -> str:
     """The first line of the change, which is the sentence somebody gave."""
     return names.change_name(entry.body, None)
@@ -1619,7 +1627,11 @@ def _why_of(entry, why_when_none: str = WHY_FROM_THE_CLOSING) -> str:
     return why_when_none
 
 
-def four_lines_for(entry, why_when_none: str = WHY_FROM_THE_CLOSING) -> str:
+def four_lines_for(
+    entry,
+    why_when_none: str = WHY_FROM_THE_CLOSING,
+    what_in_full: bool = False,
+) -> str:
     """One context change as the four labeled lines, and nothing else.
 
     Every value comes out of a file somebody typed into and is read out inside
@@ -1627,9 +1639,19 @@ def four_lines_for(entry, why_when_none: str = WHY_FROM_THE_CLOSING) -> str:
     with anything that could end the block taken apart first. `moment` owns
     that rule and is asked for it rather than having it written out again
     here, because two copies of a rule is how one of them ends up not doing it.
+
+    `what_in_full` is for a context change recorded at any time, where the
+    first line is the sentence the person has just typed and is shown whole
+    rather than cut to the short name a change is called by (finding 3 of
+    live check step 5, a "What changed" cut off mid-number). It is still one
+    line, still has its markers taken apart, and is still held to the one cap
+    that keeps the fence safe; that step refuses anything longer before it is
+    shown, so nothing it shows is ever cut.
     """
     values = (
-        moment._one_line(_what_changed(entry)),
+        moment._one_line(
+            _first_line(entry) if what_in_full else _what_changed(entry)
+        ),
         moment._one_line(_why_of(entry, why_when_none)),
         moment._one_line(
             ", ".join(names.document_name(path) for path in entry.affects)
