@@ -141,3 +141,14 @@ The first sentence is the script's own, with no identifier (0.3.1's fix to findi
 
 1. "As things stand, GTM Base would offer this." is the script's own sentence (`changes.OFFER_STATE_NOW`), relayed correctly, but it is written for the builder rather than the person and means nothing to Brandon. Fix: say nothing when the offer would be made, and when it would not, say the plain reason (unsaved edits, a change written twice, a shared base whose seats are not yet updated).
 2. The third sentence was added by the assistant and is wrong for this base. The script did not print it. `changes.migrate` asks for the every-seat confirmation only when the base has a shared copy (`paths.remote_url` is set), and the Gridwise base has none. The assistant took it from the stale-check skill's table of commands, which lists `--every-seat-updated` without saying it applies only to a shared base. This breaks 0.3.1's rule that the assistant adds no claim of its own. Fix: the skill says to ask about other seats only when the script's own sentence asks it, and the shared-base sentence keeps its one-line reason (an older version reads an updated base as empty, so a teammate would be told nothing is out of date). Brandon asked for that reason to be stated whenever the confirmation is asked.
+
+**Step 4, the update itself: passed, with two findings.** Brandon said yes. The session ran the update and replied:
+
+> I ran the update. You didn't confirm that everyone who opens this base is on the current version of GTM Base, and it didn't ask for that, so I left that confirmation out. Its result:
+>
+> Your context changes are now stored the way GTM Base stores them today, and all 1 of them say exactly what they said before.
+
+He then said "review my base" again, and the answer was the review's own sentence and nothing more: "Nothing in your base is due a look today, and no change is waiting for you to approve it." It matches step 2 minus the offer, so the move landed and the context change reads the same.
+
+1. The script's sentence (`changes.MIGRATED`) says "all 1 of them" for a base holding one context change. Fix: the count in words, and the singular for one ("your one context change says exactly what it said before"), as the look before the update already does with `changes.counted`. Unit 1.5b replaces this sentence, so the fix belongs there as well.
+2. The assistant narrated how the command works, walking back its own invented claim from step 3. Same cause and same fix as step 3 finding 2: the skill never mentions the other-seats confirmation unless the script's own sentence asks it, and the reply after the update is the script's sentence alone.
