@@ -1475,3 +1475,9 @@ Review: docs/reviews/2026-09-27-unit-1-7c-1-7d-astra.md, not ready, eight findin
 - [x] 8. Candidate and inventory numbers must be positive counting numbers; a record holding anything else is set aside.
 - [ ] Full suite after the fixes.
 - [x] Full suite after Astra's merged-line fixes: 2427 tests OK in 1219 seconds, then 115 from a linked folder OK in 101 seconds (tests/run.sh exit 0).
+
+#### Astra's confirmation pass on the merged units (2026-09-27)
+Review: docs/reviews/2026-09-27-unit-1-7c-1-7d-verify-astra.md, all eight closed, three new medium findings, not ready. Tests in tests/test_import_astra_verify.py, committed failing first.
+- [x] 1. Claims carry the inode, the hash and the original name; a sweep settles any claim left by a stop (own file removed, another put back, or kept aside under a plain name with a sentence); a failed put-back is kept aside and reported.
+- [x] 2. No clock: every temporary-file writer holds a shared folder ownership lock (fsutil.FolderLock) for its write and move; the sweep reclaims only when it can take the lock exclusively. Tested with a child stopped with SIGSTOP (its file survives and its move succeeds after SIGCONT) and one killed with SIGKILL (reclaimed at once).
+- [x] 3. Only real markup refuses a page; CAC<LTV., a<b, x <y, LTV<3x and <3 pass; the oversized tag, with or without a value, is refused.
