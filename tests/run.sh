@@ -64,5 +64,6 @@ python3 -m unittest -v \
   test_import_recovery.TestResumeSaysNamesAndNeverPageText \
   test_adoption.TestAstraFindingOne \
   test_adoption.TestTheApprovalShowing \
-  test_import_astra_merged.TestNoFileNameOutsideTheFence
+  test_import_astra_merged.TestNoFileNameOutsideTheFence \
+  test_segments_left_to_draft.TestTheScript
 exit $?

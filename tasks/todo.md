@@ -1495,3 +1495,16 @@ Review: docs/reviews/2026-09-27-unit-1-7c-1-7d-verify-2-astra.md, five findings,
 Review: docs/reviews/2026-09-27-unit-1-7c-1-7d-verify-3-astra.md, ready with one change. Tests in tests/test_import_astra_verify_3.py, committed failing first.
 - [x] A start tag is markup only with an element name (the HTML standard, older names browsers honor, SVG and MathML), a custom element name, or an attribute with a value; end tags, comments, declarations and processing instructions always refuse. Comparisons before a quoted reply or a later greater-than sign pass; the script, div, oversized span, custom element and valued made up tag cases still refuse.
 - [x] LOCKS_NOT_PRIVATE reworded, the orchestrator's call open to Brandon's veto.
+
+#### Call 29: a segment settled to be drafted but not drafted before the closing (2026-09-27)
+Brandon's call 29: a later session asks again for consent to the material and finishes it. Branch `call-29` from `release-b`.
+- [ ] The import record carries a segment left to draft as one more per-file state (name and settled answer from the inventory; state approved with the hash of the approved draft, saved, or left out), never material or a draft body, and never a yes to read anything. It is kept from the moment the base exists, including an import with no finished page to take in.
+- [ ] Setup's step 6c writes a segment through the same write-ahead path as a finished page (the yes written down, then written, staged, its line, saved, then saved written down), so a stop anywhere is finished by the next session.
+- [ ] The closing keeps the record while a segment is left to draft and says so in one sentence.
+- [ ] "Finish setting up my base" finishes a draft whose yes was given and names each segment still to draft; a stop partway through a draft's save is finished, taken back, or drafted again, never written over.
+- [ ] A segment still to draft is drafted in a run of its own, after the same survey-free consent step as Unit 1.6: only the numbered document the record kept for it is offered, the person may add a folder or drop a file, a changed list asks again, and nothing is read before the yes. Material gone or changed is said plainly with two choices, leave it out or name new material, and nothing is drafted from nothing.
+- [ ] The draft is shown whole and approved exactly as step 6c; leaving a segment out ends it and it is never offered again.
+- [ ] The session-start notice covers both kinds in one notice; a segment left out is not "to finish".
+- [ ] Tests failing first: survives the closing and finished after a fresh consent; a changed list asks again; missing material said with the two choices; leave-out ends it; one notice; a stop at every mutation step resumes cleanly. run.sh linked-folder list and its guard for any new script-starting class.
+- [ ] Join skill, lint registry, atlas figure 7 (not republished), join guide and closing rules if they describe it, the draft Unreleased CHANGELOG.
+- [ ] Full suite, both runs; a correctness review of release-b to HEAD, fixes with tests, suite again.
