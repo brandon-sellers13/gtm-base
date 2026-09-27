@@ -23,6 +23,8 @@ This file is not an implementation plan. Both reviews of the build plan (Astra a
 
 **The layout by CLASS part, set by Brandon on 2026-09-25 (revision 2.3).** A base has `context/`, `learning/` (changes, corrections, and `lessons/` for lessons from results), `access/stack.md` in place of `context/stack.md` and `sources-of-truth.md`, `skills/<job>/` (refused until the company-skills brainstorm settles who may approve a skill change; that brainstorm runs before the first skill), `standards/<job>.md`, and `work/` for approvals. The first reporting skill is where `learning/lessons/` first gets filled: it proposes changes to personas or messaging from results, with the evidence attached.
 
+**The next plan, set by Brandon on 2026-09-27 (call 48 of the build plan).** The plan written as soon as Release B ships is the inventory (Unit 2.1), the thin runner (Unit 3.1, as the reviewed Unit 1.4b text at the end of this file) and the outbound sequence (Unit 3.4, as the reviewed Unit 1.4c text), pulled forward ahead of the rest of Phase 2. The outbound sequence is the shortest line from the base to pipeline (a sequence, then sends, replies and meetings), and SC-C is its test. The company-skills brainstorm (Unit 4.1) runs alongside it, because the outbound sequence ships with the plugin rather than as a company skill kept in a base. This replaces the sentence above that each phase's plan waits for a skill used on real work. The rest of Phase 2 (messaging and voice, design, the other kinds, the source map, and updating GTM Base) follows.
+
 ## Review findings to fold in when each plan is written
 
 Nothing below is decided again here. These are the reviewers' findings about the moved units, kept beside them so the next planning session starts from them.
