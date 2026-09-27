@@ -1328,3 +1328,7 @@ Built on fix-0-3-2 (the clutter fix and the seat-folder guard), which releases a
 
 #### Review (0.3.3)
 Two reviews. Security: S1, file names read out as instructions in the documents list, the questions and the answers (fixed: `record_change.safe_name`, only safely named documents are asked about); S2, `--record-change answer` settled any change for any owned document (fixed: answers bound to what the yes asked, once, origin manual only). Correctness: words files thrown away before a refusal that asks for a retry (fixed: claimed, given back on refusal); a name with a space asked about and never recordable (fixed: left flagged); the second screen ignored the allowlist (fixed); a refused correction left the earlier showing recordable (fixed); rollback could delete a file it did not write or undo a save that went through (fixed); identifiers named by corrections or prepared changes (fixed). Each has a test in tests/test_record_change.py. Not done: `--happened-on` carries a date typed on the command line (validated as a date); the closing's own `free_entry_id` still ignores confirmation lines.
+
+### 2026-09-27, 0.3.3: Brandon's calls on the open questions (after merge e828d7a)
+- [x] Q3: the any-time path shows only the four labeled lines inside the data fence, then the one ask; no identifier, path or settings block. The yes stays bound to the whole entry (a comment in record_change.preview says why that is safe). The closing's preview is unchanged.
+- [x] Q1, Q2, Q4 kept as built; Q5 wording accepted.

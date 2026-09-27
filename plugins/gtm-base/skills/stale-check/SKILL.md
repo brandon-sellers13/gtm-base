@@ -213,8 +213,9 @@ Does it affect those, or which numbers should it be?
 ## Record a context change: the whole of it, before anything is written
 <!-- step -->
 
-Nothing is written until they have read exactly what would be written, so this
-step shows the context change whole. Run, with the numbers they settled on:
+Nothing is written until they have read what would be written, so this step
+shows the context change as its four lines. Run, with the numbers they
+settled on:
 
 ```
 python3 scripts/stale_check.py --record-change show --what-changed-file <the path it printed> --reason-file <the path it printed> --source-file <the path it printed> --documents <the numbers they chose>
@@ -223,9 +224,9 @@ python3 scripts/stale_check.py --record-change show --what-changed-file <the pat
 - Leave off `--reason-file` or `--source-file` when they gave no reason or no
   source. Add `--happened-on <year-month-day>` when they said it happened on
   another day than today.
-- It prints the four lines, the three things that are theirs to correct, the
-  whole entry, and the ask. Show all of it as printed. Keep the shown value
-  from the line marked for you.
+- It prints the four lines, held apart as data, and the ask. Show them as
+  printed. Keep the shown value from the line marked for you; the yes is
+  bound to exactly what those four lines were worked out from.
 
 <!-- ask -->
 Record this context change, or leave it?

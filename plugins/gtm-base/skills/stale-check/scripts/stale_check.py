@@ -47,7 +47,6 @@ import argparse  # noqa: E402
 
 from gtmbase import (  # noqa: E402
     changes,
-    join_flow,
     machine,
     moment,
     paths,
@@ -270,9 +269,7 @@ def record_a_change(options, resolution):
             raise
         for claim in claims:
             wordsfile.consume_claim(claim)
-        sys.stdout.write(shown.proposed.summary + "\n\n")
-        sys.stdout.write(join_flow.NOTED_BY_IS_THE_BASES_RECORD + "\n")
-        sys.stdout.write("\n" + shown.proposed.artifact + "\n")
+        sys.stdout.write(shown.showing + "\n\n")
         sys.stdout.write(record_change.PREVIEW_ASK + "\n")
         sys.stdout.write("   [for the assistant] shown=%s\n" % shown.shown)
         return EXIT_DONE

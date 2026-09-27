@@ -268,13 +268,36 @@ class TestTheWholeFlowThroughTheScript(LocalCase):
         self.assertIn("What changed: Our verified driver count", out)
         self.assertIn("Why: " + WHY, out)
         self.assertIn("What it affects: your customer profile, your positioning", out)
-        self.assertIn(join_flow.ARTIFACT_OPEN, out)
         self.assertIn(moment.FENCE_NOTE, out)
         self.assertIn(record_change.PREVIEW_ASK, out)
-        # The wrapper above the whole entry names documents the way a person does.
-        wrapper = out.split(join_flow.ARTIFACT_OPEN)[0]
-        self.assertNotIn("context/strategy", wrapper)
-        self.assertNotIn("stg-", wrapper)
+        # Brandon's decision of 2026-09-27: the four lines inside the data
+        # fence, then the one ask, and nothing else. No identifier, no path,
+        # no settings block, and not the closing's whole-entry artifact.
+        said = out.split("[for the assistant]")[0]
+        self.assertNotIn(join_flow.ARTIFACT_OPEN, said)
+        self.assertNotIn(join_flow.NOTED_BY_IS_THE_BASES_RECORD, said)
+        self.assertNotIn("context/", said)
+        self.assertNotIn("stg-", said)
+        self.assertNotIn("origin:", said)
+        self.assertNotIn("---", said)
+        self.assertNotIn(SOURCE, said)
+        four = said.split(join_flow.CHANGE_OPEN)[1].split(join_flow.CHANGE_CLOSE)[0]
+        self.assertEqual(
+            ["What changed:", "Why:", "What it affects:", "When to look again:"],
+            [line.split(":")[0] + ":" for line in four.strip().split("\n")],
+        )
+        self.assertEqual(
+            [
+                moment.FENCE_NOTE,
+                "```data",
+                join_flow.CHANGE_OPEN,
+            ],
+            said.strip().split("\n")[:3],
+        )
+        self.assertEqual(
+            ["```", "", record_change.PREVIEW_ASK],
+            said.strip().split("\n")[-3:],
+        )
 
         # Nothing written before the yes.
         self.assertEqual(before, head_of(self.base.root))
@@ -699,7 +722,7 @@ class TestTheWords(LocalCase):
         code, out, err = self.flow.show("1", why=None, source=None)
         self.assertEqual(0, code, out + err)
         self.assertIn("Why: This was written down on", out)
-        self.assertIn("source: %s" % record_change.SOURCE_WHEN_NONE, out)
+        self.assertNotIn("source:", out)
         self.assertNotIn(join_flow.WHY_FROM_THE_CLOSING, out)
 
     def test_nothing_about_what_changed_is_refused(self):
@@ -726,7 +749,14 @@ class TestTheWords(LocalCase):
     def test_another_day_and_a_day_in_the_future(self):
         code, out, err = self.flow.show("1", extra=["--happened-on", "2026-01-15"])
         self.assertEqual(0, code, out + err)
-        self.assertIn("The day it happened: 2026-01-15", out)
+        code, out, err = self.flow.run(
+            ["--record-change", "record", "--shown", value_on(out, "shown")]
+        )
+        self.assertEqual(0, code, out + err)
+        entry = formats.ChangeEntry.parse(
+            support.read(os.path.join(self.base.root, entry_files(self.base.root)[0]))
+        )
+        self.assertEqual("2026-01-15", entry.happened_on)
         tomorrow = (state.today() + datetime.timedelta(days=2)).isoformat()
         code, out, _err = self.flow.show("1", extra=["--happened-on", tomorrow])
         self.assertEqual(1, code)

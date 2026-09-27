@@ -574,15 +574,19 @@ def why_when_none(entry) -> str:
 
 
 class Shown(object):
-    """One context change as it was shown, and the value the yes is bound to."""
+    """One context change as it was shown, and the value the yes is bound to.
 
-    __slots__ = ("entry", "text", "shown", "proposed")
+    `showing` is what the person reads: the four labeled lines inside the
+    data fence and nothing else. `text` is the whole entry the yes writes.
+    """
 
-    def __init__(self, entry, text, shown, proposed):
+    __slots__ = ("entry", "text", "shown", "showing")
+
+    def __init__(self, entry, text, shown, showing):
         self.entry = entry
         self.text = text
         self.shown = shown
-        self.proposed = proposed
+        self.showing = showing
 
 
 def _waiting_path(base_id: str) -> str:
@@ -604,10 +608,14 @@ def preview(
     today: Optional[datetime.date] = None,
     runner: Optional[GitRunner] = None,
 ) -> Shown:
-    """Show the whole context change, and keep it for the yes. Writes nothing.
+    """Show the context change as four lines, and keep it for the yes.
 
-    Nothing goes into the base here. The one thing kept is the entry as shown,
-    in this seat's own folder, so the yes writes exactly those words.
+    Nothing goes into the base here. The person reads the four labeled lines
+    inside the data fence and nothing else: no identifier, no document path,
+    and no settings block, as Brandon decided on 2026-09-27 for this path
+    (the closing's own preview still shows the whole entry). The one thing
+    kept is the whole entry, in this seat's own folder, so the yes writes
+    exactly those words.
     """
     git = runner_or_default(runner)
     day = today or state.today()
@@ -621,13 +629,23 @@ def preview(
         base_root, what, why, source, affects, day, happened_on, runner=git
     )
     text = entry.render()
-    proposed = join_flow.show_entry(text, why_when_none(entry))
+    # The four lines come from this entry and from nothing else, the closing's
+    # own `four_lines_for` reading the very text that will be written.
+    showing = moment.fenced(join_flow.four_lines_for(entry, why_when_none(entry)))
+    # The yes is bound to the whole entry rather than to the four lines. That
+    # is safe to do although the person reads only the four lines, because
+    # the four lines are worked out from this one entry and nothing else, and
+    # the entry is the only thing the yes writes: whatever the person read is
+    # exactly what that entry says, and nothing written falls outside it. The
+    # settings the lines leave out (the identifier, the day it was written,
+    # who noted it, where it came from, and the paths behind the document
+    # names) are the base's own record of those same four things.
     shown = shown_value(text)
     atomic_write_json(
         _waiting_path(base_id),
         {"schema": 1, "text": text, "shown": shown, "day": day.isoformat()},
     )
-    return Shown(entry, text, shown, proposed)
+    return Shown(entry, text, shown, showing)
 
 
 def leave(base_id: str) -> str:
