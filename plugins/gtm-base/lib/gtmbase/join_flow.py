@@ -2106,8 +2106,8 @@ NO_LOCK = (
 )
 LOCKS_NOT_PRIVATE = (
     "The folder GTM Base keeps its own records in can be changed by somebody "
-    "other than you, so nothing was written. Make it yours alone, then ask "
-    "again."
+    "other than you, so nothing was written. Ask whoever looks after this "
+    "computer to make it yours alone, then ask again."
 )
 # Said when another window holds the base for a moment.
 LOCKED = (

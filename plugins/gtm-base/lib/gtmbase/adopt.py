@@ -591,8 +591,63 @@ _WRAP_RE = re.compile(r"[ \t]*\n(?![ \t]*\n)[ \t]*")
 _UNFINISHED_MARKUP_RE = re.compile(r"<!--|</[a-zA-Z]")
 
 
+# The names a start tag can have and be an element: the HTML living
+# standard's elements, with the older ones browsers still honor, and the SVG
+# and MathML elements, all compared without letter case. A name with a
+# hyphen that starts with a letter is a custom element and counts too.
+HTML_ELEMENTS = frozenset(
+    """
+    a abbr acronym address applet area article aside audio b base basefont
+    bdi bdo bgsound big blink blockquote body br button canvas caption center
+    cite code col colgroup data datalist dd del details dfn dialog dir div dl
+    dt em embed fieldset figcaption figure font footer form frame frameset h1
+    h2 h3 h4 h5 h6 head header hgroup hr html i iframe image img input ins
+    isindex kbd keygen label legend li link listing main map mark marquee
+    math menu menuitem meta meter multicol nav nextid nobr noembed noframes
+    noscript object ol optgroup option output p param picture plaintext pre
+    progress q rb rp rt rtc ruby s samp script search section select slot
+    small source spacer span strike strong style sub summary sup svg table
+    tbody td template textarea tfoot th thead time title tr track tt u ul var
+    video wbr xmp
+    altglyph altglyphdef altglyphitem animate animatecolor animatemotion
+    animatetransform circle clippath color-profile cursor defs desc discard
+    ellipse feblend fecolormatrix fecomponenttransfer fecomposite
+    feconvolvematrix fediffuselighting fedisplacementmap fedistantlight
+    fedropshadow feflood fefunca fefuncb fefuncg fefuncr fegaussianblur
+    feimage femerge femergenode femorphology feoffset fepointlight
+    fespecularlighting fespotlight fetile feturbulence filter font-face
+    font-face-format font-face-name font-face-src font-face-uri foreignobject
+    g glyph glyphref hatch hatchpath hkern line lineargradient marker mask
+    mesh meshgradient meshpatch meshrow metadata missing-glyph mpath path
+    pattern polygon polyline radialgradient rect set solidcolor stop switch
+    symbol text textpath tref tspan unknown use view vkern
+    annotation annotation-xml maction maligngroup malignmark menclose merror
+    mfenced mfrac mglyph mi mlabeledtr mlongdiv mmultiscripts mn mo mover
+    mpadded mphantom mprescripts mroot mrow ms mscarries mscarry msgroup
+    msline mspace msqrt msrow mstack mstyle msub msubsup msup mtable mtd
+    mtext mtr munder munderover none semantics
+    """.split()
+)
+_CUSTOM_ELEMENT_RE = re.compile(r"\A[a-z][a-z0-9._]*-[a-z0-9._-]*\Z")
+
+
+def is_an_element_name(name: str) -> bool:
+    """Whether a start tag of this name is an element a reader would render."""
+    folded = str(name or "").lower()
+    return folded in HTML_ELEMENTS or bool(_CUSTOM_ELEMENT_RE.match(folded))
+
+
 class _MarkupFinder(html_parser.HTMLParser):
-    """Notes whether anything in a text reads as markup, and nothing else."""
+    """Notes whether anything in a text reads as markup, and nothing else.
+
+    The reader finds a tag however many lines it runs over and whatever its
+    quoted values hold. A start tag counts only when its name is an element
+    or a custom element, or when it sets a value on anything, which is how a
+    made up name hides text all the same; so a comparison such as `CAC<LTV.`
+    read together with a later paragraph's `>`, such as a quoted reply, is
+    prose (Astra's third confirmation pass on the merged units). End tags,
+    comments, declarations and processing instructions always count.
+    """
 
     def __init__(self):
         html_parser.HTMLParser.__init__(self, convert_charrefs=True)
@@ -601,9 +656,13 @@ class _MarkupFinder(html_parser.HTMLParser):
     def _mark(self, *_args):
         self.found = True
 
-    handle_starttag = _mark
+    def _start(self, tag, attrs):
+        if is_an_element_name(tag) or any(value is not None for _name, value in attrs):
+            self.found = True
+
+    handle_starttag = _start
+    handle_startendtag = _start
     handle_endtag = _mark
-    handle_startendtag = _mark
     handle_comment = _mark
     handle_decl = _mark
     handle_pi = _mark

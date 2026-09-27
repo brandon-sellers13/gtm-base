@@ -1490,3 +1490,8 @@ Review: docs/reviews/2026-09-27-unit-1-7c-1-7d-verify-2-astra.md, five findings,
 - [x] 3. Claims settled only when their names validate exactly; malformed ones, including a superscript digit and a nested claim, are left alone and counted as somebody's unsaved work.
 - [x] 4. Markup decided by Python's HTML reader, plus a leftover comment opener or closing tag; a quoted value with a blank line is refused; the comparisons still pass.
 - [x] 5. A put-back stopped after its link finishes by removing only the claim.
+
+#### Astra's third confirmation pass on the merged units (2026-09-27)
+Review: docs/reviews/2026-09-27-unit-1-7c-1-7d-verify-3-astra.md, ready with one change. Tests in tests/test_import_astra_verify_3.py, committed failing first.
+- [x] A start tag is markup only with an element name (the HTML standard, older names browsers honor, SVG and MathML), a custom element name, or an attribute with a value; end tags, comments, declarations and processing instructions always refuse. Comparisons before a quoted reply or a later greater-than sign pass; the script, div, oversized span, custom element and valued made up tag cases still refuse.
+- [x] LOCKS_NOT_PRIVATE reworded, the orchestrator's call open to Brandon's veto.
