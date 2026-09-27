@@ -674,6 +674,7 @@ PYTHON_SENTENCES = (
     ("approve_local", "DROPPED"),
     ("approve_local", "ASK"),
     ("approve_local", "WHITESPACE_ONLY"),
+    ("approve_local", "NOTHING_DIFFERENT"),
     ("changes", "OFFER"),
     ("changes", "MIGRATED"),
     ("changes", "NOTHING_TO_MOVE"),

@@ -50,6 +50,7 @@ from . import (
     formats,
     ids,
     layout,
+    moment,
     names,
     paths,
     report,
@@ -240,13 +241,31 @@ APPLIED = "%s now says what this change said, and you are recorded as approving 
 KEPT = "The prepared change is still waiting, and nothing in your base changed."
 DROPPED = "The prepared change is gone, and nothing in your base changed."
 ASK = "Approve this change, leave it for now, or drop it?"
-# How a part taken out by a change is introduced in what a person reads, and
-# how one of several parts with the same heading is named (finding R10 of
-# Astra's third look).
-PART_TAKEN_OUT_NOW = (
-    "The part of %s called %s, which this change takes out, as it reads now:"
+# How each part of a document is introduced in what a person reads. The part
+# itself, heading first, follows inside the data fence, so no word of it is in
+# these sentences (the second round of Astra's review of Unit 1.7c): a heading
+# comes out of the document, and the document may be a page somebody adopted.
+# One of several parts with the same heading is named by which one it is
+# (finding R10 of Astra's third look).
+PART_NOW = "The part of %s this change rewrites, heading first, as it reads now:"
+PART_NOW_NTH = (
+    "The %s part of %s with that same heading, which this change rewrites, "
+    "heading first, as it reads now:"
 )
-PART_OF_SEVERAL = "%s, the %s part with that heading"
+PART_AFTER = "The same part, as this change would leave it:"
+PART_TAKEN_OUT_NOW = (
+    "The part of %s this change takes out, heading first, as it reads now:"
+)
+PART_TAKEN_OUT_NTH = (
+    "The %s part of %s with that same heading, which this change takes out, "
+    "heading first, as it reads now:"
+)
+CARRIES = "The context change this carries, as it will be written down:"
+DIFFERENCE = (
+    "Everything in %s that is different from the last time it was saved, "
+    "which is all of what saying yes to this writes down:"
+)
+NOTHING_DIFFERENT = "Nothing in %s is different from the last time it was saved."
 # Said under the whole difference of a document when some of what changed is
 # only spaces, tabs, or line endings, which a reader cannot see in the literal
 # difference above it (finding R8 of Astra's third look).
@@ -636,27 +655,18 @@ def _one_line(text: str) -> str:
     return " ".join(single.split())
 
 
-def _quoted(text: str) -> str:
-    """A piece of a file, marked as something read rather than written."""
-    lines = str(text or "").strip("\n").split("\n")
-    return "\n".join(("> " + line.rstrip()) if line.strip() else ">" for line in lines)
+# Finding R8 of Astra's third look put the whole difference in a fence no run
+# of backticks in it can close, so it is shown as the characters it is. Since
+# the second round of Astra's review of Unit 1.7c that fence is the data fence,
+# `moment.fenced`, which is built the same way and says the text is data.
 
 
-_BACKTICKS_RE = re.compile(r"`+")
-
-
-def _fenced(text: str, language: str = "") -> str:
-    """Text inside a fence no run of backticks in it can close.
-
-    Finding R8 of Astra's third look. The whole difference was shown as quoted
-    text, which a screen renders: an image added by hand showed as a picture,
-    a link hid where it went, and spaces at the end of a line were taken off.
-    Inside a fence it is shown as the characters it is, and the fence is one
-    backtick longer than the longest run of them in the text.
-    """
-    longest = max((len(run) for run in _BACKTICKS_RE.findall(text)), default=0)
-    fence = "`" * max(3, longest + 1)
-    return "%s%s\n%s\n%s" % (fence, language, text, fence)
+def _part_as_read(heading: str, text: str) -> str:
+    """One part of a document as it reads: its heading line, then its words."""
+    words = str(text or "").strip("\n")
+    return "%s\n\n%s" % (str(heading or "").strip(), words) if words else str(
+        heading or ""
+    ).strip()
 
 
 def _visible(line: str) -> str:
@@ -801,59 +811,65 @@ def artifact_for(base_root: str, staging, entry, walk, today, differences=None) 
     document that is different from the last time it was saved, all of it,
     because that is what saying yes to one of those writes down.
     """
-    pieces = [ARTIFACT_OPEN, four_lines(base_root, staging, entry, walk, today), ""]
+    # Every piece of text that came out of a document, a record, or a
+    # prepared change sits inside the data fence, and only GTM Base's own
+    # sentences sit outside it, so an adopted page can never speak to the
+    # assistant from here (the second round of Astra's review of Unit 1.7c).
+    # The four labeled lines keep their form, inside the fence as the moment
+    # of use shows them.
+    pieces = [
+        ARTIFACT_OPEN,
+        moment.fenced(four_lines(base_root, staging, entry, walk, today)),
+        "",
+    ]
     carried = _carried_entry(staging)
     if carried is not None:
-        pieces.append("The context change this carries, as it will be written down:")
+        pieces.append(CARRIES)
         pieces.append("")
-        pieces.append(_quoted(carried.render()))
+        pieces.append(moment.fenced(carried.render().rstrip("\n")))
         pieces.append("")
     for (relative, heading, before, after), (operation, which, count) in zip(
         walk.steps, walk.kinds
     ):
         document = names.document_name(relative)
-        part = _one_line(heading.lstrip("#"))
-        if count > 1:
-            part = PART_OF_SEVERAL % (part, _ordinal(which))
         if operation == "remove":
-            pieces.append(PART_TAKEN_OUT_NOW % (document, part))
+            if count > 1:
+                pieces.append(PART_TAKEN_OUT_NTH % (_ordinal(which), document))
+            else:
+                pieces.append(PART_TAKEN_OUT_NOW % document)
             pieces.append("")
-            pieces.append(_quoted(before) if before.strip() else "> (nothing there)")
+            pieces.append(moment.fenced(_part_as_read(heading, before)))
             pieces.append("")
             continue
-        pieces.append("The part of %s called %s, as it reads now:" % (document, part))
+        if count > 1:
+            pieces.append(PART_NOW_NTH % (_ordinal(which), document))
+        else:
+            pieces.append(PART_NOW % document)
         pieces.append("")
-        pieces.append(_quoted(before) if before.strip() else "> (nothing there yet)")
+        pieces.append(moment.fenced(_part_as_read(heading, before)))
         pieces.append("")
-        pieces.append(
-            "The part of %s called %s, as this change would leave it:"
-            % (document, part)
-        )
+        pieces.append(PART_AFTER)
         pieces.append("")
-        pieces.append(_quoted(after))
+        pieces.append(moment.fenced(_part_as_read(heading, after)))
         pieces.append("")
     for relative in walk.ordered:
         text = (differences or {}).get(relative)
         if text is None:
             continue
         document = names.document_name(relative)
-        pieces.append(
-            "Everything in %s that is different from the last time it was "
-            "saved, which is all of what saying yes to this writes down:"
-            % document
-        )
-        pieces.append("")
         if not text.strip():
-            pieces.append("> (nothing is different)")
+            pieces.append(NOTHING_DIFFERENT % document)
             pieces.append("")
             continue
-        pieces.append(_fenced(text, "diff"))
+        pieces.append(DIFFERENCE % document)
+        pieces.append("")
+        pieces.append(moment.fenced(text))
         pieces.append("")
         hidden = _whitespace_lines(text)
         if hidden:
             pieces.append(WHITESPACE_ONLY % document)
             pieces.append("")
-            pieces.append(_fenced("\n".join(_visible(line) for line in hidden)))
+            pieces.append(moment.fenced("\n".join(_visible(line) for line in hidden)))
             pieces.append("")
     pieces.append(ARTIFACT_CLOSE)
     return "\n".join(pieces).rstrip("\n") + "\n"

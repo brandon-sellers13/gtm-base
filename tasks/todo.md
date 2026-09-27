@@ -1427,3 +1427,5 @@ Review: docs/reviews/2026-09-26-unit-1-7c-astra.md in the main checkout. Finding
 - [x] 7 A question on a heading line refuses the page, with the round trip that shows an answer there leaves it open and the one under the heading that settles it.
 - [x] Call 23: the whole-file sentence drops "or tell you where it is"; the script prints no location; the skill says never to give it.
 - [x] Full suite after these fixes: 2346 tests OK in 937 seconds, then 107 from a linked folder OK in 108 seconds (tests/run.sh exit 0).
+- [x] Follow-up (coordinator): the approval showing (`approve_local.py --show`) holds every piece of document text inside the data fence (the four labeled lines, the context change it carries, each part with its heading before and after, the whole difference); only GTM Base's sentences and the shown value are outside. New sentences for each part; the R8 difference test reads the data fence. tests/test_adoption.py TestTheApprovalShowing fails against the old renderer and passes now.
+- [x] Full suite after the follow-up: 2348 tests OK in 997 seconds, then 109 from a linked folder OK in 101 seconds (tests/run.sh exit 0).
