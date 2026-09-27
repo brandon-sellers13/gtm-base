@@ -52,7 +52,7 @@ Fix a typo in the same file and tell Claude to keep it, answering that it was on
 - Write down: whether anything was recorded.
 
 ### 7. The moment of use, measured
-This is the trial the plan sets a bar for. The bar is ten real prompts with the flag firing on at least nine, unless Brandon sets another bar before starting. Write the bar here before step 7 begins: [BAR TK — Brandon].
+This is the trial the plan sets a bar for. The bar is ten real prompts with the flag firing on at least nine, unless Brandon sets another bar before starting. Write the bar here before step 7 begins: **9 of 10**, the default, set by Brandon on 2026-09-27 (in the orchestrating session).
 
 First record a context change that makes the customer profile out of date (through the review, or by telling Claude what changed). Then, across ten separate ordinary requests that would use the customer profile (draft an email to a prospect in a segment, outline a landing page, summarize who we sell to), count how many times Claude stopped first and said the profile had not caught up with that change.
 - Expected: it stops, names the document and the change in plain words, shows the four lines, and asks whether to use it as it stands, fix it first, or say it already reflects the change.
