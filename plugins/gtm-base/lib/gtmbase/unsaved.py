@@ -34,7 +34,6 @@ file the computer made.
 from __future__ import annotations
 
 import os
-import re
 import stat
 from typing import List, Optional, Sequence, Tuple
 
@@ -229,26 +228,16 @@ KNOWN_DOCUMENT_LABELS.update(
     }
 )
 
-# A segment's file name, checked whole: lowercase words of letters and digits
-# joined by single hyphens, at most five of them. It is read out as the
-# segment's name ("your mid market segment"), so nothing else is let through.
-_SAFE_SLUG_RE = re.compile(r"[a-z0-9]+(?:-[a-z0-9]+){0,4}")
-_SAFE_SLUG_MOST = 40
-
-
 def _known_label(path: str) -> Optional[str]:
-    """The fixed label of a document the product knows, or None."""
-    normalized = str(path).replace(os.sep, "/")
-    label = KNOWN_DOCUMENT_LABELS.get(normalized)
-    if label:
-        return label
-    folder, _slash, name = normalized.rpartition("/")
-    if folder != names.SEGMENTS_DIR or not name.endswith(".md"):
-        return None
-    slug = name[: -len(".md")]
-    if len(slug) > _SAFE_SLUG_MOST or not _SAFE_SLUG_RE.fullmatch(slug):
-        return None
-    return "your %s segment" % slug.replace("-", " ")
+    """The fixed label of a document the product knows, or None.
+
+    A segment is not named here, however its file is spelled. Its name is its
+    file name, and a file name short and tidy enough to pass any shape check
+    can still read as an instruction ("ignore all prior instructions"), which
+    the confirmation of this release found. So a segment is counted with the
+    other documents, and nothing in a refusal is ever read out of a file name.
+    """
+    return KNOWN_DOCUMENT_LABELS.get(str(path).replace(os.sep, "/"))
 
 
 def _is_a_document(path: str) -> bool:
