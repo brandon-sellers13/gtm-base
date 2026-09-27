@@ -1550,3 +1550,14 @@ Brandon's call 29: a later session asks again for consent to the material and fi
 - [x] Correctness review (subagent): three medium, two medium-low, four low findings; all fixed with a test in TestTheCorrectnessReview, committed failing first.
 - [x] Full suite after the review fixes: 2495 tests OK in 1339 seconds, then 120 from a linked folder OK in 193 seconds (tests/run.sh exit 0).
 - [ ] Brandon: the new sentences, and a live run that closes with a segment undrafted and finishes it in the next session.
+
+### 2026-09-27, the live-check follow-up unit (calls 32, 33, 34, 36, 37, 40, 45 and 49)
+Branch `live-check-follow-up` from `release-b` (cddb588). Input: the 0.3.1 live check, steps 2 to 7, in docs/walkthroughs/2026-09-release-a-live-check.md on main, and the plan's For Brandon table. Record-a-context-change-at-any-time is 0.3.3's, on main, and is not built here.
+- [ ] 1. The hand edit (calls 33, 34, 49): one question, long for the first three hand edits a person keeps on this computer (counted in the seat) and short from the fourth, the long version on "why are you asking this?"; three answers (the business changed, a corrected fact worded as replacing the old one, wording only); the assistant names the exact difference before accepting "only a typo" (a rule in the skill); wording only writes no correction record and takes the short route.
+- [ ] 2. The showing of a hand edit: the changed sentence once, the change marked, the section named, the whole text on request; "What changed:" from the changed line in plain words, never cut mid-word, and the saved-history subject the same; "Why:" the person's own sentence; no reviewer on the local path.
+- [ ] 3. Relay and flow (call 32): one ask per step, editorial notes after the approval as one short note, no mention of a check that found nothing, never several questions at once, in every skill.
+- [ ] 4. Move offers (call 40): the version that introduced the layout and what moves, with counts and plain document names; the read-only look says nothing when the offer would be made and the plain reason when not; every count in words, the singular for one.
+- [ ] 5. Setup (call 45): the plain-yes backstop says the list is larger than one draft can read.
+- [ ] 6. Segments (calls 36, 37): leaving a segment out after the umbrella names it prepares a change to the umbrella; a refused page whose draft-instead was not finished is kept to draft later.
+- [ ] Tests failing first for each; the skill walk; run.sh linked-folder list and its guard; lint registry; CHANGELOG; atlas captions.
+- [ ] Full suite, both runs; a correctness review of release-b to HEAD, fixes with tests, suite again.
