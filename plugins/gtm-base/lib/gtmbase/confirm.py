@@ -38,6 +38,7 @@ from typing import List, Optional, Tuple
 
 from . import (
     base_reader,
+    callmarkers,
     constants,
     formats,
     gate,
@@ -98,6 +99,9 @@ CODE_NOTHING_PENDING = "nothing-pending"
 CODE_NOT_ONE_OF_THE_TWO = "not-one-of-the-two-documents"
 CODE_NOT_ABOUT_THIS_FILE = "change-does-not-affect-this-file"
 CODE_NOT_AN_OWNER = "not-an-owner"
+# The document still holds a question the draft left for the person, marked
+# `[your call: ...]`, so nothing may say it is right yet (Unit 1.7b).
+CODE_QUESTION_OPEN = "a-question-is-still-open"
 
 # The one code this module is allowed to leave in seat state.
 PENDING_CODE = "pending-push"
@@ -225,6 +229,14 @@ UNSAVED_EDITS_HERE = (
     "There are words in your base that you have not saved, so nothing was "
     "recorded about %s. Save them or put them aside and answer again."
 )
+# Said when somebody says a document is right, or already says what a change
+# says, while it still holds a question nobody answered. The question itself is
+# not repeated here, because it came out of the file.
+QUESTION_STILL_OPEN = (
+    "%s still has a question in it that only you can answer, so it cannot be "
+    "recorded as right yet. Answer that question in a review of your base "
+    "first."
+)
 NOT_ON_THE_MAIN_LINE = (
     "Your base is not on its main line right now, so nothing was recorded "
     "about %s. Ask GTM Base to put it back."
@@ -274,6 +286,24 @@ def refusal_while_written_twice(base_root, base_id, path, today, git=None):
 
 def _refused(code: str, sentence: str) -> ConfirmResult:
     return ConfirmResult(STATUS_REFUSED, codes=[code], reasons=[sentence])
+
+
+def refusal_while_a_question_is_open(base_root: str, relative: str):
+    """The refusal for a yes about a document still holding an open question.
+
+    No path that records an owner saying a document is right may record it
+    while the document still asks a question nobody answered (requirement
+    P27): the review's yes, the moment of use's "it already reflects this",
+    and the closing's own answer all come through here. Setup's own line is
+    the one exception, because the file and that line are written together,
+    and the rules count it for nothing until the question is answered.
+    """
+    text = read_text(os.path.join(base_root, relative.replace("/", os.sep)))
+    if not text or not callmarkers.count(text):
+        return None
+    return _refused(
+        CODE_QUESTION_OPEN, QUESTION_STILL_OPEN % names.document_name(relative)
+    )
 
 
 # --- Where a confirmation line lives ----------------------------------------
@@ -478,6 +508,15 @@ def answer(
         )
         if disagreeing is not None:
             return _refused(CODE_WRITTEN_TWICE, disagreeing)
+
+    # A yes about a document that still asks a question nobody answered is
+    # refused before the question is used up, so it is still there to answer
+    # once the open question is settled. A no and a not now are both allowed,
+    # because neither says the document is right.
+    if answer == ANSWER_YES:
+        still_asking = refusal_while_a_question_is_open(base_root, path)
+        if still_asking is not None:
+            return still_asking
 
     def use_the_question():
         """Use the question up. Everything after this records the answer."""
@@ -1104,6 +1143,10 @@ def against_change(
     )
     if disagreeing is not None:
         return _refused(CODE_WRITTEN_TWICE, disagreeing)
+
+    still_asking = refusal_while_a_question_is_open(base_root, relative_context)
+    if still_asking is not None:
+        return still_asking
 
     line = formats.ConfirmationLine(
         date=today.isoformat(),

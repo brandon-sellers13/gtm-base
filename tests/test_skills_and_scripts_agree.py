@@ -740,6 +740,17 @@ class TestTheSkillsAsTheyAreWritten(unittest.TestCase):
             state["kept_id"] = kept
         return kept
 
+    def an_open_question(self, state):
+        """The token the review gives the question left open in the base."""
+        from gtmbase import callmarkers, layout
+
+        # The walk may have moved the base to the current layout by now, so
+        # the document is looked for where it lives.
+        where = layout.where_it_lives(state["base"], state["open_question_document"])
+        text = support.read(os.path.join(state["base"], where))
+        found = callmarkers.find(text)
+        return found[0].token if found else None
+
     def a_document_to_ask_about(self, state):
         """The next document the reconcile step said to ask about."""
         waiting = state.get("ask_about") or []
@@ -769,8 +780,12 @@ class TestTheSkillsAsTheyAreWritten(unittest.TestCase):
         "<path>": lambda self, state, command: (
             state.get("document")
             if "--show-document" in shlex.split(command)
+            else state.get("open_question_document")
+            if "--document" in shlex.split(command)
             else state.get("staged")
         ),
+        "<segment>": lambda self, state, command: state.get("segment"),
+        "<question>": lambda self, state, command: self.an_open_question(state),
         "<a short label>": lambda self, state, command: "a note from the call",
         "<file you wrote it to>": lambda self, state, command: state.get("paste"),
         "<the path from step 4>": lambda self, state, command: state.get("words"),
@@ -928,6 +943,19 @@ class TestTheSkillsAsTheyAreWritten(unittest.TestCase):
             held = self.value_of(printed, "paste")
             if held:
                 state["held_paste"] = held
+        if mode == "segments-settle":
+            # More than one segment means the profile is drafted across them,
+            # and the first one to draft is the segment the later step drafts
+            # (Unit 1.7b).
+            settled = [
+                line for line in printed.split("\n") if line.startswith("segment=")
+            ]
+            if len(settled) > 1 and state.get("step") == "icp":
+                state["step"] = "umbrella"
+            for line in settled:
+                if " answer=draft" in line:
+                    state["segment"] = line[len("segment=") :].split(" ")[0]
+                    break
 
     def a_draft_for(self, step):
         import test_join_setup_flow as flow
@@ -935,10 +963,21 @@ class TestTheSkillsAsTheyAreWritten(unittest.TestCase):
         if step == "change-entry":
             # The change names the part of the document it is about, which is
             # what lets the wording go in without a part being named.
+            # It names a part of the profile by that part's heading, in the
+            # single profile and in the profile across several segments.
             return flow.change_draft(
-                body="Firmographics changed: we stopped selling to companies "
-                "under twenty people."
+                body="Firmographics changed, and so did who we sell to: we "
+                "stopped selling to companies under twenty people."
             )
+        if step in ("umbrella", "segment"):
+            import test_umbrella_and_segments as umbrella
+
+            # The walk settles two segments: one drafted, one left out.
+            if step == "umbrella":
+                return umbrella.umbrella_text(
+                    drafted=("Fintech lenders",), left_out=("Regional banks",)
+                )
+            return umbrella.segment_text("Fintech lenders")
         return flow.captured("icp.md" if step == "icp" else "positioning.md")
 
     # --- the walk itself ---------------------------------------------------
@@ -1075,6 +1114,19 @@ class TestTheSkillsAsTheyAreWritten(unittest.TestCase):
         state["staged"] = first_draft.a_first_draft(
             base.root, body=first_draft.NAMES_THE_PART
         )
+        # A second document holding a question a draft left open, so the
+        # review's own way of answering one has a question to answer (Unit
+        # 1.7b). It is not the document the other questions are about,
+        # because a yes about a document with a question open is refused.
+        base.write(
+            moment_tests.POSITIONING,
+            moment_tests.POSITIONING_TEXT.replace(
+                "We help teams move faster.",
+                "We help teams move faster [your call: is it faster or cheaper?].",
+            ),
+        )
+        base.save("a question left open")
+        state["open_question_document"] = moment_tests.POSITIONING
         waiting = [line for line in base.review().review if line.question_id]
         state["question"] = waiting[0].question_id if waiting else None
         return base
@@ -1166,7 +1218,7 @@ class TestTheSkillsAsTheyAreWritten(unittest.TestCase):
                     (state.get("handed") or {}).pop(kind, None)
         if mode in ("approve", "skip") and state.get("base"):
             state["cwd"] = state["base"]
-            if state["step"] == "icp":
+            if state["step"] in ("icp", "umbrella"):
                 state["step"] = "positioning"
 
 

@@ -137,6 +137,11 @@ is a thing nobody else can write for them.
   again in this session.
 - It prepared a change: tell them it is waiting, and hand it to the
   `propose-change` skill when they want it raised.
+- A yes about a document that still holds a question a draft left open for
+  them, marked `[your call: ...]`, is refused with one sentence, because
+  nobody can say a document is right while it still asks something. Say the
+  sentence. The review lists that question first, and answering it there is
+  how it is settled.
 
 ## What you never do
 

@@ -81,5 +81,10 @@ close it with three backticks, and put nothing outside it.
 Write the whole document now, from what you have. Where something is genuinely
 the person's call rather than yours, write your best reading of it and mark
 that spot inline like this: `[your call: do you still say this to buyers?]`.
-Then stop and let them read the whole thing. Do not interview them one field at
-a time, and do not ask for anything the sources already told you.
+Each mark is a question the person is asked before the document is saved, and
+a document saved with one still in it counts as unfinished until they answer
+it. So mark only a call the sources cannot settle, keep each question to one
+short line, and put it in a paragraph under one of the level two headings,
+never in the settings block and never in a heading. Then stop and let them
+read the whole thing. Do not interview them one field at a time, and do not
+ask for anything the sources already told you.

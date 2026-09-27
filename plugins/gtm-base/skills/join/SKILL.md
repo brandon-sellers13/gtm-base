@@ -402,6 +402,9 @@ python3 scripts/join.py segments-settle --run <run identifier> --segments-file <
 - A refusal is one sentence naming the segment to change. Say it, and ask
   about that segment again.
 - Nothing is drafted or taken into the base in this step.
+- Keep the `segment=` lines. More than one of them means the customer profile
+  is drafted across the segments in step 6, and each line marked
+  `answer=draft` is drafted on its own in step 6c.
 
 ### Step 6. What each draft will read
 
@@ -415,6 +418,10 @@ For each step in turn, with `<step>` being `icp` and then `positioning`, run:
 ```
 python3 scripts/join.py preview --step <step> --run <run identifier>
 ```
+
+- When step 5d kept more than one segment, the first step is `umbrella`
+  instead of `icp`: the customer profile across every segment, with one short
+  paragraph each.
 
 - It writes nothing. For the assistant it prints `choice=`, `going-in=`,
   `left-out-count=`, `total=`, the first twenty labels going in, and one
@@ -483,6 +490,8 @@ person is waiting:
 
 - Reading what you named.
 - Drafting your ideal customer profile.
+- Drafting your customer profile across your segments.
+- Drafting that segment.
 - Drafting your positioning.
 - Saving that into the base.
 
@@ -500,6 +509,17 @@ python3 scripts/join.py review --step <step> --run <run identifier> --draft <dra
   a line of a refused draft to them.
 - If a draft cannot be read back at all, write it again from the same step.
   Never move on to the next document or ask the person to fix it.
+- `review` needs the same run, and for a segment the same segment, because
+  the profile across several segments is checked against them.
+- `codes=umbrella-instead` means draft `umbrella` rather than `icp`, and
+  `codes=no-several-segments` means the other way round.
+- `questions=<number>` and a sentence mean the draft leaves that many
+  questions for them, each marked in it as `[your call: ...]`. Say the
+  sentence before you show the draft.
+- An answer they give to one is an edit: write it into the draft in place of
+  that mark and check it again with `review`.
+- Add `--questions-open` to `approve` only when they say to leave the
+  questions open, never on your own; without it nothing is written.
 
 When it is ready, show them the whole document and offer the answers they
 actually have. The first document has three: approve it, edit it, or ask what
@@ -528,6 +548,36 @@ because a skipped document is written into the base the first approval makes.
   `python3 scripts/join.py skip --step <step> --base <base folder>`.
   Say plainly that a skipped document is written down as skipped and that the
   next session will offer to finish it.
+
+### Step 6c. Each segment to draft, at full depth
+<!-- step -->
+
+This step will draft each segment they said to draft into a document of its
+own, so a segment's page is never folded into one profile. It runs after the
+positioning, once for each `segment=` line step 5d printed with
+`answer=draft`, and before the closing, which clears the list of segments.
+
+```
+python3 scripts/join.py preview --step segment --segment <segment> --run <run identifier>
+python3 scripts/join.py words-file --run <run identifier> --for company
+python3 scripts/join.py assemble --step segment --segment <segment> --run <run identifier> --company-file <the path it printed> --email <their address>
+python3 scripts/join.py review --step segment --segment <segment> --run <run identifier> --draft <draft file>
+python3 scripts/join.py approve --step segment --segment <segment> --draft <draft file> --run <run identifier> --base <base folder>
+```
+
+- The segment is the name on its `segment=` line. Everything else works as
+  in steps 6 and 6b, and it is shown whole like any other document.
+- There is no skip: a segment they do not want now is simply not approved,
+  and nothing is written.
+- `codes=segment-file-taken`: the base already holds a document under that
+  name. Say the sentence and go on to the next segment.
+- `codes=not-a-segment-to-draft`: that segment was not settled to be drafted.
+- A segment to be taken from its finished document is not drafted here.
+  That arrives with the next part of this release.
+
+<!-- ask -->
+Approve this segment, edit it, or say what is wrong with it.
+<!-- end ask -->
 
 ### Step 7. The one question about what changed
 <!-- step -->

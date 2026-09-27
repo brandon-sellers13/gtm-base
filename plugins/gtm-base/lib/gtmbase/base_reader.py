@@ -19,7 +19,17 @@ import os
 import re
 from typing import Dict, List, Optional, Sequence
 
-from . import constants, formats, ids, layout, paths, stale, state, validate
+from . import (
+    callmarkers,
+    constants,
+    formats,
+    ids,
+    layout,
+    paths,
+    stale,
+    state,
+    validate,
+)
 from .errors import GtmBaseError, PathError, ValidationError
 from .fsutil import read_text
 from .gitcmd import GitRunner, nul_fields, runner_or_default
@@ -173,6 +183,8 @@ def context_files(root: str) -> "List[stale.ContextFileInfo]":
                     sources_date=sources_date,
                     status=str(fields.get("status") or ""),
                     kind=str(fields.get("kind") or ""),
+                    # Read from the body every time, never stored (Unit 1.7b).
+                    open_questions=callmarkers.questions(text),
                 )
             )
     return files

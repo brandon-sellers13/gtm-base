@@ -537,3 +537,70 @@ def readback(inventory: Inventory) -> List[str]:
 def dumps(inventory: Inventory) -> str:
     """The inventory as the text it is kept as, for a test to compare."""
     return json.dumps(inventory.to_payload(), sort_keys=True)
+
+
+# --- Before a segment's file is written into a base (Unit 1.7b) --------------
+
+CODE_FILE_TAKEN = "segment-file-taken"
+CODE_FOLDER_NOT_ORDINARY = "segment-folder-not-ordinary"
+CODE_NOT_TO_DRAFT = "not-a-segment-to-draft"
+
+# Said when the base already holds a file whose name comes out the same as the
+# one this segment would be saved under, in either folder segments have been
+# kept in. Nothing is ever written over it.
+FILE_TAKEN = (
+    "Your base already holds a document under the name this segment would be "
+    "saved under, so nothing was written over it. Give that segment a "
+    "different name, or leave it out."
+)
+# Said when the folder segments are kept in is a link, or leads outside the
+# base, which is never somewhere a document is written.
+FOLDER_NOT_ORDINARY = (
+    "The folder your segments are kept in is not an ordinary folder inside "
+    "your base, so nothing was written."
+)
+
+
+def already_in_base(base_root: str, slug: str) -> Optional[str]:
+    """A file the base already holds that this segment's file would collide with.
+
+    `settle` looks only at the names the person gave, so this is the look at
+    the base itself, made before anything is written. Both folders segments
+    have been kept in are read, because a base moved by Unit 1.5b keeps each
+    segment under the name it had before the move, and that name may differ
+    from the one GTM Base would make now only in its letter case or in the way
+    one letter is encoded, which one computer treats as the same file and
+    another does not. So every name is folded the way a segment's name is, and
+    two names that fold to one file name are one file.
+    """
+    wanted = str(slug or "")
+    for folder in (constants.SEGMENTS_DIR, constants.LEGACY_SEGMENTS_DIR):
+        full = os.path.join(base_root, folder.replace("/", os.sep))
+        try:
+            names = sorted(os.listdir(full))
+        except OSError:
+            continue
+        for name in names:
+            stem = name[: -len(".md")] if name.casefold().endswith(".md") else name
+            if slug_for(stem) == wanted:
+                return folder + "/" + name
+    return None
+
+
+def folder_is_ordinary(base_root: str) -> bool:
+    """Whether the segment folder may be written into: no link on the way.
+
+    Each folder from the top of the base down to the segment folder is either
+    not there yet or an ordinary folder, and none of them is a link, so a file
+    written there lands inside the base and nowhere else.
+    """
+    root = os.path.realpath(base_root)
+    here = root
+    for part in constants.SEGMENTS_DIR.split("/"):
+        here = os.path.join(here, part)
+        if os.path.islink(here):
+            return False
+        if os.path.lexists(here) and not os.path.isdir(here):
+            return False
+    real = os.path.realpath(here)
+    return real == here or real.startswith(root + os.sep)

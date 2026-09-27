@@ -292,7 +292,18 @@ def build_parser():
     parser = argparse.ArgumentParser(add_help=True)
     parser.add_argument("mode", help="which step of setting a base up to run")
     parser.add_argument("--run", help="the identifier of this setup run")
-    parser.add_argument("--step", help="icp, change-entry, or positioning")
+    parser.add_argument(
+        "--step", help="icp, umbrella, segment, change-entry, or positioning"
+    )
+    parser.add_argument(
+        "--segment",
+        help="the file name the segments step printed for one segment to draft",
+    )
+    parser.add_argument(
+        "--questions-open",
+        action="store_true",
+        help="they chose to approve the draft with its questions left open",
+    )
     parser.add_argument("--company", help="the company the base is for")
     parser.add_argument("--content-folder", help="the folder holding their material")
     parser.add_argument(
@@ -414,6 +425,34 @@ def build_parser():
 COULD_NOT_READ = (
     "GTM Base could not read the file holding their words, so nothing was "
     "done. Write it again and run this with the path to it."
+)
+# Said when the draft being approved still asks the person something and they
+# have not said to leave it open (Unit 1.7b).
+QUESTIONS_NOT_ANSWERED = (
+    "That draft still leaves questions for you to answer, so nothing was "
+    "written. Answer them, or say to approve it with them left open."
+)
+# Said when a step is asked for that the segments this run settled rule out.
+UMBRELLA_INSTEAD = (
+    "Your base holds several segments, so the customer profile is drafted "
+    "across all of them rather than as one. Draft that instead."
+)
+NOT_SEVERAL_SEGMENTS = (
+    "This run settled one segment or none, so the customer profile is drafted "
+    "in full as one document. Draft that instead."
+)
+NOT_THIS_SEGMENTS_DRAFT = (
+    "That draft is not the one written for this segment, so nothing was done. "
+    "Use the draft file the assemble step named for it."
+)
+CANNOT_SKIP_THIS = (
+    "Only the customer profile and the positioning are ever written down as "
+    "skipped. A segment you do not want now is simply not approved, and "
+    "nothing is written."
+)
+NOT_A_SEGMENT_TO_DRAFT = (
+    "That is not a segment this run settled to be drafted, so nothing was "
+    "done. Draft one of the segments you said to draft."
 )
 NEEDS_A_RUN_OR_SESSION = (
     "This step needs to know which setup run it belongs to, so nothing was "
@@ -1197,6 +1236,26 @@ def say_older_versions(out, superseded):
         )
 
 
+STEP_REFUSALS = {
+    join_flow.CODE_UMBRELLA_INSTEAD: UMBRELLA_INSTEAD,
+    join_flow.CODE_NO_SEVERAL_SEGMENTS: NOT_SEVERAL_SEGMENTS,
+    segments.CODE_NOT_TO_DRAFT: NOT_A_SEGMENT_TO_DRAFT,
+    join_flow.CODE_NOT_THIS_SEGMENTS_DRAFT: NOT_THIS_SEGMENTS_DRAFT,
+    join_flow.CODE_NO_RUN: NEEDS_A_RUN_OR_SESSION,
+    "cannot-skip": CANNOT_SKIP_THIS,
+}
+
+
+def a_step_refusal(refusal, out):
+    """Say why a step the settled segments rule out was refused, when it was."""
+    sentence = STEP_REFUSALS.get(getattr(refusal, "code", None))
+    if sentence is None:
+        return False
+    line(out, "codes", refusal.code)
+    out.write(sentence + "\n")
+    return True
+
+
 def run_preview(options, out):
     step = need(options, "step", out)
     run_id = need(options, "run", out)
@@ -1212,9 +1271,14 @@ def run_preview(options, out):
             paste_files=options.paste_file,
             only_index=only,
             only_folder=only_folder,
+            segment=options.segment,
         )
     except ConsentError as refusal:
         if not a_reading_refusal(refusal, out):
+            raise
+        return EXIT_REFUSED
+    except ReviewError as refusal:
+        if not a_step_refusal(refusal, out):
             raise
         return EXIT_REFUSED
     line(out, "step", previewed.step)
@@ -1266,9 +1330,14 @@ def run_assemble(options, out):
             paste_files=options.paste_file,
             only_index=only,
             only_folder=only_folder,
+            segment=options.segment,
         )
     except ConsentError as refusal:
         if not a_reading_refusal(refusal, out):
+            raise
+        return EXIT_REFUSED
+    except ReviewError as refusal:
+        if not a_step_refusal(refusal, out):
             raise
         return EXIT_REFUSED
     except DraftError as refusal:
@@ -1279,7 +1348,12 @@ def run_assemble(options, out):
         out.write(NO_SOURCES_LEFT + "\n")
         return EXIT_REFUSED
     line(out, "prompt", assembled.path)
-    line(out, "draft", join_flow.draft_path(run_id, step))
+    settled = (
+        join_flow.segment_to_draft(run_id, options.segment)
+        if step == drafting.STEP_SEGMENT
+        else None
+    )
+    line(out, "draft", join_flow.draft_path(run_id, step, settled))
     for label in assembled.included_labels:
         line(out, "included", label)
     for label in assembled.dropped_labels:
@@ -1302,9 +1376,25 @@ def run_review(options, out):
         return EXIT_ERROR
     if not a_draft_of_this_run(draft, options, out):
         return EXIT_REFUSED
-    reviewed = join_flow.review_step(step, draft, base_root=options.base)
+    try:
+        reviewed = join_flow.review_step(
+            step,
+            draft,
+            base_root=options.base,
+            run_id=options.run,
+            segment=options.segment,
+        )
+    except ReviewError as refusal:
+        if not a_step_refusal(refusal, out):
+            raise
+        return EXIT_REFUSED
     if reviewed.ready:
         out.write("ready\n")
+        if reviewed.questions:
+            # The questions themselves are in the draft, where the person
+            # reads them; only how many there are is said here.
+            line(out, "questions", reviewed.questions)
+            out.write(join_flow.draft_questions_sentence(reviewed.questions) + "\n")
         return EXIT_DONE
     line(out, "codes", ",".join(reviewed.codes))
     out.write(
@@ -1345,19 +1435,24 @@ def run_approve(options, out):
     if not read:
         return EXIT_REFUSED
     options.content_folder = content_folder
-    result = join_flow.approve_step(
-        step,
-        draft,
-        run_id,
-        base_root=root,
-        parent=options.parent,
-        company=options.company,
-        email=options.email,
-        name=options.name,
-        confirmed_home=options.confirmed_home,
-        content_folder=options.content_folder,
-        beside=options.beside,
-    )
+    try:
+        result = join_flow.approve_step(
+            step,
+            draft,
+            run_id,
+            base_root=root,
+            parent=options.parent,
+            company=options.company,
+            email=options.email,
+            name=options.name,
+            confirmed_home=options.confirmed_home,
+            content_folder=options.content_folder,
+            beside=options.beside,
+            segment=options.segment,
+            questions_open=options.questions_open,
+        )
+    except ReviewError as refusal:
+        return an_approval_refusal(refusal, options, out)
     line(out, "base", result.root)
     line(out, "file", result.path)
     if drafting.step_named(step) == drafting.STEP_CHANGE:
@@ -1372,6 +1467,28 @@ def run_approve(options, out):
     return EXIT_DONE
 
 
+def an_approval_refusal(refusal, options, out):
+    """Say why an approval wrote nothing, for the refusals a person can act on."""
+    code = getattr(refusal, "code", None)
+    if a_step_refusal(refusal, out):
+        return EXIT_REFUSED
+    if code == join_flow.CODE_QUESTIONS_OPEN:
+        line(out, "codes", code)
+        out.write(QUESTIONS_NOT_ANSWERED + "\n")
+        return EXIT_REFUSED
+    if code == segments.CODE_FOLDER_NOT_ORDINARY:
+        line(out, "codes", code)
+        out.write(segments.FOLDER_NOT_ORDINARY + "\n")
+        return EXIT_REFUSED
+    if code == segments.CODE_FILE_TAKEN:
+        line(out, "codes", code)
+        # The segment is not named here: the step's own line already says
+        # which one it is, and a name can have come out of their material.
+        out.write(segments.FILE_TAKEN + "\n")
+        return EXIT_REFUSED
+    raise refusal
+
+
 def run_skip(options, out):
     step = need(options, "step", out)
     if not step:
@@ -1382,7 +1499,12 @@ def run_skip(options, out):
         # nowhere to write it until the first document has been approved.
         out.write(CANNOT_SKIP_FIRST + "\n")
         return EXIT_REFUSED
-    result = join_flow.skip_step(step, root)
+    try:
+        result = join_flow.skip_step(step, root, run_id=options.run)
+    except ReviewError as refusal:
+        if not a_step_refusal(refusal, out):
+            raise
+        return EXIT_REFUSED
     if getattr(result, "sentence", None):
         # Skipping a context change writes nothing at all, so there is no file
         # to name and nothing for a later session to finish.
