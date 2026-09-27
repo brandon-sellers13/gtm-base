@@ -27,16 +27,22 @@ any later day the page is read.
 4. What is left may not hold a character that draws nothing, a line GTM
    Base uses to keep material apart from its own instructions, which a
    comment could have been hiding, an email address, a phone number, or
-   anything shaped like a key or a token.
+   anything shaped like a key or a token. These are looked for in the page
+   as written and again in a copy read the way a reader takes it in, with
+   character codes turned into the characters they stand for, wide letters
+   made plain, selectors taken out and wrapped lines joined, so a value
+   written in any of those ways is still found. The copy is never saved.
 5. Its headings must be ones a later change can find: no heading used twice
    at one level, no line shaped like a heading inside a block of code, no
    heading written by underlining it, and at least one part under a heading
    of the second size for a change to land in.
 6. When the base is for one part of the company, no heading may name a place
    the person dropped because it is about another part.
-7. A question marked `[your call: ...]` may stay only under a heading, where
-   a later change can answer it, and only when the person says to take the
-   page in with it left open.
+7. A question marked `[your call: ...]` may stay only in the words under a
+   heading, where a later change can answer it, and only when the person
+   says to take the page in with it left open. One above the first part, one
+   written inside a heading, or one whose marker runs over two lines refuses
+   the page.
 8. GTM Base writes the settings: the kind, the owner, the day, where the
    original sat with its date, and that the page was adopted. The whole file
    is screened once more.

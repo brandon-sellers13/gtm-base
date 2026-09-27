@@ -1167,7 +1167,7 @@ def strip_hidden(text: str):
     in somebody's own writing, and refusing the whole document over one of them
     turned a document that could simply have been cleaned into a wall.
     """
-    if not scan.scan_text(text, None, "a source", _EVERYTHING_ELSE):
+    if not _holds_hidden(text):
         return text, {}
     removed: Dict[str, int] = {}
     cleaned = text
@@ -1175,9 +1175,25 @@ def strip_hidden(text: str):
         cleaned, counted = _strip_once(cleaned)
         for kind, count in counted.items():
             removed[kind] = removed.get(kind, 0) + count
-        if not scan.scan_text(cleaned, None, "a source", _EVERYTHING_ELSE):
+        if not _holds_hidden(cleaned):
             break
     return cleaned, removed
+
+
+def _holds_hidden(text: str) -> bool:
+    """Whether anything a reader would not see is left, read across lines.
+
+    It used to be read one line at a time, and a tag opened on one line and
+    closed on the next was on neither, so the whole text was passed as clean
+    and kept its tag (Astra's review of Unit 1.7c, finding 4). The one line
+    screen still runs everywhere it ran; this is the look across the text.
+    """
+    return bool(
+        redaction_patterns.HIDDEN_COMMENT_MARK.search(text)
+        or redaction_patterns.HIDDEN_TAG.search(text)
+        or redaction_patterns.HIDDEN_CHARACTER.search(text)
+        or scan.scan_text(text, None, "a source", _EVERYTHING_ELSE)
+    )
 
 
 def _strip_once(text: str):

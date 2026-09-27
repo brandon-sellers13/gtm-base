@@ -1417,3 +1417,13 @@ Plan: docs/plans/2026-09-19-001-feat-base-that-produces-work-plan.md, Unit 1.7c 
 
 Review: the contract's scope clause is a heading naming a place dropped for the scope, because 1.7a settled that no filter reads the words of a document and the places dropped are what apply the scope. A `[your call: ...]` question in a finished page is kept as an open question rather than refused, only under a heading and only on the person's say, because adoption never edits the page and P27 already makes such a file unconfirmed until it is answered.
 - [x] Full suite after the review fixes: 2330 tests OK in 861 seconds, then 103 from a linked folder OK in 85 seconds (tests/run.sh exit 0).
+
+#### Astra's review of Unit 1.7c (2026-09-26), findings 1, 3, 4, 6 and 7
+Review: docs/reviews/2026-09-26-unit-1-7c-astra.md in the main checkout. Findings 2 and 5 (the write path and the take-back after a save) are the Unit 1.7d agent's, who owns recovery and the write. Each fix below has a test in tests/test_adoption.py that failed at the commit holding only the tests.
+- [x] 1 The prepared change is read through `approve_local.py --read`, inside the fence; `--sections` prints its headings inside the fence; the wording command writes the Before and After lines; the stale-check skill and join step 9 never open a prepared file or a document themselves.
+- [x] 3 The screens also read an inspection copy (selectors out, character codes decoded, compatibility forms folded, wrapped lines joined); the saved bytes are the approved bytes; a set of ordinary marketing lines still passes.
+- [x] 4 Hidden markup is found across the whole text, never across a blank line, and closing tags count; the cleaned bytes and the count are asserted for a tag over two lines.
+- [x] 6 A question marker split over two lines refuses the page; the same question on one line is open, unconfirmed and listed.
+- [x] 7 A question on a heading line refuses the page, with the round trip that shows an answer there leaves it open and the one under the heading that settles it.
+- [x] Call 23: the whole-file sentence drops "or tell you where it is"; the script prints no location; the skill says never to give it.
+- [x] Full suite after these fixes: 2346 tests OK in 937 seconds, then 107 from a linked folder OK in 108 seconds (tests/run.sh exit 0).

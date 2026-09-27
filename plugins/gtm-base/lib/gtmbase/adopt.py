@@ -45,12 +45,13 @@ that later hands the document to the model holds it inside the data fence.
 from __future__ import annotations
 
 import hashlib
+import html
 import os
 import re
 import unicodedata
 from typing import Dict, List, Optional, Sequence
 
-from . import callmarkers, constants, formats, redaction_patterns, review, segments
+from . import callmarkers, constants, formats, redaction_patterns, review, scan, segments
 from . import sources as sources_module
 from .errors import GtmBaseError, PathError, SourceRejected, ValidationError
 from .fsutil import atomic_write_json, read_json
@@ -85,6 +86,7 @@ CODE_HEADING_IN_CODE = "heading-in-code"
 CODE_UNDERLINED_HEADING = "underlined-heading"
 CODE_NO_PARTS = "no-parts"
 CODE_QUESTION_UNREACHABLE = "question-above-every-part"
+CODE_QUESTION_SPLIT = "question-split"
 CODE_WIDER_THAN_SCOPE = "wider-than-scope"
 CODE_FILE_TAKEN = segments.CODE_FILE_TAKEN
 CODE_FOLDER_NOT_ORDINARY = segments.CODE_FOLDER_NOT_ORDINARY
@@ -112,8 +114,8 @@ OPENING_SAID = "Its first lines, exactly as they will be saved, are below."
 # Said after them: where the whole of it is, and that the original stays.
 WHOLE_FILE = (
     "The whole cleaned document is saved in this setup's own folder, and I can "
-    "show it to you in full, or tell you where it is, before you answer. Your "
-    "original is not changed or moved."
+    "show it to you in full before you answer. Your original is not changed or "
+    "moved."
 )
 # Said when the page leaves questions for the person, before the one ask.
 ONE_QUESTION = (
@@ -186,8 +188,13 @@ NO_PARTS = (
     "I can draft this segment from your material instead."
 )
 QUESTION_UNREACHABLE = (
-    "That document asks a question above its first part, where a later change "
-    "cannot reach it, so nothing was saved. "
+    "That document asks a question above its first part or inside a heading, "
+    "where a later change cannot reach it, so nothing was saved. "
+    "I can draft this segment from your material instead."
+)
+QUESTION_SPLIT = (
+    "That document marks a question for you over two lines, which a later "
+    "reader could miss, so nothing was saved. "
     "I can draft this segment from your material instead."
 )
 WIDER_THAN_SCOPE = (
@@ -246,6 +253,7 @@ PERSON_FACING = (
     "UNDERLINED_HEADING",
     "NO_PARTS",
     "QUESTION_UNREACHABLE",
+    "QUESTION_SPLIT",
     "WIDER_THAN_SCOPE",
     "NOT_TO_ADOPT",
     "BASE_NOT_READY",
@@ -268,6 +276,7 @@ OFFERS_A_DRAFT = (
     CODE_UNDERLINED_HEADING,
     CODE_NO_PARTS,
     CODE_QUESTION_UNREACHABLE,
+    CODE_QUESTION_SPLIT,
     CODE_WIDER_THAN_SCOPE,
 )
 
@@ -283,6 +292,7 @@ _SENTENCES = {
     CODE_UNDERLINED_HEADING: UNDERLINED_HEADING,
     CODE_NO_PARTS: NO_PARTS,
     CODE_QUESTION_UNREACHABLE: QUESTION_UNREACHABLE,
+    CODE_QUESTION_SPLIT: QUESTION_SPLIT,
     CODE_FILE_TAKEN: segments.FILE_TAKEN,
     CODE_FOLDER_NOT_ORDINARY: segments.FOLDER_NOT_ORDINARY,
     CODE_NOT_SHOWN: NOT_SHOWN,
@@ -312,6 +322,8 @@ class AdoptionRefused(GtmBaseError):
 _HEADING_RE = re.compile(r"^(#{1,6})\s+\S")
 # A line that would read as a heading once its leading spaces were gone.
 _HEADING_SHAPED_RE = re.compile(r"^\s+#{1,6}\s+\S")
+# The start of a question marker, read across lines.
+_MARKER_START_RE = re.compile(r"\[\s*your\s+call\s*:", re.IGNORECASE)
 # The line opening or closing a fenced block of code.
 _FENCE_RE = re.compile(r"^ {0,3}(`{3,}|~{3,})(.*)$")
 # The line underneath a heading written the underlined way.
@@ -550,6 +562,60 @@ def has_invisible(text: str) -> bool:
     return False
 
 
+# The classes a copy with its lines joined tight is read for: the ones a
+# line break can cut in half without a reader noticing. A phone number is
+# read with the lines joined by a space instead, the way it would be read.
+_TIGHT_CLASSES = (
+    redaction_patterns.KEY_SHAPE,
+    redaction_patterns.VENDOR_URL_TOKEN,
+    redaction_patterns.EMAIL,
+)
+_SKIP_ALL_BUT_TIGHT = tuple(
+    name
+    for name, _pattern, _label in redaction_patterns.PATTERN_CLASSES
+    if name not in _TIGHT_CLASSES
+)
+# A line break inside a paragraph, which a reader reads straight through.
+_WRAP_RE = re.compile(r"[ \t]*\n(?![ \t]*\n)[ \t]*")
+
+
+def _without_selectors(text: str) -> str:
+    return "".join(ch for ch in text if not _is_selector(ord(ch)))
+
+
+def inspection_copy(text: str) -> str:
+    """The page as a reader takes it in, for screening and never for saving.
+
+    Selectors taken out, character references such as `&#64;` read as the
+    characters they stand for, and every compatibility form, such as a full
+    width digit, folded to its plain one, so an address, a number or a key
+    written in any of those ways reads as what it is (Astra's review of Unit
+    1.7c, finding 3). The bytes saved are still the bytes the person approved.
+    """
+    unescaped = html.unescape(_without_selectors(str(text or "")))
+    return unicodedata.normalize("NFKC", _without_selectors(unescaped))
+
+
+def inspection_problems(text: str) -> List[str]:
+    """What the inspection copy shows that the literal page did not."""
+    copy = inspection_copy(text)
+    found: List[str] = []
+    if has_invisible(html.unescape(str(text or ""))):
+        found.append(redaction_patterns.HIDDEN_CONTENT)
+    spaced = _WRAP_RE.sub(" ", copy)
+    tight = _WRAP_RE.sub("", copy)
+    # A character reference to a tag reads as the tag written out, which a
+    # reader sees, so markup is not looked for here.
+    skipped = tuple(review.SKIPPED_CLASSES) + (redaction_patterns.HIDDEN_CONTENT,)
+    for hit in scan.scan_text(spaced, None, "the page", skipped):
+        if hit.pattern_class not in found:
+            found.append(hit.pattern_class)
+    for hit in scan.scan_text(tight, None, "the page", _SKIP_ALL_BUT_TIGHT):
+        if hit.pattern_class not in found:
+            found.append(hit.pattern_class)
+    return found
+
+
 def _screen(text: str, frontmatter_lines=None) -> List[str]:
     return review.screen(text, None, frontmatter_lines=frontmatter_lines or set())
 
@@ -611,6 +677,13 @@ def clean(
     found = _screen(cleaned)
     if found:
         _refuse_screened(found)
+    found = inspection_problems(cleaned)
+    if found:
+        _refuse_screened(found)
+    if any("\n" in match.group(0) for match in _MARKER_START_RE.finditer(cleaned)):
+        # A question marker the line by line reader would miss, so every
+        # later reader would miss it too (Astra's review, finding 6).
+        raise AdoptionRefused(CODE_QUESTION_SPLIT)
     problem = heading_problem(cleaned)
     if problem is not None:
         raise AdoptionRefused(problem)
@@ -641,7 +714,13 @@ def clean(
     # Questions are found in the file exactly as it will be saved, the way
     # every later reader finds them (correctness review C1).
     marks = callmarkers.find(text)
-    if any(mark.heading is None for mark in marks):
+    saved_lines = text.split("\n")
+    if any(
+        mark.heading is None or _HEADING_RE.match(saved_lines[mark.line - 1])
+        for mark in marks
+    ):
+        # Above every part, or on a heading line, where an answer lands under
+        # the heading and the heading keeps its question (finding 7).
         raise AdoptionRefused(CODE_QUESTION_UNREACHABLE)
     final_body = formats.split_document(text)[1]
     return Cleaned(text, final_body, removed, had_settings, len(marks), label)

@@ -934,6 +934,7 @@ PYTHON_SENTENCES = (
     ("adopt", "UNDERLINED_HEADING"),
     ("adopt", "NO_PARTS"),
     ("adopt", "QUESTION_UNREACHABLE"),
+    ("adopt", "QUESTION_SPLIT"),
     ("adopt", "WIDER_THAN_SCOPE"),
     ("adopt", "NOT_TO_ADOPT"),
     ("adopt", "BASE_NOT_READY"),

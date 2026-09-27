@@ -1309,7 +1309,7 @@ def a_change_about(company, relative, entry="stg-" + "e" * 16):
                 "status: open",
                 "---",
                 "",
-                "Mortgage brokers now buy through their networks.",
+                "Felt needs changed: mortgage brokers now buy through their networks.",
                 "",
             ]
         ),
@@ -1342,7 +1342,7 @@ def outside_the_fence(printed):
     return "\n".join(kept)
 
 
-class TestAstraFinding1(unittest.TestCase):
+class TestAstraFindingOne(unittest.TestCase):
     """High: adopted instructions escaped the fence during improvement. The
     prepared change carries the adopted section in its Before text, the skill
     told the assistant to read that file directly, and the list of parts
@@ -1419,7 +1419,7 @@ def probe(line):
     return "# T\n\n## Who\n\n" + line + "\n"
 
 
-class TestAstraFinding3(unittest.TestCase):
+class TestAstraFindingThree(unittest.TestCase):
     """High: encoded and split contact details or keys passed both screens."""
 
     def test_encoded_and_split_values_are_refused(self):
@@ -1453,7 +1453,7 @@ class TestAstraFinding3(unittest.TestCase):
             self.assertIn(line, cleaned.text)
 
 
-class TestAstraFinding4(unittest.TestCase):
+class TestAstraFindingFour(unittest.TestCase):
     """High: multiline HTML survived hidden-content removal unchanged."""
 
     PAGE = (
@@ -1484,7 +1484,7 @@ class TestAstraFinding4(unittest.TestCase):
         self.assertEqual({}, removed)
 
 
-class TestAstraFinding6(unittest.TestCase):
+class TestAstraFindingSix(unittest.TestCase):
     """Medium: a question marker wrapped over two lines was adopted as though
     there were no question at all."""
 
@@ -1516,7 +1516,7 @@ class TestAstraFinding6(unittest.TestCase):
             self.assertEqual([result.path], [line.path for line in questions])
 
 
-class TestAstraFinding7(unittest.TestCase):
+class TestAstraFindingSeven(unittest.TestCase):
     """Medium: a question in its own section heading could not be answered."""
 
     ON_THE_HEADING = "# Brokers\n\n## Buyers [your call: who buys?]\n\nSomebody.\n"

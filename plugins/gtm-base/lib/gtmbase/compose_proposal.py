@@ -1455,10 +1455,47 @@ def write_the_wording(
         edit.text = text
     staging.first_draft = False
     staging.revision = int(getattr(staging, "revision", 0) or 0) + 1
+    _summary_follows(base_root, staging, text)
     atomic_write_text(resolved, staging.validate().render(), mode=0o600)
     if base_id:
         state.clear_first_draft(base_id, staging.staging_id)
     return staging
+
+
+def _summary_follows(base_root: str, staging, words: str) -> None:
+    """Keep the Before and After lines in step with the wording, one line each.
+
+    They used to be rewritten by hand, which meant opening the prepared file
+    and reading the part of the document it quotes outside the fence (Astra's
+    review of Unit 1.7c, finding 1). The After line is the wording, and the
+    Before line is what the part it replaces says today.
+    """
+    body = getattr(staging, "pr_body", None)
+    if not body:
+        return
+    try:
+        fields = formats.parse_pr_body(body)
+    except ValidationError:
+        return
+    fields["after"] = _WHITESPACE_RE.sub(" ", str(words)).strip() or fields["after"]
+    edit = staging.edits[0] if staging.edits else None
+    if edit is not None and edit.op == "replace":
+        text = read_text(os.path.join(base_root, str(edit.path).replace("/", os.sep)))
+        if text is not None:
+            lines = text.split("\n")
+            index = find_heading(
+                lines, edit.heading or "", frontmatter_end(lines),
+                getattr(edit, "occurrence", 1),
+            )
+            if index >= 0:
+                part = " ".join(lines[index + 1 : section_end(lines, index)])
+                said = _WHITESPACE_RE.sub(" ", part).strip()
+                if said:
+                    fields["before"] = said
+    try:
+        staging.pr_body = formats.render_pr_body(fields)
+    except ValidationError:
+        return
 
 
 # --- The path for a person who edited a file themselves -----------------------
