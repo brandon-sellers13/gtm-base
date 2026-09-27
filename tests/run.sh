@@ -21,7 +21,26 @@ export PYTHONPATH
 TZ="America/Los_Angeles"
 export TZ
 
+# No test may write into the seat folder of whoever runs the suite. Every test
+# module starts with the seat folder pointed at this temporary one (see
+# tests/support.py), so a test that makes no seat folder of its own writes
+# here instead, and the run fails if anything did. The real seat folder is
+# never read, listed or touched by this check.
+UNOWNED_SEAT=$(mktemp -d "${TMPDIR:-/tmp}/gtm-base-unowned-seat.XXXXXX")
+GTM_BASE_TESTS_UNOWNED_SEAT="$UNOWNED_SEAT"
+export GTM_BASE_TESTS_UNOWNED_SEAT
+
+nothing_written_to_a_seat_nobody_made() {
+  if [ -n "$(ls -A "$UNOWNED_SEAT")" ]; then
+    echo "A test wrote into a seat folder it did not make for itself:" >&2
+    find "$UNOWNED_SEAT" >&2
+    rm -rf "$UNOWNED_SEAT"
+    exit 1
+  fi
+}
+
 python3 -m unittest discover -s tests -p 'test_*.py' -v
+nothing_written_to_a_seat_nobody_made
 
 # The test classes that start a skill's scripts, run a second time with every
 # script started from a folder linked to the base rather than from inside it.
@@ -59,4 +78,5 @@ python3 -m unittest -v \
   test_words_files.TestThePathTheScriptsDoHandOut \
   test_words_files.TestTheDraftFileToo \
   test_os_clutter.TestTheApprovalScriptPastClutter
-exit $?
+nothing_written_to_a_seat_nobody_made
+rm -rf "$UNOWNED_SEAT"

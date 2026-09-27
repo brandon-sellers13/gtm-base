@@ -962,8 +962,11 @@ class TestTheSessionConditions(unittest.TestCase):
     def test_this_plugins_own_repository_is_left_alone_entirely(self):
         """It is a repository with no map where a base keeps one, so it is not
         a base, and nothing about this release changes how it behaves."""
-        self.assertFalse(gate.folder_is_in_scope(support.REPO_ROOT))
-        self.assertFalse(gate.first_push_is_unreviewed(support.REPO_ROOT))
+        # A seat folder of its own: reading this account's record makes the
+        # seat folder, and a test never makes it in the real one.
+        with support.TempHome():
+            self.assertFalse(gate.folder_is_in_scope(support.REPO_ROOT))
+            self.assertFalse(gate.first_push_is_unreviewed(support.REPO_ROOT))
 
     def test_a_question_that_cannot_be_answered_is_answered_yes(self):
         """It used to be answered no, so anything that broke the question let

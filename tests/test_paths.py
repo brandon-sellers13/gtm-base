@@ -567,7 +567,9 @@ class TestAWriteStaysWhereItBelongs(unittest.TestCase):
     def test_a_write_inside_the_folder_is_allowed(self):
         from gtmbase import fsutil
 
-        with TempDir() as folder:
+        # A seat folder of its own, because a write may take its folder's lock
+        # in the seat folder, and a test never writes into the real one.
+        with TempHome(), TempDir() as folder:
             root = os.path.join(folder, "base")
             os.makedirs(root)
             written = fsutil.atomic_write_text(
