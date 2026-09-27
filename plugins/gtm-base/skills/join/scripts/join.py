@@ -880,8 +880,18 @@ def run_segments(options, out):
             "candidate=%s number=%d\n" % (safe_value(candidate.path), candidate.number)
         )
     out.write(segments.FOUND_SENTENCE % {"count": len(found)} + "\n")
-    for candidate in found:
-        out.write("%d. %s\n" % (candidate.number, plain_value(candidate.label)))
+    # A document's name is whatever somebody typed when they saved it, so the
+    # numbered list is held apart as data like the documents themselves
+    # (Astra's review of the merged Units 1.7c and 1.7d, finding 7).
+    out.write(
+        moment.fenced(
+            "\n".join(
+                "%d. %s" % (candidate.number, plain_value(candidate.label))
+                for candidate in found
+            )
+        )
+        + "\n"
+    )
     out.write(segments.ASK_SENTENCE + "\n")
     return EXIT_DONE
 

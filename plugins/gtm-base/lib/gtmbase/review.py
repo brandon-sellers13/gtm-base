@@ -91,6 +91,8 @@ CODE_NOT_WHAT_WAS_SHOWN = "not-what-was-shown"
 
 # What the saved work is called when a file is written during setup.
 SAVE_MESSAGE = "Add %s from setup"
+# What it is called when only the line recording the yes to one is saved.
+CONFIRM_SAVED_MESSAGE = "Record the yes to %s from setup"
 
 # The settings lines this plugin writes the base's own address onto a moment
 # after the screen runs. Whatever a draft put on one of them is replaced, so
@@ -474,6 +476,7 @@ DESCRIPTOR_WRITES = (
     and os.stat in os.supports_follow_symlinks
     and os.link in os.supports_dir_fd
     and os.link in os.supports_follow_symlinks
+    and os.rename in os.supports_dir_fd
     and bool(_NO_FOLLOW)
 )
 
@@ -578,12 +581,31 @@ def _create_new(base_root: str, relative: str, data: bytes):
         _close_all(opened)
 
 
-def sweep_temporary(base_root: str, folder_relative: str) -> List[str]:
-    """Take away the temporary names a stopped write left in one folder.
+# The names every writer here gives a file before it is complete: a page
+# (above), and a whole file put down in one move by `fsutil`, which is how a
+# confirmations file is written. A claimed name is never among them.
+_TEMPORARY_PREFIXES = (TEMPORARY_PREFIX, ".gtmbase-", ".tmp-")
+# How old a temporary file has to be before it is taken as left by a writer
+# that died, so one another window is writing this very moment is left to it.
+TEMPORARY_AGE_SECONDS = 5.0
 
-    Only names this plugin gives its own temporary files, only ordinary files,
-    and only in the one folder named, reached the same way a write reaches it.
+
+def _is_temporary(name: str) -> bool:
+    return name.startswith(_TEMPORARY_PREFIXES) and not name.startswith(CLAIM_PREFIX)
+
+
+def sweep_temporary(base_root: str, folder_relative: str) -> List[str]:
+    """Take away the temporary files a writer that died left in one folder.
+
+    Only names this plugin gives its own temporary files, only ordinary files
+    old enough that no live writer is still on them, and only in the one
+    folder named, reached the same way a write reaches it. A process killed
+    between writing such a file and naming it leaves one behind, and nothing
+    else ever would take it away (Astra's review of the merged units,
+    finding 6).
     """
+    import time
+
     removed: List[str] = []
     if not DESCRIPTOR_WRITES:
         return removed
@@ -593,13 +615,15 @@ def sweep_temporary(base_root: str, folder_relative: str) -> List[str]:
         return removed
     try:
         for name in os.listdir(opened[-1]):
-            if not name.startswith(TEMPORARY_PREFIX):
+            if not _is_temporary(name):
                 continue
             try:
                 found = os.stat(name, dir_fd=opened[-1], follow_symlinks=False)
             except OSError:
                 continue
             if not stat.S_ISREG(found.st_mode):
+                continue
+            if time.time() - found.st_mtime < TEMPORARY_AGE_SECONDS:
                 continue
             try:
                 os.unlink(name, dir_fd=opened[-1])
@@ -609,6 +633,13 @@ def sweep_temporary(base_root: str, folder_relative: str) -> List[str]:
     finally:
         _close_all(opened)
     return removed
+
+
+def sweep_for_a_page(base_root: str, relative: str) -> None:
+    """Sweep the two folders one page's write touches: its own and its line's."""
+    folder = relative.rsplit("/", 1)[0]
+    sweep_temporary(base_root, folder)
+    sweep_temporary(base_root, constants.CONFIRMATIONS_DIR)
 
 
 def installed(base_root: str, relative: str):
@@ -649,8 +680,22 @@ def installed(base_root: str, relative: str):
         _close_all(opened)
 
 
+# What a name is moved to while cleanup looks at who it is. It is never swept,
+# so a file moved there and found not to be this run's is never lost.
+CLAIM_PREFIX = ".gtmbase-claim-"
+
+
 def _remove_if_ours(base_root: str, relative: str, identity) -> bool:
-    """Remove the file at a name only when it is the very file this run made."""
+    """Remove the file at a name only when it is the very file this run made.
+
+    The name is first moved, in one step, to a private name nobody else uses,
+    so whatever is looked at is exactly what will be removed: a file somebody
+    puts at the page's name after that move is a different entry and is never
+    touched (Astra's review of the merged units, finding 2). The moved file is
+    removed only when it is this run's own; anything else is put back under
+    its name, or, when its name has been taken again meanwhile, kept under the
+    private name, where nothing ever removes it.
+    """
     if identity is None:
         return False
     parts = relative.split("/")
@@ -667,18 +712,37 @@ def _remove_if_ours(base_root: str, relative: str, identity) -> bool:
         opened = _open_folders(base_root, parts[:-1], make=False)
     except (ReviewError, OSError):
         return False
+    folder = opened[-1]
+    claimed = CLAIM_PREFIX + os.urandom(8).hex()
     try:
         try:
-            found = os.stat(parts[-1], dir_fd=opened[-1], follow_symlinks=False)
+            os.rename(parts[-1], claimed, src_dir_fd=folder, dst_dir_fd=folder)
         except OSError:
-            return False
-        if (found.st_dev, found.st_ino) != tuple(identity) or not stat.S_ISREG(found.st_mode):
             return False
         try:
-            os.unlink(parts[-1], dir_fd=opened[-1])
-            return True
+            found = os.stat(claimed, dir_fd=folder, follow_symlinks=False)
         except OSError:
             return False
+        if (found.st_dev, found.st_ino) == tuple(identity) and stat.S_ISREG(found.st_mode):
+            try:
+                os.unlink(claimed, dir_fd=folder)
+                return True
+            except OSError:
+                return False
+        # Not this run's: it goes back under its own name, never over
+        # anything that has since been put there.
+        try:
+            os.link(
+                claimed, parts[-1], src_dir_fd=folder, dst_dir_fd=folder,
+                follow_symlinks=False,
+            )
+        except OSError:
+            return False
+        try:
+            os.unlink(claimed, dir_fd=folder)
+        except OSError:
+            pass
+        return False
     finally:
         _close_all(opened)
 
@@ -852,7 +916,7 @@ def approve_adopted(
         raise ReviewError(CODE_SCREENED, codes=codes)
     # A write that stopped between putting its bytes down and naming them
     # leaves a temporary name behind, which is this plugin's own and goes.
-    sweep_temporary(base_root, relative.rsplit("/", 1)[0])
+    sweep_for_a_page(base_root, relative)
     ready_to_write(base_root, git)
     _segment_file_is_free(base_root, relative)
     if _already_there(base_root, relative):
@@ -1029,6 +1093,10 @@ PAGE_WRITTEN = "written"
 PAGE_ABSENT = "absent"
 PAGE_EDITED = "edited-before-the-save"
 PAGE_OTHER = "other-bytes"
+# Saved by somebody, with no line recording the yes of this import's run.
+PAGE_SAVED_UNCONFIRMED = "saved-without-its-line"
+# The states in which a page with a yes is finished from what is there.
+PAGES_TO_FINISH = (PAGE_SAVED, PAGE_SAVED_UNCONFIRMED, PAGE_WRITTEN)
 
 
 def _text_at(git: GitRunner, base_root: str, spec: str) -> Optional[str]:
@@ -1070,18 +1138,37 @@ def _staged_is_ours(git: GitRunner, base_root: str, relative: str, digest: str) 
     return _digest_of(_text_at(git, base_root, ":" + relative)) == digest
 
 
-def page_state(git: GitRunner, base_root: str, relative: str, digest: str) -> str:
+def _drafted_lines_at_head(git: GitRunner, base_root: str, relative: str):
+    saved = _text_at_head(git, base_root, confirm.confirmations_path_for(relative))
+    found, _bad = formats.parse_confirmations_file(saved or "")
+    return [line for line in found if line.trigger == "drafted" and line.file == relative]
+
+
+def page_state(
+    git: GitRunner, base_root: str, relative: str, digest: str, run: Optional[str] = None
+) -> str:
     """How far one page with a yes got, read from what the base holds.
 
     Saved: some saved piece of work held these bytes at the name, whatever the
-    name holds now. Written: the bytes sit at the name, unsaved, staged or
-    not, with its line or not. Edited before the save: this import staged or
-    recorded the page, and the file at the name was changed before the save.
-    Absent: nothing at the name and nothing saved there. Other bytes:
-    something else is at the name, which is never written over.
+    name holds now, and, when `run` is given, the saved line recording the yes
+    names that run. Saved without its line: the bytes were saved, by another
+    window saving what was staged, and no line recording the yes was saved
+    with them (Astra's review of the merged units, finding 4). Written: the
+    bytes sit at the name, unsaved, staged or not, with its line or not.
+    Edited before the save: this import staged or recorded the page, and the
+    file at the name was changed before the save. Absent: nothing at the name
+    and nothing saved there. Other bytes: something else is at the name, or a
+    line for another run was saved for it, which is never written over.
     """
     if _saved_once(git, base_root, relative, digest):
-        return PAGE_SAVED
+        if run is None:
+            return PAGE_SAVED
+        lines = _drafted_lines_at_head(git, base_root, relative)
+        if not lines:
+            return PAGE_SAVED_UNCONFIRMED
+        if any(line.run == run for line in lines):
+            return PAGE_SAVED
+        return PAGE_OTHER
     if _text_at_head(git, base_root, relative) is not None:
         return PAGE_OTHER
     here = installed(base_root, relative)
@@ -1139,7 +1226,7 @@ def _only_this_pages_edits(git: GitRunner, base_root: str, relative: str) -> str
     from the temporary names a stopped write leaves, which are swept first.
     """
     confirmations = confirm.confirmations_path_for(relative)
-    sweep_temporary(base_root, relative.rsplit("/", 1)[0])
+    sweep_for_a_page(base_root, relative)
     status = git.run(["status", "--porcelain", "-z", "--untracked-files=all"], cwd=base_root)
     entries = status_entries(status.stdout) if status.ok else None
     if entries is None:
@@ -1198,7 +1285,7 @@ def take_back_unsaved(
     if _saved_once(git, base_root, relative, digest):
         return
     confirmations = confirm.confirmations_path_for(relative)
-    sweep_temporary(base_root, relative.rsplit("/", 1)[0])
+    sweep_for_a_page(base_root, relative)
     status = git.run(["status", "--porcelain", "-z", "--untracked-files=all"], cwd=base_root)
     entries = status_entries(status.stdout) if status.ok else None
     if entries is None:
@@ -1213,6 +1300,83 @@ def take_back_unsaved(
     here = installed(base_root, relative)
     if here is not None and hashlib.sha256(here[0]).hexdigest() == digest:
         _remove_if_ours(base_root, relative, here[1])
+
+
+def confirm_saved(
+    base_root: str,
+    base_id: Optional[str],
+    relative: str,
+    run_id: str,
+    runner: Optional[GitRunner] = None,
+    now: Optional[datetime.datetime] = None,
+) -> ApproveResult:
+    """Add and save the line recording the yes to a page already saved without it.
+
+    Another window can save what an import had staged before the import added
+    the line recording the yes. The page is then saved and nobody's yes is,
+    which is not a finished adoption. The line is added now, naming the
+    import's own run, and saved on its own; nothing else in the base is
+    touched, and a base with anything else half done is refused.
+    """
+    git = runner_or_default(runner)
+    moment = now or state.now_utc()
+    if isinstance(moment, datetime.date) and not isinstance(moment, datetime.datetime):
+        moment = datetime.datetime(moment.year, moment.month, moment.day)
+    on_default, _code = paths.head_is_default_branch(base_root, runner=git)
+    if not on_default:
+        raise ReviewError(CODE_NOT_DEFAULT_BRANCH, code=CODE_NOT_DEFAULT_BRANCH)
+    confirmations = confirm.confirmations_path_for(relative)
+    sweep_for_a_page(base_root, relative)
+    status = git.run(["status", "--porcelain", "-z", "--untracked-files=all"], cwd=base_root)
+    entries = status_entries(status.stdout) if status.ok else None
+    if entries is None:
+        raise ReviewError(CODE_GIT_FAILED, code=CODE_GIT_FAILED)
+    for _letters, named in entries:
+        if any(name != confirmations for name in named):
+            raise ReviewError(CODE_UNSAVED_EDITS, code=CODE_UNSAVED_EDITS)
+    line = _line_state(git, base_root, relative)
+    if line == "other":
+        raise ReviewError(CODE_UNSAVED_EDITS, code=CODE_UNSAVED_EDITS)
+    before = head_now(git, base_root)
+    if before is None:
+        raise ReviewError(CODE_GIT_FAILED, code=CODE_GIT_FAILED)
+    held = os.path.join(base_root, confirmations.replace("/", os.sep))
+    kept = _text_at_head(git, base_root, confirmations)
+    if line == "as-saved":
+        today = state.today(moment)
+        recorded = formats.ConfirmationLine(
+            date=today.isoformat(),
+            time=moment.strftime("%H:%M:%SZ"),
+            file=relative,
+            trigger="drafted",
+            entry=None,
+            question=None,
+            run=run_id,
+        )
+        recorded.validate()
+        confirm._append_line(base_root, confirmations, recorded)
+    failed = False
+    try:
+        git.check(["add", "--", confirmations], cwd=base_root)
+        git.check(
+            ["commit", "-q", "-m", CONFIRM_SAVED_MESSAGE % relative, "--", confirmations],
+            cwd=base_root,
+        )
+    except Exception:
+        failed = True
+    head = head_now(git, base_root)
+    if head is not None and head != before and any(
+        found.run == run_id for found in _drafted_lines_at_head(git, base_root, relative)
+    ):
+        return ApproveResult(relative, head, [], base_root, base_id)
+    if head == before and failed:
+        if _unstage(git, base_root, confirmations):
+            if kept is None:
+                fsutil.remove(held)
+            else:
+                fsutil.atomic_write_bytes(held, kept.encode("utf-8"), mode=0o644, inside=base_root)
+        raise ReviewError(CODE_GIT_FAILED, code=CODE_GIT_FAILED)
+    raise ReviewError(CODE_SAVE_UNCERTAIN, code=CODE_SAVE_UNCERTAIN)
 
 
 def finish_adopted(

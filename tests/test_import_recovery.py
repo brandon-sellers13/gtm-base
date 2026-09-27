@@ -28,6 +28,7 @@ import io
 import os
 import shutil
 import threading
+import time
 import unittest
 from unittest import mock
 
@@ -991,6 +992,9 @@ class TestTheReviews(RecoveryCase):
         company = self.company
         folder = os.path.join(company.root, constants.SEGMENTS_DIR)
         support.write(os.path.join(folder, review.TEMPORARY_PREFIX + "00ff"), "half of a page")
+        # Left by a run that died a while ago, not one writing right now.
+        old = time.time() - 600
+        os.utime(os.path.join(folder, review.TEMPORARY_PREFIX + "00ff"), (old, old))
         stop_at_the_yes(company, company.run, ORDER[0])
         _run, resumed = self.resume()
         self.assertEqual([ORDER[0]], [s.name for s in resumed.finished])
@@ -1587,6 +1591,7 @@ NEW_SENTENCES = (
     "RESUME_EDITED",
     "RESUME_CANNOT_READ",
     "RESUME_RECHECKED",
+    "CLEANED_AGAIN_SAID",
     "RESUME_STOPPED",
     "PAGE_EDITED_SAID",
     "ALREADY_SAVED",

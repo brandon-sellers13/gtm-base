@@ -33,6 +33,7 @@ import os
 import shutil
 import stat
 import tempfile
+import threading
 from typing import List, Optional, Sequence
 
 from . import (
@@ -1790,7 +1791,9 @@ class Shown(object):
         said = [adopt.SHOW_OPENING % {"name": self.segment.name}]
         if self.cleaned.settings_set_aside:
             said.append(adopt.SETTINGS_SET_ASIDE)
-        hidden = sources_module.removed_sentence(self.cleaned.label, self.cleaned.removed)
+        # Named by the segment the person named, never by the file's own name,
+        # which is not text the fence holds (Astra, finding 7 of the merged units).
+        hidden = sources_module.removed_sentence(self.segment.name, self.cleaned.removed)
         if hidden:
             said.append(hidden)
         if not self.cleaned.settings_set_aside and not hidden:
@@ -1834,13 +1837,21 @@ def adoption_show(
     record = _carry(run_id, base_id)
     yes = record.approved(segment.slug) if record is not None else None
     if yes is not None and review.page_state(
-        git, root, segment.destination, yes["approved"]
-    ) in (review.PAGE_SAVED, review.PAGE_WRITTEN):
+        git, root, segment.destination, yes["approved"], run=record.run
+    ) in review.PAGES_TO_FINISH:
         # The person already said yes and the page is at its name, so it is
         # finished rather than shown again or refused as a name in the way
-        # (the correctness review of Unit 1.7d, finding 4).
-        _finish_one(root, base_id, segment, record, None, git, None, address)
-        raise adopt.AdoptionRefused(CODE_ALREADY_SAVED, ALREADY_SAVED)
+        # (the correctness review of Unit 1.7d, finding 4). Finishing cleans
+        # it again under today's rules first; a page that no longer comes out
+        # to what the yes was to is taken back and shown here afresh (Astra's
+        # review of the merged units, finding 3).
+        try:
+            _finish_one(run_id, root, base_id, segment, record, None, git, None, address)
+            raise adopt.AdoptionRefused(CODE_ALREADY_SAVED, ALREADY_SAVED)
+        except adopt.AdoptionRefused as refusal:
+            if refusal.code not in (CODE_CLEANED_AGAIN, adopt.CODE_CHANGED):
+                raise
+        record = _carry(run_id, base_id)
     try:
         cleaned = _cleaned_page(run_id, segment, root, address, day)
     except adopt.AdoptionRefused as refusal:
@@ -1945,7 +1956,7 @@ def adoption_approve(
         yes = kept.approved(segment.slug)
         if yes is None or yes["approved"] != record["shown"]:
             raise adopt.AdoptionRefused(adopt.CODE_FILE_TAKEN)
-        return _finish_one(root, base_id, segment, kept, None, git, now, address)
+        return _finish_one(run_id, root, base_id, segment, kept, None, git, now, address)
     on_disk = read_bytes(adoption_file(run_id, segment.slug))
     if (
         cleaned.digest != record["shown"]
@@ -1959,7 +1970,7 @@ def adoption_approve(
         base_id, segment.slug, segments.STATE_APPROVED, record["shown"], record["day"],
         run=kept.run, original=_original_digest(run_id, segment),
     )
-    return _finish_one(root, base_id, segment, kept, cleaned.text, git, now, address)
+    return _finish_one(run_id, root, base_id, segment, kept, cleaned.text, git, now, address)
 
 
 # --- An import kept past the closing, and finished later (Unit 1.7d) ---------
@@ -1971,6 +1982,8 @@ CODE_ANOTHER_IMPORT = segments.CODE_ANOTHER_IMPORT
 CODE_ALREADY_SAVED = "already-saved"
 CODE_PAGE_EDITED = review.PAGE_EDITED
 CODE_LOCKED = "locked"
+# A page with a yes that today's cleaning no longer turns into those bytes.
+CODE_CLEANED_AGAIN = "cleaned-again-differently"
 # The name of the lock held, per base, while one page is written and saved,
 # so two windows never write into one base's staging at once.
 WRITING_LOCK = "segments-import-writing"
@@ -2068,6 +2081,12 @@ IMPORT_PENDING = (
     "not finished yet, so nothing was saved. Say \"finish setting up my "
     "base\" first."
 )
+# Said when a page is asked about again and today's cleaning no longer turns
+# its original into the bytes the person said yes to.
+CLEANED_AGAIN_SAID = (
+    "GTM Base now checks finished documents more closely than when you said "
+    "yes to that one, so nothing was saved. Show it again, then ask again."
+)
 # Said when another window holds the base for a moment.
 LOCKED = (
     "Another window is saving into your base right now, so nothing more was "
@@ -2092,6 +2111,7 @@ BASE_REFUSALS = {
     review.CODE_GIT_FAILED: WRITE_FAILED,
     CODE_PAGE_EDITED: PAGE_EDITED_SAID,
     CODE_LOCKED: LOCKED,
+    CODE_CLEANED_AGAIN: CLEANED_AGAIN_SAID,
 }
 
 
@@ -2131,35 +2151,118 @@ def _mark_refused(record, slug: str) -> None:
     segments.mark(record.base_id, slug, segments.STATE_REFUSED, run=record.run)
 
 
-def _writing(base_id: str):
-    """The lock held while one page of this base is written and saved."""
-    paths.seat_dir(base_id)
-    return HeldLock(os.path.join(paths.seat_dir(base_id), WRITING_LOCK))
+# How many times this thread holds each base's writing lock, so a call that
+# already holds it, such as a resume finishing one of its pages, never waits
+# on itself, while another thread still waits like any other window.
+_WRITING_HELD = threading.local()
 
 
-def _finish_one(root, base_id, segment, record, text, git, now, address):
+def _held_counts() -> dict:
+    counts = getattr(_WRITING_HELD, "counts", None)
+    if counts is None:
+        counts = _WRITING_HELD.counts = {}
+    return counts
+
+
+class _Writing(object):
+    """This base's writing lock, held across every step that changes it.
+
+    Every write, every take-back, and every record update that ends them is
+    made with it held, and the state of the page is read again once it is
+    held, so no other window can come between the look and the change
+    (Astra's review of the merged units, finding 1). Waiting too long gives up
+    with the sentence that says another window is saving.
+    """
+
+    def __init__(self, base_id: str):
+        self.path = os.path.join(paths.seat_dir(base_id), WRITING_LOCK)
+        self.lock = None
+
+    def __enter__(self):
+        held = _held_counts().get(self.path, 0)
+        if held == 0:
+            lock = HeldLock(self.path)
+            try:
+                lock.__enter__()
+            except PathError:
+                raise ReviewError(CODE_LOCKED, code=CODE_LOCKED)
+            self.lock = lock
+        _held_counts()[self.path] = held + 1
+        return self
+
+    def __exit__(self, *_exc):
+        counts = _held_counts()
+        left = counts.get(self.path, 1) - 1
+        if left <= 0:
+            counts.pop(self.path, None)
+            if self.lock is not None:
+                self.lock.__exit__(None, None, None)
+        else:
+            counts[self.path] = left
+        return False
+
+
+def _revalidate(run_id, segment, root, address, yes, written):
+    """Clean the original again under today's rules and say whether the yes stands.
+
+    This is the one check every route that finishes a page not yet saved goes
+    through: finishing an import, showing a page again, and approving it
+    again. A yes binds to the exact bytes the person was shown, so the page
+    has to come out to them today, through today's cleaning and its
+    inspection copy. The answer is the same, unreadable just now, changed
+    (the original itself is different), or rechecked (the original is the
+    same and GTM Base now cleans or refuses it differently).
+    """
+    original = _original_digest(run_id, segment)
+    if original is None:
+        return "unreadable", None
+    day = datetime.date.fromisoformat(yes["day"])
+    try:
+        cleaned = _cleaned_page(
+            run_id, segment, root, address, day, check_destination=not written
+        )
+    except adopt.AdoptionRefused as refusal:
+        if refusal.code in _COULD_NOT_READ:
+            return "unreadable", None
+        cleaned = None
+    if cleaned is not None and cleaned.digest == yes["approved"]:
+        return "same", cleaned
+    if yes.get("original") == original:
+        return "rechecked", None
+    return "changed", None
+
+
+def _finish_one(run_id, root, base_id, segment, record, text, git, now, address):
     """Take one page with a yes as far as it still has to go, and note the save.
 
-    What stands at the page's name decides, read with this base's writing
-    lock held so no other window is between the look and the write: saved at
-    some point, the save is only written down; written and not saved, it is
-    finished from those bytes; changed before its save, what this import
-    started is taken back and the changed copy is left; nothing there, it is
-    written from `text`, which has to be the approved bytes; anything else
-    there, it is never written over. The line recording the yes names the
-    run the import belongs to, so a page finished in a later session is
-    written exactly as an uninterrupted run would have.
+    All of it happens with this base's writing lock held, from the look at
+    the page's name to the record update that ends it, and the record is
+    read again once the lock is held. What stands at the name decides: saved
+    with its line, the save is only written down; saved without its line,
+    the line is added and saved; written and not saved, it is cleaned again
+    under today's rules and finished only when it still comes out to the
+    bytes of the yes, and otherwise taken back and shown again; changed by
+    the person before its save, what this import started is taken back and
+    the changed copy left; nothing there, it is written from `text`, which
+    has to be the approved bytes; anything else there, it is never written
+    over. The line recording the yes names the run the import belongs to,
+    so a page finished in a later session is written exactly as an
+    uninterrupted run would have.
     """
-    yes = record.approved(segment.slug)
-    digest = yes["approved"]
     relative = segment.destination
-    try:
-        lock = _writing(base_id)
-        lock.__enter__()
-    except PathError:
-        raise ReviewError(CODE_LOCKED, code=CODE_LOCKED)
-    try:
-        where = review.page_state(git, root, relative, digest)
+    with _Writing(base_id):
+        record = segments.load_import(base_id) or record
+        yes = record.approved(segment.slug)
+        if yes is None:
+            raise adopt.AdoptionRefused(adopt.CODE_NOT_SHOWN)
+        digest = yes["approved"]
+        if record.state_of(segment.slug) == segments.STATE_COMMITTED:
+            where = review.page_state(git, root, relative, digest, run=record.run)
+            if where == review.PAGE_SAVED:
+                return review.ApproveResult(
+                    relative, review.head_now(git, root), [], root, base_id
+                )
+        where = review.page_state(git, root, relative, digest, run=record.run)
         if where == review.PAGE_OTHER:
             raise ReviewError(segments.CODE_FILE_TAKEN, code=segments.CODE_FILE_TAKEN)
         if where == review.PAGE_EDITED:
@@ -2169,7 +2272,26 @@ def _finish_one(root, base_id, segment, record, text, git, now, address):
             result = review.ApproveResult(
                 relative, review.head_now(git, root), [], root, base_id
             )
+        elif where == review.PAGE_SAVED_UNCONFIRMED:
+            # Saved by another window before its line was added: the line is
+            # added and saved now, because an adoption is finished only when
+            # the page, its line, and the import's own run are all there
+            # (Astra's review of the merged units, finding 4).
+            result = review.confirm_saved(
+                root, base_id, relative, record.run, runner=git, now=now
+            )
         elif where == review.PAGE_WRITTEN:
+            verdict, _cleaned = _revalidate(
+                run_id, segment, root, address, yes, written=True
+            )
+            if verdict == "unreadable":
+                raise adopt.AdoptionRefused(adopt.CODE_UNREADABLE)
+            if verdict != "same":
+                review.take_back_unsaved(root, relative, digest, runner=git)
+                segments.clear(base_id, segment.slug, run=record.run)
+                if verdict == "rechecked":
+                    raise adopt.AdoptionRefused(CODE_CLEANED_AGAIN, CLEANED_AGAIN_SAID)
+                raise adopt.AdoptionRefused(adopt.CODE_CHANGED)
             result = review.finish_adopted(
                 root, base_id, relative, digest, record.run,
                 runner=git, now=now, email=address,
@@ -2182,11 +2304,10 @@ def _finish_one(root, base_id, segment, record, text, git, now, address):
                 root, base_id, relative, text, digest, record.run,
                 runner=git, now=now, email=address,
             )
-    finally:
-        lock.__exit__(None, None, None)
-    segments.mark(
-        base_id, segment.slug, segments.STATE_COMMITTED, digest, yes["day"], run=record.run
-    )
+        segments.mark(
+            base_id, segment.slug, segments.STATE_COMMITTED, digest, yes["day"],
+            run=record.run,
+        )
     return result
 
 
@@ -2198,29 +2319,38 @@ def adoption_leave_out(
 ) -> str:
     """Write down the person's no to one finished page, so it is never asked again.
 
-    Nothing is written into the base. A page already saved stays saved, and
-    is said to be. A page this import wrote and did not save is taken back
-    first, its staging and its line with it, so nothing of it is left half
-    done; a copy the person changed is left where it is.
+    Nothing is written into the base. A page already saved stays saved, is
+    given its line when another window saved it without one, and is said to
+    be saved. A page this import wrote and did not save is taken back first,
+    its staging and its line with it, so nothing of it is left half done; a
+    copy the person changed is left where it is. All of it happens with the
+    base's writing lock held, and the page is looked at again once it is
+    held, so a page another window has just saved is never taken back
+    (Astra's review of the merged units, finding 1).
     """
     segment = segment_to_adopt(run_id, slug)
     git = runner_or_default(runner)
     root, base_id = _adoption_base(base_root, git)
-    record = _carry(run_id, base_id)
-    if record is None:
+    if _carry(run_id, base_id) is None:
         return LEFT_OUT_SAID
-    yes = record.approved(segment.slug)
-    if yes is not None:
-        where = review.page_state(git, root, segment.destination, yes["approved"])
-        if where == review.PAGE_SAVED:
-            segments.mark(
-                base_id, segment.slug, segments.STATE_COMMITTED, yes["approved"],
-                yes["day"], run=record.run,
+    with _Writing(base_id):
+        record = segments.load_import(base_id)
+        if record is None:
+            return LEFT_OUT_SAID
+        yes = record.approved(segment.slug)
+        if yes is not None:
+            where = review.page_state(
+                git, root, segment.destination, yes["approved"], run=record.run
             )
-            return ALREADY_SAVED
-        if where in (review.PAGE_WRITTEN, review.PAGE_EDITED, review.PAGE_ABSENT):
-            review.take_back_unsaved(root, segment.destination, yes["approved"], runner=git)
-    segments.mark(base_id, segment.slug, segments.STATE_LEFT_OUT, run=record.run)
+            if where in (review.PAGE_SAVED, review.PAGE_SAVED_UNCONFIRMED):
+                address = _owner_address(root, None, git)
+                _finish_one(run_id, root, base_id, segment, record, None, git, None, address)
+                return ALREADY_SAVED
+            if where in (review.PAGE_WRITTEN, review.PAGE_EDITED, review.PAGE_ABSENT):
+                review.take_back_unsaved(
+                    root, segment.destination, yes["approved"], runner=git
+                )
+        segments.mark(base_id, segment.slug, segments.STATE_LEFT_OUT, run=record.run)
     return LEFT_OUT_SAID
 
 
@@ -2409,95 +2539,79 @@ def resume_import(
     address = _owner_address(root, email, git)
     result = Resumed()
     order = [segment.slug for segment in record.to_adopt()]
+    current = record.unfinished()[0]
 
     def finish(segment, text):
-        _finish_one(root, base_id, segment, record, text, git, now, address)
+        """Finish one page through the one shared path, and sort the answer."""
+        try:
+            _finish_one(run_id, root, base_id, segment, record, text, git, now, address)
+        except adopt.AdoptionRefused as refusal:
+            if refusal.code == CODE_CLEANED_AGAIN:
+                result.rechecked.append(segment)
+                result.to_show.append(segment)
+                return
+            if refusal.code == adopt.CODE_CHANGED:
+                result.changed.append(segment)
+                result.to_show.append(segment)
+                return
+            if refusal.code in _COULD_NOT_READ:
+                result.unreadable.append(segment)
+                return
+            raise
+        except ReviewError as refusal:
+            if refusal.code == CODE_PAGE_EDITED:
+                result.edited.append(segment)
+                return
+            raise
         result.finished.append(segment)
 
-    def still_the_yes(segment, yes, written):
-        """Clean the original again and say whether the yes still stands.
-
-        A yes binds to the exact bytes the person was shown. Cleaned again
-        today, the page has to come out to those bytes; otherwise it is
-        shown again and never saved under the old yes. What is said depends
-        on why: the original itself changed, or the original is the same and
-        GTM Base now cleans or refuses it differently, which is never blamed
-        on the person's original.
-        """
-        original = _original_digest(run_id, segment)
-        if original is None:
-            return "unreadable", None
-        day = datetime.date.fromisoformat(yes["day"])
-        try:
-            cleaned = _cleaned_page(
-                run_id, segment, root, address, day, check_destination=not written
-            )
-        except adopt.AdoptionRefused as refusal:
-            if refusal.code in _COULD_NOT_READ:
-                return "unreadable", None
-            cleaned = None
-        if cleaned is not None and cleaned.digest == yes["approved"]:
-            return "same", cleaned
-        if yes.get("original") == original:
-            return "rechecked", None
-        return "changed", None
-
-    def show_again(segment, why, written, yes):
-        if written:
-            review.take_back_unsaved(root, segment.destination, yes["approved"], runner=git)
-        segments.clear(base_id, segment.slug, run=record.run)
-        (result.rechecked if why == "rechecked" else result.changed).append(segment)
-        result.to_show.append(segment)
-
-    # Pages already at their name come first: finishing one clears the only
-    # unsaved work an import can leave, and every other write needs a base
-    # with nothing half done in it.
-    waiting = []
     try:
-        for segment in record.unfinished():
-            current = segment
-            yes = record.approved(segment.slug)
-            if yes is None:
-                result.to_show.append(segment)
-                continue
-            where = review.page_state(git, root, segment.destination, yes["approved"])
-            if where == review.PAGE_OTHER:
-                # Never written over. One the base has saved is named once
-                # and settled; an unsaved one is left for the person, and its
-                # yes stands for when it is gone.
-                result.taken.append(segment)
-                if review.held_at_head(git, root, segment.destination):
-                    segments.mark(
-                        base_id, segment.slug, segments.STATE_REFUSED, run=record.run
-                    )
-            elif where == review.PAGE_EDITED:
-                review.take_back_unsaved(
-                    root, segment.destination, yes["approved"], runner=git
+        # Everything that looks at a page and changes it happens with the
+        # base's writing lock held, and the record is read again once it is
+        # (Astra's review of the merged units, finding 1).
+        with _Writing(base_id):
+            record = segments.load_import(base_id) or record
+            # Pages already at their name come first: finishing one clears the
+            # only unsaved work an import can leave, and every other write
+            # needs a base with nothing half done in it.
+            waiting = []
+            for segment in record.unfinished():
+                current = segment
+                yes = record.approved(segment.slug)
+                if yes is None:
+                    result.to_show.append(segment)
+                    continue
+                where = review.page_state(
+                    git, root, segment.destination, yes["approved"], run=record.run
                 )
-                result.edited.append(segment)
-            elif where == review.PAGE_SAVED:
-                finish(segment, None)
-            elif where == review.PAGE_WRITTEN:
-                # Written under the yes and not saved: saved only when the
-                # page still cleans to exactly the bytes the yes was to.
-                verdict, _cleaned = still_the_yes(segment, yes, written=True)
-                if verdict == "same":
-                    finish(segment, None)
-                elif verdict == "unreadable":
-                    result.unreadable.append(segment)
+                if where == review.PAGE_OTHER:
+                    # Never written over. One the base has saved is named once
+                    # and settled; an unsaved one is left for the person, and
+                    # its yes stands for when it is gone.
+                    result.taken.append(segment)
+                    if review.held_at_head(git, root, segment.destination):
+                        segments.mark(
+                            base_id, segment.slug, segments.STATE_REFUSED, run=record.run
+                        )
+                elif where == review.PAGE_ABSENT:
+                    waiting.append((segment, yes))
                 else:
-                    show_again(segment, verdict, True, yes)
-            else:
-                waiting.append((segment, yes))
-        for segment, yes in waiting:
-            current = segment
-            verdict, cleaned = still_the_yes(segment, yes, written=False)
-            if verdict == "unreadable":
-                result.unreadable.append(segment)
-            elif verdict == "same":
-                finish(segment, cleaned.text)
-            else:
-                show_again(segment, verdict, False, yes)
+                    finish(segment, None)
+            for segment, yes in waiting:
+                current = segment
+                verdict, cleaned = _revalidate(
+                    run_id, segment, root, address, yes, written=False
+                )
+                if verdict == "unreadable":
+                    result.unreadable.append(segment)
+                elif verdict == "same":
+                    finish(segment, cleaned.text)
+                else:
+                    segments.clear(base_id, segment.slug, run=record.run)
+                    (result.rechecked if verdict == "rechecked" else result.changed).append(
+                        segment
+                    )
+                    result.to_show.append(segment)
     except (ReviewError, adopt.AdoptionRefused, segments.InventoryRefused, PathError) as refusal:
         code = getattr(refusal, "code", None) or review.CODE_GIT_FAILED
         sentence = getattr(refusal, "sentence", "") or BASE_REFUSALS.get(code) or ""

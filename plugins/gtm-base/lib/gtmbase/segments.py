@@ -290,10 +290,15 @@ def candidates_from(items) -> Optional[List[Candidate]]:
     for item in items:
         if not isinstance(item, dict):
             return None
-        try:
-            found.append(Candidate(item["number"], item["path"], item["label"]))
-        except (KeyError, TypeError, ValueError):
+        number = item.get("number")
+        # A counting number and nothing else: not a truth value, not a
+        # fraction, not a number so large it reads as infinity (Astra's review
+        # of the merged units, finding 8).
+        if not isinstance(number, int) or isinstance(number, bool) or number < 1:
             return None
+        if not isinstance(item.get("path"), str) or not isinstance(item.get("label"), str):
+            return None
+        found.append(Candidate(number, item["path"], item["label"]))
     return found
 
 
@@ -516,7 +521,7 @@ def inventory_from(payload, candidates: Sequence[Candidate]) -> Optional[Invento
             return None
         number = item.get("number")
         if number is not None and (
-            not isinstance(number, int) or isinstance(number, bool)
+            not isinstance(number, int) or isinstance(number, bool) or number < 1
         ):
             return None
         lines.append((item.get("answer"), number, item.get("name")))

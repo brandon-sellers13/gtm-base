@@ -579,6 +579,11 @@ _SKIP_ALL_BUT_TIGHT = tuple(
 _WRAP_RE = re.compile(r"[ \t]*\n(?![ \t]*\n)[ \t]*")
 
 
+# The start of a tag, opening or closing, anywhere in the page. After hidden
+# content is taken out, one left is markup the cleaning could not consume.
+_RESIDUAL_MARKUP_RE = re.compile(r"</?[a-zA-Z]")
+
+
 def _without_selectors(text: str) -> str:
     return "".join(ch for ch in text if not _is_selector(ord(ch)))
 
@@ -672,7 +677,11 @@ def clean(
     cleaned = source.text
     for kind, count in source.removed.items():
         removed[kind] = removed.get(kind, 0) + count
-    if has_invisible(cleaned):
+    if has_invisible(cleaned) or _RESIDUAL_MARKUP_RE.search(cleaned):
+        # Markup the cleaning could not take out, such as an opening tag
+        # longer than the pattern reads, still hides what follows it when the
+        # page is shown, so the whole page is refused rather than kept with
+        # it (Astra's review of the merged units, finding 5).
         _refuse_screened([redaction_patterns.HIDDEN_CONTENT])
     found = _screen(cleaned)
     if found:
