@@ -25,6 +25,7 @@ from __future__ import annotations
 import datetime
 import hashlib
 import os
+import re
 import stat
 from typing import List, Optional
 
@@ -709,12 +710,35 @@ def _claim_name(identity, original: str) -> str:
     return "%s%s-%s-%s" % (CLAIM_PREFIX, inode, digest, original)
 
 
+# A claim's name exactly as `_claim_name` writes one: digits from 0 to 9 for
+# the inode, sixteen lowercase hexadecimal characters for the hash, and the
+# name the file came from (Astra's second confirmation pass, finding 3).
+_CLAIM_RE = re.compile(r"\A" + re.escape(CLAIM_PREFIX) + r"([0-9]+)-([0-9a-f]{16})-(.+)\Z")
+# The names a claimed file can have come from: a segment page, or a file of
+# confirmations.
+_PAGE_NAME_RE = re.compile(r"\A[a-z0-9]+(?:-[a-z0-9]+)*\.md\Z")
+_CONFIRMATIONS_NAME_RE = re.compile(r"\Acontext(?:--[a-z0-9]+(?:-[a-z0-9]+)*)+\.md\Z")
+
+
 def _claim_parts(name: str):
-    rest = name[len(CLAIM_PREFIX):]
-    pieces = rest.split("-", 2)
-    if len(pieces) != 3 or not pieces[0].isdigit() or not pieces[2]:
+    """What a claim's name says, or None when it is not exactly one.
+
+    Anything else shaped like a claim is somebody's file, left exactly where
+    it is and never renamed or removed; the base then counts it as work half
+    done, which is how it is reported.
+    """
+    found = _CLAIM_RE.match(name)
+    if not found:
         return None
-    return int(pieces[0]), pieces[1], pieces[2]
+    inode, digest, original = found.group(1), found.group(2), found.group(3)
+    if original.startswith(".") or CLAIM_PREFIX in original:
+        return None
+    if _PAGE_NAME_RE.match(original):
+        if segments.slug_problem(original[: -len(".md")]) is not None:
+            return None
+    elif not _CONFIRMATIONS_NAME_RE.match(original):
+        return None
+    return int(inode), digest, original
 
 
 def _is_the_claimed_own(folder: int, claimed: str, inode: int, digest: str) -> bool:
@@ -734,6 +758,16 @@ def _is_the_claimed_own(folder: int, claimed: str, inode: int, digest: str) -> b
         return hashlib.sha256(stream.read()).hexdigest()[:16] == digest
 
 
+def _same_file(folder: int, one: str, other: str) -> bool:
+    """Whether two names in a folder are the very same file on the disk."""
+    try:
+        first = os.stat(one, dir_fd=folder, follow_symlinks=False)
+        second = os.stat(other, dir_fd=folder, follow_symlinks=False)
+    except OSError:
+        return False
+    return (first.st_dev, first.st_ino) == (second.st_dev, second.st_ino)
+
+
 def _put_back(folder: int, claimed: str, original: str) -> bool:
     """Give a claimed file that is not this run's its name back, or keep it aside.
 
@@ -744,6 +778,16 @@ def _put_back(folder: int, claimed: str, original: str) -> bool:
     try:
         os.link(claimed, original, src_dir_fd=folder, dst_dir_fd=folder, follow_symlinks=False)
     except OSError:
+        if _same_file(folder, claimed, original):
+            # A run stopped between giving the file its name back and
+            # letting go of the private name: the name already is this very
+            # file, so only the private name goes, and no copy is kept
+            # (Astra's second confirmation pass, finding 5).
+            try:
+                os.unlink(claimed, dir_fd=folder)
+            except OSError:
+                pass
+            return True
         stem, dot, ending = original.rpartition(".")
         if not dot:
             stem, ending = original, ""

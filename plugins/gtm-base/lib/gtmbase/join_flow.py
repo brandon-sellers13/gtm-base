@@ -46,6 +46,7 @@ from . import (
     drafting,
     extract,
     formats,
+    fsutil,
     ids,
     layout,
     location,
@@ -2096,6 +2097,18 @@ KEPT_ASIDE = (
     "name with the words kept aside added. Nothing of it was lost. Look at "
     "it, then ask again."
 )
+# Said when a write could not make sure no other window was writing to the
+# same place, or the folder that makes sure of it is not this account's
+# alone, so nothing was written.
+NO_LOCK = (
+    "GTM Base could not make sure no other window was writing to the same "
+    "place, so nothing was written. Ask again in a moment."
+)
+LOCKS_NOT_PRIVATE = (
+    "The folder GTM Base keeps its own records in can be changed by somebody "
+    "other than you, so nothing was written. Make it yours alone, then ask "
+    "again."
+)
 # Said when another window holds the base for a moment.
 LOCKED = (
     "Another window is saving into your base right now, so nothing more was "
@@ -2122,6 +2135,8 @@ BASE_REFUSALS = {
     CODE_LOCKED: LOCKED,
     CODE_CLEANED_AGAIN: CLEANED_AGAIN_SAID,
     review.CODE_KEPT_ASIDE: KEPT_ASIDE,
+    fsutil.CODE_NO_LOCK: NO_LOCK,
+    fsutil.CODE_LOCKS_NOT_PRIVATE: LOCKS_NOT_PRIVATE,
 }
 
 

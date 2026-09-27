@@ -45,6 +45,7 @@ that later hands the document to the model holds it inside the data fence.
 from __future__ import annotations
 
 import hashlib
+import html.parser as html_parser
 import html
 import os
 import re
@@ -579,18 +580,48 @@ _SKIP_ALL_BUT_TIGHT = tuple(
 _WRAP_RE = re.compile(r"[ \t]*\n(?![ \t]*\n)[ \t]*")
 
 
-# Markup the cleaning could not take out, read across the whole page: a
-# comment opener, a closing tag, or an opening tag whose name is followed by
-# a space, a slash or its own closing mark, reaching that mark within its
-# paragraph however long it runs. After hidden content is taken out, one left
-# is a tag longer than the cleaning reads. A comparison such as `CAC<LTV.` or
-# `a<b` is not a tag, and is taken in as it stands (Astra's confirmation pass
-# on the merged units, finding 3).
-_RESIDUAL_MARKUP_RE = re.compile(
-    r"<!--"
-    r"|</[a-zA-Z]"
-    r"|<[a-zA-Z][a-zA-Z0-9-]*(?:[\s/](?:[^>\n]|\n(?![ \t]*\n))*)?>"
-)
+# Markup the cleaning could not take out. Whether a piece of the page is a
+# tag is decided by Python's own reader of HTML, which reads a tag however
+# many lines it runs over and whatever its quoted values hold, blank lines
+# included, so `<script data-x="ok` with a blank line inside its value is the
+# tag it is (Astra's second confirmation pass on the merged units, finding 4).
+# That reader leaves a comment opener or a closing tag with nothing after it
+# as plain text, so those two are looked for as well. A comparison such as
+# `CAC<LTV.`, `a<b` or `<3` is not a tag to it and is taken in as it stands.
+_UNFINISHED_MARKUP_RE = re.compile(r"<!--|</[a-zA-Z]")
+
+
+class _MarkupFinder(html_parser.HTMLParser):
+    """Notes whether anything in a text reads as markup, and nothing else."""
+
+    def __init__(self):
+        html_parser.HTMLParser.__init__(self, convert_charrefs=True)
+        self.found = False
+
+    def _mark(self, *_args):
+        self.found = True
+
+    handle_starttag = _mark
+    handle_endtag = _mark
+    handle_startendtag = _mark
+    handle_comment = _mark
+    handle_decl = _mark
+    handle_pi = _mark
+    unknown_decl = _mark
+
+
+def holds_markup(text: str) -> bool:
+    """Whether any of the text reads as markup, across the whole of it."""
+    if _UNFINISHED_MARKUP_RE.search(text):
+        return True
+    finder = _MarkupFinder()
+    try:
+        finder.feed(text)
+        finder.close()
+    except Exception:
+        # Text the reader cannot get through is not taken as clean.
+        return True
+    return finder.found
 
 
 def _without_selectors(text: str) -> str:
@@ -686,7 +717,7 @@ def clean(
     cleaned = source.text
     for kind, count in source.removed.items():
         removed[kind] = removed.get(kind, 0) + count
-    if has_invisible(cleaned) or _RESIDUAL_MARKUP_RE.search(cleaned):
+    if has_invisible(cleaned) or holds_markup(cleaned):
         # Markup the cleaning could not take out, such as an opening tag
         # longer than the pattern reads, still hides what follows it when the
         # page is shown, so the whole page is refused rather than kept with

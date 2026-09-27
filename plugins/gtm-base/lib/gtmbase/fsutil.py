@@ -69,25 +69,69 @@ def _check_inside(folder: str, inside: str) -> None:
 # sweep that gets the lock knows every temporary file in the folder belongs to
 # a writer that is gone. A sweep that does not get it takes nothing.
 #
-# The lock files live in a folder of this person's own under the folder this
-# computer keeps temporary work in, one per folder written into, never in the
-# folder itself, so nothing appears in a base.
+# The lock files live in a folder of this person's own inside the seat folder,
+# the one folder every session of this account resolves the same way whatever
+# its temporary folder is, one file per folder written into, never in the
+# folder itself, so nothing appears in a base. Each folder on the way that
+# this code makes is checked before it is trusted: a real folder and not a
+# link, owned by this account, and writable by nobody else. Anything else is
+# refused, because whoever controls the lock files decides when a sweep may
+# take a writer's file (Astra's second confirmation pass on the merged Units
+# 1.7c and 1.7d, finding 1).
+
+# A writer could not take its lock, so nothing was written (finding 2).
+CODE_NO_LOCK = "no-writing-lock"
+# The folder the locks live in is not one this account alone controls.
+CODE_LOCKS_NOT_PRIVATE = "locks-not-private"
+
+
+def _private_folder(path: str) -> str:
+    """Make a folder owner only when it is missing, and check it either way."""
+    import stat
+
+    if not os.path.lexists(path):
+        try:
+            os.mkdir(path, DIR_MODE)
+        except FileExistsError:
+            pass
+        except OSError:
+            raise PathError("the locks folder could not be made", code=CODE_LOCKS_NOT_PRIVATE)
+    info = os.lstat(path)
+    if (
+        not stat.S_ISDIR(info.st_mode)
+        or info.st_uid != os.getuid()
+        or (info.st_mode & 0o022)
+    ):
+        raise PathError("the locks folder is not this account's alone", code=CODE_LOCKS_NOT_PRIVATE)
+    return path
+
+
+def _lock_home() -> str:
+    """The seat folder's own folder of locks, checked at every step it makes."""
+    from . import paths
+
+    home = paths.seat_home_path()
+    parent = os.path.dirname(home)
+    if parent and not os.path.isdir(parent):
+        ensure_dir(parent)
+    _private_folder(home)
+    return _private_folder(os.path.join(home, "locks"))
 
 
 def _folder_lock_path(folder: str) -> str:
     import hashlib
 
-    home = ensure_dir(
-        os.path.join(tempfile.gettempdir(), "gtmbase-folder-locks-%d" % os.getuid())
-    )
     key = hashlib.sha256(os.path.realpath(folder).encode("utf-8")).hexdigest()[:40]
-    return os.path.join(home, key + ".lock")
+    return os.path.join(_lock_home(), key + ".lock")
 
 
 class FolderLock(object):
     """A shared hold on a folder while writing into it, or an exclusive one to sweep it.
 
-    `exclusive=True` never waits: `held` says whether it was taken.
+    `exclusive=True` never waits and never refuses: `held` says whether it was
+    taken, and a sweep that did not take it takes nothing. A writer that
+    cannot take its hold refuses to write at all, because a write made
+    without it is one a sweep could take away half done (finding 2).
     """
 
     def __init__(self, folder: str, exclusive: bool = False):
@@ -100,8 +144,8 @@ class FolderLock(object):
         try:
             import fcntl
         except ImportError:
-            # Nowhere to take a lock: a writer goes ahead, and a sweep takes
-            # nothing, which is the safe half of each.
+            # A computer with no such locks: nothing is ever swept there, so
+            # a writer has nothing to hold off.
             self.held = not self.exclusive
             return self
         try:
@@ -110,27 +154,35 @@ class FolderLock(object):
                 os.O_CREAT | os.O_RDWR | getattr(os, "O_NOFOLLOW", 0),
                 FILE_MODE,
             )
-        except OSError:
-            self.held = not self.exclusive
-            return self
+        except (OSError, PathError):
+            if self.exclusive:
+                return self
+            raise PathError("the writing lock could not be taken", code=CODE_NO_LOCK)
         if self.exclusive:
             try:
                 fcntl.flock(self.handle, fcntl.LOCK_EX | fcntl.LOCK_NB)
                 self.held = True
             except OSError:
                 self.held = False
-        else:
+            return self
+        try:
             fcntl.flock(self.handle, fcntl.LOCK_SH)
-            self.held = True
+        except OSError:
+            self._close()
+            raise PathError("the writing lock could not be taken", code=CODE_NO_LOCK)
+        self.held = True
         return self
 
-    def __exit__(self, *_exc):
+    def _close(self):
         if self.handle is not None:
             try:
                 os.close(self.handle)
             except OSError:
                 pass
             self.handle = None
+
+    def __exit__(self, *_exc):
+        self._close()
         return False
 
 
