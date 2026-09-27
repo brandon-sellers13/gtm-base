@@ -1,0 +1,26 @@
+Reviewed `4c8e35e..d2bdfa7` read-only. No files changed. Filesystem-writing tests were not rerun; evidence below distinguishes executed in-memory checks from source inspection.
+
+| Finding | Status | Evidence | Tests fail without fix? |
+|---|---|---|---|
+| Stranded claim after interrupted cleanup | **Original cases closed; recovery defects remain** | Claims retain inode, hash and original name; sweeping deletes owned claims or restores foreign files. Malformed names and interruption during restoration remain problematic below. | **Yes, all four by inspection.** The previous sweep excluded claims, and failed restoration did not raise the expected refusal. |
+| Five-second temporary-file age rule | **Not fully closed** | Age is removed, and all three temporary-file writers acquire folder locks. However, sessions can acquire different locks, and writers continue after lock acquisition fails. | **Yes, both by inspection.** Previously, the paused writer’s aged temporary was deleted, while the killed writer’s fresh temporary survived. |
+| Ordinary comparisons refused as markup | **Comparison regression closed; markup protection regressed** | All three markup tests passed in memory. Restoring the old rule produced five comparison failures. A tag spanning a blank line now survives cleaning. | **Comparison test: yes, executed. Both oversized-tag tests: no**, they pass with either rule and serve as preservation checks. |
+
+Generated segment names are bounded, so genuine claim names fit ordinary filename limits. Kept-aside creation uses non-overwriting hard links and a bounded 999-attempt loop. A hung writer does not hang the sweep call, but prevents reclamation throughout its folder until its lock is released.
+
+1. **Medium: The lock namespace can split between sessions or be controlled by another local user.**  
+   [fsutil.py:80](/Users/brandonsellers/Build/gtm-base/.claude/worktrees/agent-adb18d6bfdbbaf313/plugins/gtm-base/lib/gtmbase/fsutil.py:80) derives lock paths from `tempfile.gettempdir()`. In-memory verification produced different locks for the same destination under different `TMPDIR` values. A sweep can therefore delete a live writer’s temporary. On shared `/tmp`, `ensure_dir` also accepts a precreated directory or directory symlink without ownership checks; its owner can replace lock entries. `O_NOFOLLOW` protects only the final component. **Smallest fix:** use a stable, private, owner-verified namespace independent of session temporary directories, rejecting symlinked or externally writable lock directories.
+
+2. **Medium: A failed lock acquisition silently permits an unprotected write.**  
+   [fsutil.py:113](/Users/brandonsellers/Build/gtm-base/.claude/worktrees/agent-adb18d6bfdbbaf313/plugins/gtm-base/lib/gtmbase/fsutil.py:113) catches lock-file open errors and reports writer ownership anyway. An in-memory `PermissionError` probe returned `held=True, handle=None`. If that failure clears while the writer remains active, a later sweep can acquire the lock and delete its temporary. **Smallest fix:** refuse the write when its ownership lock cannot be acquired.
+
+3. **Medium: Malformed claim-shaped filenames are treated as recovery instructions.**  
+   [review.py:715](/Users/brandonsellers/Build/gtm-base/.claude/worktrees/agent-adb18d6bfdbbaf313/plugins/gtm-base/lib/gtmbase/review.py:715) accepts `.gtmbase-claim-0-x-customer.md`; an in-memory settlement probe renamed it to `customer.md`, although its digest cannot come from `_claim_name`. A name containing inode `²` passes `isdigit()` and then crashes `int()`. Nested claim-shaped originals also undergo further interpretation on subsequent sweeps. **Smallest fix:** validate ASCII inode digits, the exact 16-character hexadecimal digest, and a supported original basename before performing any recovery operation.
+
+4. **Medium: Blank lines inside HTML attributes bypass the new markup rule.**  
+   [adopt.py:592](/Users/brandonsellers/Build/gtm-base/.claude/worktrees/agent-adb18d6bfdbbaf313/plugins/gtm-base/lib/gtmbase/adopt.py:592) stops matching at paragraph boundaries. In-memory cleaning accepted `<script\n data-x="ok\n\nmore">hidden instructions</script>`, retained its opening tag, and stripped its closing tag. Python’s HTML parser recognized the surviving script element; the old rule refused the page. **Smallest fix:** recognize actual tag syntax across blank lines, including quoted attributes, while preserving literal comparisons.
+
+5. **Low: Interrupted restoration produces a redundant kept-aside copy.**  
+   [review.py:745](/Users/brandonsellers/Build/gtm-base/.claude/worktrees/agent-adb18d6bfdbbaf313/plugins/gtm-base/lib/gtmbase/review.py:745) treats every existing destination as a conflicting file. An in-memory crash after successful restoration but before claim unlink left two names for the same inode; retry created another kept-aside link and raised a refusal. The tests interrupt before linking, missing this window. **Smallest fix:** recognize when the destination already references the claimed inode and finish removing the claim without allocating another copy.
+
+**Verdict: not ready.**

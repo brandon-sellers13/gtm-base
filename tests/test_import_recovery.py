@@ -35,6 +35,7 @@ from unittest import mock
 import plain_language
 import support
 import test_adoption as adoption
+import test_os_clutter as clutter
 
 from gtmbase import (
     adopt,
@@ -559,6 +560,44 @@ class TestAnotherFileWhereThePageWouldGo(RecoveryCase):
         self.assertEqual("my own edit\n", company.read("context/positioning.md"))
         # The page this import wrote is still there, untouched, to finish later.
         self.assertIsNotNone(company.read(company.destination(MIDDLE)))
+
+
+class TestFilesTheComputerMadeBesideAStoppedImport(clutter.ClutterAssertions, RecoveryCase):
+    """Release 0.3.2 carried into this one: every check for unsaved work asks
+    the one shared question, so a file the computer made on its own is never
+    the reason an import that stopped cannot be finished or taken back, and
+    it is never saved."""
+
+    def stop_the_middle_page_after(self, step):
+        self.snapshot.restore()
+        company = self.company
+        shown = show(company.run, company, MIDDLE)
+        with StopAfter(review, step, middle_page) as stop:
+            with self.assertRaises(Stopped):
+                approve(company.run, company, MIDDLE, shown.digest)
+        self.assertTrue(stop.fired)
+        clutter.scatter_clutter(company.root)
+        return company
+
+    def test_a_half_written_page_beside_clutter_is_finished(self):
+        company = self.stop_the_middle_page_after("_create_new")
+        _run, resumed = self.resume()
+        self.assertIsNone(resumed.stopped, resumed.sentences())
+        self.assertIn(MIDDLE, [segment.name for segment in resumed.finished])
+        self.assert_no_clutter_saved(company.root)
+
+    def test_a_staged_page_left_out_beside_clutter_is_taken_back(self):
+        company = self.stop_the_middle_page_after("_stage_bytes")
+        said = join_flow.adoption_leave_out(
+            company.run, segments.slug_for(MIDDLE), company.root
+        )
+        self.assertEqual(join_flow.LEFT_OUT_SAID, said)
+        self.assertIsNone(company.read(company.destination(MIDDLE)))
+        self.assert_no_clutter_saved(company.root)
+        self.assertEqual(
+            segments.STATE_LEFT_OUT,
+            segments.load_import(company.base_id).state_of(segments.slug_for(MIDDLE)),
+        )
 
 
 # --- After the closing (call 18) ----------------------------------------------

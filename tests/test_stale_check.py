@@ -818,7 +818,10 @@ class TestTheBaseHasToBeReady(unittest.TestCase):
             result = run_check(base)
 
             self.assertTrue(result.stopped)
-            self.assertEqual([stale_check.UNSAVED_EDITS], result.lines())
+            self.assertEqual(
+                [stale_check.UNSAVED_EDITS_NAMED % "They are in your customer profile."],
+                result.lines(),
+            )
             self.assertEqual([], result.staged)
 
 

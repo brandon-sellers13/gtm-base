@@ -114,3 +114,100 @@ All three root causes above are fixed in 0.3.1 (commit on main the same day, ins
 Not verified by Claude: the release against the real Gridwise base, because a read-only run from ~/Gridwise was blocked by the session's permission mode. Step 2 of this check is that verification.
 
 To resume: quit Claude Code and open it again, open it in ~/Gridwise, and start again at step 2. Expected at step 2 now: no command fails before the answer, the answer is the review's own sentence ("Nothing in your base is due a look today, and no change is waiting for you to approve it."), followed (after the quiet-record question, if that is due) by the offer: "Your context changes are stored the old way. Updating them takes one step and changes nothing they say. Shall I do it?"
+
+### 0.3.1 live check, run 2026-09-27 (from Brandon's screenshot of a new session opened in ~/Gridwise, plugin 0.3.1)
+
+**Step 1, a quiet start: passed.** Brandon said "hey what's up". The reply offered his weekly-planning skill and named the branch and uncommitted files in ~/Gridwise, which come from his own setup in that folder, not from GTM Base. Nothing was asked on the base's behalf and nothing was said about the map.
+
+**Step 2, review my base: passed.** Brandon said "review my base". The session ran one command and used one tool, with no failed command shown and no search for the base. Its whole answer was the review's own two sentences, word for word:
+
+> Nothing in your base is due a look today, and no change is waiting for you to approve it.
+>
+> Your context changes are stored the old way. Updating them takes one step and changes nothing they say. Shall I do it?
+
+Every line reads in seconds. No path, identifier, "up to date", or added advice appeared, and the offer that 0.3.0 never made appeared once. All three 0.3.1 root causes are confirmed fixed in the real run. Not yet confirmed: the expanded command, to see that it ran from ~/Gridwise without an error.
+
+**Step 2, Brandon's note on the offer (2026-09-27).** At first glance the offer reads like a plugin update. It is really a change to how the base stores its files, made necessary by a newer version, and it names neither the version nor what moves. Finding for the build: the offer says which version introduced the change and what moves, in release-notes style, from the real base. Proposed for 0.3: "GTM Base 0.3 stores context changes in a new folder, and your base still keeps its one context change in the old one. Moving it changes nothing it says, and your base works either way until you do. Shall I move it now?" The Unit 1.5b offer has the same problem at a larger scale and should name the version and each kind of thing it moves, with counts and document names from the real base. Brandon has not yet approved these words.
+
+**Step 3, look before moving anything: passed, with two findings.** Brandon asked what the update would do without doing it. The session previewed without writing and said:
+
+> This would update one of your context changes and write one dated record of it under today's date, 2026-09-27. It would be saved as two separate pieces of work. Nothing has been written.
+>
+> As things stand, GTM Base would offer this.
+>
+> When you want to go ahead, I'll also need you to confirm that everyone who opens this base is on the current version of GTM Base.
+
+The first sentence is the script's own, with no identifier (0.3.1's fix to finding 4 works), and nothing in the base changed.
+
+1. "As things stand, GTM Base would offer this." is the script's own sentence (`changes.OFFER_STATE_NOW`), relayed correctly, but it is written for the builder rather than the person and means nothing to Brandon. Fix: say nothing when the offer would be made, and when it would not, say the plain reason (unsaved edits, a change written twice, a shared base whose seats are not yet updated).
+2. The third sentence was added by the assistant and is wrong for this base. The script did not print it. `changes.migrate` asks for the every-seat confirmation only when the base has a shared copy (`paths.remote_url` is set), and the Gridwise base has none. The assistant took it from the stale-check skill's table of commands, which lists `--every-seat-updated` without saying it applies only to a shared base. This breaks 0.3.1's rule that the assistant adds no claim of its own. Fix: the skill says to ask about other seats only when the script's own sentence asks it, and the shared-base sentence keeps its one-line reason (an older version reads an updated base as empty, so a teammate would be told nothing is out of date). Brandon asked for that reason to be stated whenever the confirmation is asked.
+
+**Step 4, the update itself: passed, with two findings.** Brandon said yes. The session ran the update and replied:
+
+> I ran the update. You didn't confirm that everyone who opens this base is on the current version of GTM Base, and it didn't ask for that, so I left that confirmation out. Its result:
+>
+> Your context changes are now stored the way GTM Base stores them today, and all 1 of them say exactly what they said before.
+
+He then said "review my base" again, and the answer was the review's own sentence and nothing more: "Nothing in your base is due a look today, and no change is waiting for you to approve it." It matches step 2 minus the offer, so the move landed and the context change reads the same.
+
+1. The script's sentence (`changes.MIGRATED`) says "all 1 of them" for a base holding one context change. Fix: the count in words, and the singular for one ("your one context change says exactly what it said before"), as the look before the update already does with `changes.counted`. Unit 1.5b replaces this sentence, so the fix belongs there as well.
+2. The assistant narrated how the command works, walking back its own invented claim from step 3. Same cause and same fix as step 3 finding 2: the skill never mentions the other-seats confirmation unless the script's own sentence asks it, and the reply after the update is the script's sentence alone.
+
+**Step 5, a hand edit: in progress, findings so far (2026-09-27).** Brandon said he had edited his positioning and wanted it kept, before he had saved the file. The session said "Your positioning doc passed its check, and nothing has overtaken it." and then asked where the edit came from. After he saved, it summarized the change itself, with ellipses, raised two editorial points (a sentence labeled as the customer's own words now carries a number the words list at the bottom does not, and the number needs a source because "an investor audience will ask"), and asked where the figure came from. He answered that it was verified against the full historic earnings database back to 2017. The session saved that as the source, suggested adding "since 2017" because the count is cumulative, and asked "what changed, and why?".
+
+1. Two questions where the check expects one ("What changed, and why?"). The script needs a source for a local edit, so the propose-change skill asks for it separately. Fix: one question whose answer supplies both.
+2. "To raise your edit for review" and "The reviewer will also need to see where it came from" describe a review that does not exist on a base with no shared copy, where the owner approves locally. Fix: the local-edit path uses the local-approval words.
+3. "Your positioning doc passed its check, and nothing has overtaken it." said out loud. The check before use is silent when it finds nothing. Fix: the skill says nothing about a check that found nothing.
+4. Editorial advice inside the flow. **Brandon decided on 2026-09-27 (for the plan's For Brandon table):** inside any GTM Base flow the assistant makes only the step's one ask; editorial observations about the content wait until after the approval, as one short note ("two things you may want to check"), and never before or between the flow's own questions. Runner-up, not chosen: inline, capped at one sentence.
+5. The before and after the assistant showed were its own summary with ellipses; the whole difference from the script is still to come in this step.
+
+**Step 5, Brandon's decision on the hand-edit questions (2026-09-27, for the plan's For Brandon table).** "What changed, and why?" did not say what it was asking or what the answer is for. Brandon: people starting out need the reason explained, and people who have done it a few times do not. Decided wording, which replaces the separate source question and the bare "What changed, and why?" (fixes findings 1 and 2 above):
+
+The first three times a person keeps a hand edit (counted per person on this computer):
+
+> Because you changed a document in your base, GTM Base keeps a short record of it. That gives you a history of why your context changed, and it lets GTM Base check your other documents against it, so anything that still says the old thing gets flagged. The record holds four things: what changed about the business, why, where it came from, and which documents it affects. I work out the last one myself.
+>
+> So, in a sentence or two: what changed, why, and where did it come from? If this was only a wording fix and nothing about the business changed, just say so and nothing is recorded.
+
+From the fourth time on:
+
+> I'll keep a record of this edit so your other documents can be checked against it. What changed, why, and where did it come from? If it was only a wording fix, say so.
+
+At any time, "why are you asking this?" gets the long version. One answer supplies the what, the why and the source; the script's source and what-changed inputs are filled from it. "Only a wording fix" is the typo path of step 6. The word stays "context change", never "decision".
+
+**Step 5, Brandon's answer and a second decision (2026-09-27, for the plan's For Brandon table).** To "what changed, and why?" Brandon answered that nothing about the business changed: a review showed the company can now claim over 1 million drivers where it used to cite 500k a year. The session filed the edit as a correction and recorded no context change, which is the product as built. The gap: a corrected fact is exactly what other documents repeat, and a correction flags none of them, so any document still saying 500k stays unflagged. **Brandon decided the three-answer version:**
+
+| The person's answer | What GTM Base does |
+|---|---|
+| Something about the business changed | Records a context change and checks the other documents against it |
+| A fact the company states was corrected (500k a year becomes over 1 million) | Records a context change as well, for example "Our verified driver count is over 1 million since 2017, replacing the 500k a year we used to cite", so every document repeating the old fact is flagged |
+| Only the wording changed | Records nothing (step 6) |
+
+The decided hand-edit wording above changes in one place to match: the question asks "what changed (in the business, or in a fact you state about it), why, and where did it come from?", and the way out stays for a fix to wording only.
+
+**Step 5, the showing (four findings).** The difference was exactly Brandon's one edit in "What we sell", and only the positioning was affected, on the local-approval path. But:
+1. For a five-word edit the showing printed the whole paragraph as it reads now, again as it would read, and again in the difference, which is not readable in seconds. Fix for a hand edit: the changed sentence once, with the change marked, and the section named; the whole text on request.
+2. The assistant shortened the difference with ellipses and explained that the rest matched. The difference is relayed as printed (fix 1 removes the need).
+3. "What changed:" carried the first line of the edit, cut off mid-number ("from over 1..."). For a correction it says what changed in plain words.
+4. "Why: The owner read the source quoted below and brought the file in line with it by hand." names the person in the third person and points at a source that is not quoted. It uses the person's own source sentence.
+
+**Step 5, approval refused: blocking finding.** Approving was refused with "You have edits in your base you have not saved, so nothing was applied. Put those somewhere safe and ask again." A read-only look at the base by Claude the same day found the only files besides the edit: an untracked `.DS_Store`, which macOS Finder writes into any folder opened in Finder. The approval's clean-tree check counts it as unsaved work, so anyone on a Mac who browses their base in Finder, as this step asks, cannot approve a hand edit. Fix: the clean-tree checks ignore operating-system clutter (`.DS_Store`, `._*`, `Thumbs.db`, `desktop.ini`), and a base's ignore file lists them from the start (the existing base gains them through an offered change, never silently).
+
+Two further findings from the same turn:
+1. The refusal sentence does not say which files are unsaved. It names them in plain words and says when one is only a file the computer made.
+2. The assistant then broke the relay rules: it narrated internals ("GTM Base blocks my commands from its own records folder"), listed guesses, and asked Brandon to find the base and run a version-control command himself. Naming the files in the refusal removes the reason to go looking; the skill says never to send the person to a command line.
+
+Workaround for this run: delete the `.DS_Store` file and ask again, without opening the folder in Finder before approving.
+
+**Step 5, result: passed once unblocked.** The `.DS_Store` file was gone by the time Brandon went to delete it, and a read-only look showed the base held only the edit. On "try the approval again" the session said: "Your positioning now says what this change said, and you are recorded as approving it." A read-only look at the base's saved history by Claude the same day: one saved change touching exactly three files, `context/strategy/positioning.md` (one line), a correction record under `corrections/`, and one confirmation line for the positioning. No other document changed, no context change was recorded (the product as built; Brandon's three-answer decision changes this for a corrected fact), and the base was left with nothing unsaved. One more finding: the saved-history subject repeats the cut-off "What changed" line ("In your words: "We collect earnings and trip data directly f"); the fix to step 5's showing finding 3 covers it.
+
+**Step 6, a typo: passed on its own condition, with findings and a decision (2026-09-27).** The approved positioning held no real typo. Brandon's first two attempts (a typo typed and then fixed within one save, and a revert that left a word behind) were each read correctly by the session as a change in meaning, not a typo, and it refused to keep them as typos; it compared the saved file against the approved version and named the exact difference, which is the right guard (write it into the skill as a rule rather than leaving it to the assistant). It again added one editorial point inside the flow (a quote not matching "What we sell"), against Brandon's decision above. The clean run: Brandon removed the comma in "Buyers who try it, buy it." and asked to keep it as a typo. The difference shown was exactly that comma, and on approve the session said "Your positioning now says what this change said, and you are recorded as approving it." A read-only look at the base by Claude: one saved change touching the positioning (one line), a correction record, and one confirmation line; no new context change (the record still holds the one from before); nothing left unsaved.
+
+1. Bug: "What changed:" quoted the first bullet of the section ("- **It answers the questions company disclosures cannot.** Quote: "He..."), not the bullet that changed, and the saved-history subject repeats it. With step 5's cut-off line, this shows "What changed" is built from the first line of the section rather than from the change. Fix: from the changed line, in plain words; for a fix to wording only, "A typo fix."
+2. A one-comma fix got the whole ceremony: the four lines, all seven bullets twice, the difference, and a source file handed out. Fix: the wording-only route of the three-answer decision shows the one line with the change marked and asks one yes.
+3. "Why: The owner read the source quoted below and brought the file in line with it by hand." Same as step 5.
+4. **Brandon decided (for the plan's For Brandon table): a typo fix writes no correction record.** The saved history already says who changed what and when, and a correction record means something was wrong, which is what a later lessons pass reads. Runner-up, not chosen: a correction record for every hand edit.
+
+**Step 7, paused: a product gap (2026-09-27).** To make the customer profile out of date, Brandon told the session about a real change (the marketing use case sold to retail firms). The session checked the terms against the profile and asked what they meant (good instinct, but three questions at once and an editorial paragraph on deal values, and it again said "The ICP passed its check, so nothing has overtaken it"). It then found, correctly, that 0.3.1 cannot record a context change on its own: outside the setup closing, which needs a setup run, a change is written down only together with an edit to a document, and a proposal that changes no document is refused ("This proposal changes nothing, so there is nothing to send."). This step's instruction ("by telling Claude what changed") promised a path the product does not have. Its offered workaround (a placeholder line in the profile carrying the change) would settle the change against the profile, so nothing would ever be flagged and the step would measure nothing.
+
+**Brandon decided to fix the gap before running step 7 as designed.** Built in two fix releases on main: 0.3.2 (by the orchestrating session) makes operating-system clutter never count as unsaved work, the blocking `.DS_Store` finding from step 5, with refusals naming the unsaved files; 0.3.3 (from the live-check session) adds the change recording. What the two do: (1) a person can record a context change at any time, from the folder they work in, with no setup and no edit; it is shown whole, written only on their yes, and each affected document is then asked about (already says it, prepare a fix, or not now, which leaves it flagged); (2) operating-system clutter never counts as unsaved work, and a refusal names the unsaved files. The wording and relay findings from steps 2 to 6 stay with Release B. Step 7 resumes on 0.3.3 in ~/Gridwise with the retail change.

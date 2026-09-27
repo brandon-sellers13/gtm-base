@@ -44,9 +44,10 @@ from . import (
     scan,
     segments,
     state,
+    unsaved,
 )
 from .errors import PathError, ReviewError
-from .gitcmd import GitRunner, runner_or_default, status_entries
+from .gitcmd import GitRunner, runner_or_default
 
 # What the screen reads a draft for. A share link and a path from inside a home
 # folder are left to the check that runs when something is about to leave the
@@ -438,10 +439,12 @@ def ready_to_write(base_root: str, git: GitRunner) -> None:
     on_default, _code = paths.head_is_default_branch(base_root, runner=git)
     if not on_default:
         raise ReviewError(CODE_NOT_DEFAULT_BRANCH)
-    status = git.run(["status", "--porcelain"], cwd=base_root)
-    if not status.ok:
+    # The shared look, which leaves out the files the computer made on its
+    # own. What it counts is the same everywhere a base is written to.
+    status = unsaved.look(base_root, git)
+    if not status.ran:
         raise ReviewError(CODE_GIT_FAILED)
-    if status.out():
+    if not status.clean:
         raise ReviewError(CODE_UNSAVED_EDITS)
 
 
@@ -1368,17 +1371,26 @@ def _only_this_pages_edits(git: GitRunner, base_root: str, relative: str) -> str
     """
     confirmations = confirm.confirmations_path_for(relative)
     sweep_for_a_page(base_root, relative)
-    status = git.run(["status", "--porcelain", "-z", "--untracked-files=all"], cwd=base_root)
-    entries = status_entries(status.stdout) if status.ok else None
-    if entries is None:
-        raise ReviewError(CODE_GIT_FAILED, code=CODE_GIT_FAILED)
-    for _letters, named in entries:
+    for _letters, named in _unsaved_entries(git, base_root):
         if any(name not in (relative, confirmations) for name in named):
             raise ReviewError(CODE_UNSAVED_EDITS, code=CODE_UNSAVED_EDITS)
     line = _line_state(git, base_root, relative)
     if line == "other":
         raise ReviewError(CODE_UNSAVED_EDITS, code=CODE_UNSAVED_EDITS)
     return line
+
+
+def _unsaved_entries(git: GitRunner, base_root: str):
+    """What is unsaved in the base, from the one shared look (release 0.3.2).
+
+    It leaves out the files the computer made on its own, so a Finder file is
+    never the reason an import's own page cannot be finished or taken back.
+    Output nobody here can read is a failure rather than a clean base.
+    """
+    status = unsaved.look(base_root, git)
+    if not status.ran or status.entries is None:
+        raise ReviewError(CODE_GIT_FAILED, code=CODE_GIT_FAILED)
+    return status.entries
 
 
 def _restore_line(git: GitRunner, base_root: str, relative: str, line: str) -> None:
@@ -1402,8 +1414,7 @@ def put_back_unwritten(base_root: str, relative: str, runner: Optional[GitRunner
     """
     git = runner_or_default(runner)
     line = _only_this_pages_edits(git, base_root, relative)
-    status = git.run(["status", "--porcelain", "-z", "--untracked-files=all"], cwd=base_root)
-    if status.ok and not status.stdout.strip("\0"):
+    if unsaved.look(base_root, git).clean:
         # Nothing is half done at all, which is the ordinary case.
         return
     confirmations = confirm.confirmations_path_for(relative)
@@ -1427,11 +1438,7 @@ def take_back_unsaved(
         return
     confirmations = confirm.confirmations_path_for(relative)
     sweep_for_a_page(base_root, relative)
-    status = git.run(["status", "--porcelain", "-z", "--untracked-files=all"], cwd=base_root)
-    entries = status_entries(status.stdout) if status.ok else None
-    if entries is None:
-        raise ReviewError(CODE_GIT_FAILED, code=CODE_GIT_FAILED)
-    for _letters, named in entries:
+    for _letters, named in _unsaved_entries(git, base_root):
         if any(name not in (relative, confirmations) for name in named):
             raise ReviewError(CODE_UNSAVED_EDITS, code=CODE_UNSAVED_EDITS)
     line = _line_state(git, base_root, relative)
@@ -1470,11 +1477,7 @@ def confirm_saved(
         raise ReviewError(CODE_NOT_DEFAULT_BRANCH, code=CODE_NOT_DEFAULT_BRANCH)
     confirmations = confirm.confirmations_path_for(relative)
     sweep_for_a_page(base_root, relative)
-    status = git.run(["status", "--porcelain", "-z", "--untracked-files=all"], cwd=base_root)
-    entries = status_entries(status.stdout) if status.ok else None
-    if entries is None:
-        raise ReviewError(CODE_GIT_FAILED, code=CODE_GIT_FAILED)
-    for _letters, named in entries:
+    for _letters, named in _unsaved_entries(git, base_root):
         if any(name != confirmations for name in named):
             raise ReviewError(CODE_UNSAVED_EDITS, code=CODE_UNSAVED_EDITS)
     line = _line_state(git, base_root, relative)

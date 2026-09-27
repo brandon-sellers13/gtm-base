@@ -25,6 +25,7 @@ from gtmbase import (
     redaction_patterns,
     scan,
     trust_surface,
+    unsaved,
     worktree,
 )
 from gtmbase.fsutil import read_text_exactly
@@ -221,10 +222,10 @@ class TestPuttingBackAndFinishingTheMove(unittest.TestCase):
                 root, {"paths": []}, GitRunner()
             )
 
-            # Found by its real name, and said by the name a person calls it,
-            # never by the file's own name (Astra's review of Unit 1.5b,
-            # finding 7).
-            self.assertEqual(changes.THEIR_WORDS % changes._named(BOTH), found)
+            # Found by its real name, and said by the fixed label every
+            # refusal about unsaved work uses, never by the file's own name
+            # (Astra's review of Unit 1.5b, finding 7, and release 0.3.2).
+            self.assertEqual(changes.THEIR_WORDS % unsaved.plain_name(BOTH), found)
             self.assertNotIn(BOTH, found)
 
 

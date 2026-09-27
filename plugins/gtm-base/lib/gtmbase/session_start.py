@@ -68,6 +68,7 @@ from . import (
     stale,
     state,
     trust_surface,
+    unsaved,
 )
 from . import gitcmd
 from .fsutil import read_text
@@ -890,10 +891,10 @@ def _daily_work(
     if not on_default:
         return _stalled(blocks, root, git, root_of_plugin, NOT_DEFAULT_BRANCH, part)
 
-    status = git.run(
-        ["status", "--porcelain"], cwd=root, timeout=LOCAL_TIMEOUT_SECONDS
-    )
-    if not status.ok or status.out():
+    # The shared look, which leaves out the files the computer made on its
+    # own, so a Finder file no longer stops the update at every session start.
+    status = unsaved.look(root, git, timeout=LOCAL_TIMEOUT_SECONDS)
+    if not status.clean:
         # An import that stopped in the middle of a page leaves that page
         # unsaved, so the way to finish it is said beside the unsaved edits.
         stopped = _import_offer(base_id, root_of_plugin).visible
@@ -955,8 +956,10 @@ def _daily_work(
             before = git.run(
                 ["rev-parse", "HEAD"], cwd=root, timeout=LOCAL_TIMEOUT_SECONDS
             ).out()
+            # Never write over a file this seat ignores, which git does by
+            # default (Astra's review of 0.3.2, finding 2).
             merged = git.run(
-                ["merge", "--ff-only", target],
+                ["merge", "--ff-only", "--no-overwrite-ignore", target],
                 cwd=root,
                 timeout=constants.FETCH_TIMEOUT_SECONDS,
             )

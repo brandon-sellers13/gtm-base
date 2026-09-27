@@ -22,6 +22,33 @@ for _path in (LIB_DIR,):
     if _path not in sys.path:
         sys.path.insert(0, _path)
 
+# --- No test ever writes into the real seat folder -----------------------------
+#
+# A test that makes no seat folder of its own used to write into the real one
+# of whoever ran the suite, because the library falls back to the folder in
+# their home (the sources test wrote its read marker there). Every test run now
+# starts with the seat folder pointed at a temporary one, before any test
+# module's own code runs, so a test that forgets its own seat folder writes
+# into this one and never into the real one. `tests/run.sh` makes the folder,
+# hands it in, and fails the run if anything was written into it, which is how
+# a test that forgot is found. Run on its own, a module gets a folder made here.
+SEAT_HOME_VARIABLE = "GTM_BASE" + "_HOME"
+UNOWNED_SEAT_VARIABLE = "GTM_BASE_TESTS_UNOWNED_SEAT"
+
+
+def unowned_seat_folder():
+    """The folder a test writes into when it made no seat folder of its own."""
+    folder = os.environ.get(UNOWNED_SEAT_VARIABLE)
+    if not folder:
+        folder = tempfile.mkdtemp(prefix="gtm-base-unowned-seat-")
+        os.environ[UNOWNED_SEAT_VARIABLE] = folder
+    return os.path.join(folder, "seat")
+
+
+# Always, even when the person running the suite has the variable set: then
+# it points at their own seat folder, which a test must not write into either.
+os.environ[SEAT_HOME_VARIABLE] = unowned_seat_folder()
+
 from gtmbase.gitcmd import GitResult  # noqa: E402
 
 

@@ -79,7 +79,17 @@ import os
 import re
 from typing import Dict, List, Optional, Tuple
 
-from . import base_reader, compose_proposal, constants, formats, ids, names, paths, state
+from . import (
+    base_reader,
+    compose_proposal,
+    constants,
+    formats,
+    ids,
+    names,
+    paths,
+    state,
+    unsaved,
+)
 from .errors import GitError, PathError, ValidationError
 from .fsutil import (
     atomic_write_json,
@@ -89,7 +99,7 @@ from .fsutil import (
     read_text_exactly,
     remove,
 )
-from .gitcmd import GitRunner, runner_or_default, status_entries
+from .gitcmd import GitRunner, runner_or_default
 from .validate import marker_line
 
 # What this seat remembers about being asked, so it is asked once.
@@ -306,6 +316,12 @@ UNSAVED_EDITS = (
     "You have unsaved edits in your base, so nothing was moved. Deal with "
     "those first and ask again."
 )
+# The same refusal with the unsaved files said in it. The one sentence naming
+# them goes where the `%s` is, before the one thing to do.
+UNSAVED_EDITS_NAMED = (
+    "You have unsaved edits in your base, so nothing was moved. %s Deal with "
+    "those first and ask again."
+)
 NOT_ON_MAIN = (
     "Your base is on a line of work the team does not share, so nothing was "
     "moved."
@@ -355,13 +371,13 @@ CANNOT_PUT_BACK = (
 # outside any fence, so no name is ever read out as it is (Astra's review of
 # Unit 1.5b, finding 7). A document gets the name a person calls it by, from
 # `names`, and everything else gets one of these.
-NAMED_CONTEXT_CHANGE = "one of your context changes"
+NAMED_CONTEXT_CHANGE = unsaved.ONE_OF_YOUR_CONTEXT_CHANGES
 # A context change whose file is named by an identifier of the one shape
 # GTM Base gives them is called by it, the way every other sentence here
 # calls a context change, because that shape can carry nothing else.
 NAMED_THE_CONTEXT_CHANGE = "the context change %s"
-NAMED_RECORD = "one of your records"
-NAMED_FILE = "one of your files"
+NAMED_RECORD = unsaved.ONE_OF_YOUR_RECORDS
+NAMED_FILE = unsaved.ONE_OF_YOUR_FILES
 
 
 def _named(relative) -> str:
@@ -385,11 +401,16 @@ def _named(relative) -> str:
     return NAMED_FILE
 
 
-def _all_named(paths_found) -> str:
-    """Several paths named plainly, each name said once."""
+def _all_named(paths_found, base_root: Optional[str] = None) -> str:
+    """Several paths holding the person's unsaved words, each name said once.
+
+    They are named by the fixed labels every refusal about unsaved work uses
+    (release 0.3.2), so a segment or a file the product does not know is
+    never read out by its own name.
+    """
     said = []
     for relative in sorted(paths_found):
-        name = _named(relative)
+        name = unsaved.plain_name(relative, base_root)
         if name not in said:
             said.append(name)
     return ", ".join(said)
@@ -1590,11 +1611,16 @@ def _ready_to_write(base_root: str, git: GitRunner) -> Optional[Result]:
     on_default, _code = paths.head_is_default_branch(base_root, runner=git)
     if not on_default:
         return _refused(CODE_NOT_DEFAULT_BRANCH, NOT_ON_MAIN)
-    status = git.run(["status", "--porcelain"], cwd=base_root)
-    if not status.ok:
+    # The shared look, which leaves out the files the computer made on its
+    # own. A Finder file was enough to refuse the move before 0.3.2.
+    status = unsaved.look(base_root, git)
+    if not status.ran:
         return _refused(CODE_GIT_FAILED, COULD_NOT_SAVE)
-    if status.out():
-        return _refused(CODE_UNSAVED_EDITS, UNSAVED_EDITS)
+    if not status.clean:
+        return _refused(
+            CODE_UNSAVED_EDITS,
+            unsaved.refusal(UNSAVED_EDITS_NAMED, UNSAVED_EDITS, status),
+        )
     return None
 
 
@@ -1771,7 +1797,9 @@ def _put_back(base_root: str, journal: dict, git: GitRunner) -> Optional[str]:
     """
     sorted_out = _sort_out(base_root, journal, git)
     if sorted_out.theirs:
-        return THEIR_WORDS % _named(sorted(sorted_out.theirs)[0])
+        return THEIR_WORDS % unsaved.plain_name(
+            sorted(sorted_out.theirs)[0], base_root
+        )
     if sorted_out.unrecoverable:
         return CANNOT_PUT_BACK % _named(sorted(sorted_out.unrecoverable)[0])
 
@@ -1785,7 +1813,7 @@ def _put_back(base_root: str, journal: dict, git: GitRunner) -> Optional[str]:
     ]
     for relative in bringing_back:
         if not _still_as_saved_or_gone(base_root, relative, git):
-            return THEIR_WORDS % _named(relative)
+            return THEIR_WORDS % unsaved.plain_name(relative, base_root)
     if bringing_back:
         result = git.run(
             ["checkout", "HEAD", "--"] + [str(one) for one in bringing_back],
@@ -1803,7 +1831,7 @@ def _put_back(base_root: str, journal: dict, git: GitRunner) -> Optional[str]:
         # the classification above and this moment, and their save must not
         # be undone by a decision made about what was there before it.
         if ids.exact_hash(current) != _what_this_run_wrote(journal, relative):
-            return THEIR_WORDS % _named(relative)
+            return THEIR_WORDS % unsaved.plain_name(relative, base_root)
         try:
             if in_head:
                 git.check(["checkout", "HEAD", "--", relative], cwd=base_root)
@@ -1815,7 +1843,7 @@ def _put_back(base_root: str, journal: dict, git: GitRunner) -> Optional[str]:
                 cwd=base_root,
             )
             if not _still_what_this_run_wrote(base_root, journal, relative):
-                return THEIR_WORDS % _named(relative)
+                return THEIR_WORDS % unsaved.plain_name(relative, base_root)
             remove(full)
         except GitError:
             return COULD_NOT_SAVE
@@ -1836,16 +1864,13 @@ def _anything_left_over(base_root: str, journal: dict, git: GitRunner):
         touched.add(str(item.get("path")))
     for item in journal.get("removed") or []:
         touched.add(str(item))
-    # Names end in a NUL and come out exactly as they are, so a path with an
+    # The shared look names paths exactly as they are, so a path with an
     # accent or a space in it is compared as itself rather than as git's
-    # quoted form of it.
-    status = git.run(["status", "--porcelain", "-z"], cwd=base_root)
-    if not status.ok:
+    # quoted form of it, and it leaves out the files the computer made.
+    status = unsaved.look(base_root, git)
+    if not status.ran or status.entries is None:
         return COULD_NOT_SAVE
-    entries = status_entries(status.stdout)
-    if entries is None:
-        return COULD_NOT_SAVE
-    for _letters, named in entries:
+    for _letters, named in status.entries:
         for piece in named:
             if piece in touched:
                 return COULD_NOT_SAVE
@@ -2304,26 +2329,27 @@ def _theirs_before_finishing(base_root, journal, git) -> Optional[str]:
         if current is None:
             continue
         if ids.exact_hash(current) not in allowed:
-            return THEIR_WORDS % _named(relative)
+            return THEIR_WORDS % unsaved.plain_name(relative, base_root)
 
     moved_away = set(str(item.get("path")) for item in journal.get("came_from") or [])
     moved_away.update(str(item) for item in journal.get("removed") or [])
-    # Names end in a NUL and come out exactly as they are, so a path with an
-    # accent or a space in it is its own name here and not git's quoted form.
-    status = git.run(["status", "--porcelain", "-z"], cwd=base_root)
-    if not status.ok:
+    # The shared look names paths exactly as they are, so a path with an
+    # accent or a space in it is its own name here and not git's quoted form,
+    # and a file the computer made on its own is nobody's words.
+    status = unsaved.look(base_root, git)
+    if not status.ran or status.entries is None:
         return COULD_NOT_SAVE
-    entries = status_entries(status.stdout)
-    if entries is None:
-        return COULD_NOT_SAVE
-    for _letters, named in entries:
+    for letters, named in status.entries:
         # A rename names two paths, and both belong to this run when this run
-        # is the thing that moved it.
+        # is the thing that moved it. A file sitting at a path this run moved
+        # away from and never saved is new, though, and nobody's but the
+        # person's: the shared look lists each one by its own name rather than
+        # folding it into a new folder, so it is caught here by its letters.
         for piece in named:
-            if piece in moved_away:
+            if piece in moved_away and letters != "??":
                 continue
             for unexplained in _what_is_really_there(base_root, piece, ours):
-                return THEIR_WORDS % _named(unexplained)
+                return THEIR_WORDS % unsaved.plain_name(unexplained, base_root)
     return None
 
 
@@ -2348,7 +2374,7 @@ def _what_is_really_there(base_root: str, named: str, ours) -> List[str]:
         for name in sorted(files):
             full = os.path.join(where, name)
             relative = os.path.relpath(full, base_root).replace(os.sep, "/")
-            if relative not in ours:
+            if relative not in ours and not unsaved.is_clutter_file(full):
                 left.append(relative)
     return left
 
@@ -2580,7 +2606,7 @@ def abandon(
     if theirs:
         return Result(
             STATUS_UNDONE,
-            sentence=GAVE_UP_LEFT_ALONE % _all_named(theirs),
+            sentence=GAVE_UP_LEFT_ALONE % _all_named(theirs, base_root),
         )
     if landed:
         return Result(STATUS_UNDONE, sentence=GAVE_UP_HALF_DONE)
