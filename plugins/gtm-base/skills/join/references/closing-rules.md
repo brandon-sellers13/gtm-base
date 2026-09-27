@@ -81,6 +81,27 @@ the whole thing into a question would make skip sound like a failure to
 answer. Skip is a whole answer and the person who gives it has finished this
 step.
 
+## Finished documents still to come
+
+When some of the finished documents the person chose to take in as they stand
+are not in the base yet, the closing message is followed by one more sentence,
+printed by the command, saying that the next session will offer to finish
+them. Say it as printed. What they chose, and every answer they gave about
+each document, is kept on this computer outside the base, where the closing
+does not clear it (Brandon's call 18 of the 2026-09-19 plan, built by Unit
+1.7d). Saying "finish setting up my base" finishes it without asking anything
+they already answered.
+
+## Before a base holding many files is first backed up
+
+The review of what leaves the computer the first time a base is backed up was
+designed for a base holding two or three documents. A base that took in a
+dozen finished segment pages holds more than anybody can read through in one
+sitting, so that review has to be rewritten for a base holding many files
+before backing up ships. This is a condition of the release that brings
+backing up, recorded here by Unit 1.7d because the review itself is not built
+yet.
+
 ## Both versions of the closing message
 
 There are two versions of the closing message, and which one is said depends on
