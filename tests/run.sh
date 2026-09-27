@@ -57,5 +57,6 @@ python3 -m unittest -v \
   test_third_look.TestAWordsFileSurvivesASecondWindow \
   test_words_files.TestAPathTheScriptsDidNotHandOut \
   test_words_files.TestThePathTheScriptsDoHandOut \
-  test_words_files.TestTheDraftFileToo
+  test_words_files.TestTheDraftFileToo \
+  test_os_clutter.TestTheApprovalScriptPastClutter
 exit $?

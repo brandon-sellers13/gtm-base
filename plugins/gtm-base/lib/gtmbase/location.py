@@ -13,7 +13,7 @@ from __future__ import annotations
 import os
 from typing import Optional
 
-from . import constants, paths
+from . import constants, paths, unsaved
 from .errors import LocationError
 from .gitcmd import GitRunner, runner_or_default
 
@@ -184,6 +184,9 @@ def _holds_content(folder: str) -> bool:
         if name.startswith("."):
             continue
         if name.casefold() == constants.BASE_FOLDER_NAME:
+            continue
+        # A file the computer made on its own is nothing the person put there.
+        if unsaved.is_clutter(name):
             continue
         return True
     return False

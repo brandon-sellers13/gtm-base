@@ -47,6 +47,7 @@ from . import (
     scan,
     stale_check,
     state,
+    unsaved,
     worktree,
 )
 from .errors import GtmBaseError, PathError, ValidationError
@@ -223,6 +224,12 @@ NOT_YOUR_DOCUMENT = (
 UNSAVED_EDITS_HERE = (
     "There are words in your base that you have not saved, so nothing was "
     "recorded about %s. Save them or put them aside and answer again."
+)
+# The same refusal with the unsaved files said in it. The document goes where
+# the first `%s` is and the one sentence naming the files where the second is.
+UNSAVED_EDITS_HERE_NAMED = (
+    "There are words in your base that you have not saved, so nothing was "
+    "recorded about %s. %s Save them or put them aside and answer again."
 )
 NOT_ON_THE_MAIN_LINE = (
     "Your base is not on its main line right now, so nothing was recorded "
@@ -770,8 +777,8 @@ def _add_to_the_local_copy(
     nothing unsaved in it, and it only ever moves that folder forward by the one
     saved answer.
     """
-    status = git.run(["status", "--porcelain"], cwd=base_root)
-    if not status.ok or status.out():
+    # The shared look, which leaves out the files the computer made on its own.
+    if not unsaved.look(base_root, git).clean:
         return _hold(base_id, line, path, codes, CODE_UNSAVED_EDITS, UNSAVED_EDITS)
     moved = git.run(["merge", "--ff-only", made.branch], cwd=base_root)
     if not moved.ok:
@@ -1124,6 +1131,11 @@ def against_change(
     except GtmBaseError as refusal:
         if refusal.code == review_module.CODE_NOT_DEFAULT_BRANCH:
             return _refused(CODE_NO_DEFAULT_BRANCH, NOT_ON_THE_MAIN_LINE % document)
+        said = unsaved.where_sentence(unsaved.look(base_root, git).paths())
+        if said:
+            return _refused(
+                CODE_UNSAVED_EDITS, UNSAVED_EDITS_HERE_NAMED % (document, said)
+            )
         return _refused(CODE_UNSAVED_EDITS, UNSAVED_EDITS_HERE % document)
 
     before = read_text(checked_confirmations_path(base_root, relative))

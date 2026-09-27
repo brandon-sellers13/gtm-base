@@ -25,6 +25,7 @@ from gtmbase import (
     redaction_patterns,
     scan,
     trust_surface,
+    unsaved,
     worktree,
 )
 from gtmbase.fsutil import read_text_exactly
@@ -221,7 +222,8 @@ class TestPuttingBackAndFinishingTheMove(unittest.TestCase):
                 root, {"paths": []}, GitRunner()
             )
 
-            self.assertEqual(changes.THEIR_WORDS % BOTH, found)
+            self.assertEqual(changes.THEIR_WORDS % unsaved.plain_name(BOTH), found)
+            self.assertNotIn(BOTH, found)
 
 
 class TestWhatAnAcceptedRecordTouched(unittest.TestCase):

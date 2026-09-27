@@ -77,6 +77,19 @@ another folder first.
   `[for the assistant]`. Those are for you to use.
 - Do not add advice about what to put in the base, and do not explain how GTM
   Base works inside.
+- Never send the person to a command line, and never ask them to find the
+  base or look inside it themselves. When a script refuses, its sentence
+  already says what is in the way, so say it and stop.
+- Never describe how GTM Base works inside, such as a command it will not
+  run or a folder it keeps to itself, and never list guesses about why
+  something was refused.
+- When the check before a document is used finds nothing wrong, say nothing
+  about the check at all and go straight on with what the person asked for.
+- Never mention confirming that everyone who opens this base is on the
+  current version of GTM Base unless a script's own sentence asks for it.
+  When one does, say that sentence as it is, with its one-line reason: an
+  older version reads an updated base as empty, so a teammate would be told
+  nothing is out of date.
 
 ## Running it
 

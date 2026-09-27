@@ -15,7 +15,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import plain_language  # noqa: E402
 import support  # noqa: E402
 
-from gtmbase import base_reader, changes, constants, formats, report  # noqa: E402
+from gtmbase import base_reader, changes, constants, formats, report, unsaved  # noqa: E402
 from gtmbase.errors import GitError, ValidationError  # noqa: E402
 from gtmbase.gitcmd import GitRunner  # noqa: E402
 
@@ -569,7 +569,10 @@ class TestMigrating(MigrationCase):
         result = changes.migrate(self.root, self.base_id, today=TODAY)
         self.assertEqual(changes.STATUS_REFUSED, result.status)
         self.assertEqual(changes.CODE_UNSAVED_EDITS, result.code)
-        self.assertEqual(changes.UNSAVED_EDITS, result.sentence)
+        self.assertEqual(
+            changes.UNSAVED_EDITS_NAMED % "They are in your customer profile.",
+            result.sentence,
+        )
         self.assertEqual([ENTRY_ONE + ".md"], self.files_in(constants.LEGACY_CHANGES_DIR))
 
 
@@ -820,7 +823,8 @@ class TestPuttingBackTouchesNothingUntilItHasLookedAtEverything(MigrationCase):
 
         self.assertEqual(changes.STATUS_REFUSED, result.status)
         self.assertEqual(changes.CODE_UNSAVED_EDITS, result.code)
-        self.assertIn(ENTRY_TWO, result.sentence)
+        self.assertEqual(changes.THEIR_WORDS % unsaved.ONE_OF_YOUR_CONTEXT_CHANGES, result.sentence)
+        self.assertNotIn(ENTRY_TWO, result.sentence)
         self.assertTrue(os.path.exists(self.note_path()))
         # Nothing at all moved, and the other entry is still readable.
         self.assertEqual(before, state_of(self.root, self.base_id))
@@ -870,7 +874,8 @@ class TestPuttingBackTouchesNothingUntilItHasLookedAtEverything(MigrationCase):
 
         self.assertEqual(changes.STATUS_REFUSED, result.status)
         self.assertEqual(changes.CODE_UNSAVED_EDITS, result.code)
-        self.assertIn(left_behind[: -len(".md")], result.sentence)
+        self.assertEqual(changes.THEIR_WORDS % unsaved.ONE_OF_YOUR_CONTEXT_CHANGES, result.sentence)
+        self.assertNotIn(left_behind[: -len(".md")], result.sentence)
         self.assertIn(
             theirs.strip(),
             support.read(
@@ -1021,7 +1026,10 @@ class TestFinishingNeverCommitsSomebodyElsesWork(MigrationCase):
 
         self.assertEqual(changes.STATUS_REFUSED, result.status)
         self.assertEqual(changes.CODE_UNSAVED_EDITS, result.code)
-        self.assertIn(ENTRY_ONE, result.sentence)
+        self.assertEqual(
+            changes.THEIR_WORDS % unsaved.ONE_OF_YOUR_CONTEXT_CHANGES, result.sentence
+        )
+        self.assertNotIn(ENTRY_ONE, result.sentence)
         self.assertEqual(
             theirs,
             support.read(

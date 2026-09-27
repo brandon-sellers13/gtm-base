@@ -368,7 +368,7 @@ class TestTheStateOfTheFolder(unittest.TestCase):
             )
 
             self.assertEqual(approve_local.STATUS_REFUSED, applied.status)
-            self.assertEqual([approve_local.UNSAVED_EDITS], applied.reasons)
+            self.assertEqual([approve_local.UNSAVED_EDITS_NAMED % "They are in your notes."], applied.reasons)
             self.assertEqual([], corrections_in(root))
             self.assertIn("Companies of any size.", support.read(os.path.join(root, ICP)))
             self.assertTrue(
@@ -518,7 +518,7 @@ class TestARunThatStoppedHalfway(unittest.TestCase):
             # This run's own leavings were undone, the person's edit was not,
             # and the person's edit is what stopped the run.
             self.assertEqual(approve_local.STATUS_REFUSED, applied.status)
-            self.assertEqual([approve_local.UNSAVED_EDITS], applied.reasons)
+            self.assertEqual([approve_local.UNSAVED_EDITS_NAMED % "They are in your notes."], applied.reasons)
             self.assertEqual(
                 "Something I was in the middle of.\n", support.read(mine)[9:]
             )
@@ -1308,7 +1308,7 @@ class TestUndoingOnlyWhatThisRunWrote(unittest.TestCase):
             )
 
             self.assertEqual(approve_local.STATUS_REFUSED, applied.status)
-            self.assertEqual([approve_local.UNSAVED_EDITS], applied.reasons)
+            self.assertEqual([approve_local.UNSAVED_EDITS_NAMED % "They are in your customer profile."], applied.reasons)
             self.assertEqual(mine, support.read(os.path.join(root, ICP)))
             self.assertEqual([], corrections_in(root))
             self.assertIsNotNone(approve_local._load_journal(base_id))
@@ -2427,7 +2427,7 @@ class TestOnlyAHandEditMayBeUnsaved(unittest.TestCase):
             )
 
             self.assertEqual(approve_local.STATUS_REFUSED, applied.status)
-            self.assertEqual([approve_local.UNSAVED_EDITS], applied.reasons)
+            self.assertEqual([approve_local.UNSAVED_EDITS_NAMED % "They are in your customer profile."], applied.reasons)
             self.assertEqual([], corrections_in(root))
 
     def test_the_whole_difference_is_what_a_hand_edit_is_approved_against(self):

@@ -42,6 +42,7 @@ from . import (
     paths,
     stale,
     state,
+    unsaved,
 )
 from .errors import PathError, ValidationError
 from .fsutil import atomic_write_json, atomic_write_text, read_json, read_text
@@ -117,6 +118,11 @@ UNREACHABLE = (
 UNSAVED_EDITS = (
     "Your base is behind the shared copy and you have edits you have not saved, "
     "so nothing was checked. Put those edits somewhere safe and ask again."
+)
+# The same refusal with the unsaved files said in it, where the `%s` is.
+UNSAVED_EDITS_NAMED = (
+    "Your base is behind the shared copy and you have edits you have not saved, "
+    "so nothing was checked. %s Put those edits somewhere safe and ask again."
 )
 COULD_NOT_UPDATE = (
     "GTM Base could not bring your base up to date on its own, so nothing was "
@@ -815,11 +821,15 @@ def _fast_forward(base_root: str, branch: str, git: GitRunner, result) -> bool:
         behind = 0
     if behind <= 0:
         return True
-    status = git.run(["status", "--porcelain"], cwd=base_root)
-    if not status.ok or status.out():
+    # The shared look, which leaves out the files the computer made on its
+    # own, so a Finder file no longer stops a base being brought up to date.
+    status = unsaved.look(base_root, git)
+    if not status.clean:
         result.status = STATUS_STOPPED
         result.codes.append(CODE_UNSAVED_EDITS)
-        result.sentences.append(UNSAVED_EDITS)
+        result.sentences.append(
+            unsaved.refusal(UNSAVED_EDITS_NAMED, UNSAVED_EDITS, status)
+        )
         return False
     merged = git.run(
         ["merge", "--ff-only", target],
