@@ -1462,3 +1462,15 @@ Review: the plan named tests/test_adoption.py, test_segments.py and test_join_se
 - [ ] Full suite after the review fixes.
 - Both reviewers noted that `unit-1-7c` gained two commits after this branch was cut (Astra's findings 1, 3, 4, 6 and 7); the orchestrator merges them, and the combined code has not been tested together here.
 - [x] Full suite after the review fixes: 2386 tests OK in 1005 seconds, then 106 from a linked folder OK in 95 seconds (tests/run.sh exit 0).
+
+#### Astra's review of the merged Units 1.7c and 1.7d (2026-09-27)
+Review: docs/reviews/2026-09-27-unit-1-7c-1-7d-astra.md, not ready, eight findings including the two partial closures. Each has a test in tests/test_import_astra_merged.py that failed on eb8999d and passes after.
+- [x] 1. Every take-back (leave out, resume, finishing) holds the per-base writing lock, reentrant per thread, reads the page and the record again inside it, and keeps it through the record update.
+- [x] 2. Cleanup moves the file to a private name, removes it only when its identity is this write's, and otherwise puts it back.
+- [x] 3. One revalidation (`join_flow._revalidate`: today's cleaning and inspection copy, bytes equal to the yes) for every route that finishes an unsaved page: resume, showing again, approving again.
+- [x] 4. A saved page is a finished adoption only with a drafted line naming the import's run; one saved without it gets the line (`review.confirm_saved`).
+- [x] 5. Markup the cleaning could not take out refuses the page, including an opening tag longer than the pattern reads.
+- [x] 6. Temporary files a killed writer left, in the page's folder and the confirmations folder, are swept under the writing lock once older than five seconds; tested with a child process killed with SIGKILL inside the confirmation write.
+- [x] 7. The removal notice names the segment, never the file; the numbered documents at the segments step are fenced.
+- [x] 8. Candidate and inventory numbers must be positive counting numbers; a record holding anything else is set aside.
+- [ ] Full suite after the fixes.
