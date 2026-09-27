@@ -279,6 +279,11 @@ Revision 2 is written to the recommended answer on each call, so the build can s
 | 24 | A `[your call: ...]` question inside a finished page | **Decided 2026-09-26: kept as an open question, only on the person's say** | Refuse the page | Built in 1.7c |
 | 25 | A finished page whose code sample holds a heading-shaped line such as `# install` | **Decided 2026-09-26: refused, with the draft offered instead** | Accept code samples | Built in 1.7c |
 | 26 | Emoji in a finished page (one variation selector straight after an ordinary character) | **Decided 2026-09-26: allowed** | Refuse every variation selector | Built in 1.7c |
+| 27 | Unit 1.7d's wording and the trigger "finish setting up my base" | **Decided 2026-09-27: yes, as built** | Other wording | Built in 1.7d |
+| 28 | Session start says once that an import stopped | **Decided 2026-09-27: yes**, the one exception to quiet by default, because the alternative is a setup left half finished without a word | Say nothing until asked | Built in 1.7d |
+| 29 | A segment settled to be drafted but not drafted before the closing | **Decided 2026-09-27: a later session asks again for consent to the material and finishes it** | Leave it pending until a new setup | Not built; follow-up before Release B ships |
+| 30 | A new setup while an earlier import of the same base is still waiting | **Decided 2026-09-27: refused**, because replacing it could lose pages already approved | Replace the earlier import | Built in 1.7d |
+| 31 | The join guide says backing up does not ship until the first-backup review is redesigned | **Decided 2026-09-27: confirmed**, it is what the roadmap already requires | Leave it unstated | Built in 1.7d |
 
 ## High-Level Technical Design
 
@@ -919,3 +924,4 @@ Later reads (Astra 7, Fable M5). Approval establishes which document was adopted
 - 2026-09-26: calls 15 to 18 decided as recommended (Unit 1.7a's two asks as built, a segment name outside A to Z refused, the split rule, and the segment inventory kept past the closing by Unit 1.7d). The segment path in Units 1.7a and 1.7b is `context/icps/` per call 11; the older `context/strategy/segments/` in their text is superseded.
 - 2026-09-26: calls 19 to 22 decided as recommended (Unit 1.7b: approval with questions left open only on the person's say, the closing counts open questions rather than quoting them, the umbrella's parts and left-out line as built, and a closing yes on a document with an open question refused).
 - 2026-09-26: calls 23 to 26 decided as recommended (Unit 1.7c's wording with the whole-file sentence no longer offering a path, an open question in a finished page kept on the person's say, a heading-shaped line in code refused, and emoji allowed).
+- 2026-09-27: calls 27 to 31 decided as recommended (Unit 1.7d's wording and trigger, session start naming a stopped import once, a later session asking consent again to draft a segment left undrafted at the closing, a new setup refused while an import waits, and backup gated on the redesigned first-backup review).
