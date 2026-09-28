@@ -50,9 +50,11 @@ from gtmbase import (  # noqa: E402
     machine,
     moment,
     paths,
+    record_change,
     report,
     stale_check,
     state,
+    wordsfile,
 )
 from gtmbase.errors import GtmBaseError  # noqa: E402
 
@@ -65,6 +67,7 @@ NOT_JOINED = (
     "here to check."
 )
 WENT_WRONG = "GTM Base could not finish the check, so nothing was prepared."
+NOT_RECORDED = "GTM Base could not finish that step, so nothing was written."
 
 
 def build_parser():
@@ -128,7 +131,53 @@ def build_parser():
         "--show-document",
         help="print one context file, with the check run before it is read",
     )
+    parser.add_argument(
+        "--new-words-file",
+        help="hand out a file to put somebody's own words in, of one kind",
+    )
+    parser.add_argument(
+        "--record-change",
+        choices=RECORD_STEPS,
+        help="one step of recording a context change without editing a document",
+    )
+    parser.add_argument(
+        "--long",
+        action="store_true",
+        help="give the whole explanation, as when somebody asks why",
+    )
+    parser.add_argument(
+        "--what-changed-file", help="a file holding what changed, in their words"
+    )
+    parser.add_argument(
+        "--reason-file", help="a file holding why it changed, in their words"
+    )
+    parser.add_argument(
+        "--source-file", help="a file holding where it came from, in their words"
+    )
+    parser.add_argument(
+        "--documents",
+        action="append",
+        default=[],
+        help="the numbers of the documents it affects, separated by commas",
+    )
+    parser.add_argument(
+        "--happened-on", help="the day it happened, as year-month-day"
+    )
+    parser.add_argument("--shown", help="the shown value the yes is bound to")
+    parser.add_argument(
+        "--list", help="the token of the numbered list the numbers come from"
+    )
+    parser.add_argument("--change", help="the context change an answer is about")
+    parser.add_argument("--document", help="the document an answer is about")
+    parser.add_argument(
+        "--answer", help="yes, no, or not-now, about one document"
+    )
     return parser
+
+
+# The steps of recording a context change without editing a document, in the
+# order they happen.
+RECORD_STEPS = ("ask", "documents", "show", "record", "leave", "answer")
 
 
 def print_review(result):
@@ -158,6 +207,123 @@ def print_review(result):
                 % (item.path, item.entry_id or "-")
             )
     return EXIT_REFUSED if result.stopped else EXIT_DONE
+
+
+def _claim(path, base_id, claims):
+    """Somebody's own words, from a file this script handed out, or nothing.
+
+    The file is held rather than taken away, and taken away only once the
+    showing it is for has worked, because a showing can still be refused and
+    its sentence asks for it again (the correctness review of 0.3.3). A path
+    it did not hand out is refused with the one sentence that says so.
+    """
+    if not path:
+        return ""
+    claim = wordsfile.claim_words(path, base_id)
+    if claim is None:
+        raise record_change.Refused(wordsfile.NOT_OURS, code=wordsfile.CODE_NOT_OURS)
+    claims.append(claim)
+    return claim.text
+
+
+def record_a_change(options, resolution):
+    """One step of recording a context change, from the folder the person is in.
+
+    Every step refuses a base with a shared copy first, so nobody is asked a
+    question whose answer could not be written down.
+    """
+    root, base_id = resolution.root, resolution.base_id
+    step = options.record_change
+    if step == "show":
+        # Before anything else, so a showing refused for any reason, a words
+        # file included, never leaves the one before it to be recorded.
+        record_change.forget_showing(base_id)
+    record_change.refuse_a_shared_copy(root)
+
+    if step == "ask":
+        for sentence in record_change.ask(long=options.long):
+            sys.stdout.write(sentence + "\n")
+        return EXIT_DONE
+
+    if step == "documents":
+        token, listed = record_change.show_list(root, base_id)
+        if not listed:
+            sys.stdout.write(record_change.NO_DOCUMENTS + "\n")
+            return EXIT_REFUSED
+        sys.stdout.write(record_change.DOCUMENTS_INTRO + "\n")
+        # Every name comes from a file name, so the whole list is held apart
+        # as data (Astra's review of 0.3.3, finding 3).
+        sys.stdout.write(
+            moment.fenced(
+                "\n".join("%d. %s" % (number, name) for number, _path, name in listed)
+            )
+            + "\n"
+        )
+        # The token the numbers are read against on the next step.
+        sys.stdout.write("   [for the assistant] list=%s\n" % token)
+        return EXIT_DONE
+
+    if step == "show":
+        claims = []
+        try:
+            what = _claim(options.what_changed_file, base_id, claims)
+            why = _claim(options.reason_file, base_id, claims)
+            source = _claim(options.source_file, base_id, claims)
+            shown = record_change.preview(
+                root,
+                base_id,
+                what,
+                why,
+                source,
+                options.documents,
+                happened_on=options.happened_on,
+                list_token=options.list,
+            )
+        except BaseException:
+            for claim in claims:
+                wordsfile.release_words(claim)
+            raise
+        for claim in claims:
+            wordsfile.consume_claim(claim)
+        sys.stdout.write(shown.showing + "\n\n")
+        sys.stdout.write(record_change.PREVIEW_ASK + "\n")
+        sys.stdout.write("   [for the assistant] shown=%s\n" % shown.shown)
+        return EXIT_DONE
+
+    if step == "leave":
+        sys.stdout.write(record_change.leave(base_id) + "\n")
+        return EXIT_DONE
+
+    if step == "record":
+        done = record_change.record(root, base_id, options.shown or "")
+        sys.stdout.write(record_change.RECORDED + "\n")
+        asked = []
+        for path, question in zip(done.plan.ask_about, done.plan.questions()):
+            asked.append(question)
+            asked.append(
+                "   [for the assistant] path=%s change=%s" % (path, done.entry.id)
+            )
+        if asked:
+            # The questions name documents by their file names, and the lines
+            # for the assistant carry the paths, so all of it is data.
+            sys.stdout.write(moment.fenced("\n".join(asked)) + "\n")
+        if done.plan.sentence:
+            sys.stdout.write(done.plan.sentence + "\n")
+        return EXIT_DONE
+
+    # The one answer about one document.
+    given = (options.answer or "").strip().lower().replace(" ", "-")
+    result = record_change.answer(
+        root, base_id, options.change or "", options.document or "", given
+    )
+    said = [result.sentence]
+    if result.staging_path:
+        said.append("   [for the assistant] prepared=%s" % result.staging_path)
+    # The answer names the document, so it is held apart as data too.
+    sys.stdout.write(moment.fenced("\n".join(said)) + "\n")
+    if given == record_change.ANSWER_YES and not result.answered_yes:
+        return EXIT_REFUSED
+    return EXIT_DONE
 
 
 def _item_for(result, sentence):
@@ -191,6 +357,30 @@ def main(argv=None):
     if not resolution.active or not resolution.root or not resolution.base_id:
         sys.stderr.write(NOT_JOINED + "\n")
         return EXIT_ERROR
+
+    if options.new_words_file:
+        if options.new_words_file not in wordsfile.KINDS:
+            sys.stdout.write(wordsfile.NOT_OURS + "\n")
+            return EXIT_REFUSED
+        wordsfile.ensure_words_dir(resolution.base_id)
+        sys.stdout.write(
+            "words=%s\n"
+            % wordsfile.new_words_path(resolution.base_id, options.new_words_file)
+        )
+        return EXIT_DONE
+
+    if options.record_change:
+        try:
+            return record_a_change(options, resolution)
+        except record_change.Refused as refusal:
+            sys.stdout.write(str(refusal) + "\n")
+            return EXIT_REFUSED
+        except GtmBaseError as failure:
+            sys.stderr.write(str(failure) + "\n")
+            return EXIT_REFUSED
+        except Exception:
+            sys.stderr.write(NOT_RECORDED + "\n")
+            return EXIT_ERROR
 
     if options.show_document:
         seat, _problems = state.load_seat(resolution.base_id)
