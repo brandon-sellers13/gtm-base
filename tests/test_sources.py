@@ -399,10 +399,11 @@ class TestFindingTheLikelyMarketingMaterial(unittest.TestCase):
 
             self.assertEqual(
                 "It looks like your marketing material sits in these places: "
-                "marketing (1 customer profile, 1 persona file, 2 positioning "
-                "files), the files loose at the top (1 customer profile, 1 "
-                "strategy file, 1 metrics file), other-co (1 positioning "
-                "file). Is this it? Say yes, name a folder to add, or name "
+                "marketing (one customer profile, one persona file, two "
+                "positioning files), the files loose at the top (one customer "
+                "profile, one strategy file, one metrics file), other-co (one "
+                "positioning file). Is this it? Say yes, name a folder to add, "
+                "or name "
                 "one to drop.",
                 found.sentence(),
             )
@@ -431,8 +432,8 @@ class TestFindingTheLikelyMarketingMaterial(unittest.TestCase):
 
             self.assertEqual(["."], [place.relative_folder for place in found.places])
             self.assertEqual(
-                "It looks like your marketing material sits in %s (1 customer "
-                "profile, 1 positioning file). Is this it? Say yes, name a "
+                "It looks like your marketing material sits in %s (one customer "
+                "profile, one positioning file). Is this it? Say yes, name a "
                 "folder to add, or name one to drop." % found.root,
                 found.sentence(),
             )
@@ -1225,7 +1226,7 @@ class TestMakingASource(unittest.TestCase):
         self.assertIn("Marketing leads at companies", source.text)
         self.assertIn("# Launch brief template", source.text)
         self.assertEqual(
-            "Hidden parts removed from template-with-comments.md: 3 comments.",
+            "Hidden parts removed from template-with-comments.md: three comments.",
             sources.removed_sentence(source.label, source.removed),
         )
 
@@ -1261,8 +1262,8 @@ class TestMakingASource(unittest.TestCase):
             "notes.md", "a<!-- x -->b<b>c​d​e\n", "markdown"
         )
         self.assertEqual(
-            "Hidden parts removed from notes.md: 1 comment, 1 tag and "
-            "2 hidden characters.",
+            "Hidden parts removed from notes.md: one comment, one tag and "
+            "two hidden characters.",
             sources.removed_sentence(source.label, source.removed),
         )
 

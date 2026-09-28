@@ -679,7 +679,8 @@ class TestTheLookBeforeTheMove(migration.MigrationCase):
 
     def test_the_plain_reason_when_it_would_not_be_offered(self):
         self.old_layout()
-        changes.not_now(self.base_id, migration.TODAY)
+        # Today as the script reads it, which is the real day.
+        changes.not_now(self.base_id)
 
         said = self.check_move()
 
@@ -705,7 +706,7 @@ class TestTheListTooLargeToRead(unittest.TestCase):
             "profiles, positioning, messaging, or plans?",
             sentence,
         )
-        self.assertNotIn("marketing material", in_one_line(SKILL_FILES["join"]))
+        self.assertNotIn("probably not marketing", in_one_line(SKILL_FILES["join"]))
 
 
 # --- Every count in words, and the singular for one ---------------------------
@@ -765,6 +766,174 @@ class TestEveryCountIsInWords(unittest.TestCase):
         self.assertIn("one item", said)
         self.assertNotIn("items", said)
         self.assertNotIn("those", said)
+
+
+# --- Calls 36 and 37: segments after the closing -------------------------------
+
+import test_adoption as adoption  # noqa: E402
+import test_segments_left_to_draft as later  # noqa: E402
+
+from gtmbase import adopt, join_flow, segments  # noqa: E402
+
+UMBRELLA = later.UMBRELLA
+
+
+def pending_changes(root):
+    folder = os.path.join(root, constants.PROPOSALS_PENDING_DIR)
+    if not os.path.isdir(folder):
+        return []
+    return sorted(
+        os.path.join(folder, name) for name in os.listdir(folder) if name.endswith(".md")
+    )
+
+
+class TestASegmentLeftOutAfterTheUmbrellaNamesIt(later.Case):
+    """Call 36: leaving it out prepares a change to the umbrella to approve."""
+
+    def test_leaving_it_out_prepares_a_change_and_rewrites_nothing(self):
+        company = later.a_company()
+        later.set_up_and_close(company)
+        umbrella_before = company.read(UMBRELLA)
+        self.assertIn("### %s" % later.LATER, umbrella_before)
+        head = company.head()
+
+        said = join_flow.draft_leave_out(later.slug(later.LATER), company.root)
+
+        self.assertIn(join_flow.DRAFT_LEFT_OUT % {"name": later.LATER}, said)
+        self.assertIn(
+            join_flow.UMBRELLA_CHANGE_WAITING % {"name": later.LATER}, said
+        )
+        # Never a silent rewrite: the profile and the saved history are as
+        # they were, and the change waits for the owner.
+        self.assertEqual(umbrella_before, company.read(UMBRELLA))
+        self.assertEqual(head, company.head())
+        waiting = pending_changes(company.root)
+        self.assertEqual(1, len(waiting), waiting)
+        staging = compose_proposal.load_staging(waiting[0])
+        self.assertEqual([UMBRELLA], staging.target_paths)
+        self.assertEqual(
+            [("### %s" % later.LATER, "replace")],
+            [(edit.heading, edit.op) for edit in staging.edits],
+        )
+        self.assertEqual(
+            constants.UMBRELLA_LEFT_OUT_SENTENCE, staging.edits[0].text.strip()
+        )
+
+    def test_the_owner_approves_it_through_the_prepared_change_path(self):
+        company = later.a_company()
+        later.set_up_and_close(company)
+        join_flow.draft_leave_out(later.slug(later.LATER), company.root)
+        staged = pending_changes(company.root)[0]
+        runner = NoRemoteRunner()
+
+        shown = approve_local.show(staged, company.root, company.base_id, runner=runner)
+        self.assertEqual(approve_local.STATUS_SHOWN, shown.status, shown.reasons)
+        applied = approve_local.approve(
+            staged, company.root, company.base_id, shown.shown_hash, runner=runner
+        )
+
+        self.assertEqual(approve_local.STATUS_APPLIED, applied.status, applied.reasons)
+        umbrella = company.read(UMBRELLA)
+        start = umbrella.index("### %s" % later.LATER)
+        self.assertIn(constants.UMBRELLA_LEFT_OUT_SENTENCE, umbrella[start:])
+        self.assertEqual("", company.status())
+
+    def test_an_umbrella_that_does_not_name_it_gets_no_change(self):
+        company = later.a_company()
+        later.set_up_and_close(company)
+        whole = os.path.join(company.root, UMBRELLA)
+        support.write(
+            whole,
+            support.read(whole).replace("### %s" % later.LATER, "### Someone else"),
+        )
+        support.git(["add", "-A"], cwd=company.root)
+        support.git(["commit", "-q", "-m", "renamed by hand"], cwd=company.root)
+
+        said = join_flow.draft_leave_out(later.slug(later.LATER), company.root)
+
+        self.assertEqual(join_flow.DRAFT_LEFT_OUT % {"name": later.LATER}, said)
+        self.assertEqual([], pending_changes(company.root))
+
+    def test_leaving_it_out_twice_prepares_one_change(self):
+        company = later.a_company(answers={later.DRAFTED: constants.SEGMENT_DRAFT})
+        later.set_up_and_close(company, draft_one=False)
+        join_flow.draft_leave_out(later.slug(later.LATER), company.root)
+        join_flow.draft_leave_out(later.slug(later.LATER), company.root)
+        self.assertEqual(1, len(pending_changes(company.root)))
+
+
+BROKEN = "Merchant cash advance providers"
+
+
+class TestARefusedPageWhoseDraftWasNotFinished(later.Case):
+    """Call 37: kept to draft later, like any unfinished segment."""
+
+    def company(self):
+        return adoption.Company(
+            [
+                (
+                    later.TAKEN_IN,
+                    adoption.clean_page(later.TAKEN_IN),
+                    "icp-%s.md" % later.slug(later.TAKEN_IN),
+                ),
+                (BROKEN, adoption.fixture("contact-in-body.md"), "icp-mca.md"),
+            ]
+        )
+
+    def refuse(self, company):
+        with self.assertRaises(adopt.AdoptionRefused) as caught:
+            company.show(BROKEN)
+        self.assertIn(caught.exception.code, adopt.OFFERS_A_DRAFT)
+
+    def test_it_is_kept_past_the_closing_and_drafted_by_a_later_session(self):
+        company = self.company()
+        company.adopt(later.TAKEN_IN)
+        self.refuse(company)
+
+        closed = later.close(company)
+
+        self.assertTrue(closed.drafts_unfinished)
+        record = segments.load_import(company.base_id)
+        self.assertEqual([BROKEN], [s.name for s in record.drafts_unfinished()])
+        self.assertEqual([], record.pages_unfinished())
+        _run, resumed = later.resume(company)
+        self.assertEqual([BROKEN], [s.name for s in resumed.to_draft])
+
+        run_id, shown = later.listed(company, BROKEN)
+        self.assertEqual([os.path.realpath(company.pages[BROKEN])], shown.paths)
+        join_flow.draft_freeze(run_id, later.SESSION_TWO, today=later.TODAY)
+        join_flow.assemble_step(
+            "segment", run_id, "Acme", later.EMAIL, today=later.TODAY,
+            segment=later.slug(BROKEN),
+        )
+        result = later.approve(run_id, company, BROKEN)
+        self.assertEqual(company.destination(BROKEN), result.path)
+        _run, last = later.resume(company)
+        self.assertTrue(last.done)
+
+    def test_left_out_after_the_refusal_it_is_not_kept(self):
+        company = self.company()
+        company.adopt(later.TAKEN_IN)
+        self.refuse(company)
+        join_flow.adoption_leave_out(
+            company.run, later.slug(BROKEN), company.root
+        )
+
+        closed = later.close(company)
+
+        self.assertFalse(closed.drafts_unfinished)
+        self.assertFalse(segments.has_import(company.base_id))
+
+    def test_drafted_in_setup_after_the_refusal_it_is_saved_and_not_kept(self):
+        company = self.company()
+        company.adopt(later.TAKEN_IN)
+        self.refuse(company)
+        later.approve(company.run, company, BROKEN)
+
+        closed = later.close(company)
+
+        self.assertFalse(closed.drafts_unfinished)
+        self.assertIsNotNone(company.read(company.destination(BROKEN)))
 
 
 if __name__ == "__main__":

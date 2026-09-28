@@ -139,9 +139,9 @@ COULD_NOT_UPDATE = (
 )
 BROUGHT_UP_TO_DATE = "Your base was brought up to date with the shared copy first."
 UNPROCESSED = (
-    "There are %d items waiting to be read in your inbox, so nothing was "
-    "prepared. Everything that is out of date is still listed below, and the "
-    "changes can be prepared once those items have been read."
+    "Your inbox holds %s waiting to be read, so nothing was prepared. "
+    "Everything that is out of date is still listed below, and the changes "
+    "can be prepared once everything in it has been read."
 )
 NOTHING_FLAGGED = "Nothing in your base is out of date today."
 DRY_RUN_NOTE = "This was a look only, so nothing was written."
@@ -150,25 +150,25 @@ DRY_RUN_NOTE = "This was a look only, so nothing was written."
 # earlier wording said "is from", which reads as the day it happened.
 LEDGER_BEHIND = (
     "The last context change in your base was written down on %s, which is "
-    "more than %d days ago. If nothing about the business has changed since "
-    "then, say so and GTM Base will stop mentioning it for %d days."
+    "more than %s ago. If nothing about the business has changed since "
+    "then, say so and GTM Base will stop mentioning it for %s."
 )
 LEDGER_BEHIND_EMPTY = (
     "Your base has no context change recorded yet. If there is nothing to write "
-    "down, say so and GTM Base will stop mentioning it for %d days."
+    "down, say so and GTM Base will stop mentioning it for %s."
 )
 LEDGER_BEHIND_DISMISSED = (
     "GTM Base will not mention the quiet record of context changes again until "
     "%s."
 )
 REVIEW_BY = (
-    "Context change %s came up for review on %s, which was %d days ago."
+    "Context change %s came up for review on %s, which was %s ago."
 )
 MALFORMED = (
-    "%d things in your base could not be read, so they were left alone."
+    "%s things in your base could not be read, so they were left alone."
 )
 MALFORMED_ONE = (
-    "1 thing in your base could not be read, so it was left alone."
+    "One thing in your base could not be read, so it was left alone."
 )
 # Said whenever one context change is written down twice and the two copies
 # do not agree. It names the change and both files, because the answer is the
@@ -184,8 +184,12 @@ CANNOT_VOUCH = (
     "Until those two agree, GTM Base cannot vouch for %s."
 )
 DROPPED = (
-    "%d file names in your context changes point outside the base, so they "
+    "%s file names in your context changes point outside the base, so they "
     "were skipped."
+)
+DROPPED_ONE = (
+    "One file name in your context changes points outside the base, so it was "
+    "skipped."
 )
 
 # The first-run findings, in the order the first run looks for them.
@@ -233,7 +237,7 @@ FINDING_OPEN_QUESTION_ONE = (
     "finished yet. Ask for a review of your base to answer it."
 )
 FINDING_OPEN_QUESTIONS = (
-    "%s still has %d questions in it that only you can answer, so it is not "
+    "%s still has %s questions in it that only you can answer, so it is not "
     "finished yet. Ask for a review of your base to answer them."
 )
 FINDING_DOCUMENT_OLDER = (
@@ -333,8 +337,8 @@ REVIEW_ITEM_WAITING_THERE = (
     "%s. %s has a prepared change waiting for somebody to review it."
 )
 REVIEW_INBOX_WAITING = (
-    "There are %d items waiting to be read in your inbox, so nothing can be "
-    "answered yet. Read those first and ask for the review again."
+    "Your inbox holds %s waiting to be read, so nothing can be answered yet. "
+    "Read everything in it first and ask for the review again."
 )
 # One question a draft left open, listed in the review with the question itself
 # shown under it, held apart as data (Unit 1.7b, requirement P27).
@@ -1013,7 +1017,7 @@ def finding_sentence(report, finding) -> str:
         many = len(getattr(info, "open_questions", ()) or ())
         name = names.document_name(finding.path)
         if many > 1:
-            return FINDING_OPEN_QUESTIONS % (name, many)
+            return FINDING_OPEN_QUESTIONS % (name, names.counted(many))
         return FINDING_OPEN_QUESTION_ONE % name
     if finding.code == stale.FINDING_BASELINE_NO_CHANGES:
         return _baseline_sentence(report, finding)
@@ -1138,7 +1142,7 @@ def run(
     if waiting:
         result.drafting_refused = True
         result.codes.append(CODE_UNPROCESSED)
-        result.sentences.append(UNPROCESSED % len(waiting))
+        result.sentences.append(UNPROCESSED % _items(len(waiting)))
 
     inputs = base_reader.read_base(
         base_root, base_id, runner=git, today=today, record_dropped=not dry_run
@@ -1291,7 +1295,9 @@ def _review(
     if waiting_to_be_read:
         # Every question below would be refused while these are unread, so it
         # is said once at the top rather than found out one answer at a time.
-        result.sentences.append(REVIEW_INBOX_WAITING % len(waiting_to_be_read))
+        result.sentences.append(
+            REVIEW_INBOX_WAITING % _items(len(waiting_to_be_read))
+        )
     if not session_id:
         result.sentences.append(REVIEW_NO_SESSION)
     for line in lines:
@@ -1912,9 +1918,9 @@ def _write_one(
     )
     if kind == "affected-files":
         result.sentences.append(
-            "Context change %s named no files, so GTM Base prepared a list of the %d "
-            "files it looks like it touches, for you to approve."
-            % (entry_id, len(target_paths))
+            "Context change %s named no files, so GTM Base prepared a list of the %s "
+            "it looks like it touches, for you to approve."
+            % (entry_id, names.how_many(len(target_paths), "file", "files"))
         )
     else:
         result.sentences.append(
@@ -1938,10 +1944,12 @@ def _offer_the_update(result, base_root, base_id, today, git) -> None:
     """
     offer = changes.what_to_offer(base_root, base_id, today=today, git=git)
     if offer == changes.OFFER_NOW:
-        result.sentences.append(changes.OFFER)
+        result.sentences.append(changes.offer_sentence(base_root))
         result.codes.append(CODE_CHANGES_CAN_MOVE)
     elif offer == changes.OFFER_EVERY_SEAT_FIRST:
-        result.sentences.append(changes.EVERY_SEAT_FIRST)
+        result.sentences.append(
+            changes.offer_sentence(base_root, every_seat_first=True)
+        )
         result.codes.append(CODE_EVERY_SEAT_FIRST)
 
 
@@ -1988,14 +1996,28 @@ def _quiet_record_ask(result, report, base_id, session_id, dry_run) -> None:
         # to write down what they already wrote.
         if report.conflicts:
             return
-        result.sentences.append(LEDGER_BEHIND_EMPTY % window)
+        result.sentences.append(LEDGER_BEHIND_EMPTY % _days(window))
     else:
         result.sentences.append(
             LEDGER_BEHIND
-            % (behind.newest_entry_date.isoformat(), behind.window_days, window)
+            % (
+                behind.newest_entry_date.isoformat(),
+                _days(behind.window_days),
+                _days(window),
+            )
         )
     if session_id and not dry_run:
         state.update_seat(base_id, quiet_record_said_in_session=session_id)
+
+
+def _days(number: int) -> str:
+    """A number of days, in words and in the singular for one."""
+    return names.how_many(int(number), "day", "days")
+
+
+def _items(number: int) -> str:
+    """A number of items waiting in the inbox, the way a person says it."""
+    return names.how_many(int(number), "item", "items")
 
 
 def _report_the_rest(result, report, base_id, today, dry_run) -> None:
@@ -2010,7 +2032,7 @@ def _report_the_rest(result, report, base_id, today, dry_run) -> None:
                     item.review_by.isoformat()
                     if hasattr(item.review_by, "isoformat")
                     else str(item.review_by),
-                    item.days_overdue,
+                    _days(item.days_overdue),
                 )
             )
         if not dry_run:
@@ -2022,10 +2044,14 @@ def _report_the_rest(result, report, base_id, today, dry_run) -> None:
         result.sentences.append(
             MALFORMED_ONE
             if len(report.malformed) == 1
-            else MALFORMED % len(report.malformed)
+            else MALFORMED % names.counted(len(report.malformed)).capitalize()
         )
     if report.dropped:
-        result.sentences.append(DROPPED % len(report.dropped))
+        result.sentences.append(
+            DROPPED_ONE
+            if len(report.dropped) == 1
+            else DROPPED % names.counted(len(report.dropped)).capitalize()
+        )
 
     if (
         result.mode == "normal"

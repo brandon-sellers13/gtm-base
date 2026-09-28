@@ -442,13 +442,13 @@ class TestTheOfferWhenNothingIsDue(unittest.TestCase):
 
     def assert_offered_once_after_nothing_due(self, sentences):
         self.assertIn(stale_check.REVIEW_NOTHING, sentences)
-        self.assertEqual(1, sentences.count(changes.OFFER), sentences)
+        self.assertEqual(1, sentences.count(changes.offer_sentence(self.root)), sentences)
         self.assertLess(
             sentences.index(stale_check.REVIEW_NOTHING),
-            sentences.index(changes.OFFER),
+            sentences.index(changes.offer_sentence(self.root)),
         )
         # The offer is the last thing said, after the quiet record ask too.
-        self.assertEqual(changes.OFFER, sentences[-1])
+        self.assertEqual(changes.offer_sentence(self.root), sentences[-1])
 
     def test_the_look_says_it_would_be_offered(self):
         self.assertEqual(
@@ -477,17 +477,20 @@ class TestTheOfferWhenNothingIsDue(unittest.TestCase):
                     code, out, err = run(STALE, arguments, cwd)
                     self.assertEqual(0, code, out + err)
                     self.assertIn(stale_check.REVIEW_NOTHING, out)
-                    self.assertEqual(1, out.count(changes.OFFER), out)
+                    self.assertEqual(1, out.count(changes.offer_sentence(self.root)), out)
                     self.assertLess(
                         out.index(stale_check.REVIEW_NOTHING),
-                        out.index(changes.OFFER),
+                        out.index(changes.offer_sentence(self.root)),
                     )
 
     def test_the_offer_and_the_look_agree(self):
         code, out, _err = run(STALE, ["--check-move"], self.root)
 
         self.assertEqual(0, code)
-        self.assertIn(changes.OFFER_STATE_NOW, out)
+        # The look says nothing about an offer it would make (the 0.3.1 live
+        # check, step 3, finding 1).
+        self.assertEqual(changes.OFFER_NOW, changes.what_to_offer(self.root, self.base_id))
+        self.assertNotIn("As things stand", out)
         self.assertIn("one context change", out)
         self.assertNotIn(migration.ENTRY_ONE, out)
         self.assertEqual([], plain_language.find_dashes(out))

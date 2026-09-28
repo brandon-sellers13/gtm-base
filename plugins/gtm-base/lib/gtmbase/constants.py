@@ -352,11 +352,15 @@ CONSENT_NARROW_THRESHOLD = 40
 # repository spread across ten folders is.
 CONSENT_NARROW_FOLDERS = 3
 # What a person is told when the folder they named is large and spread out. It
-# says the two numbers and then asks the one question whose answer narrows it.
+# says the two numbers, each in the words a person counts in, and that the
+# list is larger than one draft can read, and then asks the one question whose
+# answer narrows it. It used to call most of the files "probably not marketing
+# material", which on the live check was GTM Base's own prepared changes
+# (Brandon's call 45, 2026-09-27).
 CONSENT_NARROW_SENTENCE = (
-    "That folder holds %(files)d files across %(folders)d folders, most of "
-    "which are probably not marketing material. Which of these folders hold "
-    "your customer profiles, positioning, messaging, or plans?"
+    "That folder holds %(files)s files across %(folders)s folders, which is "
+    "more than one draft can read. Which of these folders hold your customer "
+    "profiles, positioning, messaging, or plans?"
 )
 # --- Finding the likely marketing material (0.2.6) --------------------------
 
@@ -755,6 +759,11 @@ ALL_CORRECTIONS_DIRS = (CORRECTIONS_DIR, LEGACY_CORRECTIONS_DIR)
 # Where each context document lived before this layout, and where it lives
 # now. The older paths are the ones the plan's layout table lists as today's.
 # Both are read; only the second is ever written.
+# The version of GTM Base that introduced the current layout, which the offer
+# to move a base names in the way release notes would (Brandon's call 40,
+# 2026-09-27). Release B brings the layout in, and its version is set when
+# Release B is versioned.
+CURRENT_LAYOUT_VERSION = "0.4"
 LEGACY_DOCUMENT_PATHS = (
     ("context/plan/goals.md", "context/goals.md"),
     ("context/strategy/icp.md", "context/icps.md"),
@@ -865,18 +874,18 @@ EXPLICIT_COUNT_SENTENCE = (
     "That is %(files)s in the %(folders)s you named."
 )
 # What the preview says about how much one draft will read.
-PREVIEW_READS_ALL = "This draft will read all %(read)d files on your list."
+PREVIEW_READS_ALL = "This draft will read all %(read)s files on your list."
 PREVIEW_READS_THE_ONE = "This draft will read the one file on your list."
 PREVIEW_READS_SOME = (
-    "This draft will read %(read)d of the %(total)d files on your list and "
-    "leave out %(left)d: %(labels)s."
+    "This draft will read %(read)s of the %(total)s files on your list and "
+    "leave out %(left)s: %(labels)s."
 )
 # The same three, once the person has narrowed the draft to part of the list.
-PREVIEW_READS_ALL_CHOSEN = "This draft will read all %(read)d files you chose."
+PREVIEW_READS_ALL_CHOSEN = "This draft will read all %(read)s files you chose."
 PREVIEW_READS_THE_ONE_CHOSEN = "This draft will read the one file you chose."
 PREVIEW_READS_SOME_CHOSEN = (
-    "This draft will read %(read)d of the %(total)d files you chose and leave "
-    "out %(left)d: %(labels)s."
+    "This draft will read %(read)s of the %(total)s files you chose and leave "
+    "out %(left)s: %(labels)s."
 )
 # Why a draft reads a limited amount at all, said whenever the cap left
 # anything out.

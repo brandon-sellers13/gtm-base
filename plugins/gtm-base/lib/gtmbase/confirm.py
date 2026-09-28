@@ -152,8 +152,8 @@ DROPPED_PATH = (
     "write, so nothing was recorded."
 )
 INBOX_WAITING = (
-    "There are %d items waiting to be read in your inbox, so nothing was "
-    "recorded yet. Read those first and the question comes back."
+    "Your inbox holds %s waiting to be read, so nothing was recorded yet. Once "
+    "everything in it is read, the question comes back."
 )
 NO_OWNER_ADDRESS = (
     "GTM Base does not know which address to record your answer under, so "
@@ -502,7 +502,10 @@ def answer(
 
     waiting = state.unprocessed_rows(base_id)
     if waiting:
-        return _refused(CODE_INBOX_WAITING, INBOX_WAITING % len(waiting))
+        return _refused(
+            CODE_INBOX_WAITING,
+            INBOX_WAITING % names.how_many(len(waiting), "item", "items"),
+        )
 
     # A document a context change is written down twice about, with the two
     # copies disagreeing, cannot be settled by anybody. It is refused before

@@ -64,6 +64,41 @@ _PLAIN_STEM_RE = re.compile(r"^[A-Za-z0-9 ._-]{1,80}$")
 DOCUMENT_WITHOUT_A_PLAIN_NAME = "one of your documents"
 
 
+# How many, the way a person says it, up to the point a person would say the
+# number itself instead. Every count a person reads goes through `counted` or
+# `how_many`, so none of them says "1 items" or "all 1 of them" (the 0.3.1 live
+# check, step 4, finding 1).
+COUNT_WORDS = (
+    "no",
+    "one",
+    "two",
+    "three",
+    "four",
+    "five",
+    "six",
+    "seven",
+    "eight",
+    "nine",
+    "ten",
+)
+
+
+def counted(number: int) -> str:
+    """A count as a person says it: in words up to ten, as a number after."""
+    if 0 <= number < len(COUNT_WORDS):
+        return COUNT_WORDS[number]
+    return str(number)
+
+
+def how_many(number: int, one: str, many: str, start: bool = False) -> str:
+    """A count and what it counts, in the singular for one: "one item".
+
+    `start` is for a count that opens a sentence, so it begins with a capital.
+    """
+    said = "%s %s" % (counted(number), one if number == 1 else many)
+    return said[:1].upper() + said[1:] if start else said
+
+
 def _normalize(path: str) -> str:
     """The path as the base stores it, with the separators this machine uses."""
     return str(path).replace(os.sep, "/").strip().lstrip("./")

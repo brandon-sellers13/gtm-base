@@ -313,7 +313,12 @@ def main(argv=None):
             sys.stderr.write(WENT_WRONG + "\n")
             return EXIT_ERROR
         sys.stdout.write(said + "\n")
-        sys.stdout.write(changes.offer_state_sentence(offer) + "\n")
+        # Nothing is said about the offer when it would be made, and the plain
+        # reason is said when it would not and the look above has not said it
+        # already (the 0.3.1 live check, step 3, finding 1).
+        why_not = changes.why_not_offered(resolution.base_id, offer)
+        if why_not:
+            sys.stdout.write(why_not + "\n")
         return EXIT_DONE
 
     if options.not_now_move:

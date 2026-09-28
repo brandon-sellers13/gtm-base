@@ -237,7 +237,7 @@ class SessionStartTest(support.PastTheFirstBackupReview, SessionStartHelpers):
         context = self.run_hook(root, part="context")
 
         said = "%s %s" % (visible or "", context or "")
-        self.assertNotIn(stale_check.LEDGER_BEHIND_EMPTY % 30, said)
+        self.assertNotIn(stale_check.LEDGER_BEHIND_EMPTY % "30 days", said)
         self.assertNotIn("record of context changes", said)
         self.assertNotIn("is more than", said)
 

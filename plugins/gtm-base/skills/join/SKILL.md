@@ -24,7 +24,7 @@ those marks. A value is never longer than three hundred characters, and one
 that was longer ends in three full stops. A value never holds a line break, so
 one line is always one value.
 
-Three rules hold for the whole session.
+Five rules hold for the whole session.
 
 1. Say what is about to happen before it happens. Every step below starts with
    the sentence that belongs to it.
@@ -32,6 +32,13 @@ Three rules hold for the whole session.
    whole and shown whole.
 3. Never say how long anything will take, and never reassure them about it.
    Not as a number, not as a promise of speed, not as an aside.
+4. Ask only the one thing the step asks, and never several questions at once.
+   Keep anything you notice about the content yourself, such as a figure that
+   needs a source or a quote that does not match, until after the approval,
+   and then say it once as one short note, such as "two things you may want to
+   check". Never raise it before or between the steps' own questions.
+5. Say nothing about any check that finds nothing wrong, and never mention a
+   check that found nothing.
 
 ### Words somebody typed never go on a command line
 <!-- step -->
@@ -275,7 +282,7 @@ asked at most once, and never after they named their folders themselves.
   mostly holds.
 
 <!-- ask -->
-That folder holds <number> files across <number> folders, most of which are probably not marketing material. Which of these folders hold your customer profiles, positioning, messaging, or plans?
+That folder holds <number> files across <number> folders, which is more than one draft can read. Which of these folders hold your customer profiles, positioning, messaging, or plans?
 <!-- end ask -->
 
 When they name the folders, list those, each by the number printed beside it:

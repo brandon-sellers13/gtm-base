@@ -492,7 +492,7 @@ class TestHiddenContentAndTheScreens(unittest.TestCase):
             self.assertNotIn("<!--", text)
             self.assertNotIn("​", text)
             said = "\n".join(shown.sentences())
-            self.assertIn("1 comment", said)
+            self.assertIn("one comment", said)
 
 
 class TestTheHeadingGrammar(unittest.TestCase):

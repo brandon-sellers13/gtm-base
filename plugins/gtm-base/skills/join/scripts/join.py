@@ -65,6 +65,7 @@ from gtmbase import (  # noqa: E402
     location,
     machine,
     moment,
+    names,
     offer_answer,
     paths,
     review,
@@ -879,7 +880,7 @@ def run_segments(options, out):
         out.write(
             "candidate=%s number=%d\n" % (safe_value(candidate.path), candidate.number)
         )
-    out.write(segments.FOUND_SENTENCE % {"count": len(found)} + "\n")
+    out.write(segments.FOUND_SENTENCE % {"count": names.counted(len(found))} + "\n")
     # A document's name is whatever somebody typed when they saved it, so the
     # numbered list is held apart as data like the documents themselves
     # (Astra's review of the merged Units 1.7c and 1.7d, finding 7).
@@ -983,8 +984,8 @@ def run_list_sources(options, out):
         out.write(
             constants.CONSENT_NARROW_SENTENCE
             % {
-                "files": len(listing.readable),
-                "folders": len(listing.by_folder),
+                "files": names.counted(len(listing.readable)),
+                "folders": names.counted(len(listing.by_folder)),
             }
             + "\n"
         )
@@ -1121,8 +1122,10 @@ def say_removed(out, removed):
 def explicit_count(files, folders):
     """The count a person confirms after naming their folders themselves."""
     return constants.EXPLICIT_COUNT_SENTENCE % {
-        "files": "1 file" if files == 1 else "%d files" % files,
-        "folders": "folder" if folders == 1 else "%d folders" % folders,
+        "files": names.how_many(files, "file", "files"),
+        "folders": (
+            "folder" if folders == 1 else names.how_many(folders, "folder", "folders")
+        ),
     }
 
 
@@ -1172,9 +1175,9 @@ def say_how_much(out, previewed):
         out.write(
             (constants.PREVIEW_READS_SOME_CHOSEN if chosen else constants.PREVIEW_READS_SOME)
             % {
-                "read": read,
-                "total": previewed.total,
-                "left": len(left),
+                "read": names.counted(read),
+                "total": names.counted(previewed.total),
+                "left": names.counted(len(left)),
                 "labels": ", ".join(plain_value(label) for label in left),
             }
             + "\n"
@@ -1191,7 +1194,7 @@ def say_how_much(out, previewed):
     else:
         out.write(
             (constants.PREVIEW_READS_ALL_CHOSEN if chosen else constants.PREVIEW_READS_ALL)
-            % {"read": read}
+            % {"read": names.counted(read)}
             + "\n"
         )
     if previewed.dropped_labels:

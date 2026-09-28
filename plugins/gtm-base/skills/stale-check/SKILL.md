@@ -65,7 +65,13 @@ another folder first.
   run or a folder it keeps to itself, and never list guesses about why
   something was refused.
 - When the check before a document is used finds nothing wrong, say nothing
-  about the check at all and go straight on with what the person asked for.
+  about the check at all and go straight on with what the person asked for,
+  and never mention a check that found nothing.
+- Ask only the one thing the step asks, and never several questions at once.
+- Keep anything you notice about the content yourself, such as a figure that
+  needs a source or a quote that does not match, until after the approval,
+  and then say it once as one short note, such as "two things you may want to
+  check". Never raise it before or between the flow's own questions.
 - Never mention confirming that everyone who opens this base is on the
   current version of GTM Base unless a script's own sentence asks for it.
   When one does, say that sentence as it is, with its one-line reason: an
@@ -89,7 +95,8 @@ another folder first.
   record of context changes being mentioned for a while. Use it only after the
   person says nothing about the business has changed lately.
 - `python3 scripts/stale_check.py --check-move` says what the move to the
-  current layout would do and whether GTM Base would offer it. It reads and
+  current layout would do, and why GTM Base would not offer it when it would
+  not. It says nothing about the offer when it would be made. It reads and
   writes nothing at all, so it is the one to run when somebody wants to know
   where they stand before deciding anything.
 - `python3 scripts/stale_check.py --move-changes` moves a base laid out the
@@ -270,8 +277,12 @@ script's sentence alone.
 
 If they say not now, run `--not-now-move`.
 
+- The offer the review makes names the version of GTM Base that brought the
+  current layout in and what in this base would move, and it ends in its own
+  question. Say it as the script printed it.
+
 <!-- ask -->
-Shall I go ahead and move your base to the current layout?
+Shall I move them now?
 <!-- end ask -->
 
 ## When one context change is written down twice

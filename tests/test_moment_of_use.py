@@ -648,8 +648,8 @@ class TestTheReview(unittest.TestCase):
             self.assertEqual(
                 [
                     stale_check.REVIEW_NOTHING,
-                    stale_check.LEDGER_BEHIND_EMPTY % 30,
-                    changes.OFFER,
+                    stale_check.LEDGER_BEHIND_EMPTY % "30 days",
+                    changes.offer_sentence(base.root),
                 ],
                 result.lines(),
             )

@@ -135,8 +135,8 @@ COULD_NOT_READ = (
     "to say about that document. It is not saying the document is fine."
 )
 INBOX_WAITING = (
-    "There are %d items waiting to be read in your inbox, so nothing was "
-    "prepared. Read those first and ask again."
+    "Your inbox holds %s waiting to be read, so nothing was prepared. Read "
+    "everything in it first and ask again."
 )
 ALREADY_DECIDED = (
     "There is already a prepared edit for that document and that context "
@@ -854,7 +854,7 @@ def fix_it_first(
         return MomentAnswer(
             STATUS_REFUSED,
             codes=[stale_check.CODE_UNPROCESSED],
-            reasons=[INBOX_WAITING % len(waiting)],
+            reasons=[INBOX_WAITING % names.how_many(len(waiting), "item", "items")],
         )
     today = moment.today or state.today()
     rows = base_reader.ledger(base_root, base_id, today)

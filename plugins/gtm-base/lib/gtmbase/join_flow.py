@@ -231,7 +231,7 @@ OTHERS_FLAGGED_ONE = (
     "One other document this change affects is left flagged for your next review."
 )
 OTHERS_FLAGGED_MANY = (
-    "%d other documents this change affects are left flagged for your next review."
+    "%s other documents this change affects are left flagged for your next review."
 )
 # Skip is a whole answer. Requirement P7.
 SKIP_RECORDED = (
@@ -1535,7 +1535,7 @@ DRAFT_HAS_ONE_QUESTION = (
     "asks it again."
 )
 DRAFT_HAS_QUESTIONS = (
-    "This draft leaves %d questions for you to answer, each marked where it "
+    "This draft leaves %s questions for you to answer, each marked where it "
     "comes up. Answer them now and they are written in before anything is "
     "saved, or approve the draft with them left open and your next review of "
     "your base asks them again."
@@ -1548,7 +1548,7 @@ def draft_questions_sentence(count: int) -> str:
         return ""
     if count == 1:
         return DRAFT_HAS_ONE_QUESTION
-    return DRAFT_HAS_QUESTIONS % count
+    return DRAFT_HAS_QUESTIONS % names.counted(count)
 
 
 def several_segments(run_id: str) -> Optional[segments.Inventory]:
@@ -1836,7 +1836,7 @@ class Shown(object):
         if self.cleaned.questions == 1:
             said.append(adopt.ONE_QUESTION)
         elif self.cleaned.questions > 1:
-            said.append(adopt.QUESTIONS % self.cleaned.questions)
+            said.append(adopt.QUESTIONS % names.counted(self.cleaned.questions))
         said.append(adopt.ASK_WITH_QUESTIONS if self.cleaned.questions else adopt.ASK)
         return said
 
@@ -2041,7 +2041,7 @@ RESUME_FINISHED_ONE = (
     "your base."
 )
 RESUME_FINISHED = (
-    "%d finished documents you had already said yes to are now saved into "
+    "%s finished documents you had already said yes to are now saved into "
     "your base."
 )
 RESUME_CHANGED = (
@@ -2075,7 +2075,7 @@ RESUME_TO_SHOW_ONE = (
     "you before anything is saved."
 )
 RESUME_TO_SHOW = (
-    "%d finished documents still wait for your answer, and each is shown to "
+    "%s finished documents still wait for your answer, and each is shown to "
     "you before anything is saved."
 )
 RESUME_DONE = (
@@ -2433,6 +2433,11 @@ def adoption_leave_out(
     return LEFT_OUT_SAID
 
 
+def _opening_count(number: int) -> str:
+    """A count that opens a sentence, in words and with a capital."""
+    return names.counted(number).capitalize()
+
+
 class Resumed(object):
     """What finishing an import did, and what is still to be shown and asked."""
 
@@ -2497,11 +2502,11 @@ class Resumed(object):
         if len(self.finished) == 1:
             said.append(RESUME_FINISHED_ONE)
         elif self.finished:
-            said.append(RESUME_FINISHED % len(self.finished))
+            said.append(RESUME_FINISHED % _opening_count(len(self.finished)))
         if len(self.drafts_saved) == 1:
             said.append(RESUME_DRAFT_SAVED_ONE)
         elif self.drafts_saved:
-            said.append(RESUME_DRAFT_SAVED % len(self.drafts_saved))
+            said.append(RESUME_DRAFT_SAVED % _opening_count(len(self.drafts_saved)))
         for segment in self.taken:
             said.append(RESUME_TAKEN % {"name": segment.name})
         for segment in self.edited:
@@ -2522,11 +2527,11 @@ class Resumed(object):
         if len(self.to_show) == 1:
             said.append(RESUME_TO_SHOW_ONE)
         elif self.to_show:
-            said.append(RESUME_TO_SHOW % len(self.to_show))
+            said.append(RESUME_TO_SHOW % _opening_count(len(self.to_show)))
         if len(self.to_draft) == 1:
             said.append(RESUME_TO_DRAFT_ONE)
         elif self.to_draft:
-            said.append(RESUME_TO_DRAFT % len(self.to_draft))
+            said.append(RESUME_TO_DRAFT % _opening_count(len(self.to_draft)))
         if self.done:
             said.append(RESUME_ALL_SETTLED if self.had_drafts else RESUME_DONE)
         if not said:
@@ -2795,7 +2800,7 @@ RESUME_DRAFT_SAVED_ONE = (
     "One segment you had already approved is now saved into your base."
 )
 RESUME_DRAFT_SAVED = (
-    "%d segments you had already approved are now saved into your base."
+    "%s segments you had already approved are now saved into your base."
 )
 # Said when a draft was approved and the session stopped before its save began.
 RESUME_DRAFT_AGAIN = (
@@ -2809,7 +2814,7 @@ RESUME_TO_DRAFT_ONE = (
     "again."
 )
 RESUME_TO_DRAFT = (
-    "%d segments you chose to have drafted are not in your base yet. Before "
+    "%s segments you chose to have drafted are not in your base yet. Before "
     "each one is drafted, you will see which of your files it would read and "
     "be asked again."
 )
@@ -4477,7 +4482,7 @@ def reconcile_plan(
     if len(left_flagged) == 1:
         sentence = OTHERS_FLAGGED_ONE
     elif left_flagged:
-        sentence = OTHERS_FLAGGED_MANY % len(left_flagged)
+        sentence = OTHERS_FLAGGED_MANY % names.counted(len(left_flagged)).capitalize()
     return Reconciliation(ask_about, left_flagged, sentence)
 
 

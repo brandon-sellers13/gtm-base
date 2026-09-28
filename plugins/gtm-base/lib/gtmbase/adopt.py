@@ -125,7 +125,7 @@ ONE_QUESTION = (
     "of your base."
 )
 QUESTIONS = (
-    "It leaves %d questions for you to answer, each marked where it comes up, "
+    "It leaves %s questions for you to answer, each marked where it comes up, "
     "and taking it in as it stands leaves them open for your next review of "
     "your base."
 )

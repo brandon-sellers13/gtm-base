@@ -616,7 +616,7 @@ class TestTheFirstRunNamesIt(unittest.TestCase):
             )
             self.assertEqual(stale.FINDING_OPEN_QUESTION, result.finding.code)
             self.assertEqual(
-                stale_check.FINDING_OPEN_QUESTIONS % ("your customer profile", 2),
+                stale_check.FINDING_OPEN_QUESTIONS % ("your customer profile", "two"),
                 result.finding_sentence,
             )
             self.assertNotIn("twenty", result.finding_sentence)

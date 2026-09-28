@@ -62,7 +62,7 @@ CODE_NONE = "no-segments"
 
 # Said above the numbered list of documents that each describe one segment.
 FOUND_SENTENCE = (
-    "Your material holds %(count)d documents that each describe one group of "
+    "Your material holds %(count)s documents that each describe one group of "
     "customers."
 )
 # The one thing this step asks.

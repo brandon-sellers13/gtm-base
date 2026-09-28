@@ -150,10 +150,40 @@ CODE_CANNOT_PUT_BACK = "cannot-put-back-what-was-moved"
 
 # --- The sentences a person reads -------------------------------------------
 
-OFFER = (
-    "Your base is laid out the older way. Moving it to the current layout "
-    "takes one step and changes nothing any of your documents or context "
-    "changes say. Shall I do it?"
+# The offer, in the way release notes say what a version changed: the version
+# that brought the current layout in, and what in this base still sits where
+# the older layout kept it, the documents by name and the rest counted in
+# words (Brandon's call 40, from the 0.3.1 live check, step 2). It names no
+# folder and no framework (call 41).
+OFFER_ONE = (
+    "GTM Base %(version)s introduced the current layout, which keeps "
+    "documents, context changes, and records in new places. Your base still "
+    "keeps %(what)s in the older place. Moving it changes nothing it says, and "
+    "your base works either way until you do. Shall I move it now?"
+)
+OFFER_MANY = (
+    "GTM Base %(version)s introduced the current layout, which keeps "
+    "documents, context changes, and records in new places. Your base still "
+    "keeps %(what)s in the older places. Moving them changes nothing they say, "
+    "and your base works either way until you do. Shall I move them now?"
+)
+# The same, on a base other people can reach, with the condition and its
+# one-line reason in place of the question.
+EVERY_SEAT_FIRST_ONE = (
+    "GTM Base %(version)s introduced the current layout, which keeps "
+    "documents, context changes, and records in new places. Your base still "
+    "keeps %(what)s in the older place. Everyone who opens this base has to be "
+    "on the current version of GTM Base before it moves, because an older one "
+    "would read the moved base as empty. Tell me once that is true and I will "
+    "move it."
+)
+EVERY_SEAT_FIRST_MANY = (
+    "GTM Base %(version)s introduced the current layout, which keeps "
+    "documents, context changes, and records in new places. Your base still "
+    "keeps %(what)s in the older places. Everyone who opens this base has to "
+    "be on the current version of GTM Base before they move, because an older "
+    "one would read the moved base as empty. Tell me once that is true and I "
+    "will move them."
 )
 # Said instead of the offer on a base other people can reach. Everyone who
 # opens it has to be on this release first, because an older one reads a
@@ -205,19 +235,7 @@ WOULD_MOVE = (
 )
 # How many, the way a person says it, up to the point a person would say the
 # number itself instead.
-COUNT_WORDS = (
-    "no",
-    "one",
-    "two",
-    "three",
-    "four",
-    "five",
-    "six",
-    "seven",
-    "eight",
-    "nine",
-    "ten",
-)
+COUNT_WORDS = names.COUNT_WORDS
 # What each kind of thing the move carries is called, one and more than one.
 KIND_WORDS = {
     "document": ("document", "documents"),
@@ -229,15 +247,13 @@ PUT_OFF = (
     "GTM Base will not offer to move your base to the current layout again "
     "until %s."
 )
-# What a read-only look says about whether the offer would be made at all.
-OFFER_STATE_NOW = "As things stand, GTM Base would offer this."
-OFFER_STATE_EVERY_SEAT_FIRST = (
-    "As things stand, GTM Base would not offer this. It would tell you "
-    "instead that everyone who opens this base has to be on the current "
-    "version first."
-)
-OFFER_STATE_NONE = (
-    "As things stand, GTM Base would not offer this at all."
+# What a read-only look adds when the move would run and yet would not be
+# offered, which is only ever because the person said not now. Every other
+# reason is already the look's own sentence, and when the offer would be made
+# the look adds nothing (the 0.3.1 live check, step 3, finding 1).
+NOT_OFFERED_PUT_OFF = (
+    "GTM Base is not offering it right now, because you said not now, and it "
+    "will offer it again on %s."
 )
 WOULD_FINISH = (
     "An earlier update stopped partway and this would pick it up where it "
@@ -2772,13 +2788,104 @@ def _move(base_root, base_id, day, runner, every_seat_updated, put_back) -> Resu
     )
 
 
-def offer_state_sentence(state_of_the_offer: str) -> str:
-    """What a read-only look says about whether the offer would be made."""
-    if state_of_the_offer == OFFER_NOW:
-        return OFFER_STATE_NOW
-    if state_of_the_offer == OFFER_EVERY_SEAT_FIRST:
-        return OFFER_STATE_EVERY_SEAT_FIRST
-    return OFFER_STATE_NONE
+def why_not_offered(
+    base_id: str, state_of_the_offer: str, today: Optional[datetime.date] = None
+) -> Optional[str]:
+    """What a read-only look adds about the offer, or None when it adds nothing.
+
+    The look's own sentence already says why a move would not run: unsaved
+    edits, a change written down twice, a shared base whose seats are not yet
+    updated, or nothing to move. The one reason it cannot see is the person's
+    own not now, so that is the one thing said here. When the offer would be
+    made, nothing is said about it at all.
+    """
+    if state_of_the_offer != OFFER_NONE:
+        return None
+    seat, _problems = state.load_seat(base_id)
+    until = _as_date(str(seat.get(SEAT_PUT_OFF_KEY) or ""))
+    if until is None or (today or state.today()) >= until:
+        return None
+    return NOT_OFFERED_PUT_OFF % until.isoformat()
+
+
+def _named_moves(plan: "_Plan") -> Tuple[str, int]:
+    """What still sits where the older layout kept it, and how many things.
+
+    Each core document is named the way a person names it, segments and any
+    other document are counted, and so are the context changes and the
+    records, each in words and in the singular for one.
+    """
+    named: List[str] = []
+    segments = 0
+    others = 0
+    for move in plan.moves:
+        if move.kind != KIND_DOCUMENT:
+            continue
+        if move.destination in names.KNOWN_DOCUMENTS:
+            named.append(names.document_name(move.destination))
+        elif names.is_segment(move.destination):
+            segments += 1
+        else:
+            others += 1
+    counts = plan.counts()
+    if not plan.moves:
+        # Nothing moves, and only settings are brought up to date.
+        counts[KIND_ENTRY] = len(plan.rewrites) or len(plan.drops)
+    parts = list(named)
+    if segments:
+        parts.append(names.how_many(segments, "segment", "segments"))
+    if others:
+        parts.append(names.how_many(others, "other document", "other documents"))
+    for kind in (KIND_ENTRY, KIND_RECORD):
+        if counts.get(kind):
+            one, many = KIND_WORDS[kind]
+            parts.append(names.how_many(counts[kind], one, many))
+    total = len(named) + segments + others + counts.get(KIND_ENTRY, 0) + counts.get(
+        KIND_RECORD, 0
+    )
+    if not parts:
+        return names.how_many(0, "document", "documents"), 0
+    if len(parts) == 1:
+        return parts[0], total
+    return ", ".join(parts[:-1]) + " and " + parts[-1], total
+
+
+def offer_sentence(base_root: str, every_seat_first: bool = False) -> str:
+    """The offer to move this base, worked out from what this base holds."""
+    plan, _refusal = _prevalidate(base_root)
+    if plan is None:
+        # Only asked once the checks the move runs have passed, so this is a
+        # base that changed in between; it is described as holding nothing
+        # rather than as holding something it may not.
+        plan = _Plan()
+    what, total = _named_moves(plan)
+    if every_seat_first:
+        template = EVERY_SEAT_FIRST_ONE if total == 1 else EVERY_SEAT_FIRST_MANY
+    else:
+        template = OFFER_ONE if total == 1 else OFFER_MANY
+    return template % {"version": constants.CURRENT_LAYOUT_VERSION, "what": what}
+
+
+def _opening() -> str:
+    return OFFER_ONE.split(" Your base still keeps", 1)[0] % {
+        "version": constants.CURRENT_LAYOUT_VERSION
+    }
+
+
+def is_the_offer(sentence: str) -> bool:
+    """Whether a sentence is the offer to move this base, in either number."""
+    text = str(sentence or "")
+    return text.startswith(_opening()) and text.endswith(
+        ("Shall I move it now?", "Shall I move them now?")
+    )
+
+
+def is_every_seat_first(sentence: str) -> bool:
+    """Whether a sentence is the offer made on a base other people can reach."""
+    text = str(sentence or "")
+    return text.startswith(_opening()) and text.endswith(
+        ("I will move it.", "I will move them.")
+    )
 
 
 def what_would_happen(
@@ -2819,9 +2926,7 @@ def what_would_happen(
 
 def counted(number: int) -> str:
     """A count as a person says it: in words up to ten, as a number after."""
-    if 0 <= number < len(COUNT_WORDS):
-        return COUNT_WORDS[number]
-    return str(number)
+    return names.counted(number)
 
 
 def resume(

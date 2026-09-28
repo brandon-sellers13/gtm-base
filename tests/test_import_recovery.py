@@ -1581,7 +1581,7 @@ class TestTheResumeScript(RecoveryCase):
         )
         self.assertEqual(0, code, printed)
         self.assertIn(join_flow.RESUME_FINISHED_ONE, printed)
-        self.assertIn(join_flow.RESUME_TO_SHOW % 6, printed)
+        self.assertIn(join_flow.RESUME_TO_SHOW % "Six", printed)
         named = [line.split("=", 1)[1] for line in printed.splitlines() if line.startswith("segment=")]
         self.assertEqual([segments.slug_for(n) for n in ORDER[6:]], named)
         self.assertNotIn(company.root, printed)
