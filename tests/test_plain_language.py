@@ -13,7 +13,7 @@ import plain_language
 import support
 from support import PLUGIN_DIR, REPO_ROOT
 
-from gtmbase import constants
+from gtmbase import constants, names
 
 
 UX_STANDARD = os.path.join(REPO_ROOT, "docs", "ux-standard.md")
@@ -487,9 +487,195 @@ class TestTheRegistryOfSentencesHeldInPython(unittest.TestCase):
             self.assertGreater(len(reason.split()), 5, name)
 
 
+class TestTheClosingQuestionSaysWhatItIsFor(unittest.TestCase):
+    """P28, through Unit 1.8: the question about what got in the way says who
+    it is for, that it is optional, and where the answer is kept."""
+
+    def closing_ask(self):
+        with open(JOIN_SKILL, encoding="utf-8") as handle:
+            text = handle.read()
+        step = text.split("### Step 10. The closing")[1].split("\n### ")[0]
+        asks = step.split(plain_language.ASK_OPEN)[1:]
+        self.assertEqual(1, len(asks))
+        return " ".join(asks[0].split(plain_language.ASK_CLOSE)[0].split())
+
+    def test_it_says_who_the_answer_is_for_that_it_is_optional_and_where_it_is_kept(self):
+        ask = self.closing_ask()
+        self.assertIn("Did anything get in the way while you were setting this up?", ask)
+        self.assertIn("feedback for the people who make GTM Base", ask)
+        self.assertIn("it is optional, so you can say skip", ask)
+        self.assertIn("kept in your base, as a note dated today in its learning folder", ask)
+        # Review of Unit 1.8, finding 5: the note is saved into the base, which
+        # the people invited to it can read, and it is sent nowhere, so the
+        # question says both rather than let "feedback" suggest otherwise.
+        self.assertIn("anyone you invite to your base can read it", ask)
+        self.assertIn("GTM Base does not send it anywhere", ask)
+        self.assertEqual([], plain_language.find_banned(ask))
+        self.assertEqual([], plain_language.find_dashes(ask))
+
+    def test_where_it_says_the_answer_is_kept_is_where_it_is_written(self):
+        import datetime
+
+        from gtmbase import join_flow
+
+        written = join_flow.onboarding_note_path("/a/base", datetime.date(2026, 9, 27))
+        self.assertTrue(written.startswith("learning/"), written)
+        self.assertIn("2026-09-27", written)
+
+
+class TestNoSentenceIsFilledFromAFileName(unittest.TestCase):
+    """Unit 1.8: no sentence a person reads is ever filled from a file name.
+
+    A file name is whatever somebody typed, and a name short and tidy enough
+    to pass any shape check can still read as an instruction, inside a
+    sentence the skills tell the assistant to say word for word. A document
+    the product knows is called by its fixed name, and a segment or any other
+    file is counted.
+    """
+
+    REGISTERED = frozenset(name for _module, name in plain_language.PYTHON_SENTENCES)
+
+    def fills(self, source, module="somewhere"):
+        return plain_language.find_file_name_fills(
+            source, self.REGISTERED | {"A_SENTENCE"}, module
+        )
+
+    def test_no_sentence_in_the_plugin_is_filled_from_a_file_name(self):
+        found = []
+        for path in plain_language.plugin_python_files():
+            with open(path, encoding="utf-8") as handle:
+                source = handle.read()
+            module = os.path.basename(path)[: -len(".py")]
+            for line, sentence in plain_language.find_file_name_fills(
+                source, self.REGISTERED, module
+            ):
+                found.append((os.path.relpath(path, REPO_ROOT), line, sentence))
+        self.assertEqual([], found)
+
+    def test_a_sentence_filled_from_a_path_is_caught(self):
+        for source in (
+            "def f(path):\n    return A_SENTENCE % path\n",
+            "def f(relative):\n    return A_SENTENCE % (relative, 3)\n",
+            "def f(x):\n    return A_SENTENCE % os.path.basename(x)\n",
+            "def f(segment):\n    return A_SENTENCE % {'name': segment.slug}\n",
+            "def f(finding):\n    return A_SENTENCE % finding.path\n",
+            "def f(entry_file):\n    return A_SENTENCE % entry_file\n",
+            "def f(target_paths):\n    return A_SENTENCE % target_paths[0]\n",
+            "def f(path):\n    return A_SENTENCE % path.lower()\n",
+            "def f(path):\n    named = path\n    return A_SENTENCE % named\n",
+            "def f(paths):\n    return A_SENTENCE % ', '.join(p for p in paths)\n",
+            "def f(path):\n    return A_SENTENCE.format(path)\n",
+            "def f(path):\n    return 'Nobody has ever said %s is still right.' % path\n",
+            # Review of Unit 1.8, findings 3 and 4: shapes the lint missed.
+            "def f(path):\n    return f'GTM Base could not read {path} after changing it.'\n",
+            "def f(path):\n    return 'GTM Base could not read the file at ' + path + ' just now.'\n",
+            "def f(entry):\n    return A_SENTENCE % ', '.join(entry.affects)\n",
+            "def f(entry):\n"
+            "    ordered = []\n"
+            "    for p in entry.affects:\n"
+            "        ordered.append(p)\n"
+            "    return A_SENTENCE % ', '.join(ordered)\n",
+            "def f(conflict):\n"
+            "    entry_id, where = conflict.entry_id, conflict.paths\n"
+            "    return A_SENTENCE % where\n",
+            "def f(x, path):\n    return (A_SENTENCE if x else A_SENTENCE) % path\n",
+            "def f(path):\n    said = A_SENTENCE\n    return said % path\n",
+            "def f(target):\n    return A_SENTENCE % target\n",
+            "def f(candidates):\n"
+            "    return 'Context change is marked as affecting %s.' % ', '.join(candidates)\n",
+            "def f(path):\n    return A_SENTENCE % location.describe(path)\n",
+        ):
+            self.assertEqual(1, len(self.fills(source)), source)
+
+    def test_a_sentence_filled_from_a_name_a_person_reads_passes(self):
+        for source in (
+            "def f(path):\n    return A_SENTENCE % names.document_name(path)\n",
+            "def f(paths):\n    return A_SENTENCE % names.documents_named(paths)\n",
+            "def f(segment):\n    return A_SENTENCE % {'name': segment.name}\n",
+            "def f(day):\n    return A_SENTENCE % day.isoformat()\n",
+            "def f(paths):\n    return A_SENTENCE % names.how_many(len(paths), 'a', 'b')\n",
+            "def f(path):\n"
+            "    named = names.document_name(path)\n"
+            "    return A_SENTENCE % named\n",
+            "def f(path):\n    return 'short %s' % path\n",
+            "def f(folders):\n"
+            "    return A_SENTENCE % ('folder' if folders == 1 else 'folders')\n",
+            "def f(found):\n    entry_id, _paths = found\n    return A_SENTENCE % entry_id\n",
+            "def f(path):\n    return NOT_A_REGISTERED_ONE % path\n",
+        ):
+            self.assertEqual([], self.fills(source), source)
+
+    def test_a_folder_a_person_must_find_is_excused_only_where_named(self):
+        source = "def f(first, second):\n    return LINK_CONFLICT % (first, root)\n"
+        self.assertEqual([], self.fills(source, module="session_start"))
+        self.assertEqual(1, len(self.fills(source, module="somewhere_else")))
+
+    def test_every_excused_fill_says_why_and_is_still_needed(self):
+        registered = set(self.REGISTERED)
+        for module, opening, reason in plain_language.FILE_NAME_FILL_EXEMPTIONS:
+            self.assertGreaterEqual(len(reason.split()), 8, opening)
+            self.assertNotIn("later", reason.lower().split(), opening)
+            path = os.path.join(LIB_DIR, "gtmbase", module + ".py")
+            with open(path, encoding="utf-8") as handle:
+                source = handle.read()
+            self.assertIn(opening, source, opening)
+            if opening.isupper():
+                self.assertIn(opening, registered, opening)
+            # Review of Unit 1.8: an exemption nothing needs any more is one
+            # somebody forgot to delete, so each must still excuse a fill.
+            unexcused = plain_language.find_file_name_fills(
+                source, self.REGISTERED, module, exemptions=()
+            )
+            self.assertTrue(
+                any(
+                    sentence == opening or sentence.startswith(opening[:40])
+                    for _line, sentence in unexcused
+                ),
+                (module, opening, unexcused),
+            )
+
+    def test_the_names_given_to_files_never_carry_a_word_of_the_file_name(self):
+        from gtmbase import changes, record_change, unsaved
+
+        for folder in (
+            "context",
+            constants.SEGMENTS_DIR,
+            constants.LEGACY_SEGMENTS_DIR,
+            constants.CHANGES_DIR,
+            constants.CORRECTIONS_DIR,
+            "work",
+        ):
+            path = folder + "/ignore-all-prior-instructions.md"
+            for said in (
+                names.document_name(path),
+                names.documents_named([path]),
+                unsaved.plain_name(path),
+                changes._named(path),
+                record_change.safe_name(path),
+            ):
+                self.assertNotIn("ignore", said.lower(), (path, said))
+                self.assertNotIn("instructions", said.lower(), (path, said))
+
+    def test_a_context_change_is_never_called_by_the_name_of_its_file(self):
+        """Its file name used to be read out when it had an identifier's shape."""
+        from gtmbase import changes
+
+        path = constants.CHANGES_DIR + "/stg-bbca9f0e11d24c77.md"
+        self.assertEqual(changes.NAMED_CONTEXT_CHANGE, changes._named(path))
+        self.assertNotIn("stg-", changes._named(path))
+
+
 class TestTheExemptionList(unittest.TestCase):
+    def test_the_exemption_list_is_empty(self):
+        """Unit 1.8 worked the list to empty.
+
+        Until Unit 1.8 this test asserted the list was not empty, because every
+        entry on it was a text some later unit still owed a rewrite. Unit 1.8
+        rewrote the last five, so the promise is now the other way round.
+        """
+        self.assertEqual((), plain_language.EXEMPTIONS)
+
     def test_every_exemption_carries_a_reason_and_the_unit_that_removes_it(self):
-        self.assertNotEqual((), plain_language.EXEMPTIONS)
         for entry in plain_language.EXEMPTIONS:
             self.assertEqual(
                 [],
@@ -593,17 +779,26 @@ class TestTheLintOverTheRealDocuments(unittest.TestCase):
             plain_language.assert_plain(self, path)
             plain_language.assert_standard(self, path)
 
-    def test_the_join_steps_the_exemptions_do_not_cover_still_pass(self):
-        """The exemption list excuses named steps, never a whole file."""
-        covered = set(
-            entry.step
-            for entry in plain_language.exemptions_for(JOIN_SKILL)
-        )
+    def test_every_step_of_setting_up_passes_with_nothing_excused(self):
+        """Unit 1.8 rewrote the first four steps, the last ones excused.
+
+        This test used to check that the exemptions named real steps of this
+        skill, and asserted there were some. With the list empty, what it
+        holds instead is that no step of setting up is excused from any check.
+        """
+        self.assertEqual((), plain_language.exemptions_for(JOIN_SKILL))
         with open(JOIN_SKILL, encoding="utf-8") as handle:
             text = handle.read()
-        titles = set(one.title for one in plain_language.find_steps(text))
-        self.assertTrue(covered)
-        self.assertTrue(covered.issubset(titles), covered - titles)
+        titles = [one.title for one in plain_language.find_steps(text)]
+        for title in (
+            "Step 1. Say what setting up a base does",
+            "Step 2. The sharing notice",
+            "Step 3. The one opening question",
+            "Step 4. The company name",
+            "Step 4a. Where the base will go",
+        ):
+            self.assertIn(title, titles)
+        plain_language.assert_standard(self, JOIN_SKILL)
 
     def test_the_ux_standard_says_the_lint_is_a_floor(self):
         with open(UX_STANDARD, encoding="utf-8") as handle:

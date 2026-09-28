@@ -585,7 +585,10 @@ class TestTheFileMovedOn(support.PastTheFirstBackupReview, unittest.TestCase):
             )
 
             self.assertEqual(compose_proposal.STATUS_CONFLICT, result.status)
-            self.assertIn(ICP, result.reasons[0])
+            # Unit 1.8: the document is named the way a person names it, where
+            # this refusal used to read out its path.
+            self.assertIn("your customer profile", result.reasons[0])
+            self.assertNotIn(ICP, result.reasons[0])
             self.assertEqual([], gh.created())
             self.assertFalse(
                 os.path.isdir(os.path.join(paths.worktrees_dir(base_id), STAGING))

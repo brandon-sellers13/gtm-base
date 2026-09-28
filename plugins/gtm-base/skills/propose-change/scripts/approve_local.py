@@ -195,7 +195,7 @@ def main(argv=None):
                 "%s: %s\n"
                 % (
                     staging_id,
-                    ", ".join(names.document_name(path) for path in targets),
+                    names.documents_named(targets),
                 )
             )
         return EXIT_DONE

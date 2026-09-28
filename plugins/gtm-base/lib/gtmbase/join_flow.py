@@ -4495,7 +4495,7 @@ def four_lines_for(
         ),
         moment._one_line(_why_of(entry, why_when_none)),
         moment._one_line(
-            ", ".join(name_of(path) for path in entry.affects) or "nothing yet"
+            names.documents_named(entry.affects, name_of=name_of) or "nothing yet"
         ),
         moment._one_line(str(entry.review_by)),
     )
@@ -4553,7 +4553,7 @@ def show_entry(text: str, why_when_none: str = WHY_FROM_THE_CLOSING) -> Proposed
     theirs to correct, held apart as data, and then the whole entry.
     """
     entry = formats.ChangeEntry.parse(text)
-    affected = ", ".join(names.document_name(path) for path in entry.affects)
+    affected = names.documents_named(entry.affects)
     details = (
         (DETAIL_LABELS[0], str(entry.happened_on)),
         (DETAIL_LABELS[1], affected or "nothing yet"),

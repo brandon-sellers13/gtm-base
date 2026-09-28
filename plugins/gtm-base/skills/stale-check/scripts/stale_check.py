@@ -313,8 +313,9 @@ def record_a_change(options, resolution):
             sys.stdout.write(record_change.NO_DOCUMENTS + "\n")
             return EXIT_REFUSED
         sys.stdout.write(record_change.DOCUMENTS_INTRO + "\n")
-        # Every name comes from a file name, so the whole list is held apart
-        # as data (Astra's review of 0.3.3, finding 3).
+        # No name here comes from a file name since Unit 1.8, and the list is
+        # still held apart as data (Astra's review of 0.3.3, finding 3), so
+        # nothing about how it is shown depends on that staying true.
         sys.stdout.write(
             moment.fenced(
                 "\n".join("%d. %s" % (number, name) for number, _path, name in listed)
@@ -366,8 +367,8 @@ def record_a_change(options, resolution):
                 "   [for the assistant] path=%s change=%s" % (path, done.entry.id)
             )
         if asked:
-            # The questions name documents by their file names, and the lines
-            # for the assistant carry the paths, so all of it is data.
+            # The lines for the assistant carry the paths, so all of it is
+            # held apart as data.
             sys.stdout.write(moment.fenced("\n".join(asked)) + "\n")
         if done.plan.sentence:
             sys.stdout.write(done.plan.sentence + "\n")

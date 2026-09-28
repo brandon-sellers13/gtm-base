@@ -123,6 +123,16 @@ called by its first line and the day it happened, never by its identifier.
 name cannot drift between one step and the next. Paths and identifiers stay in
 the machine-readable lines, which nobody reads aloud.
 
+No sentence a person reads is ever filled from a file name, because a file
+name is whatever somebody typed and a tidy one can still read as an
+instruction. A document the product knows by its path has its fixed name. A
+segment is "one of your segments", any other document is "one of your
+documents", and several are counted, as in "your customer profile, two of your
+segments". Where the person's own name for a segment is needed, it comes from
+the list of segments they settled, which GTM Base keeps, and never from the
+disk. `find_file_name_fills` in `tests/plain_language.py` fails on any sentence
+filled from a file name (Unit 1.8).
+
 ## CLASS: the framework every step ties back to
 
 Adopted 2026-09-25 from Brandon's AI-native framework (MICW Issue #4, v10), replacing the draft four questions of 2026-09-19. The plugin and the newsletter use one framework, so a person who read the article recognises every part of the product. The name is subject to the trademark check the article lists as open.

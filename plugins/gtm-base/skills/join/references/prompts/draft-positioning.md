@@ -57,9 +57,22 @@ The body carries these level two headings, in this order:
    as they were written, one per line. If the material carries none, write one
    sentence saying so.
 
+## Definitions, never tracking
+
+This document defines. It never tracks. Customers, deals, deal stages, deal
+values, next steps, and the pipeline belong in the company's CRM, and none of
+them is ever written here, even when the sources carry them. So never write a
+deal value, a deal stage, a next step, a prospect or a list of prospects, or an
+instruction to contact anybody. Leave each one out rather than rewording it.
+
+A named customer appears only as evidence. Name a customer only beside the
+claim it supports, under the heading What makes it different, and never as
+an account to work, a deal to close, or somebody to contact.
+
 ## Rules
 
-- Keep the customer names, the figures, and the dates that the sources carry.
+- Keep the customer names, the figures, and the dates that the sources carry,
+  with every customer named as evidence the way the section above says.
 - Never carry a person's contact details across. No email addresses, no phone
   numbers, no personal handles, whoever they belong to.
 - Never write a placeholder. No "TBD", no "TODO", no bracketed instruction to

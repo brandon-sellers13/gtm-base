@@ -385,13 +385,12 @@ CANNOT_PUT_BACK = (
 # How a file is named in a sentence a person reads. A file's own name comes
 # out of the base, and a sentence carrying it is handed to the assistant
 # outside any fence, so no name is ever read out as it is (Astra's review of
-# Unit 1.5b, finding 7). A document gets the name a person calls it by, from
-# `names`, and everything else gets one of these.
+# Unit 1.5b, finding 7). A document the product knows gets the name a person
+# calls it by, from `names`, and everything else is counted with one of these
+# (Unit 1.8). A context change used to be called by its identifier when its
+# file name had the shape GTM Base gives one, but an identifier is a file name
+# too, and it is not what a person calls a change.
 NAMED_CONTEXT_CHANGE = unsaved.ONE_OF_YOUR_CONTEXT_CHANGES
-# A context change whose file is named by an identifier of the one shape
-# GTM Base gives them is called by it, the way every other sentence here
-# calls a context change, because that shape can carry nothing else.
-NAMED_THE_CONTEXT_CHANGE = "the context change %s"
 NAMED_RECORD = unsaved.ONE_OF_YOUR_RECORDS
 NAMED_FILE = unsaved.ONE_OF_YOUR_FILES
 
@@ -401,10 +400,6 @@ def _named(relative) -> str:
     text = str(relative or "")
     lowered = text.lower()
     if _is_an_entry_path(text):
-        stem = text.split("/")[-1]
-        stem = stem[: -len(".md")] if stem.endswith(".md") else ""
-        if ids.is_staging_id(stem):
-            return NAMED_THE_CONTEXT_CHANGE % stem
         return NAMED_CONTEXT_CHANGE
     for folder in constants.ALL_CORRECTIONS_DIRS:
         if lowered.startswith(folder + "/"):

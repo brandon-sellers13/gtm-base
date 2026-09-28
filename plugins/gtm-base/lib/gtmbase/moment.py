@@ -147,7 +147,7 @@ ALREADY_DECIDED = (
 # not agree. It comes before anything else, because nothing about a document
 # those two are about can be relied on until they agree.
 WRITTEN_TWICE = (
-    "The context change %s is written down twice, in %s, and the two do not "
+    "The context change %s is written down twice, and the two copies do not "
     "say the same thing. GTM Base cannot vouch for this document until they "
     "agree."
 )
@@ -254,8 +254,8 @@ class Moment(object):
     def sentences(self) -> List[str]:
         """Every sentence this moment says, in the order it says them."""
         twice = [
-            WRITTEN_TWICE % (entry_id, " and ".join(paths))
-            for entry_id, paths in self.written_twice
+            WRITTEN_TWICE % entry_id
+            for entry_id, _paths in self.written_twice
         ]
         if not self.flagged:
             return twice
@@ -274,8 +274,8 @@ class Moment(object):
         stand and acted on by nobody.
         """
         twice = [
-            WRITTEN_TWICE % (entry_id, " and ".join(paths))
-            for entry_id, paths in self.written_twice
+            WRITTEN_TWICE % entry_id
+            for entry_id, _paths in self.written_twice
         ]
         if not self.flagged:
             return "\n".join(twice)
@@ -373,13 +373,14 @@ def _affects_of(moment: "Moment") -> str:
     for path in list(getattr(moment.entry, "affects", []) or []):
         if path not in ordered:
             ordered.append(path)
-    named = []
+    nameable = []
     for path in ordered:
         try:
-            named.append(names.document_name(path))
+            names.document_name(path)
         except ValueError:
             continue
-    return ", ".join(named)
+        nameable.append(path)
+    return names.documents_named(nameable)
 
 
 def four_lines(moment: "Moment") -> str:

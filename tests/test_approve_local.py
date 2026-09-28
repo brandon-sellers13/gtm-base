@@ -563,7 +563,11 @@ class TestWhatItRefusesToTouch(unittest.TestCase):
 
             self.assertEqual(approve_local.STATUS_REFUSED, shown.status)
             self.assertEqual([approve_local.CODE_OUTSIDE_ALLOWED], shown.codes)
-            self.assertIn("CODEOWNERS", shown.reasons[0])
+            # Unit 1.8: the refusal used to read out the path the prepared
+            # change names. A path in a prepared change is whatever somebody
+            # wrote, so it is no longer repeated back.
+            self.assertEqual(approve_local.OUTSIDE_THE_FOLDERS, shown.reasons[0])
+            self.assertNotIn("CODEOWNERS", shown.reasons[0])
             self.assertEqual([], corrections_in(root))
 
     def test_a_change_to_the_map_is_refused(self):

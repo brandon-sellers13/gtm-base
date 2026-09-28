@@ -1451,7 +1451,11 @@ class TestBothSpellingsOfOneSetting(MigrationCase):
         self.save()
         result = changes.migrate(self.root, self.base_id, today=TODAY)
         self.assertEqual(changes.STATUS_REFUSED, result.status)
-        self.assertIn(ENTRY_ONE, result.sentence)
+        # Unit 1.8: this refusal used to call the context change by the name
+        # of its file, which had an identifier's shape. No sentence reads a
+        # file's own name out any more, so it is one of your context changes.
+        self.assertNotIn(ENTRY_ONE, result.sentence)
+        self.assertIn(changes.NAMED_CONTEXT_CHANGE, result.sentence)
 
     def test_a_required_value_that_folds_away_to_nothing_is_a_plain_refusal(self):
         """K6. It used to die on an attribute, which nothing above catches."""
@@ -1626,7 +1630,11 @@ class TestAWayOutOfAStoppedRun(MigrationCase):
         result = changes.migrate(self.root, self.base_id, today=TODAY)
 
         self.assertEqual(changes.STATUS_REFUSED, result.status)
-        self.assertIn(ENTRY_ONE, result.sentence)
+        # Unit 1.8: this refusal used to call the context change by the name
+        # of its file, which had an identifier's shape. No sentence reads a
+        # file's own name out any more, so it is one of your context changes.
+        self.assertNotIn(ENTRY_ONE, result.sentence)
+        self.assertIn(changes.NAMED_CONTEXT_CHANGE, result.sentence)
 
     def test_giving_up_on_it_clears_the_note_and_says_what_it_left_alone(self):
         # Before the move is saved, because after it is saved there is
@@ -2135,7 +2143,11 @@ class TestTheRewriteIsCheckedAgainstItself(MigrationCase):
         result = changes.migrate(self.root, self.base_id, today=TODAY)
 
         self.assertEqual(changes.STATUS_REFUSED, result.status)
-        self.assertIn(ENTRY_ONE, result.sentence)
+        # Unit 1.8: this refusal used to call the context change by the name
+        # of its file, which had an identifier's shape. No sentence reads a
+        # file's own name out any more, so it is one of your context changes.
+        self.assertNotIn(ENTRY_ONE, result.sentence)
+        self.assertIn(changes.NAMED_CONTEXT_CHANGE, result.sentence)
 
     # --- N4: a byte-order mark ----------------------------------------------
 
@@ -2189,7 +2201,11 @@ class TestTheRewriteIsCheckedAgainstItself(MigrationCase):
         result = changes.migrate(self.root, self.base_id, today=TODAY)
 
         self.assertEqual(changes.STATUS_REFUSED, result.status)
-        self.assertIn(ENTRY_ONE, result.sentence)
+        # Unit 1.8: this refusal used to call the context change by the name
+        # of its file, which had an identifier's shape. No sentence reads a
+        # file's own name out any more, so it is one of your context changes.
+        self.assertNotIn(ENTRY_ONE, result.sentence)
+        self.assertIn(changes.NAMED_CONTEXT_CHANGE, result.sentence)
         self.assertEqual(
             [ENTRY_ONE + ".md"], self.files_in(constants.LEGACY_CHANGES_DIR)
         )
@@ -2965,7 +2981,11 @@ class TestTheReadOnlyCheck(MigrationCase):
         finished = self.run_script("--check-move")
 
         said = finished.stdout.decode("utf-8") + finished.stderr.decode("utf-8")
-        self.assertIn(ENTRY_ONE, said)
+        # Unit 1.8: this refusal used to call the context change by the name
+        # of its file, which had an identifier's shape. No sentence reads a
+        # file's own name out any more, so it is one of your context changes.
+        self.assertNotIn(ENTRY_ONE, said)
+        self.assertIn(changes.NAMED_CONTEXT_CHANGE, said)
 
     def test_it_says_why_the_offer_would_not_be_made(self):
         self.old_layout()

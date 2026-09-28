@@ -239,7 +239,7 @@ def load_staging(path: str) -> "formats.ProposalStaging":
     text = read_text(path)
     if text is None:
         raise ValidationError(
-            "GTM Base could not read the staged proposal at %s." % path,
+            "GTM Base could not read that prepared change.",
             code=CODE_UNREADABLE,
         )
     return staging_from_text(text)
@@ -370,7 +370,7 @@ def check_edits(base_root: str, staging) -> List[Tuple[str, str]]:
                 (
                     CODE_OUTSIDE_CONTEXT,
                     "A proposal may only change files in the context folder, and "
-                    "this one names %s." % edit.path,
+                    "this one names a file outside it.",
                 )
             )
             continue
@@ -388,7 +388,7 @@ def check_edits(base_root: str, staging) -> List[Tuple[str, str]]:
                 (
                     CODE_OUTSIDE_CONTEXT,
                     "A proposal may only change files in the context folder, and "
-                    "%s is a name for a file somewhere else." % edit.path,
+                    "one of the files this one names is really somewhere else.",
                 )
             )
             continue
@@ -659,7 +659,8 @@ def content_hash_for(worktree_path: str, ordered_paths: List[str]) -> str:
         text = read_text(os.path.join(worktree_path, checked))
         if text is None:
             raise ValidationError(
-                "GTM Base could not read %s after changing it." % relative,
+                "GTM Base could not read %s after changing it."
+                % names.document_name(relative),
                 code=CODE_MISSING_FILE,
             )
         parts.append(text)
@@ -1157,15 +1158,15 @@ def propose(
                 made.path, staging, today, entry_id, source_id, git, base_root, codes
             )
     except ConflictError as clash:
-        files = ", ".join(edited_paths(staging))
         worktree.remove_worktree(base_root, made.path, runner=git)
+        named = names.documents_named(edited_paths(staging))
         return ProposalResult(
             STATUS_CONFLICT,
             staging_id=staging.staging_id,
             codes=[clash.code or CODE_HEADING_MISSING],
             reasons=[
                 "The part of %s this proposal changes is not there any more, so "
-                "it was not sent. Ask for it to be prepared again." % files
+                "it was not sent. Ask for it to be prepared again." % named
             ],
             branch=made.branch,
         )
@@ -1306,8 +1307,8 @@ def _prepare(
         text = read_text(target)
         if text is None:
             raise ValidationError(
-                "The file %s is not in the shared copy, so it cannot be changed."
-                % edit.path,
+                "The shared copy does not hold %s, so it cannot be changed."
+                % names.document_name(edit.path),
                 code=CODE_MISSING_FILE,
             )
         atomic_write_text(
@@ -1990,7 +1991,7 @@ def stage_local_edit(
         except PathError:
             raise ValidationError(
                 "Only files in the context folder can be proposed this way, and "
-                "%s is not one of them." % relative,
+                "this one is not in it.",
                 code=CODE_LOCAL_OUTSIDE,
             )
     if _added_characters(diff) > constants.LOCAL_EDIT_MAX_CHARS:
@@ -2025,7 +2026,8 @@ def stage_local_edit(
             )
             before_parts.append(
                 previous.get((heading, occurrence))
-                or "This part of %s was not there before." % relative
+                or "This part of %s was not there before."
+                % names.document_name(relative)
             )
             after_parts.append(body)
         # A part that is gone is described as taken out, which is all a person
@@ -2095,7 +2097,7 @@ def stage_local_edit(
         if data is None:
             raise ValidationError(
                 "GTM Base could not read %s as it stands, so it prepared "
-                "nothing." % relative,
+                "nothing." % names.document_name(relative),
                 code=CODE_UNREADABLE,
             )
         target_bytes.append(ids.bytes_hash(data))

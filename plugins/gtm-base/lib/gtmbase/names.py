@@ -16,7 +16,7 @@ from __future__ import annotations
 
 import os
 import re
-from typing import Optional
+from typing import List, Optional
 
 from . import constants
 
@@ -51,17 +51,25 @@ SEGMENT_DIRS = (constants.SEGMENTS_DIR, constants.LEGACY_SEGMENTS_DIR)
 # What a change with nothing written in it yet is called.
 CHANGE_WITHOUT_A_LINE = "the change you recorded"
 
-_SEPARATORS_RE = re.compile(r"[-_]+")
 _WHITESPACE_RE = re.compile(r"\s+")
-# What a file name may be made of before it is read aloud. A name comes out of
-# the base, and a name is read out in the middle of an instruction the
-# assistant follows, so a name carrying anything else is not repeated back. The
-# session-start hook held file names to the same rule before Unit 1.3 moved the
-# text it was guarding, and this is that rule in the one place names are made.
-_PLAIN_STEM_RE = re.compile(r"^[A-Za-z0-9 ._-]{1,80}$")
 
-# What a document with a name nobody can safely read aloud is called instead.
-DOCUMENT_WITHOUT_A_PLAIN_NAME = "one of your documents"
+# What a segment is called when a sentence names it. A segment's file name is
+# made from whatever somebody typed, and a file name short and tidy enough to
+# pass any shape check can still read as an instruction, so no segment is ever
+# named out of its file name (Unit 1.8, and Astra's confirmation of 0.3.2 for
+# the refusals about unsaved work). Where the person's own name for a segment
+# is needed, it comes from the settled inventory GTM Base keeps, never from
+# the disk.
+ONE_OF_YOUR_SEGMENTS = "one of your segments"
+SOME_OF_YOUR_SEGMENTS = "%s of your segments"
+
+# What any other document is called, for the same reason: its file name is
+# never read out. The older name is kept because two modules import it.
+ONE_OF_YOUR_DOCUMENTS = "one of your documents"
+SOME_OF_YOUR_DOCUMENTS = "%s of your documents"
+ONE_OTHER_DOCUMENT = "one other document"
+OTHER_DOCUMENTS = "%s other documents"
+DOCUMENT_WITHOUT_A_PLAIN_NAME = ONE_OF_YOUR_DOCUMENTS
 
 
 # How many, the way a person says it, up to the point a person would say the
@@ -104,11 +112,6 @@ def _normalize(path: str) -> str:
     return str(path).replace(os.sep, "/").strip().lstrip("./")
 
 
-def _words(stem: str) -> str:
-    """A file stem read as words, so `mid-market` becomes `mid market`."""
-    return _WHITESPACE_RE.sub(" ", _SEPARATORS_RE.sub(" ", stem)).strip()
-
-
 def is_segment(path: str) -> bool:
     """True when the path is one segment of the customer profile."""
     normalized = _normalize(path)
@@ -120,10 +123,12 @@ def is_segment(path: str) -> bool:
 def document_name(path: str) -> str:
     """What a person calls the context file at this path.
 
-    The two required documents and the map have names of their own. A segment
-    is named by the segment it covers. Anything else is named by the words in
-    its file name, because a person who named a file `messaging.md` calls it
-    their messaging.
+    A document the product knows by its path has a fixed name of its own. A
+    segment is "one of your segments" and any other document is "one of your
+    documents", because a file name is whatever somebody typed and no
+    sentence a person reads is ever filled from one (Unit 1.8). Only an empty
+    path is refused; a file named by its ending alone is counted like any
+    other, as it was before.
     """
     normalized = _normalize(path)
     if not normalized:
@@ -131,17 +136,64 @@ def document_name(path: str) -> str:
     known = KNOWN_DOCUMENTS.get(normalized)
     if known:
         return known
-    stem = os.path.basename(normalized)
-    if stem.endswith(".md"):
-        stem = stem[: -len(".md")]
-    if not _PLAIN_STEM_RE.fullmatch(stem):
-        return DOCUMENT_WITHOUT_A_PLAIN_NAME
-    words = _words(stem)
-    if not words:
-        raise ValueError("a document name needs a file name to work from")
     if is_segment(normalized):
-        return "your %s segment" % words
-    return "your %s" % words
+        return ONE_OF_YOUR_SEGMENTS
+    return ONE_OF_YOUR_DOCUMENTS
+
+
+def documents_named(paths, name_of=None) -> str:
+    """Several documents as a person says them, each known one by its name.
+
+    The documents the product knows are named, in the order given and each
+    once, and the segments and any other documents are counted, so a list
+    of three segments reads "three of your segments" rather than the same
+    words three times, and nothing in it is read out of a file name.
+    `name_of` is for a caller that names one document its own way, such as
+    recording a context change at any time; it defaults to `document_name`.
+    """
+    name_of = name_of or document_name
+    named: List[str] = []
+    segments = 0
+    others = 0
+    seen = set()
+    for path in paths:
+        # One document listed twice, or a segment at its older folder and its
+        # current one, is one document and is counted once.
+        normalized = _normalize(path)
+        key = (
+            "segment:" + os.path.basename(normalized)
+            if is_segment(normalized)
+            else normalized
+        )
+        if key in seen:
+            continue
+        seen.add(key)
+        name = name_of(path)
+        if name == ONE_OF_YOUR_SEGMENTS:
+            segments += 1
+        elif name == ONE_OF_YOUR_DOCUMENTS:
+            others += 1
+        elif name not in named:
+            named.append(name)
+    pieces = list(named)
+    if segments:
+        pieces.append(
+            ONE_OF_YOUR_SEGMENTS
+            if segments == 1
+            else SOME_OF_YOUR_SEGMENTS % counted(segments)
+        )
+    if others:
+        if pieces:
+            pieces.append(
+                ONE_OTHER_DOCUMENT if others == 1 else OTHER_DOCUMENTS % counted(others)
+            )
+        else:
+            pieces.append(
+                ONE_OF_YOUR_DOCUMENTS
+                if others == 1
+                else SOME_OF_YOUR_DOCUMENTS % counted(others)
+            )
+    return ", ".join(pieces)
 
 
 def change_name(
