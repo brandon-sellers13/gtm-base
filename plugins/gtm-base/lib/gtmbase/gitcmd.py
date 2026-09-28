@@ -56,7 +56,14 @@ HOOK_FREE_SETTINGS = (
     ("core.fsmonitor", "false"),
     ("commit.gpgSign", "false"),
     ("tag.gpgSign", "false"),
+    # Checking a signature runs the configured program as surely as making
+    # one does: a signed save read back with signatures shown, or an update
+    # told to check them (Astra's confirmation of 0.3.3, defect 2).
+    ("log.showSignature", "false"),
+    ("merge.verifySignatures", "false"),
 )
+# A send keeps its hooks, and runs no signing program either.
+SEND_SETTINGS = (("push.gpgSign", "false"),)
 # A send keeps its hooks. The plugin's own safeguard before anything leaves
 # this computer is a pre-push hook, and turning hooks off for a send would
 # turn that off with them.
@@ -128,7 +135,14 @@ def hook_free(args: Sequence[str]) -> List[str]:
     """
     words = [str(one) for one in args]
     index, command = subcommand_of(words)
-    if command in KEEPS_ITS_HOOKS or command in READS_ITS_SETTINGS:
+    if command in KEEPS_ITS_HOOKS:
+        # The pre-push safeguard is a hook, so the hooks stay; signing a send
+        # would run a program the base names, so that does not.
+        prefix = []
+        for name, value in SEND_SETTINGS:
+            prefix += ["-c", "%s=%s" % (name, value)]
+        return prefix + words
+    if command in READS_ITS_SETTINGS:
         return words
     if "--git-path" in words:
         # Where the hooks folder is, which the safeguard's installer asks.
@@ -172,19 +186,109 @@ def _plain(git_path: str, args: Sequence[str], cwd: Optional[str], env: dict) ->
     return finished.stdout.decode("utf-8", "replace")
 
 
-def _attribute_texts(git_path: str, cwd: Optional[str], env: dict) -> List[str]:
-    """Every attribute file git would read for this folder, as text."""
+# The most one attribute file may hold before it is refused rather than read.
+# An attribute file this long is not one anybody wrote by hand, and reading
+# part of one would be reading past the line that names a program.
+ATTRIBUTES_MAX_BYTES = 1024 * 1024
+# What stands in for a driver name when an attribute file could not be read
+# whole, so a file too long to read is refused like one that names a program.
+UNREADABLE_ATTRIBUTES = "an attribute file too large to read"
+# The commands that write files out of another tree, and so read that tree's
+# own attribute files first (Astra's confirmation of 0.3.3, defect 1).
+FROM_ANOTHER_TREE = ("worktree", "checkout", "switch", "merge", "reset", "read-tree", "restore")
+
+
+def _whole(path: str) -> Optional[str]:
+    """One attribute file on the disk, whole, or the stand-in when too long."""
+    try:
+        with open(path, "rb") as handle:
+            data = handle.read(ATTRIBUTES_MAX_BYTES + 1)
+    except OSError:
+        return None
+    if len(data) > ATTRIBUTES_MAX_BYTES:
+        return UNREADABLE_ATTRIBUTES
+    return data.decode("utf-8", "replace")
+
+
+def _blob_text(git_path: str, blob: str, cwd: Optional[str], env: dict) -> str:
+    """One attribute file saved in the history, whole, or the stand-in."""
+    size = _plain(git_path, ["cat-file", "-s", blob], cwd, env).strip()
+    if not size.isdigit() or int(size) > ATTRIBUTES_MAX_BYTES:
+        return UNREADABLE_ATTRIBUTES
+    return _plain(git_path, ["cat-file", "blob", blob], cwd, env)
+
+
+def _attribute_blobs(listing: str) -> List[str]:
+    """The saved attribute files in one NUL-separated listing of a tree or index."""
+    found: List[str] = []
+    for record in listing.split("\0"):
+        meta, tab, name = record.partition("\t")
+        if not tab or os.path.basename(name) != ".gitattributes":
+            continue
+        parts = meta.split()
+        # A tree listing is "mode type blob", an index listing "mode blob stage".
+        blob = parts[2] if len(parts) >= 3 and parts[1] == "blob" else (
+            parts[1] if len(parts) >= 2 else ""
+        )
+        if blob:
+            found.append(blob)
+    return found
+
+
+def _trees_named_by(git_path: str, args: Sequence[str], cwd: Optional[str], env: dict) -> List[str]:
+    """The trees a command would write files out of, when it names any."""
+    words = [str(one) for one in args]
+    index, command = subcommand_of(words)
+    if command not in FROM_ANOTHER_TREE:
+        return []
+    trees: List[str] = []
+    for word in words[index + 1 :]:
+        if word == "--":
+            break
+        if not word or word.startswith("-") or word == "add":
+            continue
+        tree = _plain(
+            git_path,
+            ["rev-parse", "--verify", "--quiet", "--end-of-options", word + "^{tree}"],
+            cwd,
+            env,
+        ).strip()
+        if tree and tree not in trees:
+            trees.append(tree)
+    return trees
+
+
+def _attribute_texts(
+    git_path: str, cwd: Optional[str], env: dict, args: Sequence[str] = ()
+) -> List[str]:
+    """Every attribute file git would read for this command, as text.
+
+    The files in the working folder, the one this repository keeps for
+    itself, and the one the person's own settings name, read the way git
+    reads them: a relative name is read from the top of the working folder,
+    where git runs, not from wherever this happens to be running. Then the
+    attribute files lined up to be saved, which git reads first when it
+    writes files out, and those in any tree the command would write files
+    out of, such as the tree a new working folder starts from (Astra's
+    confirmation of 0.3.3, defect 1). Every file is read whole or refused.
+    """
     texts: List[str] = []
     places: List[str] = []
     top = _plain(git_path, ["rev-parse", "--show-toplevel"], cwd, env).strip()
+    where = top or cwd or os.getcwd()
     common = _plain(git_path, ["rev-parse", "--git-common-dir"], cwd, env).strip()
-    if common and cwd and not os.path.isabs(common):
-        common = os.path.join(cwd, common)
+    if common and not os.path.isabs(common):
+        common = os.path.join(cwd or os.getcwd(), common)
     if common:
         places.append(os.path.join(common, "info", "attributes"))
-    configured = _plain(git_path, ["config", "--get", "core.attributesFile"], cwd, env).strip()
+    configured = _plain(
+        git_path, ["config", "--type=path", "--get", "core.attributesFile"], cwd, env
+    ).strip()
     if configured:
-        places.append(os.path.expanduser(configured))
+        configured = os.path.expanduser(configured)
+        if not os.path.isabs(configured):
+            configured = os.path.join(where, configured)
+        places.append(configured)
     else:
         home = env.get("XDG_CONFIG_HOME") or os.path.join(
             env.get("HOME") or os.path.expanduser("~"), ".config"
@@ -196,16 +300,24 @@ def _attribute_texts(git_path: str, cwd: Optional[str], env: dict) -> List[str]:
             if ".gitattributes" in files:
                 places.append(os.path.join(folder, ".gitattributes"))
     for place in places:
-        try:
-            with open(place, encoding="utf-8", errors="replace") as handle:
-                texts.append(handle.read(256 * 1024))
-        except OSError:
-            continue
+        text = _whole(place)
+        if text is not None:
+            texts.append(text)
+    blobs = _attribute_blobs(_plain(git_path, ["ls-files", "-s", "-z"], cwd, env))
+    for tree in _trees_named_by(git_path, args, cwd, env):
+        blobs += _attribute_blobs(
+            _plain(git_path, ["ls-tree", "-r", "-z", tree], cwd, env)
+        )
+    for blob in dict.fromkeys(blobs):
+        texts.append(_blob_text(git_path, blob, cwd, env))
     return texts
 
 
 def executable_drivers(
-    cwd: Optional[str], git_path: str = "git", env: Optional[dict] = None
+    cwd: Optional[str],
+    git_path: str = "git",
+    env: Optional[dict] = None,
+    args: Sequence[str] = (),
 ) -> List[str]:
     """The filter and merge programs this folder's attributes would run.
 
@@ -228,7 +340,11 @@ def executable_drivers(
     if not drivers:
         return []
     found: List[str] = []
-    for text in _attribute_texts(git_path, cwd, env):
+    for text in _attribute_texts(git_path, cwd, env, args):
+        if text == UNREADABLE_ATTRIBUTES:
+            if text not in found:
+                found.append(text)
+            continue
         for kind, name in _ATTRIBUTE_RE.findall(text):
             if (kind, name) in drivers and name not in found:
                 found.append(name)
@@ -291,7 +407,7 @@ class GitRunner(object):
         `executable_drivers`).
         """
         if needs_a_driver_check(args) and executable_drivers(
-            cwd, self.git_path, self.environment()
+            cwd, self.git_path, self.environment(), args
         ):
             return GitResult(DRIVER_CODE, "", CODE_EXECUTABLE_DRIVER)
         command = [self.git_path] + hook_free(args)

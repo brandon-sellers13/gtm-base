@@ -152,6 +152,23 @@ def _started(flow, argv, cwd=None):
     another. Otherwise the script starts where `support.where_a_script_runs`
     says, which is the base, or a folder linked to it on the second run.
     """
+    argv = [str(one) for one in argv]
+    if (
+        "show" in argv
+        and "--list" not in argv
+        and getattr(flow, "list_token", None)
+        and not getattr(flow, "no_token", False)
+    ):
+        # The token of the list this window was last shown, as the skill
+        # passes it back.
+        argv = argv + ["--list", flow.list_token]
+    ran = _started_as_given(flow, argv, cwd)
+    if "documents" in argv and ran[0] == 0:
+        flow.list_token = value_on(ran[1], "list")
+    return ran
+
+
+def _started_as_given(flow, argv, cwd=None):
     where = cwd or flow.cwd
     if where == flow.root:
         return run_script(argv, flow.root)
@@ -1084,6 +1101,46 @@ class TestTheListAndTheBaseAsShown(LocalCase):
         code, out, _err = self.flow.show("1", list_first=False)
         self.assertEqual(1, code)
         self.assertEqual(record_change.NO_LIST_YET, out.strip())
+
+    def test_a_list_token_nobody_was_given_is_refused(self):
+        self.flow.run(["--record-change", "documents"])
+        self.flow.list_token = "list-" + "0" * 16
+        code, out, _err = self.flow.show("1", list_first=False)
+        self.assertEqual(1, code)
+        self.assertEqual(record_change.NO_LIST_YET, out.strip())
+
+    def test_a_second_windows_list_never_replaces_the_first(self):
+        """Astra's confirmation of 0.3.3, defect 3, step by step."""
+        self.base.write("context/b/notes.md", MESSAGING_TEXT)
+        self.base.save("b")
+        # Window A is shown the list: b/notes.md is number 1.
+        self.flow.run(["--record-change", "documents"])
+        first = self.flow.list_token
+        # Window B adds a/notes.md, saves it, and is shown a list of its own.
+        self.base.write("context/a/notes.md", MESSAGING_TEXT)
+        self.base.save("a, in the other window")
+        _code, listed_b, _err = self.flow.run(["--record-change", "documents"])
+        second = self.flow.list_token
+        self.assertNotEqual(first, second)
+        self.assertEqual("1. your notes", listed(listed_b)[0])
+        # Window A chooses number 1 from the list it was shown. It is never
+        # read against window B's list, where 1 is a/notes.md.
+        self.flow.list_token = first
+        code, out, _err = self.flow.show("1", list_first=False)
+        self.assertEqual(1, code)
+        self.assertEqual(record_change.LIST_CHANGED, out.strip())
+        # Window B's own choice is read against its own list.
+        self.flow.list_token = second
+        code, out, err = self.flow.show("1", list_first=False)
+        self.assertEqual(0, code, out + err)
+        waiting = json.loads(
+            support.read(
+                os.path.join(paths.seat_dir(self.base.base_id), record_change.WAITING_FILE)
+            )
+        )
+        self.assertEqual(
+            ["context/a/notes.md"], formats.ChangeEntry.parse(waiting["text"]).affects
+        )
 
     def test_a_document_added_after_the_list_is_refused_not_substituted(self):
         self.base.write("context/b/notes.md", MESSAGING_TEXT)

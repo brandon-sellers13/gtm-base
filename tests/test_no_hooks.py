@@ -91,11 +91,21 @@ class TestTheHelper(unittest.TestCase):
 
     def test_a_send_keeps_its_hooks_and_settings_read_back_are_the_bases(self):
         for args in (
-            ["push", "origin", "main"],
             ["config", "--get", "core.hooksPath"],
             ["rev-parse", "--git-path", "hooks"],
         ):
             self.assertEqual(args, gitcmd.hook_free(args))
+        # A send keeps its hooks, and signs nothing (Astra's confirmation of
+        # 0.3.3, defect 2).
+        self.assertEqual(
+            ["-c", "push.gpgSign=false", "push", "origin", "main"],
+            gitcmd.hook_free(["push", "origin", "main"]),
+        )
+
+    def test_checking_a_signature_is_switched_off_too(self):
+        made = gitcmd.hook_free(["log", "-1"])
+        self.assertIn("log.showSignature=false", made)
+        self.assertIn("merge.verifySignatures=false", made)
 
     def test_a_difference_is_never_shown_through_a_program_the_base_names(self):
         self.assertEqual(
@@ -213,6 +223,178 @@ class TestTheSessionStartUpdateRunsNoHook(
         self.run_hook(root)
         self.assertTrue(os.path.isfile(os.path.join(root, "context", "notes", "note.md")))
         self.assertEqual([], ran(marker))
+
+
+# A stand-in for the signing program, which writes down every time it is run.
+FAKE_SIGNER = """#!/bin/sh
+echo "$@" >> '%s'
+case "$*" in *--verify*) exit 0;; esac
+cat > /dev/null
+echo "[GNUPG:] SIG_CREATED D 1 8 00 1 X" >&2
+printf -- '-----BEGIN PGP SIGNATURE-----\n\nfake\n-----END PGP SIGNATURE-----\n'
+"""
+
+
+class TestNoSignatureProgramRuns(unittest.TestCase):
+    """Astra's confirmation of 0.3.3, defect 2."""
+
+    def signer(self, sandbox):
+        marker = os.path.join(sandbox.path, "signed")
+        program = os.path.join(sandbox.path, "signer")
+        support.write(program, FAKE_SIGNER % marker)
+        os.chmod(program, 0o755)
+        return program, marker
+
+    def signed_save(self, root, program, text="signed\n"):
+        support.write(os.path.join(root, "context", "signed.md"), text)
+        support.git(["add", "-A"], cwd=root)
+        support.git(
+            [
+                "-c", "gpg.program=" + program,
+                "-c", "user.signingKey=x",
+                "commit", "-q", "-S", "-m", "a signed save",
+            ],
+            cwd=root,
+        )
+
+    def test_reading_the_history_never_checks_a_signature(self):
+        with support.Sandbox() as sandbox:
+            root, _base_id = approving.local_base(sandbox)
+            program, marker = self.signer(sandbox)
+            self.signed_save(root, program)
+            if os.path.exists(marker):
+                os.remove(marker)
+            support.git(["config", "--local", "gpg.program", program], cwd=root)
+            support.git(["config", "--local", "log.showSignature", "true"], cwd=root)
+            self.assertTrue(GitRunner().run(["log", "-1", "--format=%s"], cwd=root).ok)
+            self.assertTrue(GitRunner().run(["show", "-s", "HEAD"], cwd=root).ok)
+            self.assertEqual([], ran(marker))
+
+    def test_an_update_never_checks_a_signature(self):
+        with support.Sandbox() as sandbox:
+            base = checking.BaseFixture(sandbox)
+            base.add_entry()
+            program, marker = self.signer(sandbox)
+            other = os.path.join(sandbox.path, "other")
+            support.git(["clone", "-q", base.remote, other], cwd=sandbox.path)
+            support.git(["config", "--local", "user.email", "owner@example.com"], cwd=other)
+            support.git(["config", "--local", "user.name", "Test Owner"], cwd=other)
+            self.signed_save(other, program)
+            support.git(["push", "-q", "origin", "main"], cwd=other)
+            if os.path.exists(marker):
+                os.remove(marker)
+            support.git(["config", "--local", "gpg.program", program], cwd=base.root)
+            support.git(
+                ["config", "--local", "merge.verifySignatures", "true"], cwd=base.root
+            )
+            result = checking.run_check(base)
+            self.assertIn(stale_check.CODE_BROUGHT_UP_TO_DATE, result.codes)
+            self.assertEqual([], ran(marker))
+
+    def test_a_send_runs_its_hook_and_no_signing_program(self):
+        with support.Sandbox() as sandbox:
+            root, _base_id = sandbox.base()
+            remote = support.git(
+                ["remote", "get-url", "origin"], cwd=root
+            ).stdout.decode("utf-8").strip()
+            support.git(["config", "receive.certNonceSeed", "seed"], cwd=remote)
+            program, marker = self.signer(sandbox)
+            support.git(["config", "--local", "gpg.program", program], cwd=root)
+            support.git(["config", "--local", "user.signingKey", "x"], cwd=root)
+            support.git(["config", "--local", "push.gpgSign", "true"], cwd=root)
+            hook_ran = os.path.join(sandbox.path, "hook")
+            hook = os.path.join(root, ".git", "hooks", "pre-push")
+            support.write(hook, "#!/bin/sh\necho pre-push >> '%s'\nexit 0\n" % hook_ran)
+            os.chmod(hook, 0o755)
+            support.write(os.path.join(root, "context", "x.md"), "x\n")
+            support.git(["add", "-A"], cwd=root)
+            support.git(["commit", "-q", "-m", "x"], cwd=root)
+            self.assertTrue(GitRunner().run(["push", "-q", "origin", "main"], cwd=root).ok)
+            self.assertEqual(["pre-push"], ran(hook_ran))
+            self.assertEqual([], ran(marker))
+
+
+class TestAttributesAreReadTheWayGitReadsThem(unittest.TestCase):
+    """Astra's confirmation of 0.3.3, defect 1."""
+
+    def configure(self, root, marker):
+        program = "sh -c 'echo filter >> \"%s\"; cat'" % marker
+        for part in ("clean", "smudge"):
+            support.git(["config", "--local", "filter.evil." + part, program], cwd=root)
+
+    def test_a_relative_attributes_file_is_read_from_the_base(self):
+        with support.Sandbox() as sandbox:
+            root, _base_id = approving.local_base(sandbox)
+            marker = os.path.join(sandbox.path, "ran")
+            support.write(os.path.join(root, "tools", "attributes"), "*.md filter=evil\n")
+            support.git(["config", "--local", "core.attributesFile", "tools/attributes"], cwd=root)
+            self.configure(root, marker)
+            here = os.getcwd()
+            os.chdir(sandbox.path)
+            try:
+                self.assertEqual(["evil"], gitcmd.executable_drivers(root))
+            finally:
+                os.chdir(here)
+            support.write(os.path.join(root, "context", "new.md"), "words\n")
+            result = GitRunner().run(["add", "--", "context/new.md"], cwd=root)
+            self.assertEqual(gitcmd.DRIVER_CODE, result.code)
+            self.assertEqual([], ran(marker))
+
+    def test_an_attribute_file_too_long_to_read_whole_is_refused(self):
+        with support.Sandbox() as sandbox:
+            root, _base_id = approving.local_base(sandbox)
+            marker = os.path.join(sandbox.path, "ran")
+            padding = ("# nothing to see here\n" * 60000)
+            support.write(
+                os.path.join(root, ".gitattributes"), padding + "*.md filter=evil\n"
+            )
+            self.configure(root, marker)
+            self.assertNotEqual([], gitcmd.executable_drivers(root))
+            support.write(os.path.join(root, "context", "new.md"), "words\n")
+            result = GitRunner().run(["add", "--", "context/new.md"], cwd=root)
+            self.assertEqual(gitcmd.DRIVER_CODE, result.code)
+            self.assertEqual([], ran(marker))
+
+    def test_attributes_only_lined_up_to_be_saved_still_count(self):
+        with support.Sandbox() as sandbox:
+            root, _base_id = approving.local_base(sandbox)
+            marker = os.path.join(sandbox.path, "ran")
+            support.write(os.path.join(root, ".gitattributes"), "*.md filter=evil\n")
+            support.git(["add", "--", ".gitattributes"], cwd=root)
+            os.remove(os.path.join(root, ".gitattributes"))
+            self.configure(root, marker)
+            os.remove(os.path.join(root, "context", "strategy", "icp.md"))
+            result = GitRunner().run(
+                ["checkout", "HEAD", "--", "context/strategy/icp.md"], cwd=root
+            )
+            self.assertEqual(gitcmd.DRIVER_CODE, result.code)
+            self.assertEqual([], ran(marker))
+
+    def test_a_working_folder_made_from_a_fetched_tree_is_refused_first(self):
+        with support.Sandbox() as sandbox:
+            base = checking.BaseFixture(sandbox)
+            base.add_entry()
+            marker = os.path.join(sandbox.path, "ran")
+            other = os.path.join(sandbox.path, "other")
+            support.git(["clone", "-q", base.remote, other], cwd=sandbox.path)
+            support.git(["config", "--local", "user.email", "owner@example.com"], cwd=other)
+            support.git(["config", "--local", "user.name", "Test Owner"], cwd=other)
+            support.write(os.path.join(other, ".gitattributes"), "*.md filter=evil\n")
+            support.write(os.path.join(other, "context", "more.md"), "more\n")
+            support.git(["add", "-A"], cwd=other)
+            support.git(["commit", "-q", "-m", "attributes"], cwd=other)
+            support.git(["push", "-q", "origin", "main"], cwd=other)
+            self.configure(base.root, marker)
+            self.assertTrue(
+                GitRunner().run(["fetch", "-q", "origin", "main"], cwd=base.root).ok
+            )
+            folder = os.path.join(sandbox.path, "proposal")
+            result = GitRunner().run(
+                ["worktree", "add", "--detach", folder, "origin/main"], cwd=base.root
+            )
+            self.assertEqual(gitcmd.DRIVER_CODE, result.code)
+            self.assertFalse(os.path.exists(os.path.join(folder, "context", "more.md")))
+            self.assertEqual([], ran(marker))
 
 
 class TestAFilterTheBaseNamesIsRefused(unittest.TestCase):

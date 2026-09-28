@@ -798,6 +798,7 @@ class TestTheSkillsAsTheyAreWritten(unittest.TestCase):
         "<the shown value>": lambda self, state, command: state.get("shown"),
         # 0.3.3: recording a context change without editing a document.
         "<the numbers they chose>": lambda self, state, command: "1",
+        "<the list token>": lambda self, state, command: state.get("list_token"),
         "<year-month-day>": lambda self, state, command: "2026-01-15",
         "<the change it printed>": lambda self, state, command: state.get(
             "recorded_change"
@@ -931,6 +932,9 @@ class TestTheSkillsAsTheyAreWritten(unittest.TestCase):
             found = re.search(r"\[for the assistant\] shown=(\S+)", line)
             if found:
                 state["shown"] = found.group(1)
+            found = re.search(r"\[for the assistant\] list=(\S+)", line)
+            if found:
+                state["list_token"] = found.group(1)
             found = re.search(
                 r"\[for the assistant\] path=(\S+) change=(\S+)", line
             )

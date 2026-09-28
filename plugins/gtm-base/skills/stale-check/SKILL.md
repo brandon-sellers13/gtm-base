@@ -205,8 +205,9 @@ so this step settles which ones they are.
 2. Run `python3 scripts/stale_check.py --record-change documents`. It prints
    the documents in the base by number and name, held apart as data because
    the names come from file names, and never a map. Read the list back as it
-   stands; the numbers mean the list it printed, so if the base changes
-   before they choose, show it again.
+   stands. Keep the list token from the line marked for you: the numbers
+   mean that list and no other, so if the base changes before they choose,
+   show it again.
 3. Say which of them you think the change affects, by name, and ask:
 
 <!-- ask -->
@@ -221,7 +222,7 @@ shows the context change as its four lines. Run, with the numbers they
 settled on:
 
 ```
-python3 scripts/stale_check.py --record-change show --what-changed-file <the path it printed> --reason-file <the path it printed> --source-file <the path it printed> --documents <the numbers they chose>
+python3 scripts/stale_check.py --record-change show --what-changed-file <the path it printed> --reason-file <the path it printed> --source-file <the path it printed> --documents <the numbers they chose> --list <the list token>
 ```
 
 - Leave off `--reason-file` or `--source-file` when they gave no reason or no

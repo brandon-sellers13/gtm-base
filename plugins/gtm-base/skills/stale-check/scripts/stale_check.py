@@ -164,6 +164,9 @@ def build_parser():
         "--happened-on", help="the day it happened, as year-month-day"
     )
     parser.add_argument("--shown", help="the shown value the yes is bound to")
+    parser.add_argument(
+        "--list", help="the token of the numbered list the numbers come from"
+    )
     parser.add_argument("--change", help="the context change an answer is about")
     parser.add_argument("--document", help="the document an answer is about")
     parser.add_argument(
@@ -243,7 +246,7 @@ def record_a_change(options, resolution):
         return EXIT_DONE
 
     if step == "documents":
-        listed = record_change.show_list(root, base_id)
+        token, listed = record_change.show_list(root, base_id)
         if not listed:
             sys.stdout.write(record_change.NO_DOCUMENTS + "\n")
             return EXIT_REFUSED
@@ -256,6 +259,8 @@ def record_a_change(options, resolution):
             )
             + "\n"
         )
+        # The token the numbers are read against on the next step.
+        sys.stdout.write("   [for the assistant] list=%s\n" % token)
         return EXIT_DONE
 
     if step == "show":
@@ -272,6 +277,7 @@ def record_a_change(options, resolution):
                 source,
                 options.documents,
                 happened_on=options.happened_on,
+                list_token=options.list,
             )
         except BaseException:
             for claim in claims:

@@ -42,7 +42,6 @@ from __future__ import annotations
 
 import contextlib
 import datetime
-import fcntl
 import os
 import re
 import secrets
@@ -57,6 +56,7 @@ from . import (
     formats,
     gitcmd,
     ids,
+    locks,
     join_flow,
     moment,
     names,
@@ -93,6 +93,10 @@ LISTED_FILE = "context-change-listed.json"
 # The one lock the questions are answered under.
 LOCK_FILE = "context-change.lock"
 LOCK_WAIT_SECONDS = 5
+# Which way the lock is held; None is the way `locks` chose for this computer.
+LOCK_KIND = None
+# How many numbered lists are kept at once, one per window that asked.
+LISTS_KEPT = 20
 
 # Most characters any one of the three answers may hold. A person answering in
 # a sentence or two writes far less than this.
@@ -418,18 +422,43 @@ def documents(base_root: str) -> List[Tuple[int, str, str]]:
     return found
 
 
-def show_list(base_root: str, base_id: str) -> List[Tuple[int, str, str]]:
-    """The numbered list, kept as it was shown so a number keeps its meaning."""
+def _lists(base_id: str) -> dict:
+    kept = read_json(os.path.join(paths.seat_dir(base_id), LISTED_FILE))
+    held = kept.get("lists") if isinstance(kept, dict) else None
+    return held if isinstance(held, dict) else {}
+
+
+def show_list(base_root: str, base_id: str) -> Tuple[str, List[Tuple[int, str, str]]]:
+    """The numbered list, kept under a token of its own so a number keeps its meaning.
+
+    Every showing of the list gets its own token, which goes to the assistant
+    and back on the next step, and the numbers are read against that one list
+    and no other. A second window listing the documents gets a token of its
+    own and never replaces the first window's list (Astra's confirmation of
+    0.3.3, defect 3).
+    """
     listed = documents(base_root)
-    atomic_write_json(
-        os.path.join(paths.seat_dir(base_id), LISTED_FILE),
-        {"schema": 1, "paths": [path for _number, path, _name in listed]},
-    )
-    return listed
+    token = "list-" + secrets.token_hex(8)
+    with _locked(base_id):
+        held = _lists(base_id)
+        held[token] = {
+            "paths": [path for _number, path, _name in listed],
+            "at": time.time(),
+        }
+        newest = sorted(held.items(), key=lambda item: item[1].get("at", 0))
+        held = dict(newest[-LISTS_KEPT:])
+        atomic_write_json(
+            os.path.join(paths.seat_dir(base_id), LISTED_FILE),
+            {"schema": 2, "lists": held},
+        )
+    return token, listed
 
 
 def chosen_documents(
-    base_root: str, numbers: Sequence[str], base_id: Optional[str] = None
+    base_root: str,
+    numbers: Sequence[str],
+    base_id: Optional[str] = None,
+    token: Optional[str] = None,
 ) -> List[str]:
     """The documents the person named, by the numbers on the list they saw.
 
@@ -441,8 +470,8 @@ def chosen_documents(
     """
     current = [(number, path, name) for number, path, name in documents(base_root)]
     if base_id is not None:
-        kept = read_json(os.path.join(paths.seat_dir(base_id), LISTED_FILE))
-        shown = kept.get("paths") if isinstance(kept, dict) else None
+        snapshot = _lists(base_id).get(str(token or ""))
+        shown = snapshot.get("paths") if isinstance(snapshot, dict) else None
         if not isinstance(shown, list):
             raise _refuse(NO_LIST_YET, CODE_NO_LIST_YET)
         if [str(path) for path in shown] != [path for _n, path, _name in current]:
@@ -721,6 +750,7 @@ def preview(
     happened_on: Optional[str] = None,
     today: Optional[datetime.date] = None,
     runner: Optional[GitRunner] = None,
+    list_token: Optional[str] = None,
 ) -> Shown:
     """Show the context change as four lines, and keep it for the yes.
 
@@ -739,7 +769,7 @@ def preview(
     # yes can never land on a version the person was in the middle of
     # correcting (the correctness review of 0.3.3).
     forget_showing(base_id)
-    affects = chosen_documents(base_root, numbers, base_id)
+    affects = chosen_documents(base_root, numbers, base_id, list_token)
     # Every document the change affects is named in the four lines, whole,
     # and the list is held to the same cap the fence keeps, counted as shown.
     # A list longer than that is refused here, before anything is kept, so
@@ -829,28 +859,19 @@ def _locked(base_id: str):
     two windows can never both answer the same question or bring back one
     already answered (Astra's review of 0.3.3, finding 10).
     """
-    handle = os.open(
-        os.path.join(paths.seat_dir(base_id), LOCK_FILE),
-        os.O_CREAT | os.O_RDWR,
-        0o600,
-    )
-    deadline = time.monotonic() + LOCK_WAIT_SECONDS
+    # Through the one interface every lock goes through, which uses the
+    # operating system's own lock where it has one and a lock file where it
+    # does not (Astra's confirmation of 0.3.3, defect 4: importing `fcntl`
+    # here stopped the whole script on Windows before it ran).
     try:
-        while True:
-            try:
-                fcntl.flock(handle, fcntl.LOCK_EX | fcntl.LOCK_NB)
-                break
-            except OSError:
-                if time.monotonic() >= deadline:
-                    raise _refuse(BUSY, CODE_BUSY)
-                time.sleep(0.05)
-        yield
-    finally:
-        try:
-            fcntl.flock(handle, fcntl.LOCK_UN)
-        except OSError:
-            pass
-        os.close(handle)
+        with locks.held(
+            os.path.join(paths.seat_dir(base_id), LOCK_FILE),
+            wait_seconds=LOCK_WAIT_SECONDS,
+            kind=LOCK_KIND,
+        ):
+            yield
+    except locks.Busy:
+        raise _refuse(BUSY, CODE_BUSY)
 
 
 def _asked_path(base_id: str) -> str:
