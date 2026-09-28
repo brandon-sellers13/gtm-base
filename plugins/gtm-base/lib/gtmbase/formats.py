@@ -1489,6 +1489,7 @@ STAGING_FIELDS = (
     "first_draft",
     "target_bytes",
     "revision",
+    "wording_only",
 )
 STAGING_SCHEMA = 1
 
@@ -1530,6 +1531,7 @@ class ProposalStaging(object):
         first_draft=False,
         target_bytes=None,
         revision=0,
+        wording_only=False,
     ):
         self.schema = schema
         self.staging_id = staging_id
@@ -1565,11 +1567,19 @@ class ProposalStaging(object):
         # even when the new words are the same as the old ones, and a fresh
         # look is always needed (finding R7 of Astra's third look).
         self.revision = revision
+        # A hand edit the person said was a fix to wording only (Brandon's
+        # calls 34 and 49 of 2026-09-27). It carries no context change, writes
+        # no correction record, and is shown as the one changed line with one
+        # yes. Written only when it is true, so a prepared change from before
+        # reads exactly as it did.
+        self.wording_only = bool(wording_only)
 
     def frontmatter(self) -> Dict[str, Any]:
         fields = self._fields()
         if self.revision:
             fields["revision"] = int(self.revision)
+        if self.wording_only:
+            fields["wording_only"] = True
         return fields
 
     def _fields(self) -> Dict[str, Any]:
@@ -1673,6 +1683,9 @@ class ProposalStaging(object):
                 fields.get("target_bytes", []), "target_bytes", "proposal"
             ),
             revision=fields.get("revision", 0),
+            wording_only=_as_bool(
+                fields.get("wording_only", False), "wording_only", "proposal"
+            ),
             decision_block=decision_block,
             edits=edits,
             excerpt=excerpt,
@@ -1777,6 +1790,11 @@ class ProposalStaging(object):
                 "the excerpt is longer than we allow", code="too-long"
             )
         if self.decision_block:
+            if self.wording_only:
+                raise ValidationError(
+                    "a fix to wording only carries no context change",
+                    code="wording-only-with-a-change",
+                )
             block, _ = split_document(self.decision_block)
             parse_frontmatter(block)
         parse_pr_body(self.pr_body)

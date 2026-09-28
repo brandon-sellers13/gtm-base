@@ -1652,6 +1652,7 @@ class TestTheApprovalShowing(unittest.TestCase):
         for name in (
             "PART_NOW", "PART_NOW_NTH", "PART_AFTER", "PART_TAKEN_OUT_NOW",
             "PART_TAKEN_OUT_NTH", "CARRIES", "DIFFERENCE", "NOTHING_DIFFERENT",
+            "MARKED",
         ):
             with self.subTest(name=name):
                 text = getattr(approve_local, name)

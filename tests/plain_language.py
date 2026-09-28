@@ -999,6 +999,15 @@ PYTHON_SENTENCES = (
     ("join_flow", "DRAFT_NO_LIST"),
     ("join_flow", "DRAFT_NOT_AGREED"),
     ("join_flow", "DRAFT_LEFT_OUT"),
+    # The live-check follow-up unit (calls 33, 34 and 49): the one question a
+    # hand edit asks, the one yes a fix to wording only asks, and the two
+    # refusals a corrected fact can meet.
+    ("hand_edit", "WHY_WE_ASK"),
+    ("hand_edit", "LONG_ASK"),
+    ("hand_edit", "SHORT_ASK"),
+    ("approve_local", "WORDING_ASK"),
+    ("compose_proposal", "FACT_NOT_REPLACING"),
+    ("compose_proposal", "NOT_A_DOCUMENT_HERE"),
 )
 
 # Constants that read like a sentence but that no person ever reads. Each one

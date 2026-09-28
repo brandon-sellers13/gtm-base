@@ -939,8 +939,14 @@ class TestWhatChangedAndWhy(support.PastTheFirstBackupReview, unittest.TestCase)
     )
     TYPO = "I spelled marketers wrong."
 
-    def test_the_one_thing_it_asks_is_what_changed_and_why(self):
-        self.assertEqual("What changed, and why?", compose_proposal.LOCAL_EDIT_ASK)
+    def test_the_one_thing_it_asks_is_what_changed_why_and_where_from(self):
+        """Brandon's call 33 replaced "What changed, and why?" and its twin."""
+        from gtmbase import hand_edit
+
+        self.assertFalse(hasattr(compose_proposal, "LOCAL_EDIT_ASK"))
+        self.assertIn(
+            "why, and where did it come from?", hand_edit.SHORT_ASK
+        )
 
     def test_an_answer_about_the_business_travels_as_the_change(self):
         with support.Sandbox() as sandbox:
@@ -1175,7 +1181,7 @@ class TestTheHandEditHabitThroughTheScript(unittest.TestCase):
             source = self.words_file(sandbox, "source.txt", STATED_SOURCE)
 
             finished = self.script(
-                root, "--local-edit", "--source-file", source
+                root, "--local-edit", "--kind", "wording", "--source-file", source
             )
 
             self.assertIn(
@@ -1281,7 +1287,9 @@ class TestTheHandEditHabitThroughTheScript(unittest.TestCase):
             root, base_id = self.local_base(sandbox)
             hand_edit(root)
             source = self.words_file(sandbox, "source.txt", STATED_SOURCE)
-            raised = self.script(root, "--local-edit", "--source-file", source)
+            raised = self.script(
+                root, "--local-edit", "--kind", "wording", "--source-file", source
+            )
             self.assertIn(
                 compose_proposal.APPROVE_HERE, raised.stdout.decode("utf-8")
             )

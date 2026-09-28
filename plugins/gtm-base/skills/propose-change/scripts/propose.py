@@ -45,9 +45,14 @@ if _lib not in sys.path:
 import argparse  # noqa: E402
 
 from gtmbase import (  # noqa: E402
+    approve_local,
+    base_reader,
     compose_proposal,
+    constants,
+    hand_edit,
     machine,
     moment,
+    names,
     paths,
     state,
     wordsfile,
@@ -72,19 +77,50 @@ def build_parser():
         action="store_true",
         help="build a proposal from the change you made by hand",
     )
-    parser.add_argument("--source", help="where the change came from, in your words")
+    parser.add_argument("--source", help="what they said about it, in their words")
     parser.add_argument(
         "--source-file",
-        help="a file holding where the change came from, in their own words",
+        help="a file holding their answer: what changed, why, and where it came from",
     )
     parser.add_argument(
         "--what-changed-file",
-        help="a file holding what changed and why, in their own words",
+        help="a file holding the one line the context change is called by",
+    )
+    parser.add_argument(
+        "--kind",
+        choices=hand_edit.KINDS,
+        help="which of the three answers it was: business, fact, or wording",
+    )
+    parser.add_argument(
+        "--also-affects",
+        action="append",
+        default=[],
+        help="another document the context change affects, once for each",
     )
     parser.add_argument(
         "--records-a-change",
         action="store_true",
-        help="what they said is about the business and becomes a context change",
+        help="the older way of saying the answer was about the business",
+    )
+    parser.add_argument(
+        "--hand-edit-question",
+        action="store_true",
+        help="print the one question a hand edit asks, long or short",
+    )
+    parser.add_argument(
+        "--why",
+        action="store_true",
+        help="with the question, the long version, for why it is asked",
+    )
+    parser.add_argument(
+        "--documents",
+        action="store_true",
+        help="list the documents in the base, one line each, for the assistant",
+    )
+    parser.add_argument(
+        "--hand-edit-difference",
+        action="store_true",
+        help="print what was changed by hand, marked, and prepare nothing",
     )
     parser.add_argument("--reopen", help="raise a kept proposal again by its id")
     parser.add_argument(
@@ -106,6 +142,15 @@ NEEDS_THE_WORDS = (
     "A context change needs what they said about what changed. Write it to a "
     "file and run this again with the path to it."
 )
+NEEDS_THE_ANSWER = (
+    "Say what they said about the change, in their own words, with the file "
+    "this skill handed out for it."
+)
+NEEDS_THE_KIND = (
+    "Say which of the three answers it was: the business changed, a fact was "
+    "corrected, or only the wording."
+)
+NOTHING_BY_HAND = "Nothing in this base has been changed by hand."
 
 
 def words_from(path, session):
@@ -172,6 +217,45 @@ def main(argv=None):
         sys.stdout.write(text + "\n")
         return EXIT_DONE
 
+    if options.documents:
+        here = os.getcwd()
+        resolution = paths.resolve_base(here, machine.load_machine_state())
+        if not resolution.active or not resolution.root or not resolution.base_id:
+            sys.stderr.write(NOT_JOINED + "\n")
+            return EXIT_ERROR
+        # One line each, marked for the assistant: the path is what it reads a
+        # document by, and the name is what it calls the document out loud.
+        for info in base_reader.context_files(resolution.root):
+            if info.path == constants.MAP_PATH:
+                continue
+            sys.stdout.write(
+                "[for the assistant] document=%s name=%s\n"
+                % (info.path, names.document_name(info.path))
+            )
+        return EXIT_DONE
+
+    if options.hand_edit_question or options.hand_edit_difference:
+        here = os.getcwd()
+        resolution = paths.resolve_base(here, machine.load_machine_state())
+        if not resolution.active or not resolution.root or not resolution.base_id:
+            sys.stderr.write(NOT_JOINED + "\n")
+            return EXIT_ERROR
+        if options.hand_edit_question:
+            sys.stdout.write(
+                hand_edit.question(resolution.base_id, why=options.why) + "\n"
+            )
+            return EXIT_DONE
+        try:
+            shown = approve_local.hand_edit_difference(resolution.root)
+        except GtmBaseError as failure:
+            sys.stderr.write(str(failure) + "\n")
+            return EXIT_REFUSED
+        if not shown:
+            sys.stdout.write(NOTHING_BY_HAND + "\n")
+            return EXIT_DONE
+        sys.stdout.write(shown + "\n")
+        return EXIT_DONE
+
     if options.new_words_file:
         here = os.getcwd()
         resolution = paths.resolve_base(here, machine.load_machine_state())
@@ -213,17 +297,20 @@ def main(argv=None):
             # they are for the next attempt once the document is renamed.
             compose_proposal.refuse_a_name_with_a_space(resolution.root)
             session = a_session(resolution.base_id)
+            kind = options.kind
+            if kind is None and options.records_a_change:
+                kind = hand_edit.KIND_BUSINESS
+            if kind is None:
+                sys.stderr.write(NEEDS_THE_KIND + "\n")
+                return EXIT_ERROR
             source = options.source
             if options.source_file:
                 source = words_from(options.source_file, session)
                 if source is None:
                     sys.stdout.write(wordsfile.NOT_OURS + "\n")
                     return EXIT_REFUSED
-            if not source:
-                sys.stderr.write(
-                    "Say where the change came from, in your own words, so the "
-                    "reviewer can see the evidence.\n"
-                )
+            if not source and kind != hand_edit.KIND_WORDING:
+                sys.stderr.write(NEEDS_THE_ANSWER + "\n")
                 return EXIT_ERROR
             what_changed = None
             if options.what_changed_file:
@@ -231,7 +318,7 @@ def main(argv=None):
                 if what_changed is None:
                     sys.stdout.write(wordsfile.NOT_OURS + "\n")
                     return EXIT_REFUSED
-            if options.records_a_change and not what_changed:
+            if kind in hand_edit.RECORDS_A_CHANGE and not what_changed:
                 sys.stdout.write(NEEDS_THE_WORDS + "\n")
                 return EXIT_REFUSED
             staged = compose_proposal.stage_local_edit(
@@ -239,7 +326,8 @@ def main(argv=None):
                 resolution.base_id,
                 source,
                 what_changed=what_changed,
-                records_a_change=bool(options.records_a_change),
+                kind=kind,
+                also_affects=list(options.also_affects or []),
             )
             result = compose_proposal.propose(
                 staged, resolution.root, resolution.base_id

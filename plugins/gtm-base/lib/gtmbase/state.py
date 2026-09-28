@@ -359,6 +359,10 @@ SEAT_DEFAULTS = {
     # changes in. Asking for the review twice in one sitting mentions it once,
     # which is what requirement P17 means by at most once a session.
     "quiet_record_said_in_session": None,
+    # How many hand edits this person has kept in this base on this computer.
+    # The question a hand edit asks is explained in full the first three times
+    # and asked short from the fourth (Brandon's call 33, 2026-09-27).
+    "hand_edits_kept": 0,
 }
 
 # How long a week is, for the one line a week.
@@ -475,6 +479,10 @@ def load_seat(base_id: str) -> Tuple[dict, List[str]]:
     seat["pending_confirmations"] = _clean_pending_confirmations(
         seat.get("pending_confirmations"), problems
     )
+    kept = seat.get("hand_edits_kept")
+    if isinstance(kept, bool) or not isinstance(kept, int) or kept < 0:
+        seat["hand_edits_kept"] = 0
+        problems.append("bad-value")
     for key, value in list(seat.items()):
         if isinstance(value, str) and looks_like_a_secret(value):
             seat[key] = "redacted"

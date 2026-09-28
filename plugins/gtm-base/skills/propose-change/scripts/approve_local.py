@@ -108,6 +108,11 @@ def build_parser():
         help="read the whole prepared change, and nothing else",
     )
     parser.add_argument(
+        "--whole",
+        action="store_true",
+        help="with --show, the whole text of a hand edit rather than the changed lines",
+    )
+    parser.add_argument(
         "--approve", action="store_true", help="apply the change that was shown"
     )
     parser.add_argument(
@@ -300,7 +305,9 @@ def main(argv=None):
                 staged, resolution.root, resolution.base_id, options.shown
             )
         else:
-            result = approve_local.show(staged, resolution.root, resolution.base_id)
+            result = approve_local.show(
+                staged, resolution.root, resolution.base_id, whole=options.whole
+            )
     except GtmBaseError as failure:
         sys.stderr.write(str(failure) + "\n")
         return EXIT_REFUSED

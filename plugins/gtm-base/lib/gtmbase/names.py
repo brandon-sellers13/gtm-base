@@ -109,20 +109,35 @@ def document_name(path: str) -> str:
     return "your %s" % words
 
 
-def change_name(first_line: Optional[str], happened_on: Optional[str] = None) -> str:
+def change_name(
+    first_line: Optional[str], happened_on: Optional[str] = None, whole: bool = False
+) -> str:
     """What a person calls one context change: its first line and its date.
 
     The first line is the sentence the person gave. The date is the day the
     change happened, not the day it was written down, because the day it
-    happened is the one they remember.
+    happened is the one they remember. A line read as "What changed:" is read
+    whole, because a line cut short there stopped in the middle of a number
+    (the 0.3.1 live check, step 5, finding 3).
     """
-    line = _first_sentence(first_line)
+    line = first_line_of(first_line) if whole else _first_sentence(first_line)
     day = (happened_on or "").strip()
     if not line:
         line = CHANGE_WITHOUT_A_LINE
     if day:
         return "%s (%s)" % (line, day)
     return line
+
+
+def first_line_of(body: Optional[str]) -> str:
+    """The opening line of a change, whole, with its heading marks taken off."""
+    if not body:
+        return ""
+    for raw in str(body).splitlines():
+        line = _WHITESPACE_RE.sub(" ", raw).strip().lstrip("#").strip()
+        if line:
+            return line
+    return ""
 
 
 def _first_sentence(body: Optional[str]) -> str:

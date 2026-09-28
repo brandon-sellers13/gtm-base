@@ -96,7 +96,7 @@ def fix_the_comma(root):
     edit(root, "Buyers who try it, buy it.", "Buyers who try it buy it.")
 
 
-def run(script, root, *arguments):
+def run_script(script, root, *arguments):
     finished = subprocess.run(
         [sys.executable, script] + [str(item) for item in arguments],
         cwd=support.where_a_script_runs(root),
@@ -113,7 +113,7 @@ def run(script, root, *arguments):
 
 def handed(root, kind, text):
     """A words file of one kind, handed out by the script, holding the text."""
-    code, printed, errors = run(PROPOSE, root, "--new-words-file", kind)
+    code, printed, errors = run_script(PROPOSE, root, "--new-words-file", kind)
     assert code == 0, printed + errors
     path = [
         line[len("words=") :].strip()
@@ -198,15 +198,15 @@ class TestTheOneQuestion(unittest.TestCase):
     def test_the_script_asks_it(self):
         with support.Sandbox() as sandbox:
             root, base_id = a_base(sandbox)
-            code, printed, errors = run(PROPOSE, root, "--hand-edit-question")
+            code, printed, errors = run_script(PROPOSE, root, "--hand-edit-question")
             self.assertEqual(0, code, errors)
             self.assertEqual(
                 hand_edit.WHY_WE_ASK + "\n\n" + hand_edit.LONG_ASK, printed.strip()
             )
             state.update_seat(base_id, hand_edits_kept=3)
-            code, printed, _errors = run(PROPOSE, root, "--hand-edit-question")
+            code, printed, _errors = run_script(PROPOSE, root, "--hand-edit-question")
             self.assertEqual(hand_edit.SHORT_ASK, printed.strip())
-            code, printed, _errors = run(
+            code, printed, _errors = run_script(
                 PROPOSE, root, "--hand-edit-question", "--why"
             )
             self.assertEqual(
@@ -384,7 +384,7 @@ class TestTheThreeAnswers(unittest.TestCase):
             correct_the_fact(root)
             answer = handed(root, "source", FACT_ANSWER)
             line = handed(root, "what-changed", FACT_LINE)
-            code, printed, errors = run(
+            code, printed, errors = run_script(
                 PROPOSE, root, "--local-edit", "--kind", "fact",
                 "--source-file", answer, "--what-changed-file", line,
                 "--also-affects", POSITIONING,
@@ -399,7 +399,7 @@ class TestTheThreeAnswers(unittest.TestCase):
         with support.Sandbox() as sandbox:
             root, _base_id = a_base(sandbox)
             fix_the_comma(root)
-            code, printed, errors = run(
+            code, printed, errors = run_script(
                 PROPOSE, root, "--local-edit", "--kind", "wording"
             )
             self.assertEqual(0, code, printed + errors)
@@ -409,11 +409,11 @@ class TestTheThreeAnswers(unittest.TestCase):
         with support.Sandbox() as sandbox:
             root, _base_id = a_base(sandbox)
             correct_the_fact(root)
-            code, printed, errors = run(PROPOSE, root, "--hand-edit-difference")
+            code, printed, errors = run_script(PROPOSE, root, "--hand-edit-difference")
             self.assertEqual(0, code, errors)
             self.assertIn(
-                "We hold data on [took out: 500k drivers a year][put in: over 1 "
-                "million drivers since 2017].",
+                "We hold data on [took out: 500k][put in: over 1 million] drivers "
+                "[took out: a year][put in: since 2017].",
                 printed,
             )
             self.assertIn("## What we sell", printed)
@@ -445,8 +445,8 @@ class TestTheShowingOfAHandEdit(unittest.TestCase):
             shown = approve_local.show(staged, root, base_id, runner=runner, now=TODAY)
 
             marked = (
-                "We hold data on [took out: 500k drivers a year][put in: over 1 "
-                "million drivers since 2017]."
+                "We hold data on [took out: 500k][put in: over 1 million] drivers "
+                "[took out: a year][put in: since 2017]."
             )
             self.assertEqual(1, shown.artifact.count(marked), shown.artifact)
             self.assertIn("## What we sell", shown.artifact)
@@ -476,7 +476,7 @@ class TestTheShowingOfAHandEdit(unittest.TestCase):
         with support.Sandbox() as sandbox:
             root, base_id = a_base(sandbox)
             staged = self.stage_the_fact(root, base_id, NoRemoteRunner())
-            code, printed, errors = run(
+            code, printed, errors = run_script(
                 APPROVE, root, "--staging", staged, "--show", "--whole"
             )
             self.assertEqual(0, code, errors)

@@ -327,6 +327,7 @@ class TestTheSecondRunCoversEveryClassThatStartsAScript(unittest.TestCase):
         "test_import_astra_merged": ("run_script",),
         "test_os_clutter": ("run_in",),
         "test_segments_left_to_draft": ("run_script",),
+        "test_live_check_follow_up": ("run_script", "handed"),
     }
 
     def listed(self):
