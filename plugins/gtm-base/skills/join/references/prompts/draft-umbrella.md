@@ -69,10 +69,23 @@ Every other segment gets a real paragraph and never that sentence.
 - Never go into a segment's detail. Its own document holds that, and this one
   is the view across all of them.
 
+## Definitions, never tracking
+
+This document defines. It never tracks. Customers, deals, deal stages, deal
+values, next steps, and the pipeline belong in the company's CRM, and none of
+them is ever written here, even when the sources carry them. So never write a
+deal value, a deal stage, a next step, a prospect or a list of prospects, or an
+instruction to contact anybody. Leave each one out rather than rewording it.
+
+A named customer appears only as evidence. Name a customer only in the
+sentence whose claim about the profile it proves, and never as an account
+to work, a deal to close, or somebody to contact.
+
 ## Rules
 
 - Be specific. Keep the customer names, the figures, the job titles, and the
-  dates that the sources carry, and use them.
+  dates that the sources carry, and use them, with every customer named as
+  evidence the way the section above says.
 - Never carry a person's contact details across. No email addresses, no phone
   numbers, no personal handles, whoever they belong to. Company names, customer
   names, and numbers stay. Contact details do not.

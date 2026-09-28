@@ -149,6 +149,73 @@ class TestThePositioningPromptPutsTheirWordsFirst(unittest.TestCase):
         )
 
 
+class TestTheDocumentPromptsWriteDefinitionsNeverTracking(unittest.TestCase):
+    """Brandon's call 54, decided 2026-09-27.
+
+    A context document holds definitions and never tracking. Customers, deals,
+    deal stages and values, and the pipeline live in the CRM, and a named
+    customer appears in a context document only as evidence. The four prompts
+    that draft a context document say so; the one that drafts a context change
+    records what happened and is not one of them.
+    """
+
+    DOCUMENT_STEPS = (
+        drafting.STEP_ICP,
+        drafting.STEP_UMBRELLA,
+        drafting.STEP_SEGMENT,
+        drafting.STEP_POSITIONING,
+    )
+
+    def test_each_document_prompt_forbids_pipeline_state(self):
+        for step in self.DOCUMENT_STEPS:
+            text = prompt(step)
+            self.assertIn("## Definitions, never tracking", text, step)
+            self.assertLess(
+                text.index("## Definitions, never tracking"),
+                text.index("## Rules"),
+                step,
+            )
+            words = flat(text)
+            self.assertIn("belong in the company's CRM", words, step)
+            self.assertIn(
+                "never write a deal value, a deal stage, a next step, a "
+                "prospect or a list of prospects, or an instruction to contact "
+                "anybody",
+                words,
+                step,
+            )
+            self.assertIn("Leave each one out rather than rewording it", words, step)
+
+    def test_each_document_prompt_names_a_customer_only_as_evidence(self):
+        for step in self.DOCUMENT_STEPS:
+            words = flat(prompt(step))
+            self.assertIn("A named customer appears only as evidence", words, step)
+            self.assertIn(
+                "never as an account to work, a deal to close, or somebody to "
+                "contact",
+                words,
+                step,
+            )
+
+    def test_where_the_evidence_goes_is_named_for_segments_and_positioning(self):
+        self.assertIn(
+            "proof that this segment is real, in a section with the level two "
+            "heading Proof",
+            flat(prompt(drafting.STEP_SEGMENT)),
+        )
+        self.assertIn(
+            "beside the claim it supports, under the heading What makes it "
+            "different",
+            flat(prompt(drafting.STEP_POSITIONING)),
+        )
+
+    def test_keeping_customer_names_is_tied_to_the_evidence_rule(self):
+        for step in self.DOCUMENT_STEPS:
+            words = flat(prompt(step))
+            self.assertIn("Keep the customer names", words, step)
+            self.assertIn("the way the section above says", words, step)
+
+
 class TestEveryPlaceholderTheLibraryFillsIsUsed(unittest.TestCase):
     """A placeholder nothing fills is a rule the assistant never sees."""
 

@@ -92,10 +92,24 @@ altogether.
 4. **Trigger events.** What happens at one of these companies just before they
    go looking for something like this.
 
+## Definitions, never tracking
+
+This document defines. It never tracks. Customers, deals, deal stages, deal
+values, next steps, and the pipeline belong in the company's CRM, and none of
+them is ever written here, even when the sources carry them. So never write a
+deal value, a deal stage, a next step, a prospect or a list of prospects, or an
+instruction to contact anybody. Leave each one out rather than rewording it.
+
+A named customer appears only as evidence. Name a customer only as proof
+that this segment is real, in a section with the level two heading Proof,
+written only when the sources name customers in this segment, and never as
+an account to work, a deal to close, or somebody to contact.
+
 ## Rules
 
 - Be specific. Keep the customer names, the figures, the job titles, and the
-  dates that the sources carry, and use them. A segment that could describe any
+  dates that the sources carry, and use them, with every customer named as
+  proof the way the section above says. A segment that could describe any
   company is a segment nobody will confirm.
 - Never carry a person's contact details across. No email addresses, no phone
   numbers, no personal handles, whoever they belong to. Company names, customer
