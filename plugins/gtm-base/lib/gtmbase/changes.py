@@ -173,16 +173,16 @@ EVERY_SEAT_FIRST_ONE = (
     "GTM Base %(version)s introduced the current layout, which keeps "
     "documents, context changes, and records in new places. Your base still "
     "keeps %(what)s in the older place. Everyone who opens this base has to be "
-    "on the current version of GTM Base before it moves, because an older one "
-    "would read the moved base as empty. Tell me once that is true and I will "
+    "on the current version of GTM Base before anything moves, because an "
+    "older one would read the moved base as empty. Tell me once that is true and I will "
     "move it."
 )
 EVERY_SEAT_FIRST_MANY = (
     "GTM Base %(version)s introduced the current layout, which keeps "
     "documents, context changes, and records in new places. Your base still "
     "keeps %(what)s in the older places. Everyone who opens this base has to "
-    "be on the current version of GTM Base before they move, because an older "
-    "one would read the moved base as empty. Tell me once that is true and I "
+    "be on the current version of GTM Base before anything moves, because an "
+    "older one would read the moved base as empty. Tell me once that is true and I "
     "will move them."
 )
 # Said instead of the offer on a base other people can reach. Everyone who
