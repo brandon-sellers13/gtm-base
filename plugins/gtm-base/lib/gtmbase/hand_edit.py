@@ -41,8 +41,8 @@ WHY_WE_ASK = (
 LONG_ASK = (
     "So, in a sentence or two: what changed (in the business, or in a fact you "
     "state about it), why, and where did it come from? If this was only a "
-    "wording fix and nothing about the business changed, just say so and "
-    "nothing is recorded."
+    "wording fix, with nothing changed in the business or in any fact you "
+    "state, just say so and nothing is recorded."
 )
 # From the fourth hand edit a person keeps.
 SHORT_ASK = (

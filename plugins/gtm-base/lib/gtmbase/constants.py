@@ -761,8 +761,8 @@ ALL_CORRECTIONS_DIRS = (CORRECTIONS_DIR, LEGACY_CORRECTIONS_DIR)
 # Both are read; only the second is ever written.
 # The version of GTM Base that introduced the current layout, which the offer
 # to move a base names in the way release notes would (Brandon's call 40,
-# 2026-09-27). Release B brings the layout in, and its version is set when
-# Release B is versioned.
+# 2026-09-27). Release B brings the layout in, and Brandon confirmed on
+# 2026-09-27 that Release B ships as 0.4.0 (call 51).
 CURRENT_LAYOUT_VERSION = "0.4"
 LEGACY_DOCUMENT_PATHS = (
     ("context/plan/goals.md", "context/goals.md"),
