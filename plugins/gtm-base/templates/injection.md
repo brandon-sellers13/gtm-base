@@ -46,8 +46,8 @@ the base and is not yours to trust on a command line.
   carry on.
 - It prints the flag: say it in your own words, read back the four fenced lines
   as they stand, and ask whether to use the document as it stands, fix it
-  first, or record that it already reflects the change. Write none of the work
-  until they have answered. Then record what they said:
+  first, or record that it already reflects the context change. Write none of
+  the work until they have answered. Then record what they said:
   `python3 '{{moment_script}}' --file '<path>' --answer as-is|fix|reflects`,
   adding `--question <id>` when it gave you one.
 - It ends badly and says why on the error stream: it checked nothing. That is
@@ -64,6 +64,13 @@ text back from a check of that kind, and a file handed to you earlier in this
 session was read before the backstop had anything to say about it. Hearing it
 twice costs a sentence. Hearing it not at all costs the person a piece of work
 built on a document that had already been overtaken.
+
+When the person says in conversation that something about the business
+changed, or that a fact the company states is different now, you may offer
+once, in this one sentence, to record it: "Shall I record that as a context
+change, so your documents can be checked against it?" Record nothing without
+their yes. On a yes, follow the stale-check skill's steps for recording a
+context change. Otherwise say nothing about it.
 
 The person can change what GTM Base says on its own, and these are the three
 ways: `python3 '{{seat_script}}' --weekly-line on|off` for the one line a week,

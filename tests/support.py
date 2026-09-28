@@ -134,6 +134,53 @@ class NoRemoteRunner(object):
         return self.inner.check(args, cwd=cwd, timeout=timeout, input=input)
 
 
+class SaveFailingRunner(object):
+    """The real runner, with the save made to go wrong in one chosen way.
+
+    `meanwhile` runs just before the save is attempted, standing in for
+    another window. With `really_saves` the save goes through and is still
+    reported as failed, which is a save that timed out after it finished.
+    Since 0.3.3 no hook in a base runs, so a refusing hook can no longer
+    stand in for a failed save, and this does instead.
+    """
+
+    def __init__(self, meanwhile=None, really_saves=False):
+        from gtmbase.gitcmd import GitRunner
+
+        self.inner = GitRunner()
+        self.meanwhile = meanwhile
+        self.really_saves = really_saves
+
+    def run(self, args, cwd=None, timeout=20, input=None):
+        words = [str(one) for one in args]
+        # The command is the first word that is not an option or the value of
+        # a `-c` before it.
+        command = next(
+            (
+                word
+                for number, word in enumerate(words)
+                if not word.startswith("-")
+                and (number == 0 or words[number - 1] not in ("-c", "-C"))
+            ),
+            "",
+        )
+        if command == "commit":
+            if self.meanwhile is not None:
+                self.meanwhile()
+            if self.really_saves:
+                self.inner.run(args, cwd=cwd, timeout=timeout, input=input)
+            return GitResult(1, "", "failed")
+        return self.inner.run(args, cwd=cwd, timeout=timeout, input=input)
+
+    def check(self, args, cwd=None, timeout=20, input=None):
+        from gtmbase.errors import GitError
+
+        result = self.run(args, cwd=cwd, timeout=timeout, input=input)
+        if not result.ok:
+            raise GitError("git-failed", code="git-failed", result=result)
+        return result
+
+
 class CountingRunner(object):
     """The real runner, with every call and the folder it ran in written down."""
 

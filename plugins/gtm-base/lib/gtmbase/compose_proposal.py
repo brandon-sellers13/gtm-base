@@ -1459,8 +1459,14 @@ def parts_of(base_root: str, staging) -> List[Tuple[str, str, int]]:
     """
     found: List[Tuple[str, str, int]] = []
     for relative in edited_paths(staging):
+        # A change prepared before the base was moved to the current layout
+        # names the document at its older place. Its parts are read where the
+        # document lives now, and the path stays the one the change names, so
+        # the prepared change keeps agreeing with itself and the approval
+        # follows the move as it always does.
+        where = layout.where_it_lives(base_root, relative)
         text = read_text(
-            os.path.join(base_root, relative.replace("/", os.sep))
+            os.path.join(base_root, where.replace("/", os.sep))
         ) or ""
         lines = text.split("\n")
         seen: Dict[str, int] = {}
@@ -1557,7 +1563,8 @@ def _summary_follows(base_root: str, staging, words: str) -> None:
     fields["after"] = _WHITESPACE_RE.sub(" ", str(words)).strip() or fields["after"]
     edit = staging.edits[0] if staging.edits else None
     if edit is not None and edit.op == "replace":
-        text = read_text(os.path.join(base_root, str(edit.path).replace("/", os.sep)))
+        where = layout.where_it_lives(base_root, str(edit.path))
+        text = read_text(os.path.join(base_root, where.replace("/", os.sep)))
         if text is not None:
             lines = text.split("\n")
             index = find_heading(

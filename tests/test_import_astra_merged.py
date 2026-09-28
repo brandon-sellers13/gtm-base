@@ -127,8 +127,8 @@ class TestOneRollbackAtATime(recovery.RecoveryCase):
             os.path.dirname(segments.import_path(company.base_id)), join_flow.WRITING_LOCK
         )
 
-        def quickly(path):
-            return fsutil.HeldLock(path, wait_seconds=0.2)
+        def quickly(path, **options):
+            return fsutil.HeldLock(path, wait_seconds=0.2, **options)
 
         with fsutil.HeldLock(lock):
             with mock.patch.object(join_flow, "HeldLock", quickly):

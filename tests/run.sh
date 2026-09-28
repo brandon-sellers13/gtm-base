@@ -89,6 +89,29 @@ python3 -m unittest -v \
   test_live_check_follow_up.TestTheOneQuestion \
   test_live_check_follow_up.TestTheThreeAnswers \
   test_live_check_follow_up.TestTheShowingOfAHandEdit \
-  test_live_check_follow_up.TestTheLookBeforeTheMove
+  test_live_check_follow_up.TestTheLookBeforeTheMove \
+  test_record_change.TestTheWholeFlowThroughTheScript \
+  test_record_change.TestNothingIsWrittenBeforeTheYes \
+  test_record_change.TestTheAsk \
+  test_record_change.TestTheDocuments \
+  test_record_change.TestTheWords \
+  test_record_change.TestNamesTheBaseCannotVouchFor \
+  test_record_change.TestTheKeptChangeIsReadAgain \
+  test_record_change.TestTheSaveGoingWrong \
+  test_record_change.TestEveryNameIsHeldApart \
+  test_record_change.TestEveryDocumentIsShown \
+  test_record_change.TestTheListAndTheBaseAsShown \
+  test_record_change.TestTheQuestionIsAboutTheChangeAsWritten \
+  test_record_change.TestOneAnswerAtATime \
+  test_record_change.TestAnEarlyRefusalForgetsTheShowing \
+  test_record_change.TestAMapIsAMapWhereverItSits \
+  test_record_change.TestTheIdentifier \
+  test_record_change.TestBothLayouts \
+  test_record_change.TestABaseWithASharedCopy \
+  test_record_change.TestWhatStandsInTheWay \
+  test_record_change.TestFromALinkedFolderEveryTime \
+  test_record_change.TestTheCurrentLayout \
+  test_record_change.TestTheLocksAreTheOneSystem \
+  test_locks.TestTheQuestionsUnderTheLockFile
 nothing_written_to_a_seat_nobody_made
 rm -rf "$UNOWNED_SEAT"
