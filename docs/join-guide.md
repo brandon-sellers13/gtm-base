@@ -45,10 +45,10 @@ version. Either way nothing is touched until you say so, and if you say not
 now it stops asking for a month.
 
 You can see exactly where you stand before deciding anything. Ask for a check
-of the move and GTM Base says what it would do, how many of your documents,
-context changes, and records it would move, and whether it would offer it at
-all. That reads your base and writes nothing, so it is safe to run whenever you
-like. If anything in your base would stop the move, it names the file rather
+of the move and GTM Base says what it would do and how many of your documents,
+context changes, and records it would move, and when it would not offer the
+move, it says why. That reads your base and writes nothing, so it is safe to
+run whenever you like. If anything in your base would stop the move, it names the file rather
 than the problem in general, so you know where to look. The move never
 overwrites anything: if a second copy of a document already sits where the
 move would put it, and the two say different things, it stops and asks you
@@ -113,7 +113,9 @@ saved until you say yes to it, and your yes is to exactly what you were
 shown. A document holding an email address, a phone number, or something
 shaped like a key, one whose headings a later change could not find, or one
 covering more than the part of the company your base is for is not taken in,
-and you are offered a draft of that segment instead.
+and you are offered a draft of that segment instead. If you take that offer
+and the draft is not finished before the end of setup, the segment is kept to
+draft later like any other.
 
 If a session stops while your finished documents are being taken in, even in
 the middle of saving one of them, nothing is lost and nothing is saved twice.
@@ -135,7 +137,10 @@ again. You can add a folder or drop a file first. If that document is gone,
 or you named none, you are told so and asked to name the folder that holds
 its material or leave the segment out, because nothing is drafted from
 nothing. The draft is shown whole and approved exactly as in setup, and a
-segment you leave out is never offered again.
+segment you leave out is never offered again. When your customer profile
+already names a segment you leave out, a change saying it is left out is
+prepared for you to approve in your next review; the profile is never
+rewritten without your yes.
 
 A draft sometimes leaves a question only you can answer, marked in it where it
 comes up. You are told how many there are before you read it, and you can

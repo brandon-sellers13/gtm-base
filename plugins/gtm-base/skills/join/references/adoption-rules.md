@@ -59,7 +59,9 @@ original or the cleaned file changes afterwards, the page is shown again.
 
 A page that breaks a rule is refused with one sentence naming what was found,
 never the value, and the offer to draft that segment from their material
-instead. Taking that offer drafts the segment exactly as a segment is drafted.
+instead. Taking that offer drafts the segment exactly as a segment is drafted,
+and from then on it is a segment to draft like any other: one not drafted
+before the closing is kept, and a later session drafts it after a fresh yes.
 
 ## Afterwards
 

@@ -901,6 +901,9 @@ PYTHON_SENTENCES = (
     # that would collide, the questions a draft leaves open, the review line
     # for each, answering one, and the refusals while one is open.
     ("constants", "UMBRELLA_PENDING_SENTENCE"),
+    ("constants", "UMBRELLA_LEFT_OUT_SENTENCE"),
+    ("join_flow", "UMBRELLA_CHANGE_WAITING"),
+    ("join_flow", "UMBRELLA_CHANGE_WHY"),
     ("segments", "FILE_TAKEN"),
     ("segments", "FOLDER_NOT_ORDINARY"),
     ("join_flow", "DRAFT_HAS_ONE_QUESTION"),

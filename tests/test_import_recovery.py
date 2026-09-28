@@ -471,16 +471,20 @@ class TestStoppingBetweenPages(RecoveryCase):
             company.run, segments.slug_for(ORDER[1]), company.root
         )
         self.assertEqual(join_flow.LEFT_OUT_SAID, said)
-        # A page the contract refuses is kept as refused, with its offer to draft.
+        # A page the contract refuses is kept as a segment to draft instead,
+        # which is its offer to draft (Brandon's call 37).
         with io.open(company.pages[ORDER[2]], "a", encoding="utf-8") as handle:
             handle.write("\n## Firmographics\n\nThe same heading twice.\n")
         with self.assertRaises(adopt.AdoptionRefused):
             show(company.run, company, ORDER[2])
         record = segments.load_import(company.base_id)
         self.assertEqual(segments.STATE_LEFT_OUT, record.state_of(segments.slug_for(ORDER[1])))
-        self.assertEqual(segments.STATE_REFUSED, record.state_of(segments.slug_for(ORDER[2])))
+        self.assertEqual(
+            segments.STATE_DRAFT_INSTEAD, record.state_of(segments.slug_for(ORDER[2]))
+        )
         _run, resumed = self.resume()
         self.assertEqual(list(ORDER[3:]), [s.name for s in resumed.to_show])
+        self.assertEqual([ORDER[2]], [s.name for s in resumed.to_draft])
         # Leaving a saved page out changes nothing about it.
         join_flow.adoption_leave_out(company.run, segments.slug_for(ORDER[0]), company.root)
         record = segments.load_import(company.base_id)
@@ -1224,8 +1228,9 @@ class TestTheYesBindsToTheBytesShown(RecoveryCase):
                 show(run_two, company, name)
         self.assertEqual(adopt.CODE_SCREENED, caught.exception.code)
         self.assertIsNone(company.read(company.destination(name)))
+        # Refused by the contract, so it is drafted instead (call 37).
         self.assertEqual(
-            segments.STATE_REFUSED,
+            segments.STATE_DRAFT_INSTEAD,
             segments.load_import(company.base_id).state_of(segments.slug_for(name)),
         )
 

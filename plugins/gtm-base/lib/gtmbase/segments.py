@@ -670,7 +670,19 @@ STATE_APPROVED = "approved"
 STATE_COMMITTED = "committed"
 STATE_LEFT_OUT = "left-out"
 STATE_REFUSED = "refused"
-STORED_STATES = (STATE_APPROVED, STATE_COMMITTED, STATE_LEFT_OUT, STATE_REFUSED)
+# A finished page the adoption contract refused, whose segment is drafted
+# instead. It is a segment to draft like any other from then on, so one not
+# drafted before the closing is kept and finished by a later session
+# (Brandon's call 37, 2026-09-27). Every state it moves on to carries the mark
+# `instead`, so it is never taken back for a page to adopt.
+STATE_DRAFT_INSTEAD = "draft-instead"
+STORED_STATES = (
+    STATE_APPROVED,
+    STATE_COMMITTED,
+    STATE_LEFT_OUT,
+    STATE_REFUSED,
+    STATE_DRAFT_INSTEAD,
+)
 # A page nobody has answered for yet.
 STATE_NOT_ANSWERED = "not-answered"
 # The states in which nothing more is asked or written for a page.
@@ -703,6 +715,14 @@ def _is_a_day(value) -> bool:
     return True
 
 
+def _is_instead(item) -> bool:
+    """Whether one kept state is a refused page's segment drafted instead."""
+    return bool(
+        item
+        and (item.get("state") == STATE_DRAFT_INSTEAD or item.get("instead") is True)
+    )
+
+
 class ImportRecord(object):
     """What an import needs to be finished by a later session, and how far it got."""
 
@@ -716,8 +736,16 @@ class ImportRecord(object):
         self.consent = dict(consent)
         self.files = dict((slug, dict(item)) for slug, item in (files or {}).items())
 
+    def drafted_instead(self, slug: str) -> bool:
+        """Whether this segment's finished page was refused and it is drafted."""
+        return _is_instead(self.files.get(slug))
+
     def to_adopt(self) -> List[Segment]:
-        """The segments settled to be taken from their finished page, in order."""
+        """The segments settled to be taken from their finished page, in order.
+
+        A page the adoption contract refused, whose segment is drafted
+        instead, is not one of them any more (call 37).
+        """
         if self.inventory.is_single:
             return []
         return [
@@ -726,6 +754,7 @@ class ImportRecord(object):
             if segment.answer == constants.SEGMENT_ADOPT
             and segment.number is not None
             and segment.source
+            and not self.drafted_instead(segment.slug)
         ]
 
     def to_draft(self) -> List[Segment]:
@@ -743,6 +772,10 @@ class ImportRecord(object):
             segment
             for segment in self.inventory.segments
             if segment.answer == constants.SEGMENT_DRAFT
+            or (
+                segment.answer == constants.SEGMENT_ADOPT
+                and self.drafted_instead(segment.slug)
+            )
         ]
 
     def kept(self) -> List[Segment]:
@@ -890,6 +923,10 @@ def _files_from(value, slugs: Sequence[str]) -> Optional[Dict[str, dict]]:
                 files[slug]["original"] = item["original"]
         else:
             files[slug] = {"state": state}
+        if "instead" in item:
+            if item["instead"] is not True:
+                return None
+            files[slug]["instead"] = True
     return files
 
 
@@ -1020,7 +1057,14 @@ def carry_import(
 
 
 def mark(
-    base_id: str, slug: str, state: str, approved=None, day=None, run=None, original=None
+    base_id: str,
+    slug: str,
+    state: str,
+    approved=None,
+    day=None,
+    run=None,
+    original=None,
+    instead=None,
 ) -> ImportRecord:
     """Write down how far one page got, with no other writer in between.
 
@@ -1052,11 +1096,18 @@ def mark(
             raise InventoryRefused(CODE_UNREADABLE)
         if run is not None and record.run != run:
             raise InventoryRefused(CODE_ANOTHER_IMPORT)
-        if state in (STATE_LEFT_OUT, STATE_REFUSED) and (
+        if state in (STATE_LEFT_OUT, STATE_REFUSED, STATE_DRAFT_INSTEAD) and (
             record.state_of(slug) == STATE_COMMITTED
         ):
             return record
         held = record.files.get(slug) or {}
+        # A refused page's segment drafted instead stays one through every
+        # state it moves on to, unless the caller says otherwise, which is
+        # the page being taken in after all (call 37).
+        if instead is None:
+            instead = _is_instead(held)
+        if instead and state != STATE_DRAFT_INSTEAD:
+            item["instead"] = True
         if (
             state == STATE_COMMITTED
             and "original" not in item
@@ -1082,7 +1133,11 @@ def clear(base_id: str, slug: str, run=None) -> ImportRecord:
         if run is not None and record.run != run:
             raise InventoryRefused(CODE_ANOTHER_IMPORT)
         if record.state_of(slug) != STATE_COMMITTED:
-            record.files.pop(slug, None)
+            if _is_instead(record.files.get(slug)):
+                # Still a segment to draft, never a page to take in again.
+                record.files[slug] = {"state": STATE_DRAFT_INSTEAD}
+            else:
+                record.files.pop(slug, None)
             _keep_import(record)
         return record
 

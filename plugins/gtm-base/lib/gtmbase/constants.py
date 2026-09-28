@@ -1014,6 +1014,13 @@ UMBRELLA_SECTIONS = ("Who we sell to", "Segments", "What they share")
 UMBRELLA_PENDING_SENTENCE = (
     "This segment is left out for now, and its own document is still to come."
 )
+# What a prepared change puts under a segment's heading in the customer
+# profile when the person leaves that segment out in a later session, after
+# the profile already named it (Brandon's call 36, 2026-09-27). No document of
+# its own is coming, so it does not say one is.
+UMBRELLA_LEFT_OUT_SENTENCE = (
+    "This segment is left out, so it has no document of its own."
+)
 # The umbrella and a segment want what the profile wants first.
 DRAFT_RELEVANCE["umbrella"] = DRAFT_RELEVANCE["icp"]
 DRAFT_RELEVANCE["segment"] = DRAFT_RELEVANCE["icp"]

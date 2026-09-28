@@ -907,8 +907,10 @@ python3 scripts/join.py draft-freeze --run <run identifier> --session <session i
 - A list shown after the yes needs a yes of its own before anything is read.
 - Then draft the segment exactly as step 6c does, with this run identifier,
   from the preview to the approval, and show it whole before the approval.
-- When they leave the segment out, run this and say the sentence it prints.
-  It is never offered again, and nothing is written into the base.
+- When they leave the segment out, run this and say what it prints. It is
+  never offered again, and nothing is written into the base. When the
+  customer profile already names the segment, it also prepares a change
+  saying it is left out, which waits for their yes in their next review.
 
 ```
 python3 scripts/join.py draft-leave --segment <segment> --base <base folder>
