@@ -280,6 +280,10 @@ class TestTheThreeAnswers(unittest.TestCase):
                 compose_proposal.load_staging(staged).decision_block
             )
             self.assertEqual([ICP, POSITIONING], list(entry.affects))
+            # The record holds what changed first and their whole answer after
+            # it, which is why and where it came from (call 33).
+            self.assertTrue(entry.body.startswith(FACT_LINE + "\n\n"))
+            self.assertIn(FACT_ANSWER, entry.body)
             shown = approve_local.show(staged, root, base_id, runner=runner, now=TODAY)
             self.assertEqual(approve_local.STATUS_SHOWN, shown.status, shown.reasons)
             self.assertIn(
@@ -934,6 +938,143 @@ class TestARefusedPageWhoseDraftWasNotFinished(later.Case):
 
         self.assertFalse(closed.drafts_unfinished)
         self.assertIsNotNone(company.read(company.destination(BROKEN)))
+
+
+# --- The correctness review of this unit (2026-09-27) --------------------------
+
+import shutil  # noqa: E402
+from unittest import mock  # noqa: E402
+
+from gtmbase import fsutil  # noqa: E402
+
+
+class Interrupted(Exception):
+    pass
+
+
+class TestTheCorrectnessReview(unittest.TestCase):
+    """What the correctness review of release-b to this unit found."""
+
+    def test_a_second_wording_fix_never_reuses_the_first_ones_name(self):
+        """High: no record of a wording fix is shared, so its name came back."""
+        with support.Sandbox() as sandbox:
+            root, base_id = a_base(sandbox)
+            runner = NoRemoteRunner()
+            fix_the_comma(root)
+            first = compose_proposal.stage_local_edit(
+                root, base_id, None, runner=runner, now=TODAY,
+                kind=hand_edit.KIND_WORDING,
+            )
+            first_id = compose_proposal.load_staging(first).staging_id
+            shown = approve_local.show(first, root, base_id, runner=runner, now=TODAY)
+            applied = approve_local.approve(
+                first, root, base_id, shown.shown_hash, runner=runner, now=NOW
+            )
+            self.assertEqual(approve_local.STATUS_APPLIED, applied.status, applied.reasons)
+            # Another computer, or this one after the folder of prepared
+            # changes was cleared, knows nothing of it but the saved history.
+            shutil.rmtree(os.path.join(root, "work", "proposals"))
+            edit(root, "Analysts use it.", "Analysts use it daily.")
+
+            second = compose_proposal.stage_local_edit(
+                root, base_id, None, runner=runner, now=TODAY,
+                kind=hand_edit.KIND_WORDING,
+            )
+
+            self.assertNotEqual(
+                first_id, compose_proposal.load_staging(second).staging_id
+            )
+
+    def test_a_line_taken_out_is_said_as_taken_out_and_not_as_a_part(self):
+        with support.Sandbox() as sandbox:
+            root, base_id = a_base(sandbox)
+            runner = NoRemoteRunner()
+            edit(root, "- **It is current.** Updated every week.\n", "")
+            staged = compose_proposal.stage_local_edit(
+                root, base_id, approve_tests.HAND_EDIT_SOURCE, runner=runner, now=TODAY
+            )
+
+            shown = approve_local.show(staged, root, base_id, runner=runner, now=TODAY)
+
+            self.assertEqual(
+                "[took out: It is current. Updated every week.]",
+                four_line(shown.artifact, "What changed:"),
+            )
+
+    def test_what_changed_on_two_lines_is_shown_whole(self):
+        with support.Sandbox() as sandbox:
+            root, base_id = a_base(sandbox)
+            runner = NoRemoteRunner()
+            correct_the_fact(root)
+            staged = compose_proposal.stage_local_edit(
+                root, base_id, FACT_ANSWER, runner=runner, now=TODAY,
+                kind=hand_edit.KIND_FACT,
+                what_changed="Our driver count is over 1 million,\nreplacing 500k a year.",
+            )
+
+            shown = approve_local.show(staged, root, base_id, runner=runner, now=TODAY)
+
+            self.assertTrue(
+                four_line(shown.artifact, "What changed:").startswith(
+                    "Our driver count is over 1 million, replacing 500k a year."
+                ),
+                shown.artifact,
+            )
+
+
+
+class TestTheUmbrellaChangeAfterAFailure(later.Case):
+    """Medium: a change that failed to be prepared was lost for good."""
+
+    def test_the_umbrella_change_comes_back_when_preparing_it_failed(self):
+        company = later.a_company(answers={later.DRAFTED: constants.SEGMENT_DRAFT})
+        later.set_up_and_close(company, draft_one=False)
+        with mock.patch.object(
+            fsutil, "atomic_write_text", side_effect=OSError("disk full")
+        ):
+            said = join_flow.draft_leave_out(later.slug(later.LATER), company.root)
+        self.assertEqual(join_flow.DRAFT_LEFT_OUT % {"name": later.LATER}, said)
+        self.assertEqual([], pending_changes(company.root))
+
+        again = join_flow.draft_leave_out(later.slug(later.LATER), company.root)
+
+        self.assertIn(join_flow.UMBRELLA_CHANGE_WAITING % {"name": later.LATER}, again)
+        self.assertEqual(1, len(pending_changes(company.root)))
+
+
+class TestTheCorrectnessReviewCarriesOn(unittest.TestCase):
+    """The rest of what the correctness review found."""
+
+    def test_a_hand_edit_finished_by_the_next_run_is_counted(self):
+        with support.Sandbox() as sandbox:
+            root, base_id = a_base(sandbox)
+            runner = NoRemoteRunner()
+            fix_the_comma(root)
+            staged = compose_proposal.stage_local_edit(
+                root, base_id, None, runner=runner, now=TODAY,
+                kind=hand_edit.KIND_WORDING,
+            )
+            shown = approve_local.show(staged, root, base_id, runner=runner, now=TODAY)
+            with mock.patch.object(
+                approve_local, "_clear_journal", side_effect=Interrupted()
+            ):
+                with self.assertRaises(Interrupted):
+                    approve_local.approve(
+                        staged, root, base_id, shown.shown_hash, runner=runner, now=NOW
+                    )
+            self.assertEqual(0, hand_edit.kept_so_far(base_id))
+
+            finished = approve_local.show(staged, root, base_id, runner=runner, now=TODAY)
+
+            self.assertEqual(approve_local.STATUS_APPLIED, finished.status, finished.reasons)
+            self.assertEqual(1, hand_edit.kept_so_far(base_id))
+
+    def test_the_join_skill_says_what_leaving_a_segment_out_writes(self):
+        text = in_one_line(SKILL_FILES["join"])
+        self.assertNotIn(
+            "nothing is written into the base. When the customer profile", text
+        )
+        self.assertIn("nothing is written into any of your documents", text)
 
 
 if __name__ == "__main__":
