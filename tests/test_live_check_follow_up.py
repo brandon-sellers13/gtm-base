@@ -557,5 +557,215 @@ class TestNoReviewerOnTheLocalPath(unittest.TestCase):
         self.assertIn("--hand-edit-question", text)
 
 
+# --- Call 32: one ask, and notes after the approval ----------------------------
+
+SKILL_FILES = {
+    name: os.path.join(SKILLS_DIR, name, "SKILL.md")
+    for name in ("propose-change", "stale-check", "confirm", "join")
+}
+
+
+def in_one_line(path):
+    return " ".join(support.read(path).split())
+
+
+class TestOneAskInEveryFlow(unittest.TestCase):
+    """Call 32, and step 5's third and fourth findings and step 7's."""
+
+    def test_every_skill_asks_one_thing_and_keeps_its_notes_for_after(self):
+        for name, path in SKILL_FILES.items():
+            with self.subTest(skill=name):
+                text = in_one_line(path)
+                self.assertIn(
+                    "Ask only the one thing the step asks, and never several "
+                    "questions at once.",
+                    text,
+                )
+                self.assertIn(
+                    "Keep anything you notice about the content yourself, such as "
+                    "a figure that needs a source or a quote that does not match, "
+                    "until after the approval, and then say it once as one short "
+                    'note, such as "two things you may want to check".',
+                    text,
+                )
+                self.assertIn("never mention a check that found nothing", text)
+
+
+# --- Call 40 and step 3: the offer to move a base, and the look before it ------
+
+import test_changes_migration as migration  # noqa: E402
+
+from gtmbase import changes, stale_check  # noqa: E402
+
+
+class TestTheMoveOffer(migration.MigrationCase):
+    """Call 40: the version that brought the change in, and what moves."""
+
+    def review(self):
+        return stale_check.run(
+            self.root,
+            self.base_id,
+            gh=support.RecordingGh(),
+            now=migration.TODAY,
+            session_id="sess-1",
+            mode="review",
+            dry_run=True,
+        )
+
+    def test_the_offer_names_the_version_and_each_thing_that_moves(self):
+        self.old_layout()
+
+        offers = [line for line in self.review().sentences if changes.is_the_offer(line)]
+
+        self.assertEqual(
+            [
+                "GTM Base %s introduced the current layout, which keeps documents, "
+                "context changes, and records in new places. Your base still keeps "
+                "your customer profile, your positioning and one context change in "
+                "the older places. Moving them changes nothing they say, and your "
+                "base works either way until you do. Shall I move them now?"
+                % constants.CURRENT_LAYOUT_VERSION
+            ],
+            offers,
+        )
+
+    def test_one_thing_to_move_is_named_in_the_singular(self):
+        self.documents_on_the_current_layout()
+        self.old_layout()
+
+        offers = [line for line in self.review().sentences if changes.is_the_offer(line)]
+
+        self.assertEqual(1, len(offers), offers)
+        self.assertIn(
+            "Your base still keeps one context change in the older place. Moving "
+            "it changes nothing it says",
+            offers[0],
+        )
+        self.assertTrue(offers[0].endswith("Shall I move it now?"))
+
+    def test_a_shared_base_is_told_the_version_and_the_condition(self):
+        migration.give_it_a_shared_copy(self.sandbox, self.root)
+        self.old_layout((migration.ENTRY_ONE, migration.ENTRY_TWO))
+
+        said = self.review().sentences
+        told = [line for line in said if changes.is_every_seat_first(line)]
+
+        self.assertEqual(1, len(told), said)
+        self.assertIn("two context changes", told[0])
+        self.assertIn("an older one would read the moved base as empty", told[0])
+        self.assertEqual([], [line for line in said if changes.is_the_offer(line)])
+
+
+class TestTheLookBeforeTheMove(migration.MigrationCase):
+    """Step 3, finding 1: the look said a sentence written for the builder."""
+
+    def check_move(self):
+        code, printed, errors = run_script(
+            os.path.join(SKILLS_DIR, "stale-check", "scripts", "stale_check.py"),
+            self.root,
+            "--check-move",
+        )
+        self.assertEqual(0, code, errors)
+        return printed
+
+    def test_nothing_is_said_about_the_offer_when_it_would_be_made(self):
+        self.old_layout()
+
+        said = self.check_move()
+
+        self.assertNotIn("As things stand", said)
+        self.assertNotIn("would offer", said)
+        self.assertEqual(1, len([line for line in said.split("\n") if line.strip()]))
+
+    def test_the_plain_reason_when_it_would_not_be_offered(self):
+        self.old_layout()
+        changes.not_now(self.base_id, migration.TODAY)
+
+        said = self.check_move()
+
+        self.assertNotIn("As things stand", said)
+        self.assertIn("because you said not now", said)
+
+    def test_the_sentences_written_for_the_builder_are_gone(self):
+        for name in ("OFFER_STATE_NOW", "OFFER_STATE_EVERY_SEAT_FIRST", "OFFER_STATE_NONE"):
+            self.assertFalse(hasattr(changes, name), name)
+
+
+# --- Call 45: the warning after a plain yes -----------------------------------
+
+
+class TestTheListTooLargeToRead(unittest.TestCase):
+    def test_it_says_the_list_is_larger_than_one_draft_can_read(self):
+        from gtmbase import constants as known
+
+        sentence = known.CONSENT_NARROW_SENTENCE % {"files": "45", "folders": "five"}
+        self.assertEqual(
+            "That folder holds 45 files across five folders, which is more than "
+            "one draft can read. Which of these folders hold your customer "
+            "profiles, positioning, messaging, or plans?",
+            sentence,
+        )
+        self.assertNotIn("marketing material", in_one_line(SKILL_FILES["join"]))
+
+
+# --- Every count in words, and the singular for one ---------------------------
+
+
+class TestEveryCountIsInWords(unittest.TestCase):
+    """No "all 1 of them" anywhere: every %d sentence was looked at."""
+
+    def test_a_count_reads_as_a_person_says_it(self):
+        self.assertEqual("one item", names.how_many(1, "item", "items"))
+        self.assertEqual("two items", names.how_many(2, "item", "items"))
+        self.assertEqual("ten items", names.how_many(10, "item", "items"))
+        self.assertEqual("11 items", names.how_many(11, "item", "items"))
+        self.assertEqual("One item", names.how_many(1, "item", "items", start=True))
+
+    def test_no_sentence_a_person_reads_counts_in_digits(self):
+        import re
+
+        import plain_language
+
+        # The four numbers of the report are figures read out beside their
+        # labels, not counts in a sentence, and are left as figures.
+        figures = ("report",)
+        found = []
+        for module, name, _line in plain_language.library_sentence_constants(
+            support.LIB_DIR
+        ):
+            if module in figures:
+                continue
+            value = getattr(__import__("gtmbase." + module, fromlist=[name]), name)
+            if re.search(r"%(\([a-z_]+\))?d", value):
+                found.append((module, name))
+        self.assertEqual([], found)
+
+    def test_the_counts_said_in_code_are_in_words_too(self):
+        for relative in (
+            os.path.join("lib", "gtmbase", "stale_check.py"),
+            os.path.join("skills", "join", "scripts", "join.py"),
+            os.path.join("lib", "gtmbase", "sources.py"),
+        ):
+            text = support.read(os.path.join(support.PLUGIN_DIR, relative))
+            with self.subTest(file=relative):
+                self.assertNotIn('"1 file"', text)
+                self.assertNotIn("a list of the %d", text)
+                self.assertNotIn('"%d %s" % (count', text)
+
+    def test_one_thing_that_could_not_be_read_is_said_in_words(self):
+        self.assertEqual(
+            "One thing in your base could not be read, so it was left alone.",
+            stale_check.MALFORMED_ONE,
+        )
+
+    def test_one_item_waiting_is_said_in_the_singular(self):
+        from gtmbase import confirm
+
+        said = confirm.INBOX_WAITING % names.how_many(1, "item", "items")
+        self.assertIn("one item", said)
+        self.assertNotIn("items", said)
+        self.assertNotIn("those", said)
+
+
 if __name__ == "__main__":
     unittest.main()

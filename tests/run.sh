@@ -88,6 +88,7 @@ python3 -m unittest -v \
   test_segments_left_to_draft.TestTheScript \
   test_live_check_follow_up.TestTheOneQuestion \
   test_live_check_follow_up.TestTheThreeAnswers \
-  test_live_check_follow_up.TestTheShowingOfAHandEdit
+  test_live_check_follow_up.TestTheShowingOfAHandEdit \
+  test_live_check_follow_up.TestTheLookBeforeTheMove
 nothing_written_to_a_seat_nobody_made
 rm -rf "$UNOWNED_SEAT"
