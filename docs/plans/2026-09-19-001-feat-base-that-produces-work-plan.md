@@ -306,6 +306,8 @@ Revision 2 is written to the recommended answer on each call, so the build can s
 | 51 | Release B's version | **Decided 2026-09-27: 0.4.0**; 0.3.x stays for fixes on main, and the move offer names GTM Base 0.4 | 0.3.4 | Release B |
 | 52 | Wording the follow-up unit wrote itself: "Shall I keep this fix to the wording?", the [took out: ...][put in: ...] marks, the umbrella's later left-out line "...so it has no document of its own.", and "Shall I move it/them now?" | **Decided 2026-09-27: yes, as built** | Other wording | Built on release-b |
 | 53 | The report's four figures | **Decided 2026-09-27: stay as digits**, a small dashboard reads faster in digits | Words | Built on release-b |
+| 54 | What a context document holds | **Decided 2026-09-27: definitions, never tracking.** Customers, deals, deal stages and values, and pipeline live in the CRM; a named customer appears in a context document only as evidence (for example in positioning). Consequences: the drafting prompts (customer profile, umbrella, segment, positioning) never write deal values, stages, next steps, or prospects into a document; and the Phase 2 inventory offers to move pipeline state out of documents taken in as they stood (such as the twelve Gridwise pages) into a note that points at the CRM, on the owner's yes | Documents may carry pipeline state | Prompts: Unit 1.8. Split: Phase 2 inventory |
+| 55 | The fidelity bar's rule 3 | **Decided 2026-09-27, before any case ran:** "No customer named as evidence is dropped or credited to the wrong segment. Deal stages and values are pipeline data, so an output need not carry them, but any it carries must match." In the answer key, deals are "if used, must match" in every case, and only customers the pages use as evidence are must-appear; in case two only those the material case two reads names | "No named deal is dropped." | Recorded in the replay doc |
 
 ## High-Level Technical Design
 
@@ -953,3 +955,4 @@ Later reads (Astra 7, Fable M5). Approval establishes which document was adopted
 - 2026-09-27: call 48, Brandon's: after Release B, the inventory, the thin runner and the outbound sequence are pulled forward ahead of the rest of Phase 2. The roadmap is updated to match on the Release B line.
 - 2026-09-27: call 49, Brandon's in the live check: a typo fix writes no correction record.
 - 2026-09-27: calls 50 to 53 decided as recommended (the hand-edit way out keeps corrected facts off the typo route, Release B is 0.4.0, the follow-up unit's own wording as built, the report's figures stay digits).
+- 2026-09-27: calls 54 and 55, Brandon's: context documents hold definitions and never tracking (pipeline lives in the CRM), and the fidelity bar's rule 3 is amended to match before any case ran.

@@ -33,10 +33,22 @@ anyone has fixed anything:
 
 1. Every segment the material names appears in the output.
 2. No figure is altered. A figure keeps its units.
-3. No named deal is dropped.
+3. No customer named as evidence is dropped or credited to the wrong segment.
+   Deal stages and values are pipeline data, so an output need not carry them,
+   but any it carries must match.
 4. Every claim is attributable to the source and the version it came from.
 5. Nothing is invented. A choice the material leaves open is marked as open
    rather than settled by the draft.
+
+**Rule 3 was amended by Brandon on 2026-09-27, before any case ran.** It used to
+read "No named deal is dropped." Context documents hold definitions and never
+tracking: customers, deals, and pipeline live in the CRM, and a named customer
+belongs in a context document only as evidence. The old rule would have rewarded
+a draft for copying pipeline data into the base. The amendment is the owner's,
+not the builder's, which is the distinction the freeze exists to keep. In case
+two, a customer counts as one the output must keep only when the material case
+two actually reads names it, since the twelve pages it is scored against are held
+out of that material.
 
 The output is scored against the whole original corpus, including material that
 fell past the point where the draft stopped reading. What the cap dropped is
