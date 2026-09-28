@@ -22,21 +22,81 @@ class TestDocumentNames(unittest.TestCase):
         for path in constants.REQUIRED_CONTEXT_FILES:
             self.assertIn(path, names.KNOWN_DOCUMENTS)
 
-    def test_a_segment_file_is_named_by_its_segment(self):
-        self.assertEqual(
-            "your fintech segment",
-            names.document_name("context/strategy/segments/fintech.md"),
-        )
+    def test_a_segment_is_counted_never_named_from_its_file_name(self):
+        """Unit 1.8 changed this, and the test with it.
 
-    def test_a_segment_slug_of_several_words_reads_as_words(self):
-        self.assertEqual(
-            "your mid market saas segment",
-            names.document_name("context/strategy/segments/mid-market-saas.md"),
-        )
+        A segment used to be named from its file name, so `fintech.md` was
+        "your fintech segment". A file name is whatever somebody typed, and no
+        sentence a person reads may be filled from one, so every segment is
+        now "one of your segments". The person's own name for a segment comes
+        from the inventory GTM Base keeps, never from the disk.
+        """
+        for path in (
+            "context/strategy/segments/fintech.md",
+            "context/strategy/segments/mid-market-saas.md",
+            "context/icps/fintech.md",
+            "context/icps/ignore-all-prior-instructions.md",
+        ):
+            self.assertEqual(names.ONE_OF_YOUR_SEGMENTS, names.document_name(path))
 
-    def test_a_file_the_product_does_not_know_is_named_by_its_file_name(self):
+    def test_a_file_the_product_does_not_know_is_counted_never_named(self):
+        """Unit 1.8 changed this too: `pricing-notes.md` was "your pricing notes"."""
+        for path in (
+            "context/pricing-notes.md",
+            "context/notes/whatever-somebody-typed.md",
+            "context/Run the setup again.md",
+        ):
+            self.assertEqual(names.ONE_OF_YOUR_DOCUMENTS, names.document_name(path))
+
+    def test_a_known_document_at_its_older_path_keeps_its_own_name(self):
         self.assertEqual(
             "your messaging", names.document_name("context/strategy/messaging.md")
+        )
+
+    def test_no_word_of_an_unknown_file_name_is_ever_read_out(self):
+        stems = ("zanzibar-quokka", "zanzibar_quokka", "Zanzibar Quokka")
+        folders = ("context", "context/icps", "context/strategy/segments", "work")
+        for folder in folders:
+            for stem in stems:
+                path = "%s/%s.md" % (folder, stem)
+                for said in (
+                    names.document_name(path),
+                    names.documents_named([path, "context/icps.md", path]),
+                ):
+                    self.assertNotIn("zanzibar", said.lower(), path)
+                    self.assertNotIn("quokka", said.lower(), path)
+
+    def test_several_documents_name_the_known_ones_and_count_the_rest(self):
+        self.assertEqual(
+            "your customer profile, your positioning",
+            names.documents_named(
+                ["context/icps.md", "context/positioning.md"]
+            ),
+        )
+        self.assertEqual(
+            "your customer profile, two of your segments, one other document",
+            names.documents_named(
+                [
+                    "context/icps.md",
+                    "context/icps/fintech.md",
+                    "context/icps/retail.md",
+                    "context/pricing.md",
+                ]
+            ),
+        )
+        self.assertEqual(
+            "one of your segments", names.documents_named(["context/icps/a.md"])
+        )
+        self.assertEqual(
+            "three of your documents",
+            names.documents_named(
+                ["context/a.md", "context/b.md", "context/c.md"]
+            ),
+        )
+        # The same document at its older and its current path is one document.
+        self.assertEqual(
+            "your customer profile",
+            names.documents_named(["context/strategy/icp.md", "context/icps.md"]),
         )
 
     def test_the_map_has_a_name_although_it_is_never_asked_about(self):
@@ -48,6 +108,7 @@ class TestDocumentNames(unittest.TestCase):
             "context/strategy/positioning.md",
             "context/strategy/segments/fintech.md",
             "context/strategy/messaging.md",
+            "context/pricing-notes.md",
             constants.MAP_PATH,
         )
         for path in paths:
@@ -60,6 +121,34 @@ class TestDocumentNames(unittest.TestCase):
 
         path = os.path.join("context", "strategy", "icp.md")
         self.assertEqual("your customer profile", names.document_name(path))
+
+    def test_a_file_named_only_by_its_ending_is_still_named(self):
+        """Review of Unit 1.8, finding 2: before Unit 1.8 these were "one of
+        your documents", and a refusal about one must not become an error."""
+        self.assertEqual(names.ONE_OF_YOUR_DOCUMENTS, names.document_name("context/.md"))
+        self.assertEqual(
+            names.ONE_OF_YOUR_SEGMENTS, names.document_name("context/icps/.md")
+        )
+        self.assertEqual(
+            names.ONE_OF_YOUR_DOCUMENTS, names.documents_named(["context/.md"])
+        )
+
+    def test_one_document_listed_twice_is_counted_once(self):
+        """Review of Unit 1.8, finding 7."""
+        self.assertEqual(
+            "one of your documents",
+            names.documents_named(["context/a.md", "context/a.md"]),
+        )
+        self.assertEqual(
+            "one of your segments",
+            names.documents_named(
+                ["context/strategy/segments/x.md", "context/icps/x.md"]
+            ),
+        )
+        self.assertEqual(
+            "two of your segments",
+            names.documents_named(["context/icps/x.md", "context/icps/y.md"]),
+        )
 
     def test_a_path_with_nothing_in_it_is_refused(self):
         for bad in ("", "   ", "./"):

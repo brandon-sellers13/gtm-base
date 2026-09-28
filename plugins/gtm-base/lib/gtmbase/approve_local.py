@@ -184,11 +184,11 @@ NO_ADDRESS = (
 OUTSIDE_THE_FOLDERS = (
     "A prepared change may only touch your context files, the record of "
     "context changes, and the record of what was corrected, and this one "
-    "names %s."
+    "names a file outside them."
 )
 ASSISTANT_FOLDER = (
     "A prepared change may never touch the assistant's own folder, and this "
-    "one names %s."
+    "one names a file inside it."
 )
 MARKER_DISAGREES = (
     "This prepared change carries a context change that its own marker does "
@@ -245,7 +245,9 @@ NOTE_UNREADABLE = (
     "GTM Base left a note about an unfinished change that it cannot make "
     "sense of, so it touched nothing at all. Ask somebody to look at it."
 )
-APPLIED = "%s now says what this change said, and you are recorded as approving it."
+APPLIED = (
+    "What this change said is now in %s, and you are recorded as approving it."
+)
 KEPT = "The prepared change is still waiting, and nothing in your base changed."
 DROPPED = "The prepared change is gone, and nothing in your base changed."
 ASK = "Approve this change, leave it for now, or drop it?"
@@ -405,12 +407,12 @@ def path_problems(staging) -> List[Tuple[str, str]]:
             candidates.append(value)
     for candidate in candidates:
         if _in_the_assistant_folder(candidate):
-            found.append((CODE_ASSISTANT_FOLDER, ASSISTANT_FOLDER % candidate))
+            found.append((CODE_ASSISTANT_FOLDER, ASSISTANT_FOLDER))
             continue
         try:
             paths.check_repo_path_syntax(candidate, paths.PROPOSAL_PATH_PREFIXES)
         except PathError:
-            found.append((CODE_OUTSIDE_ALLOWED, OUTSIDE_THE_FOLDERS % candidate))
+            found.append((CODE_OUTSIDE_ALLOWED, OUTSIDE_THE_FOLDERS))
     return found
 
 
@@ -760,7 +762,7 @@ def _affected_names(walk: "_Walk", entry) -> str:
     for path in list(entry.affects) if entry is not None else []:
         if path not in ordered:
             ordered.append(path)
-    return ", ".join(names.document_name(path) for path in ordered)
+    return names.documents_named(ordered)
 
 
 def four_lines(base_root: str, staging, entry, walk, today) -> str:
@@ -2178,7 +2180,7 @@ def _finish_unfinished_work(
             STATUS_APPLIED,
             staging_id=its_id,
             codes=list(codes),
-            reasons=[APPLIED % ", ".join(names.document_name(path) for path in ordered)],
+            reasons=[APPLIED % names.documents_named(ordered)],
             paths=ordered,
             written_paths=[str(item.get("path")) for item in items],
             saved_work=git.run(["rev-parse", "HEAD"], cwd=base_root).out(),
@@ -2417,7 +2419,7 @@ def approve(
         staging_id=plan.staging.staging_id,
         codes=codes,
         reasons=[
-            APPLIED % ", ".join(names.document_name(path) for path in plan.ordered)
+            APPLIED % names.documents_named(plan.ordered)
         ],
         paths=list(plan.ordered),
         written_paths=written,

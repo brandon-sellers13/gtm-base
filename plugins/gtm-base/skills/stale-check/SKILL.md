@@ -410,9 +410,9 @@ Shall I move them now?
 
 Two files can end up saying they are the same context change and not say the
 same thing, which happens most often when somebody restores a copy of a base.
-GTM Base never chooses between them. It names the change, names both files,
-and says plainly that it cannot vouch for the documents that change is about
-until the two agree. The person decides which one is right and takes the other
+GTM Base never chooses between them. It names the change, never either
+file, and says plainly that it cannot vouch for the documents that change is
+about until the two agree. The person decides which one is right and takes the other
 one away. Nothing else in the run treats those documents as settled in the
 meantime, and the update refuses to run at all while it is true.
 

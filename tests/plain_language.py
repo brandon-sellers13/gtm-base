@@ -1102,54 +1102,15 @@ class Exemption(object):
 # The names of the four checks, used by the exemption list and by the tests.
 CHECK_NAMES = ("purpose", "one-request", "prose", "four-lines")
 
-# Unit 1.1b changes no sentence anybody reads. Every text that fails one of the
-# four checks today is listed here with the reason it fails and the unit that
-# owns the rewrite. Each of those units clears its own entries as it rewrites
-# its own step, and Unit 1.8 empties whatever is left.
-_JOIN_SKILL = "plugins/gtm-base/skills/join/SKILL.md"
+# Unit 1.1b changed no sentence anybody reads. Every text that failed one of
+# the four checks was listed here with the reason it failed and the unit that
+# owned the rewrite, and each of those units cleared its own entries as it
+# rewrote its own step. Unit 1.8 rewrote the last five, the first four steps of
+# setting up a base, which no behavior unit owned, so the list is empty. A
+# later text that cannot meet a check goes back on it only with a reason that
+# will still be true once that text is finished, and never with "later".
 
-EXEMPTIONS = (
-    Exemption(
-        _JOIN_SKILL,
-        "purpose",
-        "Step 1. Say what setting up a base does",
-        "The step opens by telling the assistant what to say, before it says "
-        "what the step is for. No behavior unit of Phase 1 owns this step.",
-        "1.8",
-    ),
-    Exemption(
-        _JOIN_SKILL,
-        "purpose",
-        "Step 2. The sharing notice",
-        "The step opens with an order to say the notice, before it says what "
-        "the notice is for. No behavior unit of Phase 1 owns this step.",
-        "1.8",
-    ),
-    Exemption(
-        _JOIN_SKILL,
-        "purpose",
-        "Step 3. The one opening question",
-        "The step opens with an order to ask the question, before it says "
-        "what the question is for. No behavior unit of Phase 1 owns this step.",
-        "1.8",
-    ),
-    Exemption(
-        _JOIN_SKILL,
-        "purpose",
-        "Step 4. The company name, and where the base will go",
-        "The step opens with an order to ask for the company name. No "
-        "behavior unit of Phase 1 owns this step.",
-        "1.8",
-    ),
-    Exemption(
-        _JOIN_SKILL,
-        "prose",
-        "Step 4. The company name, and where the base will go",
-        "The step runs six plain prose lines before anything a person can "
-        "read at a glance. No behavior unit of Phase 1 owns this step.",
-        "1.8",
-    ),
-)
+EXEMPTIONS = ()
 
 
 def exemption_problems(entry):
@@ -1248,6 +1209,466 @@ def library_sentence_constants(lib_dir):
             for target in targets:
                 found.append((module, target, node.lineno))
     return found
+
+
+# --- No sentence is filled from a file name (Unit 1.8) ------------------------
+
+# A file name is whatever somebody typed, and a sentence a person reads is
+# handed to the assistant to say word for word. A name short and tidy enough
+# to pass any shape check can still read as an instruction, which the review
+# of 0.3.2 and its confirmation both found. So no registered sentence may be
+# filled from a file name: a document the product knows is called by its fixed
+# name, and a segment or any other file is counted. This check reads the code
+# that fills each sentence, which is the only place the rule can be held.
+
+# The words the code uses for a value that is, or came out of, a file name or
+# a folder name. A context change's identifier is not one of them: the ones a
+# sentence says are read from inside the change and checked against the one
+# shape GTM Base gives them, which can carry nothing else, and in the few
+# refusals that still say one it is the only thing that tells two copies of a
+# change apart.
+FILE_NAME_WORDS = frozenset(
+    (
+        "path",
+        "paths",
+        "relative",
+        "relative_context",
+        "destination",
+        "moved",
+        "file",
+        "files",
+        "filename",
+        "file_name",
+        "stem",
+        "slug",
+        "candidate",
+        "target",
+        "affects",
+        "root",
+        "roots",
+        "old_root",
+        "folder",
+    )
+)
+
+# `source` is left out on purpose: in a context change it is the person's own
+# words for where the change came from, which are theirs to read back.
+
+
+def _names_a_file(identifier):
+    """True when a name in the code says it holds a file name or a path.
+
+    A name counts when it is one of the words above, or is made of words
+    joined by underscores and ends in one of them, so `entry_file` and
+    `target_paths` count and `file_flags` does not. A lookup named for its
+    key, such as `by_slug`, does not count.
+    """
+    if str(identifier).startswith("by_"):
+        # A lookup keyed by a file name, such as `by_slug`, holds something
+        # else as its values, and what is looked up is what is said.
+        return False
+    last = str(identifier).rsplit("_", 1)[-1]
+    # A plural is the same word, so `candidates` and `targets` count.
+    return last in FILE_NAME_WORDS or (
+        last.endswith("s") and last[:-1] in FILE_NAME_WORDS
+    )
+
+
+# Calls trusted only when made through the one module that defines them,
+# because another module has a function of the same name that does hand a
+# path back (`location.describe` says where a base would go).
+SAFE_QUALIFIED_CALLS = frozenset((("trust_surface", "describe"),))
+
+# Calls that read a name out of a path.
+FILE_NAME_READERS = frozenset(
+    ("basename", "splitext", "relpath", "abspath", "realpath", "dirname")
+)
+
+# The functions that turn a path into what a person calls it without reading
+# the file name, each tested for it by name, and the few that turn one into
+# something that is not a name at all: a date, a count, the reasons a check
+# gave, the addresses of a document's owners, or what a file holds rather than
+# what it is called. What they are given is not read. Any other function given
+# a path is taken to hand the path back.
+SAFE_CALLS = frozenset(
+    (
+        "words_from",
+        "read_words",
+        "isoformat",
+        "_as_of",
+        "_happened_on",
+        "owners_of",
+        "document_name",
+        "documents_named",
+        "plain_name",
+        "where",
+        "where_sentence",
+        "_named",
+        "_all_named",
+        "_named_moves",
+        "_what_moves",
+        "safe_name",
+        "change_name",
+        "_the_change_called",
+        "how_many",
+        "counted",
+    )
+)
+
+# The few sentences that name a folder on this computer on purpose, each with
+# the reason that will still be true once its text is finished. A folder the
+# person has to go to, or has to recognise as their own before anything is
+# read, can only be told to them by its location.
+FILE_NAME_FILL_EXEMPTIONS = (
+    (
+        "sources",
+        "SURVEY_SENTENCE",
+        "Names the folders of the person's own material, which they must "
+        "recognise before a single file in them is read.",
+    ),
+    (
+        "sources",
+        "SURVEY_ONE_PLACE_SENTENCE",
+        "Names the one folder of the person's own material, which they must "
+        "recognise before a single file in it is read.",
+    ),
+    (
+        "sources",
+        "SURVEY_NOTHING_SENTENCE",
+        "Names the folder the person just named themselves, to say nothing "
+        "in it looked like marketing material.",
+    ),
+    (
+        "session_start",
+        "COPY_FOUND",
+        "Names where on this computer the base already joined is, which is "
+        "the one fact the person needs to tell the two copies apart.",
+    ),
+    (
+        "session_start",
+        "LINK_CONFLICT",
+        "Names where on this computer the two bases are, because the person "
+        "has to choose which one lets go and only the locations tell them.",
+    ),
+    (
+        "location",
+        "Your base will go in a new folder at",
+        "Says where on this computer the base would be made, which the person "
+        "is asked to agree to before anything is created there.",
+    ),
+)
+
+
+def _callee(node):
+    """The name a call is made by, whether it is written plainly or dotted."""
+    func = node.func
+    if isinstance(func, ast.Name):
+        return func.id
+    if isinstance(func, ast.Attribute):
+        return func.attr
+    return None
+
+
+def _bindings(target, value):
+    """Every (name, value) an assignment binds.
+
+    A tuple of names given a tuple written out beside it is taken apart
+    element by element. A tuple of names unpacked from anything else binds
+    nothing here: which part went where cannot be read, and a name that says
+    it holds a path is caught by its own name wherever it is used.
+    """
+    if isinstance(target, ast.Name):
+        return [(target.id, value)]
+    if isinstance(target, (ast.Tuple, ast.List)) and isinstance(
+        value, (ast.Tuple, ast.List)
+    ):
+        if len(target.elts) != len(value.elts):
+            return []
+        found = []
+        for one, other in zip(target.elts, value.elts):
+            found.extend(_bindings(one, other))
+        return found
+    return []
+
+
+# Methods that put a value into a list or a set, which is an assignment in
+# all but name.
+_ADDERS = ("append", "extend", "add", "insert")
+
+
+def _assignments(function):
+    """Every assignment in one function, as name to the values given.
+
+    A tuple written out on both sides is taken apart, and a value added to
+    a list or a set with `append`, `extend`, `add` or `insert` counts as
+    given to it.
+    """
+    found = {}
+    for node in ast.walk(function):
+        if isinstance(node, ast.Assign):
+            for target in node.targets:
+                for name, value in _bindings(target, node.value):
+                    found.setdefault(name, []).append(value)
+        elif isinstance(node, (ast.For, ast.comprehension)):
+            for name, value in _bindings(node.target, node.iter):
+                found.setdefault(name, []).append(value)
+        elif isinstance(node, (ast.AnnAssign, ast.AugAssign)):
+            if node.value is not None:
+                for name, value in _bindings(node.target, node.value):
+                    found.setdefault(name, []).append(value)
+        elif (
+            isinstance(node, ast.Call)
+            and isinstance(node.func, ast.Attribute)
+            and node.func.attr in _ADDERS
+            and isinstance(node.func.value, ast.Name)
+        ):
+            found.setdefault(node.func.value.id, []).extend(node.args)
+    return found
+
+
+def _reads_a_file_name(node, assigned, seen=()):
+    """True when this expression carries a file name into a sentence."""
+    if isinstance(node, ast.Call):
+        name = _callee(node)
+        if name in SAFE_CALLS:
+            return False
+        func = node.func
+        if (
+            isinstance(func, ast.Attribute)
+            and isinstance(func.value, ast.Name)
+            and (func.value.id, func.attr) in SAFE_QUALIFIED_CALLS
+        ):
+            return False
+        if name in FILE_NAME_READERS:
+            return True
+        # A method is read through what it is called on, so `path.lower()`
+        # still carries the path, and so do its arguments.
+        parts = list(node.args) + [keyword.value for keyword in node.keywords]
+        if isinstance(node.func, ast.Attribute):
+            parts.append(node.func.value)
+        return any(_reads_a_file_name(part, assigned, seen) for part in parts)
+    if isinstance(node, ast.Subscript):
+        # What is looked up is what is said, never the key it is found by.
+        return _reads_a_file_name(node.value, assigned, seen)
+    if isinstance(node, ast.Compare):
+        # A comparison is true or false, never a name.
+        return False
+    if isinstance(node, ast.IfExp):
+        # Only what either side gives is said, never what chose between them.
+        return _reads_a_file_name(
+            node.body, assigned, seen
+        ) or _reads_a_file_name(node.orelse, assigned, seen)
+    if isinstance(node, (ast.GeneratorExp, ast.ListComp, ast.SetComp)):
+        # What a comprehension carries into the sentence is what it yields.
+        # Its loop variable is read through the assignments, like any other.
+        return _reads_a_file_name(node.elt, assigned, seen)
+    if isinstance(node, ast.Name):
+        if not isinstance(node.ctx, ast.Load):
+            return False
+        if _names_a_file(node.id):
+            return True
+        if node.id in assigned and node.id not in seen:
+            return any(
+                _reads_a_file_name(value, assigned, seen + (node.id,))
+                for value in assigned[node.id]
+            )
+        return False
+    if isinstance(node, ast.Attribute):
+        # A field is judged by its own name: `finding.path` is a path, and a
+        # segment's `name` is the name the person gave, from the inventory.
+        return _names_a_file(node.attr)
+    for child in ast.iter_child_nodes(node):
+        if isinstance(child, (ast.Lambda, ast.FunctionDef)):
+            continue
+        if _reads_a_file_name(child, assigned, seen):
+            return True
+    return False
+
+
+def _added_pieces(node):
+    """The pieces of a chain of `+`, in order."""
+    if isinstance(node, ast.BinOp) and isinstance(node.op, ast.Add):
+        return _added_pieces(node.left) + _added_pieces(node.right)
+    return [node]
+
+
+def _text_with_holes(pieces):
+    """The words a sentence built from pieces reads as, a hole for each value.
+
+    Returns None when a piece is neither a string nor a value that fills one.
+    """
+    words = []
+    for piece in pieces:
+        if isinstance(piece, ast.Constant):
+            if not isinstance(piece.value, str):
+                return None
+            words.append(piece.value)
+        elif isinstance(piece, ast.FormattedValue):
+            words.append("%s")
+        else:
+            words.append("%s")
+    return "".join(words)
+
+
+def _templates(template, assigned):
+    """What a template may be: itself, both sides of an `if`, or what a local
+    name was given."""
+    if isinstance(template, ast.IfExp):
+        return _templates(template.body, assigned) + _templates(
+            template.orelse, assigned
+        )
+    found = [template]
+    if isinstance(template, ast.Name):
+        for value in assigned.get(template.id, []):
+            if isinstance(value, (ast.Name, ast.Attribute, ast.Constant)):
+                found.append(value)
+    return found
+
+
+def _fills(node, assigned=None):
+    """Every (sentence, values, inline) a node fills: the sentence, the values
+    it is filled with, and whether it is written right there rather than
+    kept as a constant."""
+    assigned = assigned or {}
+    if isinstance(node, ast.JoinedStr):
+        text = _text_with_holes(node.values)
+        if text and _is_sentence_shaped(text):
+            values = [
+                piece.value
+                for piece in node.values
+                if isinstance(piece, ast.FormattedValue)
+            ]
+            return [(text, values, True)]
+        return []
+    if (
+        isinstance(node, ast.BinOp)
+        and isinstance(node.op, ast.Add)
+        and not isinstance(getattr(node, "_parent", None), ast.BinOp)
+    ):
+        pieces = _added_pieces(node)
+        strings = [
+            piece
+            for piece in pieces
+            if isinstance(piece, ast.Constant) and isinstance(piece.value, str)
+        ]
+        text = _text_with_holes(pieces) if strings else None
+        if text and _is_sentence_shaped(text):
+            values = [piece for piece in pieces if piece not in strings]
+            return [(text, values, True)]
+        return []
+    found = []
+    for template, values in _one_fill(node):
+        for each in _templates(template, assigned):
+            key, inline = _template_key(each)
+            if key is not None:
+                found.append((key, values, inline))
+    return found
+
+
+def _template_key(template):
+    if isinstance(template, ast.Name):
+        return template.id, False
+    if isinstance(template, ast.Attribute):
+        return template.attr, False
+    if (
+        isinstance(template, ast.Constant)
+        and isinstance(template.value, str)
+        and _is_sentence_shaped(template.value)
+    ):
+        # A sentence written where it is filled, rather than kept as a named
+        # constant, is read by a person just the same.
+        return template.value, True
+    return None, False
+
+
+def _one_fill(node):
+    """The template a `%` or a `.format` fills, and the values it is given."""
+    if isinstance(node, ast.BinOp) and isinstance(node.op, ast.Mod):
+        template = node.left
+        right = node.right
+        if isinstance(right, ast.Tuple):
+            values = list(right.elts)
+        elif isinstance(right, ast.Dict):
+            values = list(right.values)
+        else:
+            values = [right]
+    elif (
+        isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Attribute)
+        and node.func.attr == "format"
+    ):
+        template = node.func.value
+        values = list(node.args) + [keyword.value for keyword in node.keywords]
+    else:
+        return []
+    return [(template, values)]
+
+
+def _is_excused(module, template, exemptions):
+    """True when the exemptions name this fill with a reason."""
+    for owner, opening, _reason in exemptions:
+        if owner != module:
+            continue
+        if template == opening or (
+            len(opening.split()) > 3 and str(template).startswith(opening)
+        ):
+            return True
+    return False
+
+
+def find_file_name_fills(source, registered, module="", exemptions=None):
+    """Return (line, sentence) for each sentence a person reads filled from a file name.
+
+    `registered` is the set of constant names that are sentences a person
+    reads, and a sentence-shaped string filled where it is written counts as
+    well. A fill is excused only when FILE_NAME_FILL_EXEMPTIONS names that
+    module and that sentence, by its constant or its opening words, with its
+    reason. `exemptions` replaces that list, which is how a test proves each
+    exemption on it is still needed.
+
+    The sentence may be filled with `%`, with `.format`, as an f-string, or
+    by joining strings with `+`, and it may be a constant, a sentence written
+    in place, either side of an `if`, or a local name given one of those.
+    """
+    if exemptions is None:
+        exemptions = FILE_NAME_FILL_EXEMPTIONS
+    tree = ast.parse(source)
+    for parent in ast.walk(tree):
+        for child in ast.iter_child_nodes(parent):
+            child._parent = parent
+    scopes = [tree] + [
+        node
+        for node in ast.walk(tree)
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
+    ]
+    found = {}
+    for scope in scopes:
+        assigned = _assignments(scope) if scope is not tree else {}
+        for node in ast.walk(scope):
+            for constant, values, inline in _fills(node, assigned):
+                if not inline and constant not in registered:
+                    continue
+                if _is_excused(module, constant, exemptions):
+                    continue
+                if any(_reads_a_file_name(value, assigned) for value in values):
+                    found.setdefault(
+                        node.lineno, constant if not inline else constant[:60]
+                    )
+    return sorted(found.items())
+
+
+def plugin_python_files():
+    """Every Python file of the plugin: the library and each skill's scripts."""
+    here = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    plugin = os.path.join(here, "plugins", "gtm-base")
+    found = []
+    for folder in ("lib", "skills", "hooks"):
+        for base, dirs, files in os.walk(os.path.join(plugin, folder)):
+            dirs[:] = [name for name in dirs if name != "__pycache__"]
+            for name in sorted(files):
+                if name.endswith(".py"):
+                    found.append(os.path.join(base, name))
+    return sorted(found)
 
 
 # --- What a test calls -------------------------------------------------------

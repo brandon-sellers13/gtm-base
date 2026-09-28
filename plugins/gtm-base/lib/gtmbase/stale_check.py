@@ -171,10 +171,10 @@ MALFORMED_ONE = (
     "One thing in your base could not be read, so it was left alone."
 )
 # Said whenever one context change is written down twice and the two copies
-# do not agree. It names the change and both files, because the answer is the
-# person's to give and they cannot give it without knowing where to look.
+# do not agree. It names the change by its identifier, which is how both copies
+# can be found, and never either file by its name (Unit 1.8).
 WRITTEN_TWICE = (
-    "The context change %s is written down twice, in %s, and the two do not "
+    "The context change %s is written down twice, and the two copies do not "
     "say the same thing. GTM Base is not choosing between them. Decide which "
     "one is right and take the other one away."
 )
@@ -241,9 +241,9 @@ FINDING_OPEN_QUESTIONS = (
     "finished yet. Ask for a review of your base to answer them."
 )
 FINDING_DOCUMENT_OLDER = (
-    "The material behind %s is dated %s, and context change %s happened on %s, "
-    "so that document is older than the change it is meant to reflect. It is "
-    "worth a read."
+    "The material behind %s is dated %s, and %s happened on %s, so that "
+    "document is older than the change it is meant to reflect. It is worth a "
+    "read."
 )
 # Said when a document has not caught up with a context change. It says only
 # what is true in every state that reaches it: the document is behind, and the
@@ -563,11 +563,11 @@ def _heading_named_by(entry_text: str, file_text: str) -> Optional[str]:
 
 def _entry_citation(entry, entry_file: str) -> str:
     """The one sentence that says which context change this came from."""
-    name = (entry_file or "").rsplit("/", 1)[-1]
-    return "Context change %s, written down in %s, and it happened on %s." % (
-        entry.id,
-        name or "the record of context changes",
-        entry.decided_on,
+    # Where it is written down is said the same way every time, because the
+    # file's own name is never read out (Unit 1.8).
+    return (
+        "Context change %s, written down in the record of context changes, and "
+        "it happened on %s." % (entry.id, entry.decided_on)
     )
 
 
@@ -729,7 +729,8 @@ def build_file_proposal(
     text = read_text(os.path.join(base_root, path))
     if text is None:
         raise ValidationError(
-            "GTM Base could not read %s, so it prepared nothing for it." % path,
+            "GTM Base could not read %s, so it prepared nothing for it."
+            % names.document_name(path),
             code=CODE_MISSING_FILE,
         )
     heading = _heading_named_by(entry.body, text)
@@ -741,7 +742,10 @@ def build_file_proposal(
         operation = "add"
         before = ""
     if not before:
-        before = "This part of %s does not say anything about that change yet." % path
+        before = (
+            "This part of %s does not say anything about that change yet."
+            % names.document_name(path)
+        )
     drafted = draft_text_for(entry)
 
     body = formats.render_pr_body(
@@ -751,7 +755,7 @@ def build_file_proposal(
             "why": (
                 "This context change was written down and %s was never brought in "
                 "line with it. The words below are a first draft for the owner "
-                "to correct or replace." % path
+                "to correct or replace." % names.document_name(path)
             ),
             "evidence": "%s\n\n%s" % (_entry_citation(entry, entry_file), _quote(entry.body)),
             "confidence": DRAFT_CONFIDENCE,
@@ -804,7 +808,7 @@ def build_affected_files_proposal(
             "before": "Context change %s does not say which files it affects."
             % entry.id,
             "after": "Context change %s is marked as affecting %s."
-            % (entry.id, ", ".join(candidates)),
+            % (entry.id, names.documents_named(candidates)),
             "why": (
                 "Whoever wrote this context change down left the list of files it "
                 "affects blank, so GTM Base worked out which files it most "
@@ -1011,7 +1015,7 @@ def finding_sentence(report, finding) -> str:
     a context change is ever told that nothing is out of date.
     """
     if finding.code == stale.FINDING_REQUIRED_FILE_MISSING:
-        return FINDING_REQUIRED_FILE % finding.path
+        return FINDING_REQUIRED_FILE % names.document_name(finding.path)
     if finding.code == stale.FINDING_OPEN_QUESTION:
         info = report.files.get(finding.path)
         many = len(getattr(info, "open_questions", ()) or ())
@@ -1031,10 +1035,12 @@ def finding_sentence(report, finding) -> str:
             if item.path == finding.path and item.entry_id == finding.entry_id:
                 decided = item.decided_on
                 break
+        # The document by its name and the change by its first line, never a
+        # path or an identifier (Unit 1.8).
         return FINDING_DOCUMENT_OLDER % (
-            finding.path,
+            names.document_name(finding.path),
             finding.date,
-            finding.entry_id,
+            _the_change_quoted(report, finding.entry_id),
             decided,
         )
     if finding.code == stale.FINDING_CHANGE_WAITING:
@@ -1047,6 +1053,17 @@ def finding_sentence(report, finding) -> str:
         finding.date,
         _the_change_called(report, finding.entry_id),
     )
+
+
+def _the_change_quoted(report, entry_id) -> str:
+    """One context change by its first line, in quotation marks, for a sentence
+    that says the day it happened on its own."""
+    for entry in getattr(report, "entries", None) or []:
+        if getattr(entry, "id", None) == entry_id:
+            line = names.change_name(getattr(entry, "body", ""))
+            if line and line != names.CHANGE_WITHOUT_A_LINE:
+                return 'the context change "%s"' % line
+    return "a context change"
 
 
 def _the_change_called(report, entry_id) -> str:
@@ -1763,7 +1780,8 @@ def _list_without_preparing(result, report) -> None:
     """Say what a context change has moved past without preparing anything for it."""
     for entry_id, path in _ledger_flags(report):
         result.sentences.append(
-            "%s is out of date against context change %s." % (path, entry_id)
+            "Context change %s has moved past %s."
+            % (entry_id, names.document_name(path))
         )
 
 
@@ -1779,21 +1797,28 @@ def _list_waiting_on_the_owner(result, report) -> None:
             continue
         if flag.newest_confirmation is None:
             result.sentences.append(
-                "Nobody has ever said %s is still right." % flag.path
+                "Nobody has ever confirmed %s." % names.document_name(flag.path)
             )
         else:
             accepted = report.merge_confirmations.get(flag.path)
             if accepted is not None and accepted.date == flag.newest_confirmation:
                 result.sentences.append(
-                    "%s was last said to be right on %s, when its owner accepted "
-                    "the change that rewrote it, which is longer ago than this "
-                    "base allows." % (flag.path, accepted.date.isoformat())
+                    "The last confirmation of %s was on %s, when its owner "
+                    "accepted the change that rewrote it, which is longer ago than "
+                    "this base allows."
+                    % (
+                        names.document_name(flag.path),
+                        accepted.date.isoformat(),
+                    )
                 )
             else:
                 result.sentences.append(
-                    "%s was last said to be right on %s, which is longer ago than "
-                    "this base allows."
-                    % (flag.path, flag.newest_confirmation.isoformat())
+                    "The last confirmation of %s was on %s, which is longer ago "
+                    "than this base allows."
+                    % (
+                        names.document_name(flag.path),
+                        flag.newest_confirmation.isoformat(),
+                    )
                 )
 
 
@@ -1924,8 +1949,8 @@ def _write_one(
         )
     else:
         result.sentences.append(
-            "%s is out of date against context change %s, and an edit for it is "
-            "prepared as %s." % (target_paths[0], entry_id, staging.staging_id)
+            "Context change %s has moved past %s, and an edit for it is "
+            "prepared." % (entry_id, names.document_name(target_paths[0]))
         )
 
 
@@ -1963,12 +1988,12 @@ def _say_what_is_written_twice(result, report) -> None:
     """
     for conflict in report.conflicts:
         result.sentences.append(
-            WRITTEN_TWICE % (conflict.entry_id, " and ".join(conflict.paths))
+            WRITTEN_TWICE % conflict.entry_id
         )
         if conflict.affects:
             result.sentences.append(
                 CANNOT_VOUCH
-                % ", ".join(names.document_name(path) for path in conflict.affects)
+                % names.documents_named(conflict.affects)
             )
         result.codes.append(CODE_WRITTEN_TWICE)
 

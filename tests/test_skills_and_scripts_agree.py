@@ -795,7 +795,9 @@ class TestTheSkillsAsTheyAreWritten(unittest.TestCase):
         "<number>": lambda self, state, command: state.get("folder_number", "1"),
         "<base folder>": lambda self, state, command: state.get("base"),
         "<base folder or company name>": lambda self, state, command: state.get("base"),
-        "<the parent from step 4>": lambda self, state, command: state.get("parent"),
+        # Unit 1.8 split step 4 so each part asks one thing; the parent now
+        # comes from step 4a, where the folder is proposed.
+        "<the parent from step 4a>": lambda self, state, command: state.get("parent"),
         "<draft file>": lambda self, state, command: state.get("draft"),
         "<the path it printed>": _the_path_it_printed,
         "<id>": lambda self, state, command: (

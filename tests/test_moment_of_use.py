@@ -1136,7 +1136,10 @@ class TestTheUnitReview(unittest.TestCase):
 
             block = base.check().block()
 
-            self.assertIn(names.DOCUMENT_WITHOUT_A_PLAIN_NAME, block)
+            # Unit 1.8: several documents are named together now, the known
+            # ones by name and the rest counted, so this one is "one other
+            # document" beside the customer profile.
+            self.assertIn("your customer profile, %s" % names.ONE_OTHER_DOCUMENT, block)
             self.assertNotIn("skip the question", block)
 
     def test_s1_a_hostile_source_is_capped_like_every_other_value(self):

@@ -597,8 +597,11 @@ class TestTheCorrectnessReviewOfThisUnit(unittest.TestCase):
                 base.root, base.base_id, runner=support.NoRemoteRunner(),
                 gh=support.RecordingGh(), now=TODAY,
             )
+            # Unit 1.8 named the document the way a person does, where this
+            # sentence used to read out its path, so both forms are checked.
             for line in result.lines():
                 self.assertNotIn("Nobody has ever said %s" % ICP, line)
+                self.assertNotIn("Nobody has ever confirmed your customer profile", line)
 
 
 class TestTheFirstRunNamesIt(unittest.TestCase):

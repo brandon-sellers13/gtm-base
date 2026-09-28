@@ -153,8 +153,9 @@ CODE_SAVING_ELSEWHERE = "saving-elsewhere"
 # What a document is called in anything this path says, when its file name is
 # not one a sentence may safely repeat (finding S1 of the same review).
 UNNAMED_DOCUMENT = names.DOCUMENT_WITHOUT_A_PLAIN_NAME
-# A file name read out in a sentence is at most a few plain words, lower case,
-# joined by hyphens or underscores. Anything else is not repeated back.
+# A document the product does not know is asked about only when its file name
+# is a few plain words, lower case, joined by hyphens or underscores. No file
+# name is ever read out (Unit 1.8); this only decides which are asked about.
 _SAFE_STEM_RE = re.compile(r"^[a-z0-9]+(?:[-_][a-z0-9]+){0,5}$")
 SAFE_STEM_CHARS = 40
 
@@ -363,20 +364,14 @@ def ask(long: bool = False) -> List[str]:
 def safe_name(path: str) -> str:
     """What a document is called in anything this path says out loud.
 
-    The documents the product knows keep their own names, and a file named in
-    a few plain lower-case words is called by those words. Every other name is
-    "one of your documents", because a file name is whatever somebody typed,
-    and a name shaped like an instruction was read out as one (the same class
-    0.3.2 closed for the refusal that names unsaved files).
+    The documents the product knows keep their own names, a segment is "one
+    of your segments", and every other document is "one of your documents",
+    because a file name is whatever somebody typed and a name shaped like an
+    instruction was read out as one (the same class 0.3.2 closed for the
+    refusal that names unsaved files). Since Unit 1.8 this is exactly what
+    `names.document_name` says, apart from a path it cannot name at all.
     """
     normalized = str(path or "").replace(os.sep, "/")
-    if normalized in names.KNOWN_DOCUMENTS:
-        return names.KNOWN_DOCUMENTS[normalized]
-    stem = os.path.basename(normalized)
-    if stem.endswith(".md"):
-        stem = stem[: -len(".md")]
-    if len(stem) > SAFE_STEM_CHARS or not _SAFE_STEM_RE.match(stem):
-        return UNNAMED_DOCUMENT
     try:
         return names.document_name(normalized)
     except ValueError:
@@ -384,22 +379,23 @@ def safe_name(path: str) -> str:
 
 
 def can_be_asked_about(path: str) -> bool:
-    """Whether the questions and answers may name this document at all.
+    """Whether the questions and answers may be about this document at all.
 
-    Every sentence the questions and the answers print names the document the
-    way the closing does, so only a document whose name is safe to repeat, and
-    whose name has no space in it (which no confirmation line can carry yet),
-    is asked about. Any other stays flagged for the review, which names it.
+    A document the product knows is always asked about. Any other is asked
+    about only when its file name is a few plain lower-case words and has no
+    space in it (which no confirmation line can carry yet), and any other
+    stays flagged for the review. Which documents are asked about is the rule
+    0.3.3 set; since Unit 1.8 none of them is named from its file name.
     """
-    try:
-        closing_name = names.document_name(path)
-    except ValueError:
+    normalized = str(path or "").replace(os.sep, "/")
+    if formats.name_has_a_space(path):
         return False
-    return (
-        not formats.name_has_a_space(path)
-        and safe_name(path) == closing_name
-        and closing_name != UNNAMED_DOCUMENT
-    )
+    if normalized in names.KNOWN_DOCUMENTS:
+        return True
+    stem = os.path.basename(normalized)
+    if stem.endswith(".md"):
+        stem = stem[: -len(".md")]
+    return len(stem) <= SAFE_STEM_CHARS and bool(_SAFE_STEM_RE.match(stem))
 
 
 def documents(base_root: str) -> List[Tuple[int, str, str]]:
@@ -745,7 +741,7 @@ def forget_showing(base_id: str) -> None:
 
 
 def _affected_names(affects: Sequence[str]) -> str:
-    return ", ".join(safe_name(path) for path in affects) or "nothing yet"
+    return names.documents_named(affects, name_of=safe_name) or "nothing yet"
 
 
 def preview(
@@ -782,8 +778,12 @@ def preview(
     # and the list is held to the same cap the fence keeps, counted as shown.
     # A list longer than that is refused here, before anything is kept, so
     # the four lines never leave out a document the yes would write down
-    # (Astra's review of 0.3.3, finding 4).
-    if len(as_shown(_affected_names(affects))) > SHOWN_CHARS:
+    # (Astra's review of 0.3.3, finding 4). Since Unit 1.8 the four lines
+    # count the segments and other documents rather than naming each, so the
+    # cap is measured as though every document were named on its own, which
+    # keeps a long list refused as it was rather than folded into a count.
+    one_by_one = ", ".join(safe_name(path) for path in affects)
+    if len(as_shown(one_by_one)) > SHOWN_CHARS:
         raise _refuse(TOO_MANY_DOCUMENTS, CODE_TOO_MANY_DOCUMENTS)
     entry = build_entry(
         base_root, what, why, source, affects, day, happened_on, runner=git

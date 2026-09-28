@@ -1587,7 +1587,10 @@ class TestTheClosingFinding(unittest.TestCase):
 
             finding = setup.close().finding
 
-            self.assertIn(POSITIONING, finding)
+            # Unit 1.8: the document is named the way a person names it, where
+            # the finding used to read out its path.
+            self.assertIn("your positioning", finding)
+            self.assertNotIn(POSITIONING, finding)
             self.assertIn("have not written", finding)
 
     def test_material_older_than_the_decision_is_reported_as_a_read(self):
@@ -1600,7 +1603,9 @@ class TestTheClosingFinding(unittest.TestCase):
 
             finding = setup.close().finding
 
-            self.assertIn(ICP, finding)
+            # Unit 1.8: the document by its name, never its path.
+            self.assertIn("your customer profile", finding)
+            self.assertNotIn(ICP, finding)
             self.assertIn(SOURCE_DATE, finding)
             self.assertIn(DECIDED_IN_SEPTEMBER, finding)
             self.assertIn("older than the change", finding)

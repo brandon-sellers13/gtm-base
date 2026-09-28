@@ -65,9 +65,10 @@ the command will carry the path to it.
 
 ### Step 1. Say what setting up a base does
 
-Before running anything, say these three things and then the line about
-stopping. This is the first thing in the session and nothing else comes before
-it.
+This step tells the person what setting up a base will do, before anything
+runs, so that nothing later comes as a surprise. It is the first thing in the
+session and nothing else comes before it. Say these three things, and then the
+line about stopping.
 
 - A company base is one folder on this computer holding your strategy, your
   numbers, and the context changes behind them, in a form your AI can read at
@@ -78,11 +79,13 @@ it.
 - You see every document whole before anything is written down, and nothing is
   written down until you say yes to it.
 
-Then say, word for word:
+The line about stopping is said word for word:
 
+<!-- ask -->
 You can stop at any time, and nothing you have not approved is kept. Say "set up my company base" whenever you are ready.
+<!-- end ask -->
 
-When you are ready to begin, the run will need an identifier of its own, so
+When they are ready to begin, the run will need an identifier of its own, so
 start it with:
 
 ```
@@ -94,76 +97,99 @@ same identifier.
 
 ### Step 2. The sharing notice
 
-Say this once, before the first draft is written, and never again:
+This step tells the person who may end up reading the documents they approve,
+so they know it before they are asked to approve anything. It is said once,
+before the first draft is written, and never again:
 
 Files you approve here may later be shared with everyone invited to this base.
 
-Nothing runs in this step. It is said so that the person deciding whether to
-approve a document already knows who may end up reading it.
+Nothing runs in this step, and nothing is asked.
 
 ### Step 3. The one opening question
 
-Ask exactly one question, and ask it in these words:
+This step finds out roughly where the company's material is, so that GTM Base
+knows where to start looking. It asks exactly one question, in these words:
 
+<!-- ask -->
 Where is your company's material, roughly? A company folder is fine, and so is a folder you keep for marketing. It can also be something you would rather paste in, or a tool you already have connected.
+<!-- end ask -->
 
 Wait for the answer. Do not offer a list of examples beyond those three, and do
 not ask a second question before they have answered the first one.
 
-### Step 4. The company name, and where the base will go
+### Step 4. The company name
 
-Ask for the company name, in one short question. Then say that GTM Base will
-propose a folder and that nothing will be created until they agree to it, and
-run:
+This step learns what the company is called, because the base will be named
+after it and the folder the base will go in is proposed from it. It asks one
+short question:
 
-Their answer is a name they typed, so it travels in a file rather than in the
-command. Ask this run for one, put the name in it, and use it:
+<!-- ask -->
+What is your company called?
+<!-- end ask -->
+
+Their answer is a name they typed, so it will travel in a file rather than in
+a command. Nothing is created in this step.
+
+### Step 4a. Where the base will go
+
+This step proposes the folder the base will live in, and nothing will be
+created until they agree to it and approve their first document. Say that, and
+then run:
 
 ```
 python3 scripts/join.py words-file --run <run identifier> --for company
 python3 scripts/join.py propose-location --run <run identifier> --company-file <the path it printed>
 ```
 
-The first command prints `words=<path>`. Write the company name into that file
-with your file-writing tool, exactly as they said it, and pass that path back
-along with the same run. Both commands need the run: that is what says which
-setup this file belongs to, and without it the file is not one GTM Base can
-read. The file is read once and then taken away, so ask for a fresh one for
-each step that needs the name. Never put their name in the command itself.
+- The first command prints `words=<path>`. Write the company name into that
+  file with your file-writing tool, exactly as they said it, and pass that
+  path back along with the same run. Never put their name in the command
+  itself.
+- Both commands need the run, because the run is what says which setup the
+  file belongs to. The file is read once and then taken away, so ask for a
+  fresh one for each step that needs the name.
+- When they named a folder that holds their material, add
+  `--content-folder-file <a fresh folder file>`, a fresh file from the same
+  `words-file` command with `--for folder` holding that folder, because a
+  folder name never goes in a command. That folder is not where the base goes.
+  It is the folder the base will be linked to, so that opening Claude Code
+  there brings the base along.
+- The command creates nothing. It prints one sentence saying where the base
+  would go, and the machine readable lines `target=`, `parent=`, `reason=`,
+  and, when they named a folder, `belongs-with=`.
 
-When they named a folder that holds their material, add
-`--content-folder-file <a fresh folder file>`: a fresh file from the same
-`words-file` command with `--for folder`, holding that folder, because a folder
-name never goes in a command. That folder is not where the base goes. It is the folder the base will
-be linked to, so that opening Claude Code there brings the base along. The
-command creates nothing. It prints one sentence saying where the base would go,
-and the machine readable lines `target=`, `parent=`, `reason=`, and, when they
-named a folder, `belongs-with=`.
+Show them the sentence the command printed, and make these points about it.
 
-Every base goes in a folder kept for bases inside their home folder, one folder
-per company. Show them the sentence the command printed and ask whether that is
-the right place. The sentence names the folder they named as the one to open
-from then on, and that is the point to make: the base lives in its own folder,
-and it wakes up in theirs. Say as well that nothing in their folder is changed
-or read again.
+- Every base goes in a folder kept for bases inside their home folder, one
+  folder per company.
+- The sentence names the folder they named as the one to open from then on,
+  because the base lives in its own folder and it wakes up in theirs.
+- Nothing in their folder is changed or read again.
 
-When the command prints `codes=company-folder-exists`, there is already a folder
-for a company of that name, so ask them for a name that tells the two apart and
-run the command again with it. Never build over a folder that is already there.
+The sentence usually ends by asking whether that is the right place. When it
+does not, ask it, and ask it only once:
 
-If they say they would rather have the base sit inside the folder their material
-is in, run the command again with `--beside --content-folder-file <a fresh folder file>`. The
-same checks run on that folder, and it is refused when another tool already
-keeps a history for it, when another program copies it off the computer on its
-own, or when it is inside a base or inside the folder GTM Base keeps for itself.
-When the command says `sync-unknown`, ask them the question it could not answer:
-does any app automatically copy this folder, or your whole home folder, to cloud
-storage. If they say yes, do not build there.
+<!-- ask -->
+Is that the right place for your base?
+<!-- end ask -->
 
-Only when they have said yes does anything get created, and that happens later,
-at the moment they approve the first document. Pass the same folder to
-`approve` on that first document, in a fresh file, the way step 6b shows, so the
-base is linked at the moment it comes into being.
+- `codes=company-folder-exists` means there is already a folder for a company
+  of that name. Ask them for a name that tells the two apart and run the
+  command again with it. Never build over a folder that is already there.
+- If they would rather have the base sit inside the folder their material is
+  in, run the command again with
+  `--beside --content-folder-file <a fresh folder file>`. The same checks run
+  on that folder. It is refused when another tool already keeps a history for
+  it, when another program copies it off the computer on its own, or when it
+  is inside a base or inside the folder GTM Base keeps for itself.
+- `sync-unknown` means the command could not tell whether an app copies that
+  folder to cloud storage. Ask them whether any app automatically copies this
+  folder, or their whole home folder, to cloud storage. If they say yes, do
+  not build there.
+- Nothing is created when they say yes here. The base is made later, at the
+  moment they approve the first document. Pass the same folder to `approve`
+  on that first document, in a fresh file, the way step 6b shows, so the base
+  is linked at the moment it comes into being.
 
 ### Step 5. Where the material sits
 
@@ -478,7 +504,7 @@ python3 scripts/join.py words-file --run <run identifier> --for company
 python3 scripts/join.py assemble --step <step> --run <run identifier> --company-file <the path it printed> --email <their address>
 ```
 
-- The company file from step 4 has already been read and taken away, so this
+- The company file from step 4a has already been read and taken away, so this
   step asks for a fresh one, and so does every step after it that needs the
   name. Add `--paste-file <the path add-paste printed>` once for each piece
   of text held in step 5c.
@@ -545,10 +571,10 @@ because a skipped document is written into the base the first approval makes.
 - **Edit.** Take their own wording, put it in the draft file, and check it again
   with `review`.
 - **Approve**, the first document they approve, which creates the base:
-  `python3 scripts/join.py approve --step <step> --draft <draft file> --run <run identifier> --parent <the parent from step 4> --company-file <a fresh company file>`.
+  `python3 scripts/join.py approve --step <step> --draft <draft file> --run <run identifier> --parent <the parent from step 4a> --company-file <a fresh company file>`.
   Add `--email <address>` when they gave one, and
   `--content-folder-file <a fresh folder file>` when they named a folder in
-  step 4.
+  step 3.
 - **Approve**, every document after the first:
   `python3 scripts/join.py approve --step <step> --draft <draft file> --run <run identifier> --base <base folder>`.
   It prints `base=` and `file=`. When it says GTM Base needs their work email
@@ -808,11 +834,10 @@ wording, and it is not approvable while it is still that.
 
 This is where GTM Base will look at the base as a whole and tell them one true
 thing about it, and say where the base is and how to come back to it. Before
-running it, say that what they say about setting up is saved into the base
-itself so the next session can see it.
+running it, ask the one last question, in these words:
 
 <!-- ask -->
-Did anything get in the way while you were setting this up?
+Did anything get in the way while you were setting this up? Your answer is feedback for the people who make GTM Base, and it is optional, so you can say skip. What you say is kept in your base, as a note dated today in its learning folder, where anyone you invite to your base can read it. GTM Base does not send it anywhere.
 <!-- end ask -->
 
 ```
