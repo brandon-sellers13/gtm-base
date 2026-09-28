@@ -830,6 +830,11 @@ class TestTheSkillsAsTheyAreWritten(unittest.TestCase):
         "<the path it printed for the words>": lambda self, state, command: state.get("words"),
         "<path to the prepared change>": lambda self, state, command: state.get("staged"),
         "<the shown value>": lambda self, state, command: state.get("shown"),
+        # Another document a hand edit's context change affects, which is a
+        # document of the base other than the one the walk edits by hand.
+        "<another document>": lambda self, state, command: state.get(
+            "open_question_document"
+        ),
     }
 
     # --- what each command needs before it, and what it leaves behind ------
@@ -904,7 +909,12 @@ class TestTheSkillsAsTheyAreWritten(unittest.TestCase):
         "label": "a note from the call",
         "reason": "We moved up market, so this is out of date now.",
         "source": "The quarterly review deck, slide four, said so.",
-        "what-changed": "We moved up market because the small ones churned.",
+        # Worded the way a corrected fact has to be, replacing the old one,
+        # so the same words serve the answer about the business as well.
+        "what-changed": (
+            "We sell to companies of twenty to two hundred people, replacing "
+            "the any size we used to state."
+        ),
         # Unit 1.7a: the part of the company a base is for, and one line per
         # segment the way the join skill says to write them.
         "scope": "Payments",

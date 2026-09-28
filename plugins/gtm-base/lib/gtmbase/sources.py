@@ -31,7 +31,7 @@ import os
 import re
 from typing import Dict, List, Optional, Sequence
 
-from . import constants, marker, paths, redaction_patterns, scan
+from . import constants, marker, names, paths, redaction_patterns, scan
 from .errors import ConsentError, SourceRejected
 
 # --- The codes a listing reports --------------------------------------------
@@ -688,7 +688,7 @@ def counted_kinds(place: Place) -> str:
         if not count:
             continue
         singular, plural = constants.MARKETING_KIND_LABELS[kind]
-        parts.append("%d %s" % (count, singular if count == 1 else plural))
+        parts.append(names.how_many(count, singular, plural))
     return ", ".join(parts)
 
 
@@ -1246,7 +1246,7 @@ def removed_sentence(label: str, removed) -> str:
     for kind in (REMOVED_COMMENT, REMOVED_TAG, REMOVED_HIDDEN_CHARACTER):
         count = int(removed.get(kind, 0))
         if count:
-            parts.append("%d %s%s" % (count, kind, "" if count == 1 else "s"))
+            parts.append(names.how_many(count, kind, kind + "s"))
     if len(parts) > 1:
         listed = ", ".join(parts[:-1]) + " and " + parts[-1]
     else:

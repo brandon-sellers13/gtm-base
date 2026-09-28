@@ -40,6 +40,7 @@ from . import (
     adopt,
     base_reader,
     callmarkers,
+    compose_proposal,
     confirm,
     constants,
     create_base,
@@ -231,7 +232,7 @@ OTHERS_FLAGGED_ONE = (
     "One other document this change affects is left flagged for your next review."
 )
 OTHERS_FLAGGED_MANY = (
-    "%d other documents this change affects are left flagged for your next review."
+    "%s other documents this change affects are left flagged for your next review."
 )
 # Skip is a whole answer. Requirement P7.
 SKIP_RECORDED = (
@@ -1535,7 +1536,7 @@ DRAFT_HAS_ONE_QUESTION = (
     "asks it again."
 )
 DRAFT_HAS_QUESTIONS = (
-    "This draft leaves %d questions for you to answer, each marked where it "
+    "This draft leaves %s questions for you to answer, each marked where it "
     "comes up. Answer them now and they are written in before anything is "
     "saved, or approve the draft with them left open and your next review of "
     "your base asks them again."
@@ -1548,7 +1549,7 @@ def draft_questions_sentence(count: int) -> str:
         return ""
     if count == 1:
         return DRAFT_HAS_ONE_QUESTION
-    return DRAFT_HAS_QUESTIONS % count
+    return DRAFT_HAS_QUESTIONS % names.counted(count)
 
 
 def several_segments(run_id: str) -> Optional[segments.Inventory]:
@@ -1583,12 +1584,28 @@ def segment_to_draft(run_id: str, slug: Optional[str]) -> segments.Segment:
             if segment.answer == constants.SEGMENT_DRAFT:
                 return segment
             # A finished page the adoption contract refused may be drafted
-            # instead, which is the offer every such refusal makes (Unit 1.7c).
-            if segment.answer == constants.SEGMENT_ADOPT and adopt.was_refused(
-                scratch_dir(run_id), slug
+            # instead, which is the offer every such refusal makes (Unit 1.7c),
+            # in setup and in a later session alike (Brandon's call 37).
+            if segment.answer == constants.SEGMENT_ADOPT and (
+                adopt.was_refused(scratch_dir(run_id), slug)
+                or _drafted_instead_later(run_id, slug)
             ):
                 return segment
     raise ReviewError(segments.CODE_NOT_TO_DRAFT, code=segments.CODE_NOT_TO_DRAFT)
+
+
+def _drafted_instead_later(run_id: str, slug: str) -> bool:
+    """Whether a later session's run drafts this refused page's segment."""
+    held = _finishing(run_id)
+    if held is None or held["segment"] != slug:
+        return False
+    record = segments.load_import(held["base_id"])
+    return bool(
+        record is not None
+        and record.run == held["run"]
+        and record.is_a_draft(slug)
+        and record.drafted_instead(slug)
+    )
 
 
 def _step_is_this_runs(run_id: str, step: str, segment: Optional[str] = None):
@@ -1836,7 +1853,7 @@ class Shown(object):
         if self.cleaned.questions == 1:
             said.append(adopt.ONE_QUESTION)
         elif self.cleaned.questions > 1:
-            said.append(adopt.QUESTIONS % self.cleaned.questions)
+            said.append(adopt.QUESTIONS % names.counted(self.cleaned.questions))
         said.append(adopt.ASK_WITH_QUESTIONS if self.cleaned.questions else adopt.ASK)
         return said
 
@@ -2001,7 +2018,7 @@ def adoption_approve(
         raise adopt.AdoptionRefused(adopt.CODE_QUESTIONS_OPEN)
     kept = segments.mark(
         base_id, segment.slug, segments.STATE_APPROVED, record["shown"], record["day"],
-        run=kept.run, original=_original_digest(run_id, segment),
+        run=kept.run, original=_original_digest(run_id, segment), instead=False,
     )
     return _finish_one(run_id, root, base_id, segment, kept, cleaned.text, git, now, address)
 
@@ -2041,7 +2058,7 @@ RESUME_FINISHED_ONE = (
     "your base."
 )
 RESUME_FINISHED = (
-    "%d finished documents you had already said yes to are now saved into "
+    "%s finished documents you had already said yes to are now saved into "
     "your base."
 )
 RESUME_CHANGED = (
@@ -2075,7 +2092,7 @@ RESUME_TO_SHOW_ONE = (
     "you before anything is saved."
 )
 RESUME_TO_SHOW = (
-    "%d finished documents still wait for your answer, and each is shown to "
+    "%s finished documents still wait for your answer, and each is shown to "
     "you before anything is saved."
 )
 RESUME_DONE = (
@@ -2224,10 +2241,15 @@ def _carry(run_id: str, base_id: Optional[str]):
 
 
 def _mark_refused(record, slug: str) -> None:
-    """Keep that the contract refused a page. A saved page stays saved."""
+    """Keep that the contract refused a page, so its segment is drafted instead.
+
+    It is then a segment to draft like any other, so one the person did not
+    finish before the closing is kept for a later session (Brandon's call 37).
+    Leaving it out still ends it. A saved page stays saved.
+    """
     if record is None:
         return
-    segments.mark(record.base_id, slug, segments.STATE_REFUSED, run=record.run)
+    segments.mark(record.base_id, slug, segments.STATE_DRAFT_INSTEAD, run=record.run)
 
 
 # How many times this thread holds each base's writing lock, so a call that
@@ -2433,6 +2455,11 @@ def adoption_leave_out(
     return LEFT_OUT_SAID
 
 
+def _opening_count(number: int) -> str:
+    """A count that opens a sentence, in words and with a capital."""
+    return names.counted(number).capitalize()
+
+
 class Resumed(object):
     """What finishing an import did, and what is still to be shown and asked."""
 
@@ -2497,11 +2524,11 @@ class Resumed(object):
         if len(self.finished) == 1:
             said.append(RESUME_FINISHED_ONE)
         elif self.finished:
-            said.append(RESUME_FINISHED % len(self.finished))
+            said.append(RESUME_FINISHED % _opening_count(len(self.finished)))
         if len(self.drafts_saved) == 1:
             said.append(RESUME_DRAFT_SAVED_ONE)
         elif self.drafts_saved:
-            said.append(RESUME_DRAFT_SAVED % len(self.drafts_saved))
+            said.append(RESUME_DRAFT_SAVED % _opening_count(len(self.drafts_saved)))
         for segment in self.taken:
             said.append(RESUME_TAKEN % {"name": segment.name})
         for segment in self.edited:
@@ -2522,11 +2549,11 @@ class Resumed(object):
         if len(self.to_show) == 1:
             said.append(RESUME_TO_SHOW_ONE)
         elif self.to_show:
-            said.append(RESUME_TO_SHOW % len(self.to_show))
+            said.append(RESUME_TO_SHOW % _opening_count(len(self.to_show)))
         if len(self.to_draft) == 1:
             said.append(RESUME_TO_DRAFT_ONE)
         elif self.to_draft:
-            said.append(RESUME_TO_DRAFT % len(self.to_draft))
+            said.append(RESUME_TO_DRAFT % _opening_count(len(self.to_draft)))
         if self.done:
             said.append(RESUME_ALL_SETTLED if self.had_drafts else RESUME_DONE)
         if not said:
@@ -2795,7 +2822,7 @@ RESUME_DRAFT_SAVED_ONE = (
     "One segment you had already approved is now saved into your base."
 )
 RESUME_DRAFT_SAVED = (
-    "%d segments you had already approved are now saved into your base."
+    "%s segments you had already approved are now saved into your base."
 )
 # Said when a draft was approved and the session stopped before its save began.
 RESUME_DRAFT_AGAIN = (
@@ -2809,7 +2836,7 @@ RESUME_TO_DRAFT_ONE = (
     "again."
 )
 RESUME_TO_DRAFT = (
-    "%d segments you chose to have drafted are not in your base yet. Before "
+    "%s segments you chose to have drafted are not in your base yet. Before "
     "each one is drafted, you will see which of your files it would read and "
     "be asked again."
 )
@@ -2863,6 +2890,18 @@ DRAFT_NOT_AGREED = (
     "written. Show the list of files it would read and ask first."
 )
 DRAFT_LEFT_OUT = "%(name)s is left out, and nothing was drafted for it."
+# Said after that when the customer profile already names the segment, and a
+# change saying it is left out has been prepared for the owner to approve
+# rather than written in (Brandon's call 36).
+UMBRELLA_CHANGE_WAITING = (
+    "Your customer profile still names %(name)s, so a change saying it is left "
+    "out is waiting for your yes the next time you review your base."
+)
+# Why that change was prepared, as its own text says it.
+UMBRELLA_CHANGE_WHY = (
+    "You left this segment out when you finished setting up your base, so the "
+    "customer profile says it is left out instead of describing it."
+)
 
 # The one sentence said for each refusal of the steps above that names no
 # segment. The script reads it.
@@ -3382,7 +3421,12 @@ def draft_leave_out(
         if now_in == segments.STATE_COMMITTED:
             return ALREADY_SAVED
         if now_in in (segments.STATE_LEFT_OUT, segments.STATE_REFUSED):
-            return DRAFT_LEFT_OUT % {"name": segment.name}
+            said = DRAFT_LEFT_OUT % {"name": segment.name}
+            if now_in == segments.STATE_LEFT_OUT and _prepare_the_umbrella_change(
+                root, segment
+            ):
+                said += " " + UMBRELLA_CHANGE_WAITING % {"name": segment.name}
+            return said
         yes = record.approved(segment.slug)
         if yes is not None:
             where = review.page_state(
@@ -3402,7 +3446,89 @@ def draft_leave_out(
                 )
         segments.mark(base_id, segment.slug, segments.STATE_LEFT_OUT, run=record.run)
     segments.forget_import(base_id)
-    return DRAFT_LEFT_OUT % {"name": segment.name}
+    said = DRAFT_LEFT_OUT % {"name": segment.name}
+    if _prepare_the_umbrella_change(root, segment) is not None:
+        said += " " + UMBRELLA_CHANGE_WAITING % {"name": segment.name}
+    return said
+
+
+def _prepare_the_umbrella_change(root: str, segment) -> Optional[str]:
+    """Prepare the change saying a segment is left out, for the owner's yes.
+
+    The customer profile across several segments gives each one a part under
+    its own name. When the person leaves a segment out in a later session,
+    that part still describes it, and setup never rewrites a document it has
+    written, so the change goes the way every other change to a document
+    goes: prepared, shown, and approved by the owner (Brandon's call 36). A
+    profile that has no part under exactly that name, one that already says
+    it is left out, and a change already waiting for it are all left alone.
+    Nothing here writes into the document itself. The leave-out is already
+    written down, so a change that cannot be prepared is not a refusal of it:
+    nothing is said about a change, and leaving the segment out again
+    prepares it (the correctness review of the live-check follow-up,
+    finding 4).
+    """
+    try:
+        return _prepare_it(root, segment)
+    except (GtmBaseError, OSError):
+        return None
+
+
+def _prepare_it(root: str, segment) -> Optional[str]:
+    """The work of `_prepare_the_umbrella_change`, which may fail."""
+    relative = layout.where_it_lives(root, constants.REQUIRED_CONTEXT_FILES[0])
+    text = read_text(os.path.join(root, relative.replace("/", os.sep)))
+    if text is None:
+        return None
+    heading = "### %s" % segment.name
+    lines = text.split("\n")
+    start = compose_proposal.frontmatter_end(lines)
+    index = compose_proposal.find_heading(lines, heading, start)
+    if index < 0 or compose_proposal.find_heading(lines, heading, index + 1) >= 0:
+        return None
+    stop = compose_proposal.section_end(lines, index)
+    before = "\n".join(lines[index + 1 : stop]).strip()
+    after = constants.UMBRELLA_LEFT_OUT_SENTENCE
+    if before in (after, constants.UMBRELLA_PENDING_SENTENCE):
+        return None
+    staging_id = ids.staging_id(segment.slug, relative, "join", 0)
+    folder = os.path.join(root, constants.PROPOSALS_PENDING_DIR)
+    destination = os.path.join(folder, staging_id + ".md")
+    for kept in (
+        constants.PROPOSALS_PENDING_DIR,
+        constants.PROPOSALS_OPENED_DIR,
+        constants.PROPOSALS_DROPPED_DIR,
+    ):
+        if os.path.lexists(os.path.join(root, kept, staging_id + ".md")):
+            return None
+    body = formats.render_pr_body(
+        {
+            "before": " ".join(before.split()) or segment.name,
+            "after": after,
+            "why": UMBRELLA_CHANGE_WHY,
+            "evidence": UMBRELLA_CHANGE_WHY,
+            "confidence": "high",
+            "rule_changed": "None",
+            "marker": validate.marker_line(staging_id, None, None),
+        }
+    )
+    staging = formats.ProposalStaging(
+        staging_id=staging_id,
+        origin="join",
+        intake_path="join",
+        target_paths=[relative],
+        sequence=0,
+        rule_change=False,
+        confidence="high",
+        third_party=False,
+        pr_body=body,
+        edits=[formats.Edit(relative, heading, "replace", after + "\n")],
+        excerpt="",
+    )
+    staging.validate()
+    fsutil.ensure_dir(folder)
+    fsutil.atomic_write_text(destination, staging.render(), mode=0o600)
+    return destination
 
 
 class SourcesRead(object):
@@ -4477,7 +4603,7 @@ def reconcile_plan(
     if len(left_flagged) == 1:
         sentence = OTHERS_FLAGGED_ONE
     elif left_flagged:
-        sentence = OTHERS_FLAGGED_MANY % len(left_flagged)
+        sentence = OTHERS_FLAGGED_MANY % names.counted(len(left_flagged)).capitalize()
     return Reconciliation(ask_about, left_flagged, sentence)
 
 

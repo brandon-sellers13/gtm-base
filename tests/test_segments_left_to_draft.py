@@ -441,7 +441,14 @@ class TestLeavingItOutEndsIt(Case):
         set_up_and_close(company)
         head = company.head()
         said = join_flow.draft_leave_out(slug(LATER), company.root)
-        self.assertEqual(join_flow.DRAFT_LEFT_OUT % {"name": LATER}, said)
+        # The profile names it, so a change saying it is left out waits for
+        # the owner's yes (Brandon's call 36); nothing is written in.
+        self.assertEqual(
+            join_flow.DRAFT_LEFT_OUT % {"name": LATER}
+            + " "
+            + join_flow.UMBRELLA_CHANGE_WAITING % {"name": LATER},
+            said,
+        )
         self.assertEqual(head, company.head())
         self.assertEqual("", company.status())
         # Nothing else was waiting, so the record is let go.

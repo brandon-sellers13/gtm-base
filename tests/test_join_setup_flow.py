@@ -862,7 +862,7 @@ class TestOneQuestionPerDocumentAtTheClosing(unittest.TestCase):
             self.assertEqual([ICP, POSITIONING], plan.ask_about)
             self.assertEqual(list(SEGMENTS), plan.left_flagged)
             self.assertEqual(
-                "10 other documents this change affects are left flagged for "
+                "Ten other documents this change affects are left flagged for "
                 "your next review.",
                 plan.sentence,
             )
@@ -2034,8 +2034,8 @@ class TestThePreviewBeforeEachDraft(unittest.TestCase):
             printed = self.preview(setup.run).stdout.decode("utf-8")
 
             self.assertIn(
-                "This draft will read 2 of the 4 files on your list and leave "
-                "out 2: b-also-huge.md (%s), pricing-notes.txt (%s)."
+                "This draft will read two of the four files on your list and "
+                "leave out two: b-also-huge.md (%s), pricing-notes.txt (%s)."
                 % (REAL_TODAY, REAL_TODAY),
                 printed,
             )
@@ -2053,7 +2053,7 @@ class TestThePreviewBeforeEachDraft(unittest.TestCase):
             printed = self.preview(setup.run).stdout.decode("utf-8")
 
             self.assertIn(
-                constants.PREVIEW_READS_ALL % {"read": 2}, printed
+                constants.PREVIEW_READS_ALL % {"read": "two"}, printed
             )
             self.assertNotIn(constants.PREVIEW_WHY_LIMITED, printed)
             self.assertIn(constants.PREVIEW_NARROW_ASK_ALL, printed)
@@ -2377,7 +2377,7 @@ class TestALargeFolderIsNarrowedBeforeTheYes(unittest.TestCase):
 
             self.assertEqual(0, finished.returncode, finished.stderr)
             self.assertIn(
-                constants.CONSENT_NARROW_SENTENCE % {"files": 45, "folders": 5},
+                constants.CONSENT_NARROW_SENTENCE % {"files": "45", "folders": "five"},
                 printed,
             )
             # The number beside each folder is what the skill names it by
@@ -2775,7 +2775,7 @@ class TestAnExplicitChoiceIsHonoredOnce(unittest.TestCase):
 
             self.assertEqual(0, listed.returncode, listed.stderr)
             self.assertIn("choice=explicit", printed)
-            self.assertIn("That is 48 files in the 4 folders you named.", printed)
+            self.assertIn("That is 48 files in the four folders you named.", printed)
             self.assertNotIn("That folder holds", printed)
             self.assertNotIn("note=narrow-first", printed)
             frozen = run_join(
@@ -2832,7 +2832,7 @@ class TestAnExplicitChoiceIsHonoredOnce(unittest.TestCase):
             self.assertEqual(0, listed.returncode, listed.stderr)
             self.assertIn("choice=plain-yes", printed)
             self.assertIn(
-                constants.CONSENT_NARROW_SENTENCE % {"files": 48, "folders": 4},
+                constants.CONSENT_NARROW_SENTENCE % {"files": "48", "folders": "four"},
                 printed,
             )
             self.assertNotIn("you named", printed)
@@ -3674,8 +3674,8 @@ class TestTheSkillIsPlainAndSaysWhatWillHappen(unittest.TestCase):
 
         self.assertEqual([], plain_language.find_banned(sentence))
         self.assertEqual([], plain_language.find_dashes(sentence))
-        for part in sentence.replace("%(files)d", "\n").replace(
-            "%(folders)d", "\n"
+        for part in sentence.replace("%(files)s", "\n").replace(
+            "%(folders)s", "\n"
         ).split("\n"):
             self.assertIn(part, step_five)
         self.assertIn("note=narrow-first", step_five)
@@ -4009,7 +4009,7 @@ class TestTheScriptAnswersFromTheCommandLine(unittest.TestCase):
 
             self.assertEqual(0, finished.returncode, finished.stderr)
             self.assertIn(
-                "Hidden parts removed from template.md: 3 comments.", printed
+                "Hidden parts removed from template.md: three comments.", printed
             )
 
 

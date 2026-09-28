@@ -48,6 +48,7 @@ from . import (
     confirm,
     constants,
     formats,
+    hand_edit,
     ids,
     layout,
     moment,
@@ -248,6 +249,13 @@ APPLIED = "%s now says what this change said, and you are recorded as approving 
 KEPT = "The prepared change is still waiting, and nothing in your base changed."
 DROPPED = "The prepared change is gone, and nothing in your base changed."
 ASK = "Approve this change, leave it for now, or drop it?"
+# The one yes a fix to wording only asks for (Brandon's calls 34 and 49).
+WORDING_ASK = "Shall I keep this fix to the wording?"
+# How a hand edit is shown: the changed sentence once, the change marked, and
+# the heading it sits under (the 0.3.1 live check, step 5, finding 1). The
+# heading and the words come out of the document, so they sit in the fence
+# below this sentence and never in it.
+MARKED = hand_edit.MARKED
 # How each part of a document is introduced in what a person reads. The part
 # itself, heading first, follows inside the data fence, so no word of it is in
 # these sentences (the second round of Astra's review of Unit 1.7c): a heading
@@ -758,9 +766,9 @@ def _affected_names(walk: "_Walk", entry) -> str:
 def four_lines(base_root: str, staging, entry, walk, today) -> str:
     """One context change as the four labeled lines, and nothing else."""
     if entry is not None:
-        what = names.change_name(entry.body, entry.decided_on)
+        what = names.change_name(entry.body, entry.decided_on, whole=True)
     else:
-        what = names.change_name(compose_proposal.summary_of(staging), None)
+        what = compose_proposal.what_changed_line(staging, steps=walk.steps)
     body = formats.parse_pr_body(staging.pr_body)
     values = (
         _one_line(what),
@@ -803,6 +811,93 @@ def whole_difference(base_root: str, ordered: List[str], git: GitRunner) -> Dict
         # reading this already knows, so they are left out.
         found[relative] = "\n".join(lines[2:]) if len(lines) > 2 else ""
     return found
+
+
+def marked_differences(
+    base_root: str, ordered: List[str], git: GitRunner
+) -> Dict[str, List[Tuple[str, str]]]:
+    """Every change in each of these files, marked, under its heading.
+
+    The same comparison the whole difference makes, between the last saved
+    version and the file as it is, read as a person reads it: the changed
+    sentence once, with what was taken out and what was put in marked.
+    """
+    found: Dict[str, List[Tuple[str, str]]] = {}
+    for relative in ordered:
+        was = _head_text(base_root, relative, git) or ""
+        now = (
+            read_text_exactly(
+                os.path.join(base_root, relative.replace("/", os.sep))
+            )
+            or ""
+        )
+        found[relative] = hand_edit.marked_changes(was, now)
+    return found
+
+
+def hand_edit_difference(base_root: str, runner: Optional[GitRunner] = None) -> str:
+    """What was changed by hand in each document, marked, and nothing prepared.
+
+    The assistant runs this before it accepts that an edit was only a fix to
+    wording, so it can name the exact difference between the saved file and
+    the version last approved (the 0.3.1 live check, step 6). It writes
+    nothing anywhere.
+    """
+    git = runner_or_default(runner)
+    compose_proposal.refuse_a_name_with_a_space(base_root, git)
+    changed = compose_proposal._changed_names(base_root, git) or []
+    documents = []
+    for relative in changed:
+        try:
+            documents.append(paths.canonical_context_path(base_root, relative))
+        except (PathError, ValidationError):
+            continue
+    pieces = []
+    for relative, changes in marked_differences(base_root, documents, git).items():
+        if not changes:
+            continue
+        pieces.append(MARKED % names.document_name(relative))
+        pieces.append("")
+        pieces.append(moment.fenced(hand_edit.as_read(changes)))
+        pieces.append("")
+    return "\n".join(pieces).rstrip("\n")
+
+
+def short_artifact_for(
+    base_root: str, staging, entry, walk, today, differences, marked
+) -> str:
+    """A hand edit as a person reads it in seconds.
+
+    The four labeled lines, unless the edit is a fix to wording only, and then
+    each changed sentence once, with the change marked and the heading it sits
+    under. Every line that saying yes would save is in it; only the unchanged
+    sentences around a change are left off, and the whole text is shown on
+    request. Changes that are only spaces, tabs, or line endings are pointed
+    out as they are in the whole text.
+    """
+    pieces = [ARTIFACT_OPEN]
+    if not getattr(staging, "wording_only", False):
+        pieces.append(moment.fenced(four_lines(base_root, staging, entry, walk, today)))
+        pieces.append("")
+    for relative in walk.ordered:
+        document = names.document_name(relative)
+        changes = (marked or {}).get(relative) or []
+        if not changes:
+            pieces.append(NOTHING_DIFFERENT % document)
+            pieces.append("")
+            continue
+        pieces.append(MARKED % document)
+        pieces.append("")
+        pieces.append(moment.fenced(hand_edit.as_read(changes)))
+        pieces.append("")
+        hidden = _whitespace_lines((differences or {}).get(relative) or "")
+        if hidden:
+            pieces.append(WHITESPACE_ONLY % document)
+            pieces.append("")
+            pieces.append(moment.fenced("\n".join(_visible(line) for line in hidden)))
+            pieces.append("")
+    pieces.append(ARTIFACT_CLOSE)
+    return "\n".join(pieces).rstrip("\n") + "\n"
 
 
 def artifact_for(base_root: str, staging, entry, walk, today, differences=None) -> str:
@@ -947,10 +1042,19 @@ class _Reading(object):
         "artifact",
         "shown_hash",
         "by_hand",
+        "entry",
     )
 
     def __init__(
-        self, staging, walk, entry_id, source_id, artifact, shown_hash, by_hand=False
+        self,
+        staging,
+        walk,
+        entry_id,
+        source_id,
+        artifact,
+        shown_hash,
+        by_hand=False,
+        entry=None,
     ):
         self.staging = staging
         self.walk = walk
@@ -959,6 +1063,9 @@ class _Reading(object):
         self.artifact = artifact
         self.shown_hash = shown_hash
         self.by_hand = by_hand
+        # The context change behind it, wherever it is written, which is what
+        # the saved history is named by.
+        self.entry = entry
 
 
 def _a_document_that_moved_on(base_root: str, staging) -> Optional[str]:
@@ -991,7 +1098,7 @@ def _made_by_hand(staging) -> bool:
     return str(getattr(staging, "origin", "")) == compose_proposal.LOCAL_EDIT_ORIGIN
 
 
-def _read_and_check(base_root, base_id, staging_path, git, today):
+def _read_and_check(base_root, base_id, staging_path, git, today, whole=False):
     """Everything show and approve both do, in the one order they both do it.
 
     What comes back is either the refusal to report or the reading to work
@@ -1210,14 +1317,27 @@ def _read_and_check(base_root, base_id, staging_path, git, today):
             )
 
     entry = _entry_for(base_root, staging, entry_id)
+    if by_hand and not whole:
+        shown = short_artifact_for(
+            base_root,
+            staging,
+            entry,
+            walk,
+            today,
+            differences,
+            marked_differences(base_root, walk.ordered, git),
+        )
+    else:
+        shown = artifact_for(base_root, staging, entry, walk, today, differences)
     return None, _Reading(
         staging,
         walk,
         entry_id,
         source_id,
-        artifact_for(base_root, staging, entry, walk, today, differences),
+        shown,
         _shown_hash(staged_text, base_root, walk.ordered),
         by_hand,
+        entry,
     )
 
 
@@ -1247,8 +1367,14 @@ def show(
     base_id: str,
     runner: Optional[GitRunner] = None,
     now: Optional[datetime.date] = None,
+    whole: bool = False,
 ) -> LocalResult:
-    """Read one prepared change, screen it, and hand back the whole of it."""
+    """Read one prepared change, screen it, and hand back the showing of it.
+
+    A change somebody made by hand is shown short, as the changed sentence
+    once with the change marked, and whole when they ask for the whole text.
+    The yes is bound to the same bytes either way.
+    """
     git = runner_or_default(runner)
     today = _day_of(now)
     codes: List[str] = []
@@ -1259,14 +1385,18 @@ def show(
     if finished is not None:
         return finished
 
-    refusal, reading = _read_and_check(base_root, base_id, staging_path, git, today)
+    refusal, reading = _read_and_check(
+        base_root, base_id, staging_path, git, today, whole=whole
+    )
     if refusal is not None:
         return refusal
     return LocalResult(
         STATUS_SHOWN,
         staging_id=reading.staging.staging_id,
         codes=codes,
-        reasons=[ASK],
+        reasons=[
+            WORDING_ASK if getattr(reading.staging, "wording_only", False) else ASK
+        ],
         artifact=reading.artifact,
         shown_hash=reading.shown_hash,
         paths=list(reading.walk.ordered),
@@ -1338,14 +1468,22 @@ def _head_text(base_root: str, relative: str, git: GitRunner) -> Optional[str]:
     return shown.stdout if shown.ok else None
 
 
-def _subject(staging) -> str:
-    """The note saved with the work, which a repeat run recognises."""
+def _subject(staging, reading=None) -> str:
+    """The note saved with the work, which a repeat run recognises.
+
+    It says what changed the way "What changed:" says it, whole, so the saved
+    history never stops in the middle of a word (the 0.3.1 live check, step
+    5). Without a reading it is worked out from the prepared change alone.
+    """
+    what = compose_proposal.what_changed_line(
+        staging,
+        entry=getattr(reading, "entry", None),
+        steps=reading.walk.steps if reading is not None else None,
+    )
     return "%s%s: %s" % (
         report.LOCAL_APPROVAL_COMMIT_PREFIX,
         staging.staging_id,
-        compose_proposal.summary_of(staging)[
-            : compose_proposal.COMMIT_SUMMARY_CHARS
-        ].strip(),
+        compose_proposal.one_line_of(what),
     )
 
 
@@ -1368,20 +1506,28 @@ def _plan_the_writes(base_root, reading, today, moment, git) -> "_Plan":
         files.append((entry_path, entry.render(), False))
         touched.append(entry_path)
 
-    # The plain run of the finished files, which is the same value the record
-    # of what changed is read back against later.
-    hash_value = ids.content_hash("".join(walk.texts[path] for path in walk.ordered))
-    correction = compose_proposal.corrections_for(
-        staging, today, hash_value, touched, reading.entry_id, reading.source_id
-    )
-    correction_path = "%s/%s-%s.md" % (
-        constants.CORRECTIONS_DIR,
-        today.isoformat(),
-        staging.staging_id,
-    )
-    if os.path.lexists(os.path.join(base_root, correction_path.replace("/", os.sep))):
-        raise ValidationError(ALREADY_RECORDED, code=CODE_ALREADY_RECORDED)
-    files.append((correction_path, correction.render(), False))
+    if not getattr(staging, "wording_only", False):
+        # The plain run of the finished files, which is the same value the
+        # record of what changed is read back against later. A fix to wording
+        # only writes no such record (Brandon's call 49): the saved history
+        # already says who changed what and when, and a correction record
+        # means something was wrong, which is what a later lessons pass reads.
+        hash_value = ids.content_hash(
+            "".join(walk.texts[path] for path in walk.ordered)
+        )
+        correction = compose_proposal.corrections_for(
+            staging, today, hash_value, touched, reading.entry_id, reading.source_id
+        )
+        correction_path = "%s/%s-%s.md" % (
+            constants.CORRECTIONS_DIR,
+            today.isoformat(),
+            staging.staging_id,
+        )
+        if os.path.lexists(
+            os.path.join(base_root, correction_path.replace("/", os.sep))
+        ):
+            raise ValidationError(ALREADY_RECORDED, code=CODE_ALREADY_RECORDED)
+        files.append((correction_path, correction.render(), False))
 
     confirmations: List[Tuple[str, str, bool]] = []
     for relative in walk.ordered:
@@ -1409,7 +1555,7 @@ def _plan_the_writes(base_root, reading, today, moment, git) -> "_Plan":
     return _Plan(
         files,
         confirmations,
-        _subject(staging),
+        _subject(staging, reading),
         staging,
         list(walk.ordered),
         leave_alone,
@@ -2010,8 +2156,16 @@ def _finish_unfinished_work(
         staged = os.path.join(
             base_root, constants.PROPOSALS_PENDING_DIR, its_id + ".md"
         )
-        compose_proposal.retire(base_root, staged, its_id, base_id=base_id)
+        kept = compose_proposal.retire(base_root, staged, its_id, base_id=base_id)
         _clear_journal(base_id)
+        try:
+            by_hand = _made_by_hand(compose_proposal.load_staging(kept))
+        except GtmBaseError:
+            by_hand = False
+        if by_hand:
+            # A hand edit kept by the run that finishes it counts the same
+            # (the correctness review of the live-check follow-up, finding 5).
+            hand_edit.one_more_kept(base_id)
         if its_id != staging_id:
             return None
         ordered = [
@@ -2254,6 +2408,10 @@ def approve(
         base_root, staging_path, plan.staging.staging_id, base_id=base_id
     )
     _clear_journal(base_id)
+    if reading.by_hand:
+        # One more hand edit kept, which is what the question a hand edit
+        # asks is explained in full for, three times (Brandon's call 33).
+        hand_edit.one_more_kept(base_id)
     return LocalResult(
         STATUS_APPLIED,
         staging_id=plan.staging.staging_id,

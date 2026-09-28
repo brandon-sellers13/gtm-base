@@ -1203,7 +1203,7 @@ class TestAConflictIsNeverSilent(MigrationCase):
 
         self.in_conflict()
         self.assertNotIn(
-            stale_check.LEDGER_BEHIND_EMPTY % 30, self.run_check().sentences
+            stale_check.LEDGER_BEHIND_EMPTY % "30 days", self.run_check().sentences
         )
 
     def test_the_affected_document_is_still_named_as_one_it_cannot_vouch_for(self):
@@ -1515,7 +1515,7 @@ class TestWhenTheOfferIsMade(MigrationCase):
 
         result = self.review()
 
-        self.assertNotIn(changes.OFFER, result.sentences)
+        self.assertFalse(any(changes.is_the_offer(line) for line in result.sentences))
         self.assertNotIn(stale_check.CODE_CHANGES_CAN_MOVE, result.codes)
 
     def test_no_offer_while_there_are_unsaved_edits(self):
@@ -1528,7 +1528,7 @@ class TestWhenTheOfferIsMade(MigrationCase):
 
         result = self.review()
 
-        self.assertNotIn(changes.OFFER, result.sentences)
+        self.assertFalse(any(changes.is_the_offer(line) for line in result.sentences))
         self.assertNotIn(stale_check.CODE_CHANGES_CAN_MOVE, result.codes)
 
     def test_a_base_with_a_shared_copy_is_told_the_condition_instead(self):
@@ -1539,8 +1539,8 @@ class TestWhenTheOfferIsMade(MigrationCase):
 
         result = self.review()
 
-        self.assertNotIn(changes.OFFER, result.sentences)
-        self.assertIn(changes.EVERY_SEAT_FIRST, result.sentences)
+        self.assertFalse(any(changes.is_the_offer(line) for line in result.sentences))
+        self.assertIn(changes.offer_sentence(self.root, every_seat_first=True), result.sentences)
         self.assertIn(stale_check.CODE_EVERY_SEAT_FIRST, result.codes)
 
     def test_the_move_itself_refuses_on_a_base_with_a_shared_copy(self):
@@ -1569,11 +1569,11 @@ class TestWhenTheOfferIsMade(MigrationCase):
         from gtmbase import stale_check
 
         self.old_layout()
-        self.assertIn(changes.OFFER, self.review().sentences)
+        self.assertIn(changes.offer_sentence(self.root), self.review().sentences)
 
         changes.not_now(self.base_id, TODAY)
 
-        self.assertNotIn(changes.OFFER, self.review().sentences)
+        self.assertFalse(any(changes.is_the_offer(line) for line in self.review().sentences))
 
     def test_the_offer_comes_back_once_the_window_has_passed(self):
         import datetime as when
@@ -1593,11 +1593,11 @@ class TestWhenTheOfferIsMade(MigrationCase):
             mode="review",
             dry_run=True,
         )
-        self.assertIn(changes.OFFER, result.sentences)
+        self.assertIn(changes.offer_sentence(self.root), result.sentences)
 
     def test_the_offer_names_no_folder_path(self):
-        self.assertNotIn("work/", changes.OFFER)
-        self.assertNotIn("/", changes.OFFER)
+        self.assertNotIn("work/", changes.offer_sentence(self.root))
+        self.assertNotIn("/", changes.offer_sentence(self.root))
 
 
 class TestAWayOutOfAStoppedRun(MigrationCase):
@@ -2813,8 +2813,8 @@ class TestAnUnreadableCopyBesideAReadableOne(MigrationCase):
         )
 
         said = " ".join(result.sentences)
-        self.assertNotIn("1 things", said)
-        self.assertIn("1 thing ", said)
+        self.assertNotIn("1 thing", said)
+        self.assertIn("One thing ", said)
 
 
 class TestAFailedFirstRunReallyLeavesItAsItWas(MigrationCase):
@@ -2967,10 +2967,12 @@ class TestTheReadOnlyCheck(MigrationCase):
         said = finished.stdout.decode("utf-8") + finished.stderr.decode("utf-8")
         self.assertIn(ENTRY_ONE, said)
 
-    def test_it_says_whether_the_offer_would_be_made(self):
+    def test_it_says_why_the_offer_would_not_be_made(self):
         self.old_layout()
+        # Today as the script reads it, which is the real day.
+        changes.not_now(self.base_id)
         said = self.run_script("--check-move").stdout.decode("utf-8")
-        self.assertIn("offer", said.lower())
+        self.assertIn("because you said not now", said)
 
 
 # --- The last of the smaller things -------------------------------------------
@@ -3427,7 +3429,7 @@ class TestTheOfferAndTheYes(MigrationCase):
 
         result = self.review()
 
-        self.assertIn(changes.OFFER, result.sentences)
+        self.assertIn(changes.offer_sentence(self.root), result.sentences)
         self.assertIn(stale_check.CODE_CHANGES_CAN_MOVE, result.codes)
         self.assertEqual(before, support.head_of(self.root))
         self.assertEqual(
@@ -3443,7 +3445,7 @@ class TestTheOfferAndTheYes(MigrationCase):
 
         result = self.review()
 
-        self.assertNotIn(changes.OFFER, result.sentences)
+        self.assertFalse(any(changes.is_the_offer(line) for line in result.sentences))
         self.assertNotIn(stale_check.CODE_CHANGES_CAN_MOVE, result.codes)
 
     def test_the_offer_is_gone_once_the_move_has_been_made(self):
@@ -3451,7 +3453,7 @@ class TestTheOfferAndTheYes(MigrationCase):
         self.assertTrue(changes.needed(self.root))
         changes.migrate(self.root, self.base_id, today=TODAY)
         self.assertFalse(changes.needed(self.root))
-        self.assertNotIn(changes.OFFER, self.review().sentences)
+        self.assertFalse(any(changes.is_the_offer(line) for line in self.review().sentences))
 
     def test_asking_whether_it_is_needed_opens_no_file(self):
         """The question is cheap enough to ask on the way past."""
@@ -3510,7 +3512,7 @@ class TestTheWholeWayThroughOnAMigratedBase(MigrationCase):
         )
         # The offer to move is gone, because there is nothing left to move.
         self.assertNotIn(stale_check.CODE_CHANGES_CAN_MOVE, review.codes)
-        self.assertNotIn(changes.OFFER, review.sentences)
+        self.assertFalse(any(changes.is_the_offer(line) for line in review.sentences))
 
         # An ordinary run prepares one edit, and the owner approves it here,
         # because this base has no shared copy of its own to send it to.

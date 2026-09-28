@@ -2451,7 +2451,7 @@ class TestOnlyAHandEditMayBeUnsaved(unittest.TestCase):
             )
 
             shown = approve_local.show(
-                staged, root, base_id, runner=runner, now=TODAY
+                staged, root, base_id, runner=runner, now=TODAY, whole=True
             )
 
             self.assertEqual(approve_local.STATUS_SHOWN, shown.status, shown.reasons)
@@ -2461,6 +2461,13 @@ class TestOnlyAHandEditMayBeUnsaved(unittest.TestCase):
                 "a change no part of this one is about was not shown",
             )
             self.assertIn("status: draft", shown.artifact)
+            # The short showing leaves none of it out either.
+            short = approve_local.show(
+                staged, root, base_id, runner=runner, now=TODAY
+            )
+            self.assertIn(
+                "status: [took out: draft][put in: confirmed]", short.artifact
+            )
 
     def test_moving_anything_in_the_document_after_it_was_shown_is_refused(self):
         with support.Sandbox() as sandbox:
@@ -2967,7 +2974,13 @@ class TestHandEditsTheSummaryCouldNotDescribe(unittest.TestCase):
                 [("## Pricing", "remove")],
                 [(edit.heading, edit.op) for edit in staging.edits],
             )
-            shown = approve_local.show(staged, root, base_id, runner=runner, now=TODAY)
+            # The whole text, which is what a person asks for to read a part
+            # taken out as it read (the short showing marks it taken out).
+            short = approve_local.show(staged, root, base_id, runner=runner, now=TODAY)
+            self.assertIn("[took out: ## Pricing", short.artifact)
+            shown = approve_local.show(
+                staged, root, base_id, runner=runner, now=TODAY, whole=True
+            )
             self.assertEqual(approve_local.STATUS_SHOWN, shown.status, shown.reasons)
             # The summary says the part is taken out, and shows what it said.
             self.assertIn("Pricing", shown.artifact)
@@ -3002,7 +3015,9 @@ class TestHandEditsTheSummaryCouldNotDescribe(unittest.TestCase):
             self.assertEqual("## Notes", staging.edits[0].heading)
             self.assertEqual("replace", staging.edits[0].op)
             self.assertEqual(1, staging.edits[0].occurrence)
-            shown = approve_local.show(staged, root, base_id, runner=runner, now=TODAY)
+            shown = approve_local.show(
+                staged, root, base_id, runner=runner, now=TODAY, whole=True
+            )
             self.assertEqual(approve_local.STATUS_SHOWN, shown.status, shown.reasons)
             # The part shown is the first one, before and after.
             summary = shown.artifact.split("different from the last time")[0]
@@ -3033,7 +3048,9 @@ class TestHandEditsTheSummaryCouldNotDescribe(unittest.TestCase):
             )
             staging = compose_proposal.load_staging(staged)
             self.assertEqual(2, staging.edits[0].occurrence)
-            shown = approve_local.show(staged, root, base_id, runner=runner, now=TODAY)
+            shown = approve_local.show(
+                staged, root, base_id, runner=runner, now=TODAY, whole=True
+            )
             self.assertEqual(approve_local.STATUS_SHOWN, shown.status, shown.reasons)
             summary = shown.artifact.split("different from the last time")[0]
             self.assertIn("Second words.", summary)
@@ -3097,7 +3114,13 @@ class TestHandEditsTheSummaryCouldNotDescribe(unittest.TestCase):
             self.assertEqual(2, len(staging.target_bytes))
             shown = approve_local.show(staged, root, base_id, runner=runner, now=TODAY)
             self.assertEqual(approve_local.STATUS_SHOWN, shown.status, shown.reasons)
-            self.assertIn("New opening.", shown.artifact)
+            # Both documents are shown, each change marked (the 0.3.1 live
+            # check, step 5, finding 1).
+            self.assertIn("[took out: Old][put in: New] opening.", shown.artifact)
+            self.assertIn(
+                "[took out: any size][put in: twenty to two hundred people]",
+                shown.artifact,
+            )
             applied = approve_local.approve(
                 staged, root, base_id, shown.shown_hash, runner=runner, now=NOW
             )
@@ -3395,7 +3418,11 @@ class TestTheWholeDifferenceIsShownAsItIs(unittest.TestCase):
         staged = compose_proposal.stage_local_edit(
             root, base_id, HAND_EDIT_SOURCE, runner=runner, now=TODAY
         )
-        shown = approve_local.show(staged, root, base_id, runner=runner, now=TODAY)
+        # The whole difference is the whole text, shown when a person asks
+        # for it (the 0.3.1 live check, step 5, finding 1).
+        shown = approve_local.show(
+            staged, root, base_id, runner=runner, now=TODAY, whole=True
+        )
         self.assertEqual(approve_local.STATUS_SHOWN, shown.status, shown.reasons)
         return shown
 

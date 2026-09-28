@@ -669,7 +669,7 @@ class TestADraftThatAsksSomething(unittest.TestCase):
 
     def test_the_sentence_counts_several(self):
         self.assertEqual(
-            join_flow.DRAFT_HAS_QUESTIONS % 3, join_flow.draft_questions_sentence(3)
+            join_flow.DRAFT_HAS_QUESTIONS % "three", join_flow.draft_questions_sentence(3)
         )
         self.assertEqual("", join_flow.draft_questions_sentence(0))
 

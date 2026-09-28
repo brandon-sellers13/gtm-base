@@ -322,8 +322,8 @@ class TestAnOlderBaseReadsTheSameBeforeAndAfterTheMove(LayoutCase):
         self.assertEqual([], before["missing"])
 
         offered = self.review()
-        self.assertIn(changes.OFFER, offered.sentences)
-        self.assertEqual(1, offered.sentences.count(changes.OFFER))
+        self.assertIn(changes.offer_sentence(self.root), offered.sentences)
+        self.assertEqual(1, offered.sentences.count(changes.offer_sentence(self.root)))
 
         head = support.head_of(self.root)
         moved = changes.migrate(self.root, self.base_id, today=TODAY)
@@ -332,9 +332,9 @@ class TestAnOlderBaseReadsTheSameBeforeAndAfterTheMove(LayoutCase):
 
         self.assertEqual(before, self.reading())
         after = self.review(session="sess-2")
-        self.assertNotIn(changes.OFFER, after.sentences)
+        self.assertFalse(any(changes.is_the_offer(line) for line in after.sentences))
         self.assertEqual(
-            [line for line in offered.sentences if line != changes.OFFER],
+            [line for line in offered.sentences if not changes.is_the_offer(line)],
             after.sentences,
         )
         self.assertFalse(changes.needed(self.root))
@@ -427,14 +427,14 @@ class TestOneOfferTakesABaseAllTheWay(LayoutCase):
         return [
             sentence
             for sentence in self.review().sentences
-            if sentence in (changes.OFFER, changes.EVERY_SEAT_FIRST)
+            if changes.is_the_offer(sentence) or changes.is_every_seat_first(sentence)
         ]
 
     def assert_one_offer_then_none(self):
         # Every day a document was last confirmed is the same afterwards, in
         # every starting state (Astra's review of Unit 1.5b, finding 4).
         confirmed = self.reading()["confirmed"]
-        self.assertEqual([changes.OFFER], self.offers())
+        self.assertEqual([changes.offer_sentence(self.root)], self.offers())
         moved = changes.migrate(self.root, self.base_id, today=TODAY)
         self.assertTrue(moved.ok, moved.sentence)
         self.assertEqual(confirmed, self.reading()["confirmed"])
@@ -1038,7 +1038,7 @@ class TestNothingIsEverOverwritten(LayoutCase):
         self.assertEqual(before, support.read(os.path.join(self.root, ICP)))
         self.assertTrue(os.path.isfile(os.path.join(self.root, OLD_ICP)))
         # And the review does not offer a move that would be refused.
-        self.assertNotIn(changes.OFFER, self.review().sentences)
+        self.assertFalse(any(changes.is_the_offer(line) for line in self.review().sentences))
 
     def test_a_different_record_of_the_same_name(self):
         self.with_a_caught_change_fixed_by_a_record()

@@ -676,7 +676,11 @@ PYTHON_SENTENCES = (
     ("approve_local", "ASK"),
     ("approve_local", "WHITESPACE_ONLY"),
     ("approve_local", "NOTHING_DIFFERENT"),
-    ("changes", "OFFER"),
+    ("changes", "OFFER_ONE"),
+    ("changes", "OFFER_MANY"),
+    ("changes", "EVERY_SEAT_FIRST_ONE"),
+    ("changes", "EVERY_SEAT_FIRST_MANY"),
+    ("changes", "NOT_OFFERED_PUT_OFF"),
     ("changes", "MIGRATED"),
     ("changes", "NOTHING_TO_MOVE"),
     ("changes", "UNREADABLE_ENTRY"),
@@ -693,9 +697,6 @@ PYTHON_SENTENCES = (
     ("changes", "CANNOT_PUT_BACK"),
     ("changes", "COULD_NOT_SAVE_LEFT_HALF_DONE"),
     ("changes", "PUT_OFF"),
-    ("changes", "OFFER_STATE_NOW"),
-    ("changes", "OFFER_STATE_EVERY_SEAT_FIRST"),
-    ("changes", "OFFER_STATE_NONE"),
     ("confirm", "WRITTEN_TWICE"),
     ("confirm", "CHANGE_NOT_IN_THE_BASE"),
     ("confirm", "CHANGE_IS_NOT_ABOUT_IT"),
@@ -705,6 +706,7 @@ PYTHON_SENTENCES = (
     ("confirm", "UNSAVED_EDITS_HERE_NAMED"),
     ("confirm", "NOT_ON_THE_MAIN_LINE"),
     ("stale_check", "MALFORMED_ONE"),
+    ("stale_check", "DROPPED_ONE"),
     ("stale_check", "CHANGE_ABOUT_A_MISSING_DOCUMENT"),
     ("compose_proposal", "NO_PARTS_AT_ALL"),
     ("compose_proposal", "OUTSIDE_EVERY_PART"),
@@ -899,6 +901,9 @@ PYTHON_SENTENCES = (
     # that would collide, the questions a draft leaves open, the review line
     # for each, answering one, and the refusals while one is open.
     ("constants", "UMBRELLA_PENDING_SENTENCE"),
+    ("constants", "UMBRELLA_LEFT_OUT_SENTENCE"),
+    ("join_flow", "UMBRELLA_CHANGE_WAITING"),
+    ("join_flow", "UMBRELLA_CHANGE_WHY"),
     ("segments", "FILE_TAKEN"),
     ("segments", "FOLDER_NOT_ORDINARY"),
     ("join_flow", "DRAFT_HAS_ONE_QUESTION"),
@@ -999,6 +1004,15 @@ PYTHON_SENTENCES = (
     ("join_flow", "DRAFT_NO_LIST"),
     ("join_flow", "DRAFT_NOT_AGREED"),
     ("join_flow", "DRAFT_LEFT_OUT"),
+    # The live-check follow-up unit (calls 33, 34 and 49): the one question a
+    # hand edit asks, the one yes a fix to wording only asks, and the two
+    # refusals a corrected fact can meet.
+    ("hand_edit", "WHY_WE_ASK"),
+    ("hand_edit", "LONG_ASK"),
+    ("hand_edit", "SHORT_ASK"),
+    ("approve_local", "WORDING_ASK"),
+    ("compose_proposal", "FACT_NOT_REPLACING"),
+    ("compose_proposal", "NOT_A_DOCUMENT_HERE"),
 )
 
 # Constants that read like a sentence but that no person ever reads. Each one
