@@ -20,6 +20,8 @@
 
 - Not done here, and recorded: the value that binds a yes to what was shown proves that what is written is what was shown, not that the owner said yes, because the assistant that ran the showing could run the yes straight after it. That is true of every approval GTM Base has, not only this one, so it is being fixed once, for all of them, in Release B.
 
+- Not done here, and recorded: on native Windows, which GTM Base has never been tested on, the lock that keeps two windows from answering at once cannot tell whether the program holding it has stopped. After a crash, recording a context change there is refused, with a sentence saying another window is answering, until the lock is ten minutes old. On a Mac and on Linux a crashed holder's lock is taken back at once. Astra's final look at 0.3.3 found this, and it is a follow-up.
+
 - Two smaller things. A context change is never given the name of one that was taken out of the base by hand while any confirmation still names it, because the new one would inherit those answers and settle documents nobody was asked about. And when you mention in conversation that something about the business changed, the assistant may offer once, in one sentence, to record it, and records nothing without your yes; otherwise the base stays quiet.
 
 ## 0.3.2 (2026-09-27)
