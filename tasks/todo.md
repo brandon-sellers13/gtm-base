@@ -1561,3 +1561,14 @@ Branch `live-check-follow-up` from `release-b` (cddb588). Input: the 0.3.1 live 
 - [ ] 6. Segments (calls 36, 37): leaving a segment out after the umbrella names it prepares a change to the umbrella; a refused page whose draft-instead was not finished is kept to draft later.
 - [ ] Tests failing first for each; the skill walk; run.sh linked-folder list and its guard; lint registry; CHANGELOG; atlas captions.
 - [ ] Full suite, both runs; a correctness review of release-b to HEAD, fixes with tests, suite again.
+
+#### Progress and review, the live-check follow-up unit (2026-09-27)
+- [x] 1 and 2. `hand_edit.py` holds the one question (Brandon's words, long three times per person in the seat, short from the fourth, long on `--why`), the three kinds, and the marked showing; `stage_local_edit` takes `kind` and `also_affects`, refuses a corrected fact without "replacing", and a wording fix carries `wording_only` and writes no correction record on either path; `approve_local.show` is short for a hand edit and whole with `--whole`, one shown value for both; "What changed:" and the saved history from `what_changed_line`, never cut; "Why:" the person's own answer; `propose.py --hand-edit-question`, `--hand-edit-difference`, `--documents`, `--kind`, `--also-affects`.
+- [x] 3. Every skill's relay rules: one ask, notes after the approval as one short note, never a check that found nothing.
+- [x] 4. The move offer from `changes.offer_sentence` (version `constants.CURRENT_LAYOUT_VERSION`, documents by name, the rest counted, it or them); the look says only the not-now reason; every person-facing count through `names.counted` or `names.how_many` (the report's figures left as figures).
+- [x] 5. The plain-yes warning says the list is more than one draft can read.
+- [x] 6. Leaving a segment out prepares the umbrella change (call 36); a refused page's segment is `draft-instead` and kept to draft later (call 37).
+- [x] Tests failing first (tests/test_live_check_follow_up.py), the skill walk, run.sh's linked-folder list and its guard, the lint registry, CHANGELOG, atlas captions (not republished), join guide.
+- [x] Full suite before the review: 2603 tests OK, then 143 from a linked folder OK (tests/run.sh exit 0).
+- [x] Correctness review (subagent): one high, three medium, two low; all fixed with a test in TestTheCorrectnessReview and its two siblings, committed failing first.
+- [ ] Brandon: the new sentences; the version the offer names (0.4 assumed for Release B); whether a corrected fact's "nothing about the business changed" way out in the long question needs rewording; a live run of the hand edit and the move offer.

@@ -718,6 +718,14 @@ def what_changed_line(staging, entry=None, steps=None) -> str:
         line = hand_edit.changed_line(before, after)
         if line:
             return line
+    for step in steps or []:
+        _relative, _heading, before, after = step
+        if not after and before:
+            # The whole part is taken out.
+            return PART_TAKEN_OUT
+        line = hand_edit.taken_out_line(before, after)
+        if line:
+            return hand_edit.TOOK_OUT % line
     if steps:
         return PART_TAKEN_OUT
     try:
@@ -1726,8 +1734,14 @@ def local_edit_entry(
     affects: List[str],
     today: datetime.date,
     git: GitRunner,
+    answer: Optional[str] = None,
 ) -> "formats.ChangeEntry":
     """The context change that travels with one hand edit, from their words.
+
+    Its first line is the one line it is called by, on one line whatever it
+    was written on, and their whole answer follows it, so the record holds
+    why and where it came from as well as what changed (Brandon's call 33),
+    and the moment a document is used reads the answer as the reason.
 
     Requirement P16. Somebody who edits a context file by hand because the
     business moved has just told the base something it had no other way to
@@ -1751,7 +1765,12 @@ def local_edit_entry(
         origin=LOCAL_EDIT_ORIGIN,
         status="open",
         run_id=None,
-        body=str(what_changed).strip(),
+        body=(
+            "%s\n\n%s"
+            % (_WHITESPACE_RE.sub(" ", str(what_changed)).strip(), answer.strip())
+            if answer and answer.strip()
+            else _WHITESPACE_RE.sub(" ", str(what_changed)).strip()
+        ),
     )
     return entry.validate(today)
 
@@ -1762,7 +1781,9 @@ def local_edit_entry(
 LOCAL_EDIT_SEQUENCE_CAP = 200
 
 
-def free_local_edit_id(base_root: str, path: str) -> str:
+def free_local_edit_id(
+    base_root: str, path: str, runner: Optional[GitRunner] = None
+) -> str:
     """The first identifier for a hand edit that nothing in this base holds.
 
     Finding N3 of the 2026-09-20 verification round. The identifier was worked
@@ -1772,17 +1793,45 @@ def free_local_edit_id(base_root: str, path: str) -> str:
     place a name is remembered is looked in: the changes waiting, the ones
     raised, the ones nobody wanted, the record of what was corrected, and both
     of the folders a base keeps its context changes in.
+
+    The saved history is looked in as well. A fix to wording only leaves no
+    correction record and no context change (Brandon's call 49), and the
+    folder of prepared changes is this computer's alone, so on another
+    computer, or once that folder is cleared, only the saved history still
+    carries its name. A name used again would carry the same marker line, and
+    the next wording fix would be skipped as already accepted (the
+    correctness review of the live-check follow-up, finding 1).
     """
+    saved = _names_in_the_saved_history(base_root, runner)
     for sequence in range(LOCAL_EDIT_SEQUENCE_CAP):
         candidate = ids.staging_id(
             LOCAL_EDIT_ORIGIN, path, LOCAL_EDIT_ORIGIN, sequence
         )
+        if candidate in saved:
+            continue
         if not _name_is_taken(base_root, candidate):
             return candidate
     raise ValidationError(
         "There are too many changes recorded for that document already.",
         code="no-room-for-a-change",
     )
+
+
+_STAGING_ID_RE = re.compile(r"\bstg-[0-9a-f]{16}\b")
+
+
+def _names_in_the_saved_history(base_root: str, runner: Optional[GitRunner]):
+    """Every prepared change's name the notes of the saved history carry.
+
+    Every saved piece of work a prepared change leaves, raised or approved
+    here, carries its name in its note, so this is the one record of a name
+    every copy of the base shares.
+    """
+    git = runner_or_default(runner)
+    found = git.run(["log", "--all", "--format=%s"], cwd=base_root)
+    if not found.ok:
+        return set()
+    return set(_STAGING_ID_RE.findall(found.stdout))
 
 
 def _name_is_taken(base_root: str, staging_id: str) -> bool:
@@ -1994,7 +2043,7 @@ def stage_local_edit(
         raise ValidationError(NO_PARTS_AT_ALL, code=CODE_LOCAL_NO_SECTION)
 
     first = changed[0]
-    staging_id = free_local_edit_id(base_root, first)
+    staging_id = free_local_edit_id(base_root, first, git)
     ordered_targets: List[str] = list(changed)
     entry = None
     if records:
@@ -2003,7 +2052,13 @@ def stage_local_edit(
             if relative not in affects:
                 affects.append(relative)
         entry = local_edit_entry(
-            base_root, staging_id, what_changed, affects, today, git
+            base_root,
+            staging_id,
+            what_changed,
+            affects,
+            today,
+            git,
+            answer=source_text,
         )
     # A proposal that carries a change names that change in its own marker, and
     # one that carries none names none. `marker_problems` refuses either half

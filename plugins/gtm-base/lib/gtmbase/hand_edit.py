@@ -150,6 +150,21 @@ def changed_line(before: str, after: str) -> str:
     return ""
 
 
+def taken_out_line(before: str, after: str) -> str:
+    """The first line a change only takes out, in plain words, and all of it."""
+    was = str(before or "").split("\n")
+    now = str(after or "").split("\n")
+    matcher = difflib.SequenceMatcher(None, was, now, autojunk=False)
+    for operation, i1, i2, _j1, _j2 in matcher.get_opcodes():
+        if operation not in ("replace", "delete"):
+            continue
+        for line in was[i1:i2]:
+            words = plain_words(line)
+            if words:
+                return words
+    return ""
+
+
 # --- The changed sentence, with the change marked (step 5, finding 1) --------
 
 # The sentence a hand edit's marked changes are shown under. The heading and

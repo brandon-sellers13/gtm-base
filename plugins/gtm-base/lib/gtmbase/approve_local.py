@@ -2156,8 +2156,16 @@ def _finish_unfinished_work(
         staged = os.path.join(
             base_root, constants.PROPOSALS_PENDING_DIR, its_id + ".md"
         )
-        compose_proposal.retire(base_root, staged, its_id, base_id=base_id)
+        kept = compose_proposal.retire(base_root, staged, its_id, base_id=base_id)
         _clear_journal(base_id)
+        try:
+            by_hand = _made_by_hand(compose_proposal.load_staging(kept))
+        except GtmBaseError:
+            by_hand = False
+        if by_hand:
+            # A hand edit kept by the run that finishes it counts the same
+            # (the correctness review of the live-check follow-up, finding 5).
+            hand_edit.one_more_kept(base_id)
         if its_id != staging_id:
             return None
         ordered = [

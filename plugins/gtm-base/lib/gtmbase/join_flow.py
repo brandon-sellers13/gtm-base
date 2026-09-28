@@ -3421,7 +3421,12 @@ def draft_leave_out(
         if now_in == segments.STATE_COMMITTED:
             return ALREADY_SAVED
         if now_in in (segments.STATE_LEFT_OUT, segments.STATE_REFUSED):
-            return DRAFT_LEFT_OUT % {"name": segment.name}
+            said = DRAFT_LEFT_OUT % {"name": segment.name}
+            if now_in == segments.STATE_LEFT_OUT and _prepare_the_umbrella_change(
+                root, segment
+            ):
+                said += " " + UMBRELLA_CHANGE_WAITING % {"name": segment.name}
+            return said
         yes = record.approved(segment.slug)
         if yes is not None:
             where = review.page_state(
@@ -3457,8 +3462,20 @@ def _prepare_the_umbrella_change(root: str, segment) -> Optional[str]:
     goes: prepared, shown, and approved by the owner (Brandon's call 36). A
     profile that has no part under exactly that name, one that already says
     it is left out, and a change already waiting for it are all left alone.
-    Nothing here writes into the document itself.
+    Nothing here writes into the document itself. The leave-out is already
+    written down, so a change that cannot be prepared is not a refusal of it:
+    nothing is said about a change, and leaving the segment out again
+    prepares it (the correctness review of the live-check follow-up,
+    finding 4).
     """
+    try:
+        return _prepare_it(root, segment)
+    except (GtmBaseError, OSError):
+        return None
+
+
+def _prepare_it(root: str, segment) -> Optional[str]:
+    """The work of `_prepare_the_umbrella_change`, which may fail."""
     relative = layout.where_it_lives(root, constants.REQUIRED_CONTEXT_FILES[0])
     text = read_text(os.path.join(root, relative.replace("/", os.sep)))
     if text is None:

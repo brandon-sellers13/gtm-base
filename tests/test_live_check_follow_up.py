@@ -1029,9 +1029,15 @@ class TestTheUmbrellaChangeAfterAFailure(later.Case):
     def test_the_umbrella_change_comes_back_when_preparing_it_failed(self):
         company = later.a_company(answers={later.DRAFTED: constants.SEGMENT_DRAFT})
         later.set_up_and_close(company, draft_one=False)
-        with mock.patch.object(
-            fsutil, "atomic_write_text", side_effect=OSError("disk full")
-        ):
+        # Writing the prepared change fails, and nothing else does.
+        real = fsutil.atomic_write_text
+
+        def failing(path, *args, **kwargs):
+            if constants.PROPOSALS_PENDING_DIR.split("/")[-1] in str(path):
+                raise OSError("disk full")
+            return real(path, *args, **kwargs)
+
+        with mock.patch.object(fsutil, "atomic_write_text", side_effect=failing):
             said = join_flow.draft_leave_out(later.slug(later.LATER), company.root)
         self.assertEqual(join_flow.DRAFT_LEFT_OUT % {"name": later.LATER}, said)
         self.assertEqual([], pending_changes(company.root))
