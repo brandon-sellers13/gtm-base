@@ -86,6 +86,13 @@ python3 -m unittest -v \
   test_record_change.TestNamesTheBaseCannotVouchFor \
   test_record_change.TestTheKeptChangeIsReadAgain \
   test_record_change.TestTheSaveGoingWrong \
+  test_record_change.TestEveryNameIsHeldApart \
+  test_record_change.TestEveryDocumentIsShown \
+  test_record_change.TestTheListAndTheBaseAsShown \
+  test_record_change.TestTheQuestionIsAboutTheChangeAsWritten \
+  test_record_change.TestOneAnswerAtATime \
+  test_record_change.TestAnEarlyRefusalForgetsTheShowing \
+  test_record_change.TestAMapIsAMapWhereverItSits \
   test_record_change.TestTheIdentifier \
   test_record_change.TestBothLayouts \
   test_record_change.TestABaseWithASharedCopy \

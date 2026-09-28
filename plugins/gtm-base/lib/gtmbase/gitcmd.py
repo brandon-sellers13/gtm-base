@@ -5,11 +5,23 @@ in a stand-in and no module reaches for a subprocess of its own. The runner
 never lets git ask for a password, always sets a time limit, and keeps git's
 own error text on the result rather than passing it into anything a person or
 a model sees.
+
+It also runs nothing the base itself names to run (Astra's review of 0.3.3,
+finding 1). A base is a folder of somebody's files, and git runs programs a
+folder can name: hooks on a save, an update, a checkout or a change of any
+reference; a monitor on a status; a signing program on a save; and the
+filter and merge programs its attribute files point at. One `post-commit`
+file was enough to send a base's private files anywhere the moment the owner
+approved a local save. `hook_free` and `executable_drivers` below are the one
+place that is closed, and every call the runner makes goes through them, so
+every save, update and move in the plugin, and every one added later, is
+covered without asking each caller to remember.
 """
 
 from __future__ import annotations
 
 import os
+import re
 import subprocess
 import time
 from typing import List, Optional, Sequence, Tuple
@@ -21,6 +33,206 @@ DEFAULT_TIMEOUT_SECONDS = 20
 # Exit codes this library invents for the two failures git cannot report itself.
 TIMEOUT_CODE = 124
 MISSING_CODE = 127
+# And for the one it refuses before git runs at all: the base names a filter or
+# merge program for its files, which the command could run.
+DRIVER_CODE = 125
+CODE_EXECUTABLE_DRIVER = "executable-driver"
+
+# --- Running nothing the base names ------------------------------------------
+
+# The settings every command runs with, ahead of anything else on its line.
+# `core.hooksPath` pointed at the null device finds no hook of any name, and
+# nobody can put one there, which an empty folder cannot promise. It covers
+# every hook git has: the ones a save runs (pre-commit, prepare-commit-msg,
+# commit-msg, post-commit, and pre-auto-gc for the tidying a save can start),
+# the one an update runs (post-merge), the ones a checkout, a switch or a new
+# working folder runs (post-checkout), the ones a rewrite runs (pre-rebase,
+# post-rewrite), and reference-transaction, which every change of a reference
+# runs. A setting given this way reaches every git process the command
+# starts, so a tidy-up a save starts is covered too. The monitor a status can
+# run, and the program that signs a save, are switched off beside it.
+HOOK_FREE_SETTINGS = (
+    ("core.hooksPath", os.devnull),
+    ("core.fsmonitor", "false"),
+    ("commit.gpgSign", "false"),
+    ("tag.gpgSign", "false"),
+)
+# A send keeps its hooks. The plugin's own safeguard before anything leaves
+# this computer is a pre-push hook, and turning hooks off for a send would
+# turn that off with them.
+KEEPS_ITS_HOOKS = ("push", "send-pack")
+# Reading a setting back would read the value set here rather than the
+# base's own, and the safeguard's installer asks where the hooks folder is.
+READS_ITS_SETTINGS = ("config",)
+# Commands that read what is already saved and never run a filter or a merge
+# program, so they need no look at the base's attribute files first.
+NO_DRIVER_CAN_RUN = (
+    "rev-parse",
+    "config",
+    "ls-files",
+    "cat-file",
+    "check-attr",
+    "symbolic-ref",
+    "remote",
+    "rev-list",
+    "for-each-ref",
+    "merge-base",
+    "ls-tree",
+    "ls-remote",
+    "fetch",
+    "push",
+    "send-pack",
+    "init",
+    "var",
+    "version",
+    "log",
+    "show",
+    "blame",
+)
+# Reading a difference can run a program the base names for showing one, so
+# those commands are told not to, whatever the base says.
+NO_DIFF_PROGRAMS = {
+    "diff": ("--no-ext-diff", "--no-textconv"),
+    "show": ("--no-ext-diff", "--no-textconv"),
+    "log": ("--no-ext-diff", "--no-textconv"),
+    "blame": ("--no-textconv",),
+}
+# The options that come before the command itself and take a value.
+_GLOBAL_WITH_VALUE = ("-c", "-C", "--git-dir", "--work-tree", "--namespace")
+# The attribute that names a program, and the setting that says what it runs.
+_ATTRIBUTE_RE = re.compile(r"(?:^|\s)(filter|merge)=([^\s]+)")
+_DRIVER_SETTING_RE = r"^(filter|merge)\..+\.(clean|smudge|process|driver)$"
+
+
+def subcommand_of(args: Sequence[str]) -> Tuple[int, str]:
+    """Where the command itself sits in a line of arguments, and what it is."""
+    words = [str(one) for one in args]
+    index = 0
+    while index < len(words):
+        word = words[index]
+        if word in _GLOBAL_WITH_VALUE:
+            index += 2
+            continue
+        if word.startswith("-"):
+            index += 1
+            continue
+        return index, word
+    return len(words), ""
+
+
+def hook_free(args: Sequence[str]) -> List[str]:
+    """One command, with every hook, monitor and signing program switched off.
+
+    A send is left exactly as it was, because the safeguard before a send is
+    a hook, and so is a command that reads the base's own settings back.
+    """
+    words = [str(one) for one in args]
+    index, command = subcommand_of(words)
+    if command in KEEPS_ITS_HOOKS or command in READS_ITS_SETTINGS:
+        return words
+    if "--git-path" in words:
+        # Where the hooks folder is, which the safeguard's installer asks.
+        return words
+    extra = NO_DIFF_PROGRAMS.get(command)
+    if extra:
+        words = words[: index + 1] + list(extra) + words[index + 1 :]
+    prefix: List[str] = []
+    for name, value in HOOK_FREE_SETTINGS:
+        prefix += ["-c", "%s=%s" % (name, value)]
+    return prefix + words
+
+
+def needs_a_driver_check(args: Sequence[str]) -> bool:
+    """Whether a command could run a filter or merge program the base names."""
+    words = [str(one) for one in args]
+    _index, command = subcommand_of(words)
+    if not command or command in NO_DRIVER_CAN_RUN:
+        return False
+    if command == "worktree" and "add" not in words:
+        return False
+    return True
+
+
+def _plain(git_path: str, args: Sequence[str], cwd: Optional[str], env: dict) -> str:
+    """One read of the base's settings, run without any of the checks above."""
+    try:
+        finished = subprocess.run(
+            [git_path] + list(args),
+            cwd=cwd,
+            env=env,
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.DEVNULL,
+            timeout=DEFAULT_TIMEOUT_SECONDS,
+        )
+    except (subprocess.TimeoutExpired, OSError, ValueError):
+        return ""
+    if finished.returncode != 0:
+        return ""
+    return finished.stdout.decode("utf-8", "replace")
+
+
+def _attribute_texts(git_path: str, cwd: Optional[str], env: dict) -> List[str]:
+    """Every attribute file git would read for this folder, as text."""
+    texts: List[str] = []
+    places: List[str] = []
+    top = _plain(git_path, ["rev-parse", "--show-toplevel"], cwd, env).strip()
+    common = _plain(git_path, ["rev-parse", "--git-common-dir"], cwd, env).strip()
+    if common and cwd and not os.path.isabs(common):
+        common = os.path.join(cwd, common)
+    if common:
+        places.append(os.path.join(common, "info", "attributes"))
+    configured = _plain(git_path, ["config", "--get", "core.attributesFile"], cwd, env).strip()
+    if configured:
+        places.append(os.path.expanduser(configured))
+    else:
+        home = env.get("XDG_CONFIG_HOME") or os.path.join(
+            env.get("HOME") or os.path.expanduser("~"), ".config"
+        )
+        places.append(os.path.join(home, "git", "attributes"))
+    if top:
+        for folder, folders, files in os.walk(top):
+            folders[:] = [one for one in folders if one != ".git"]
+            if ".gitattributes" in files:
+                places.append(os.path.join(folder, ".gitattributes"))
+    for place in places:
+        try:
+            with open(place, encoding="utf-8", errors="replace") as handle:
+                texts.append(handle.read(256 * 1024))
+        except OSError:
+            continue
+    return texts
+
+
+def executable_drivers(
+    cwd: Optional[str], git_path: str = "git", env: Optional[dict] = None
+) -> List[str]:
+    """The filter and merge programs this folder's attributes would run.
+
+    Only a program that is both configured and named by an attribute file in
+    effect here counts, so somebody whose own settings carry a filter for
+    another kind of project is not refused in a base that never names it.
+    Nothing is read out of the answer but the names.
+    """
+    env = env if env is not None else GitRunner().environment()
+    configured = _plain(
+        git_path, ["config", "--get-regexp", _DRIVER_SETTING_RE], cwd, env
+    )
+    drivers = set()
+    for line in configured.splitlines():
+        key = line.split(" ", 1)[0]
+        kind, _dot, rest = key.partition(".")
+        name = rest.rsplit(".", 1)[0]
+        if kind and name:
+            drivers.add((kind.lower(), name))
+    if not drivers:
+        return []
+    found: List[str] = []
+    for text in _attribute_texts(git_path, cwd, env):
+        for kind, name in _ATTRIBUTE_RE.findall(text):
+            if (kind, name) in drivers and name not in found:
+                found.append(name)
+    return found
 
 
 class GitResult(object):
@@ -71,8 +283,18 @@ class GitRunner(object):
         timeout: int = DEFAULT_TIMEOUT_SECONDS,
         input: Optional[str] = None,
     ) -> GitResult:
-        """Run one git command and return its result. This never raises."""
-        command = [self.git_path] + list(args)
+        """Run one git command and return its result. This never raises.
+
+        Every command runs with hooks, the file monitor and signing switched
+        off, and one that could run a filter or merge program the base's
+        attribute files name is not run at all (`hook_free`,
+        `executable_drivers`).
+        """
+        if needs_a_driver_check(args) and executable_drivers(
+            cwd, self.git_path, self.environment()
+        ):
+            return GitResult(DRIVER_CODE, "", CODE_EXECUTABLE_DRIVER)
+        command = [self.git_path] + hook_free(args)
         try:
             finished = subprocess.run(
                 command,
@@ -109,6 +331,10 @@ class GitRunner(object):
             raise GitError("git-timeout", code="git-timeout", result=result)
         if result.code == MISSING_CODE:
             raise GitError("git-missing", code="git-missing", result=result)
+        if result.code == DRIVER_CODE:
+            raise GitError(
+                CODE_EXECUTABLE_DRIVER, code=CODE_EXECUTABLE_DRIVER, result=result
+            )
         raise GitError("git-failed", code="git-failed", result=result)
 
 

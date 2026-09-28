@@ -3204,13 +3204,38 @@ def _staged_bytes(root, relative):
     return finished.stdout
 
 
-def _a_hook_that_refuses_every_save(root):
-    hooks = os.path.join(root, ".git", "hooks")
-    os.makedirs(hooks, exist_ok=True)
-    hook = os.path.join(hooks, "pre-commit")
-    with open(hook, "w") as handle:
-        handle.write("#!/bin/sh\nexit 1\n")
-    os.chmod(hook, 0o755)
+class _RefusingSaves(object):
+    """The runner underneath, with every save refused.
+
+    These scenarios used a pre-commit hook that refused every save. Since
+    0.3.3 no hook in a base ever runs (Astra's review of 0.3.3, finding 1,
+    and tests/test_no_hooks.py), so the refusal comes from the runner
+    instead, which is the same failure seen from the approval's side.
+    """
+
+    def __init__(self, inner):
+        self.inner = inner
+
+    def _refused(self, args):
+        from gtmbase import gitcmd
+
+        return gitcmd.subcommand_of([str(one) for one in args])[1] == "commit"
+
+    def run(self, args, cwd=None, timeout=20, input=None):
+        if self._refused(args):
+            return GitResult(1, "", "refused")
+        return self.inner.run(args, cwd=cwd, timeout=timeout, input=input)
+
+    def check(self, args, cwd=None, timeout=20, input=None):
+        if self._refused(args):
+            from gtmbase.errors import GitError
+
+            raise GitError("git-failed", code="git-failed", result=GitResult(1, "", ""))
+        return self.inner.check(args, cwd=cwd, timeout=timeout, input=input)
+
+
+def _every_save_refused(runner):
+    runner.inner = _RefusingSaves(runner.inner)
 
 
 class TestAFailedApprovalLeavesTheIndexAsItWas(unittest.TestCase):
@@ -3256,7 +3281,7 @@ class TestAFailedApprovalLeavesTheIndexAsItWas(unittest.TestCase):
             )
             shown = approve_local.show(staged, root, base_id, runner=runner, now=TODAY)
             self.assertEqual(approve_local.STATUS_SHOWN, shown.status, shown.reasons)
-            _a_hook_that_refuses_every_save(root)
+            _every_save_refused(runner)
 
             applied = approve_local.approve(
                 staged, root, base_id, shown.shown_hash, runner=runner, now=NOW
@@ -3277,7 +3302,7 @@ class TestAFailedApprovalLeavesTheIndexAsItWas(unittest.TestCase):
             staged = a_hand_edit(root, base_id, runner)
             entry = _index_entry(root, ICP)
             shown = approve_local.show(staged, root, base_id, runner=runner, now=TODAY)
-            _a_hook_that_refuses_every_save(root)
+            _every_save_refused(runner)
 
             approve_local.approve(
                 staged, root, base_id, shown.shown_hash, runner=runner, now=NOW
@@ -3301,7 +3326,7 @@ class TestAFailedApprovalLeavesTheIndexAsItWas(unittest.TestCase):
             runner = NoRemoteRunner()
             shown = approve_local.show(staged, root, base_id, runner=runner, now=TODAY)
             self.assertEqual(approve_local.STATUS_SHOWN, shown.status, shown.reasons)
-            _a_hook_that_refuses_every_save(root)
+            _every_save_refused(runner)
 
             approve_local.approve(
                 staged, root, base_id, shown.shown_hash, runner=runner, now=NOW
@@ -3318,7 +3343,7 @@ class TestAFailedApprovalLeavesTheIndexAsItWas(unittest.TestCase):
                 root, base_id, HAND_EDIT_SOURCE, runner=runner, now=TODAY
             )
             shown = approve_local.show(staged, root, base_id, runner=runner, now=TODAY)
-            _a_hook_that_refuses_every_save(root)
+            _every_save_refused(runner)
             real_run = runner.run
 
             def refusing_to_line_up(args, *rest, **options):

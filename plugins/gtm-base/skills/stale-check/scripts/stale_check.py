@@ -231,6 +231,10 @@ def record_a_change(options, resolution):
     """
     root, base_id = resolution.root, resolution.base_id
     step = options.record_change
+    if step == "show":
+        # Before anything else, so a showing refused for any reason, a words
+        # file included, never leaves the one before it to be recorded.
+        record_change.forget_showing(base_id)
     record_change.refuse_a_shared_copy(root)
 
     if step == "ask":
@@ -239,13 +243,19 @@ def record_a_change(options, resolution):
         return EXIT_DONE
 
     if step == "documents":
-        listed = record_change.documents(root)
+        listed = record_change.show_list(root, base_id)
         if not listed:
             sys.stdout.write(record_change.NO_DOCUMENTS + "\n")
             return EXIT_REFUSED
         sys.stdout.write(record_change.DOCUMENTS_INTRO + "\n")
-        for number, _path, name in listed:
-            sys.stdout.write("%d. %s\n" % (number, name))
+        # Every name comes from a file name, so the whole list is held apart
+        # as data (Astra's review of 0.3.3, finding 3).
+        sys.stdout.write(
+            moment.fenced(
+                "\n".join("%d. %s" % (number, name) for number, _path, name in listed)
+            )
+            + "\n"
+        )
         return EXIT_DONE
 
     if step == "show":
@@ -281,11 +291,16 @@ def record_a_change(options, resolution):
     if step == "record":
         done = record_change.record(root, base_id, options.shown or "")
         sys.stdout.write(record_change.RECORDED + "\n")
+        asked = []
         for path, question in zip(done.plan.ask_about, done.plan.questions()):
-            sys.stdout.write(question + "\n")
-            sys.stdout.write(
-                "   [for the assistant] path=%s change=%s\n" % (path, done.entry.id)
+            asked.append(question)
+            asked.append(
+                "   [for the assistant] path=%s change=%s" % (path, done.entry.id)
             )
+        if asked:
+            # The questions name documents by their file names, and the lines
+            # for the assistant carry the paths, so all of it is data.
+            sys.stdout.write(moment.fenced("\n".join(asked)) + "\n")
         if done.plan.sentence:
             sys.stdout.write(done.plan.sentence + "\n")
         return EXIT_DONE
@@ -295,9 +310,11 @@ def record_a_change(options, resolution):
     result = record_change.answer(
         root, base_id, options.change or "", options.document or "", given
     )
-    sys.stdout.write(result.sentence + "\n")
+    said = [result.sentence]
     if result.staging_path:
-        sys.stdout.write("   [for the assistant] prepared=%s\n" % result.staging_path)
+        said.append("   [for the assistant] prepared=%s" % result.staging_path)
+    # The answer names the document, so it is held apart as data too.
+    sys.stdout.write(moment.fenced("\n".join(said)) + "\n")
     if given == record_change.ANSWER_YES and not result.answered_yes:
         return EXIT_REFUSED
     return EXIT_DONE

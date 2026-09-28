@@ -1631,6 +1631,7 @@ def four_lines_for(
     entry,
     why_when_none: str = WHY_FROM_THE_CLOSING,
     what_in_full: bool = False,
+    name_of=None,
 ) -> str:
     """One context change as the four labeled lines, and nothing else.
 
@@ -1646,16 +1647,17 @@ def four_lines_for(
     live check step 5, a "What changed" cut off mid-number). It is still one
     line, still has its markers taken apart, and is still held to the one cap
     that keeps the fence safe; that step refuses anything longer before it is
-    shown, so nothing it shows is ever cut.
+    shown, so nothing it shows is ever cut. `name_of` is how that step names
+    documents, the same way its own list names them.
     """
+    name_of = name_of or names.document_name
     values = (
         moment._one_line(
             _first_line(entry) if what_in_full else _what_changed(entry)
         ),
         moment._one_line(_why_of(entry, why_when_none)),
         moment._one_line(
-            ", ".join(names.document_name(path) for path in entry.affects)
-            or "nothing yet"
+            ", ".join(name_of(path) for path in entry.affects) or "nothing yet"
         ),
         moment._one_line(str(entry.review_by)),
     )

@@ -1091,8 +1091,13 @@ def against_change(
         return _refused(formats.CODE_NAME_WITH_A_SPACE, formats.NAME_WITH_A_SPACE)
     document = names.document_name(relative_context)
 
-    if any_affected_document and relative_context == constants.MAP_PATH:
-        # The map is never asked about, whoever asks (Unit 1.2 of 0.3.0).
+    if any_affected_document and (
+        relative_context == constants.MAP_PATH
+        or _kind_of(base_root, relative_context) == "map"
+    ):
+        # The map is never asked about, whoever asks (Unit 1.2 of 0.3.0), and
+        # a map is known by what it says it is, wherever it sits (Astra's
+        # review of 0.3.3, finding 12).
         return _refused(CODE_DROPPED_PATH, DROPPED_PATH)
     if (
         not any_affected_document
@@ -1194,6 +1199,18 @@ def _entry_the_base_holds(base_root, base_id, entry_id, today, git):
         if item.entry is not None and item.entry.id == entry_id:
             return item.entry
     return None
+
+
+def _kind_of(base_root: str, relative: str) -> str:
+    """What one context file says it is, in lower case, or nothing."""
+    text = read_text(os.path.join(base_root, relative.replace("/", os.sep)))
+    if text is None:
+        return ""
+    try:
+        block, _body = formats.split_document(text)
+        return str(formats.parse_frontmatter(block).get("kind") or "").strip().lower()
+    except (ValidationError, PathError):
+        return ""
 
 
 def owners_of(base_root: str, relative: str) -> List[str]:
