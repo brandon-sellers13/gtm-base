@@ -77,3 +77,11 @@
   same function. Two rules for "in this folder" is a number that picks something
   else.
 - Read machine output in its machine form (`-z`), never its display form.
+
+## 2026-10-05, 0.3.4
+- "Refuse once `git` appears anywhere in the command" (the 2026-09-05 lesson above) was too wide: a hyphen counted
+  as a word edge, so one flag (`--skip-git-repo-check`) turned every Codex line into a refused line, and the
+  refusal reused the parse-failure sentence so nobody could tell why. Decide "is this about git" by what each part
+  runs, not by the letters on the line, and give every distinct refusal its own sentence.
+- When widening an allowlist of harmless programs, check each one for an option that runs something (`find -exec`,
+  `xargs`, `timeout`) before adding it; a harmless word with such an option is a bypass of the whole gate.
