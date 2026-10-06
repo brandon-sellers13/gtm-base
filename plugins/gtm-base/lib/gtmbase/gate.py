@@ -10,16 +10,25 @@ the cap, a missing interpreter, a settings override that would turn the
 safeguard off: all of them refuse. A refusal names the file and what kind of
 thing was found, and never the thing itself.
 
-The check only reads a command that names git or GitHub. A command that names
-neither is outside it, so a script of its own that runs git from inside itself
-is a known gap: `python3 tool.py` is allowed and whatever `tool.py` does with
-the shared copy is not read here. The safeguard git itself runs is the layer
-that covers that gap.
+The check only reads a command that runs git or GitHub. A part of a command
+runs git or GitHub when the program it starts is git or gh, once the settings
+and the words that stand in front of a program (env, sudo, timeout) are taken
+off the front, or when it starts a program this check does not know and hands
+that program the word git or gh to run. The letters inside a flag such as
+`--skip-git-repo-check`, inside a path, or inside a sentence a known program
+prints or is asked about run nothing, so they do not count; until 0.3.4 they
+did, and every line holding such a flag beside an ordinary program was refused.
+A command that runs neither is outside the check, so a script of its own that
+runs git from inside itself is a known gap: `python3 tool.py` is allowed and
+whatever `tool.py` does with the shared copy is not read here. The safeguard
+git itself runs is the layer that covers that gap.
 
-Once a command does name git or GitHub, every part of it has to be accounted
-for. A part whose first word is not git, not GitHub, and not one of the small
-set of harmless words listed below is refused rather than assumed to be
-harmless, because a word this check does not know can carry a send inside it.
+Once a command does run git or GitHub, every part of it has to be accounted
+for. A part whose first word is not git, not GitHub, and not one of the
+harmless words listed below is refused rather than assumed to be harmless,
+because a word this check does not know can carry a send inside it. That
+refusal names the word, so the person can see which program on the line the
+check did not know.
 
 What the gate reads, and where
 ------------------------------
@@ -69,6 +78,7 @@ MODE_GIT_HOOK = "git-hook"
 
 # The reasons a refusal can carry. The gate never invents free text.
 REASON_UNTOKENIZABLE = "untokenizable"
+REASON_STRICT_UNKNOWN = "unknown-program-beside-git"
 REASON_UNREADABLE = "unreadable-range"
 REASON_DENIED_COMMAND = "denied-command"
 REASON_NO_VERIFY = "no-verify"
@@ -90,6 +100,11 @@ SENTENCES = {
     REASON_UNTOKENIZABLE: (
         "GTM Base could not tell what this command does with the shared copy, "
         "so it was not run."
+    ),
+    REASON_STRICT_UNKNOWN: (
+        "GTM Base stopped this because it runs {word} on the same line as a "
+        "git or GitHub command, and GTM Base only reads lines it fully "
+        "understands."
     ),
     REASON_UNREADABLE: (
         "GTM Base could not read what this command would send, so it was not "
@@ -165,7 +180,11 @@ EMPTY_TREE = "4b825dc642cb6eb9a060e54bf8d69288fbee4904"
 # the whole of it is read.
 ESTIMATED_BYTES_PER_LINE = 80
 
-_GIT_OR_GH = re.compile(r"(?<![A-Za-z0-9_])(?:git|gh)(?![A-Za-z0-9_])")
+# The letters git or gh standing as a word of their own. A hyphen on either
+# side joins the letters to a flag, so `--skip-git-repo-check` is not the word.
+_GIT_OR_GH = re.compile(r"(?<![A-Za-z0-9_\-])(?:git|gh)(?![A-Za-z0-9_\-])")
+# What a program name has to look like before a refusal will repeat it.
+_PLAIN_PROGRAM_NAME = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.+-]{0,39}$")
 _ASSIGNMENT = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*=")
 _SHELL_C = re.compile(r"^-[A-Za-z]*c$")
 _STAT_SUMMARY = re.compile(r"(\d+) insertions?\(\+\)|(\d+) deletions?\(-\)")
@@ -177,9 +196,17 @@ _HOOKS_PATH_KEYS = ("core.hookspath", "hooks.path")
 # Shells whose `-c` argument is another command to read.
 _SHELLS = ("sh", "bash", "zsh", "dash", "ksh")
 # Words that stand in front of a real command without changing what it is.
-_PREFIX_WORDS = ("command", "sudo", "nice", "exec", "nohup", "time", "builtin", "env")
+_PREFIX_WORDS = (
+    "command", "sudo", "nice", "exec", "nohup", "time", "builtin", "env", "timeout",
+)
 # Those words' options that take a value of their own.
-_PREFIX_VALUE_FLAGS = ("-n", "-u", "-g", "-C", "--user", "--group", "-S")
+_PREFIX_VALUE_FLAGS = (
+    "-n", "-u", "-g", "-C", "--user", "--group", "-S", "-s", "--signal", "-k",
+    "--kill-after",
+)
+# The one prefix word that takes a plain word of its own, how long to wait,
+# before the program it runs.
+_PREFIX_WITH_A_DURATION = "timeout"
 
 # The options that make `gh api` a write.
 _GH_API_WRITE_FLAGS = ("-f", "-F", "--input", "--raw-field", "--field")
@@ -197,8 +224,13 @@ _QUOTING = re.compile(r"[\\'\"]")
 _INERT_WORDS = (
     "echo", "printf", "cat", "ls", "cd", "pushd", "pwd", "test", "[", "true",
     "false", "head", "tail", "grep", "wc", "sort", "sed", "awk", "mkdir",
-    "touch", "cp", "mv",
+    "touch", "cp", "mv", "cut", "uniq", "tr", "find", "du", "df", "date",
+    "which", "basename", "dirname", "realpath", "stat", "diff", "jq", "tee",
+    "less", "column", "codex",
 )
+# `find` is harmless until it is asked to run something it finds, so these
+# options take it off the harmless list for that one command.
+_FIND_RUNS_SOMETHING = ("-exec", "-execdir", "-ok", "-okdir")
 # The words that move the rest of the command line into another folder.
 _FOLDER_WORDS = ("cd", "pushd")
 # The two interpreters, allowed only when they are handed a file to run and
@@ -274,8 +306,17 @@ def deny_payload(client: str, reason_sentence: str) -> str:
     return json.dumps(verdict)
 
 
-def sentence_for(reason: str) -> str:
-    return SENTENCES.get(reason, SENTENCES[REASON_INTERNAL])
+def sentence_for(reason: str, word: Optional[str] = None) -> str:
+    """The sentence a refusal carries. Only one of them names anything from
+    the command, and that is the program the check did not know, shown only
+    when it is a plain program name. Anything else is called "another
+    program", so nothing a command line was dressed up as reaches the person
+    as part of a sentence from GTM Base."""
+    sentence = SENTENCES.get(reason, SENTENCES[REASON_INTERNAL])
+    if "{word}" in sentence:
+        shown = word if word and _PLAIN_PROGRAM_NAME.match(word) else "another program"
+        sentence = sentence.replace("{word}", shown)
+    return sentence
 
 
 # --- Reading a command -------------------------------------------------------
@@ -290,9 +331,78 @@ def strip_quoting(text: str) -> str:
     return _QUOTING.sub("", text or "")
 
 
+def holds_the_letters(text: str) -> bool:
+    """Whether the letters git or gh stand anywhere in a text as a word."""
+    return bool(text) and bool(_GIT_OR_GH.search(strip_quoting(text)))
+
+
 def mentions_git_or_gh(command: str) -> bool:
-    """Whether a command names git or GitHub as a word of its own."""
-    return bool(command) and bool(_GIT_OR_GH.search(strip_quoting(command)))
+    """Whether a command runs git or GitHub.
+
+    Each part of the command is read on its own. A part runs git or GitHub
+    when its first word, once the settings and the words that stand in front
+    of a program are taken off, is git or gh. A command handed to a shell to
+    run, and a command written inside another one, are read the same way.
+
+    A part whose first word is a program this check does not know is read a
+    little further: when any word it is handed is git or gh, it is taken to
+    run git, because a program this check does not know may run what it is
+    handed. A part that starts one of the two interpreters and hands it text
+    holding the letters is taken to run git for the same reason. A part that
+    starts a program on the harmless list, or that only changes folder, runs
+    nothing of what it is handed, so the letters inside its flags, its paths
+    and its sentences do not count.
+
+    A part that cannot be split into words at all is read the old way, by
+    searching for the letters, so a broken command holding them is still
+    refused rather than let through unread.
+    """
+    return _runs_git_or_gh(command, 0)
+
+
+def _runs_git_or_gh(command: str, depth: int) -> bool:
+    if not command:
+        return False
+    if depth > 3:
+        return holds_the_letters(command)
+    for segment in split_segments(command):
+        bodies, remainder = _substitution_bodies(segment)
+        if any(_runs_git_or_gh(body, depth + 1) for body in bodies):
+            return True
+        try:
+            tokens = shlex.split(remainder, posix=True)
+        except ValueError:
+            if holds_the_letters(remainder):
+                return True
+            continue
+        tokens = _strip_redirections(tokens)
+        tokens, _assignments = _strip_prefixes(tokens)
+        if not tokens:
+            continue
+        script = _shell_script_argument(tokens)
+        if script is not None:
+            if _runs_git_or_gh(script, depth + 1):
+                return True
+            continue
+        tokens = _strip_xargs(tokens)
+        if not tokens:
+            continue
+        word = os.path.basename(tokens[0])
+        if word in ("git", "gh"):
+            return True
+        if word in _FOLDER_WORDS or _is_inert(tokens):
+            continue
+        if word in _INTERPRETERS:
+            # Handed text rather than a file, or a file and the letters after
+            # it: `_is_inert` said no, so the letters anywhere after the
+            # interpreter are what decides.
+            if holds_the_letters(" ".join(tokens[1:])):
+                return True
+            continue
+        for handed in tokens[1:]:
+            if holds_the_letters(handed):
+                return True
+    return False
 
 
 def split_segments(text: str) -> List[str]:
@@ -398,11 +508,14 @@ class Classification(object):
     """What one command line turned out to be."""
 
     __slots__ = (
-        "deny_reason", "pushes", "gh_writes", "has_gh", "has_git", "config_edits"
+        "deny_reason", "deny_word", "pushes", "gh_writes", "has_gh", "has_git",
+        "config_edits",
     )
 
     def __init__(self):
         self.deny_reason: Optional[str] = None
+        # The program this check did not know, when that is why it refused.
+        self.deny_word: Optional[str] = None
         self.pushes: List[PushSpec] = []
         self.gh_writes: List[List[str]] = []
         self.has_gh = False
@@ -417,9 +530,14 @@ class Classification(object):
     def needs_scan(self) -> bool:
         return bool(self.pushes or self.gh_writes)
 
-    def deny(self, reason: str) -> None:
+    def deny(self, reason: str, word: Optional[str] = None) -> None:
         if self.deny_reason is None:
             self.deny_reason = reason
+            self.deny_word = word
+
+    def sentence(self) -> str:
+        """The sentence for this refusal, or the internal one if there is none."""
+        return sentence_for(self.deny_reason or REASON_INTERNAL, self.deny_word)
 
     def __repr__(self) -> str:
         return "Classification(deny=%r, pushes=%d, gh=%d)" % (
@@ -518,6 +636,10 @@ def _strip_prefixes(tokens: List[str]) -> Tuple[List[str], List[str]]:
                     index += 1
                 continue
             break
+        if word == _PREFIX_WITH_A_DURATION and index < len(tokens):
+            # How long to wait comes before the program, so it is stepped
+            # over to reach the program itself.
+            index += 1
     return tokens[index:], assignments
 
 
@@ -598,6 +720,8 @@ def _substitution_bodies(text: str) -> Tuple[List[str], str]:
 def _is_inert(tokens: Sequence[str]) -> bool:
     """Whether a part of a command is one of the few we read no further."""
     word = os.path.basename(tokens[0])
+    if word == "find" and any(token in _FIND_RUNS_SOMETHING for token in tokens[1:]):
+        return False
     if word in _INERT_WORDS:
         return True
     if word in _INTERPRETERS:
@@ -1016,10 +1140,10 @@ def classify(
 ) -> Classification:
     """Work out what a command line would send, or refuse to guess.
 
-    A command that never names git or GitHub is left alone. Once it does name
+    A command that never runs git or GitHub is left alone. Once it does run
     one of them, every part of it has to be accounted for: a part whose first
-    word is neither of them and is not on the short harmless list is refused,
-    rather than read as though it did nothing.
+    word is neither of them and is not on the harmless list is refused, naming
+    that word, rather than read as though it did nothing.
 
     The parts are read in the order they run, because a part that changes
     folder changes where every part after it would send from.
@@ -1083,12 +1207,12 @@ def _classify_segment(
             _classify_gh(tokens, result)
         return
     if strict and not _is_inert(tokens):
-        result.deny(REASON_UNTOKENIZABLE)
+        result.deny(REASON_STRICT_UNKNOWN, word)
 
 
 def _merge(result: Classification, other: Classification) -> None:
     if other.deny_reason:
-        result.deny(other.deny_reason)
+        result.deny(other.deny_reason, other.deny_word)
     result.pushes.extend(other.pushes)
     result.gh_writes.extend(other.gh_writes)
     result.has_gh = result.has_gh or other.has_gh
@@ -1679,7 +1803,7 @@ def check_command(
                 return hits[0].sentence()
         return sentence_for(REASON_UNTOKENIZABLE)
     if result.deny_reason:
-        return sentence_for(result.deny_reason)
+        return result.sentence()
     for folder in result.config_edits:
         if folder is None or _looks_like_a_base(folder, runner):
             return sentence_for(REASON_BASE_NAME)

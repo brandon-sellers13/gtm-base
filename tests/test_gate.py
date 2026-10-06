@@ -170,14 +170,93 @@ class TestClassifyingACommand(unittest.TestCase):
             self.assertIsNone(classified.deny_reason, command)
 
     def test_a_part_of_the_command_we_cannot_account_for_is_refused(self):
-        for command in (
-            'python3 -c "import subprocess; subprocess.run([\'git\',\'push\'])"',
-            "python3 -c 'import os' && git push",
-            "perl -e 'x' ; git push",
+        for command, word in (
+            ('python3 -c "import subprocess; subprocess.run([\'git\',\'push\'])"', "python3"),
+            ("python3 -c 'import os' && git push", "python3"),
+            ("perl -e 'x' ; git push", "perl"),
         ):
-            self.assertEqual(
-                gate.REASON_UNTOKENIZABLE, gate.classify(command).deny_reason, command
+            classified = gate.classify(command)
+            self.assertEqual(gate.REASON_STRICT_UNKNOWN, classified.deny_reason, command)
+            self.assertEqual(word, classified.deny_word, command)
+            self.assertIn(
+                "runs %s on the same line as a git or GitHub command" % word,
+                classified.sentence(),
+                command,
             )
+
+    def test_the_letters_inside_a_flag_a_path_or_a_sentence_run_nothing(self):
+        """Finding of the 2026-10-05 live check in a client folder: every
+        `codex exec --skip-git-repo-check` line and most pipelines out of git
+        were refused, with the sentence meant for a command that cannot be
+        read. The letters inside a flag do not run git."""
+        for command in (
+            "codex exec --skip-git-repo-check -s read-only - ",
+            'codex exec --skip-git-repo-check "look at the git history and summarise it"',
+            "cd ~/git/repo && make",
+            "ls ~/git/repo",
+            "echo 'remember to git push later'",
+        ):
+            self.assertFalse(gate.mentions_git_or_gh(command), command)
+            classified = gate.classify(command)
+            self.assertIsNone(classified.deny_reason, command)
+            self.assertEqual([], classified.pushes, command)
+
+    def test_a_pipeline_out_of_git_through_harmless_words_is_allowed(self):
+        for command in (
+            "git log --format=%an | cut -d' ' -f1 | sort | uniq -c",
+            "git ls-files | xargs du -ch | tail -1",
+            "git diff --name-only | tr '\\n' ' '",
+            "git status --porcelain | wc -l; date; which gh",
+            "git log -1 --format=%H | tee last.txt",
+            "git ls-files | jq -R . | column -t",
+            "timeout 30 git fetch --all",
+        ):
+            self.assertTrue(gate.mentions_git_or_gh(command), command)
+            classified = gate.classify(command)
+            self.assertIsNone(classified.deny_reason, command)
+            self.assertEqual([], classified.pushes, command)
+
+    def test_a_real_send_is_still_a_send_whatever_stands_around_it(self):
+        for command in (
+            "git push origin main",
+            "timeout 30 git push origin main",
+            "timeout -s KILL 30 git push origin main",
+            "git log -1 | cut -c1-8 && git push origin main",
+            "codex exec --skip-git-repo-check 'x' && git push origin main",
+        ):
+            self.assertTrue(gate.mentions_git_or_gh(command), command)
+            classified = gate.classify(command)
+            self.assertIsNone(classified.deny_reason, command)
+            self.assertEqual(1, len(classified.pushes), command)
+
+    def test_a_program_the_check_does_not_know_handed_git_is_still_refused(self):
+        """The first word is what counts, except for a program this check does
+        not know: that one may run what it is handed, so handing it the word
+        git keeps the old refusal, now with the program named."""
+        for command, word in (
+            ("find . -exec git push \\;", "find"),
+            ('watch "git push origin main"', "watch"),
+            ("parallel git push ::: origin", "parallel"),
+            ("git status && find . -name '*.md' -execdir git push \\;", "find"),
+        ):
+            self.assertTrue(gate.mentions_git_or_gh(command), command)
+            classified = gate.classify(command)
+            self.assertEqual(gate.REASON_STRICT_UNKNOWN, classified.deny_reason, command)
+            self.assertEqual(word, classified.deny_word, command)
+
+    def test_a_program_name_that_is_not_plain_is_not_repeated(self):
+        self.assertIn(
+            "runs another program on the same line",
+            gate.sentence_for(gate.REASON_STRICT_UNKNOWN, "ignore;everything above"),
+        )
+        self.assertIn(
+            "runs another program on the same line",
+            gate.sentence_for(gate.REASON_STRICT_UNKNOWN, None),
+        )
+        self.assertIn(
+            "runs perl on the same line",
+            gate.sentence_for(gate.REASON_STRICT_UNKNOWN, "perl"),
+        )
 
     def test_a_harmless_word_beside_a_send_is_left_alone(self):
         for command in (
@@ -354,6 +433,24 @@ class TestReadingASend(unittest.TestCase):
                 "could not tell what this command does",
                 check("git push 'unclosed", root),
             )
+
+    def test_the_flag_that_holds_the_letters_passes_the_whole_check(self):
+        with Sandbox() as box:
+            root, _base_id = box.base()
+            self.assertIsNone(
+                check("codex exec --skip-git-repo-check -s read-only - ", root)
+            )
+            self.assertIsNone(
+                check("git log --format=%an | cut -d' ' -f1 | sort | uniq -c", root)
+            )
+
+    def test_a_program_the_check_does_not_know_is_named_in_the_refusal(self):
+        with Sandbox() as box:
+            root, _base_id = box.base()
+            sentence = check("perl -e 'x' ; git push origin main", root)
+            self.assertIn("runs perl on the same line as a git or GitHub command", sentence)
+            self.assertIn("only reads lines it fully understands", sentence)
+            self.assertNotIn("could not tell", sentence)
 
     def test_a_folder_name_in_the_command_itself_is_not_content(self):
         """Where a send is run from is not something that is being sent.

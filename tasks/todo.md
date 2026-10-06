@@ -1336,3 +1336,14 @@ Two reviews. Security: S1, file names read out as instructions in the documents 
 ### 2026-09-27, 0.3.3: Brandon's calls on the open questions (after merge e828d7a)
 - [x] Q3: the any-time path shows only the four labeled lines inside the data fence, then the one ask; no identifier, path or settings block. The yes stays bound to the whole entry (a comment in record_change.preview says why that is safe). The closing's preview is unchanged.
 - [x] Q1, Q2, Q4 kept as built; Q5 wording accepted.
+
+### 2026-10-05, 0.3.4: the command check refused lines that only held the letters "git"
+Observed in the Gridwise folder on 2026-10-05: every `codex exec --skip-git-repo-check` line and most pipelines out of git refused with the "could not tell" sentence.
+- [x] A line is about git only when a part of it runs git or gh as its program (prefixes stripped, shell `-c` and substitutions read recursively); an unknown program handed the word git still counts.
+- [x] Widen the harmless words (cut, uniq, tr, find, du, df, date, which, basename, dirname, realpath, stat, diff, jq, tee, less, column, codex); `find -exec` leaves the list; `timeout` read as a prefix.
+- [x] A refusal of its own for an unknown program beside git, naming the program; "could not tell" kept for parse failures.
+- [x] Tests: flag case passes, pipeline into cut and uniq passes, a real push is still a push, unknown wrapper still refused.
+- [x] Full suite run; version 0.3.4 in both manifests; changelog entry.
+- [ ] Brandon: review the pull request, then update the installed plugin.
+
+Review: the fix is in `plugins/gtm-base/lib/gtmbase/gate.py` (`mentions_git_or_gh`, `_INERT_WORDS`, `_strip_prefixes`, `REASON_STRICT_UNKNOWN`) with tests in `tests/test_gate.py`. One judgment call: the first-token rule alone would have let `find . -exec git push` and `watch "git push"` run unread, so an unknown program handed the word git keeps the old refusal.
