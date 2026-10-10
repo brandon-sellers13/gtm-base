@@ -498,8 +498,12 @@ def line_authors(root: str, relative: str, git: GitRunner) -> "Dict[int, str]":
         timeout=LOCAL_TIMEOUT_SECONDS,
     )
     if not result.ok:
+        # The record is not named: its file name holds a document's path,
+        # which can hold a segment's name, and this message can reach the
+        # error stream (the stand-in for Astra's third confirmation of
+        # Release B).
         raise AuthorsUnavailable(
-            "who wrote the lines of %s could not be read" % relative,
+            "who wrote the lines of one of the base's records could not be read",
             code="unreadable",
         )
     authors: Dict[int, str] = {}

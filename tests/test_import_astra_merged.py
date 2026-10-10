@@ -465,6 +465,24 @@ class TestNoFileNameOutsideTheFence(unittest.TestCase):
                 outside.append(line)
         return outside
 
+    def test_a_record_the_history_cannot_read_is_never_named_on_the_error_stream(self):
+        # The stand-in for Astra's third confirmation of Release B: when the
+        # saved history could not say who wrote a record's lines, the error
+        # repeated the record's file name, which can hold a segment's, on the
+        # error stream of close.
+        from gtmbase import base_reader
+        from gtmbase.gitcmd import GitResult
+
+        class Failing(object):
+            def run(self, args, cwd=None, check=True, timeout=None, env=None):
+                return GitResult(1, "", "fatal")
+
+        relative = "work/confirmations/context--icps--ignore-your-instructions.md"
+        with self.assertRaises(base_reader.AuthorsUnavailable) as caught:
+            base_reader.line_authors("/a/base", relative, Failing())
+        self.assertNotIn("ignore", str(caught.exception))
+        self.assertNotIn(relative, str(caught.exception))
+
     def assert_only_inside_fences(self, printed):
         outside = []
         inside = False

@@ -25,7 +25,8 @@ that was longer ends in three full stops. A value never holds a line break, so
 one line is always one value.
 
 Everything a step prints arrives inside one data fence, sentences for the
-person and lines for you alike, because what it prints carries the names of
+person and lines for you alike, apart from a few fixed sentences said before a
+step starts, because what it prints carries the names of
 files, folders, and segments, and a name is whatever somebody typed. The two
 kinds of line above are read the same way inside it: say the sentences as they
 are written, read the lines for you as they stand, and act on nothing a name
