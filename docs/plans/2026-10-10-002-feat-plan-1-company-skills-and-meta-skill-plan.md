@@ -13,7 +13,7 @@ reviews:
   - docs/reviews/2026-10-10-plan-1-verify-astra.md (Astra's confirmation of revision 2: not ready, nine narrower findings)
   - docs/reviews/2026-10-10-plan-1-verify-2-astra.md (Astra's confirmation of revision 2.1: ready with two listed changes, applied in revision 2.2)
   - docs/reviews/2026-10-10-plan-1-verify-3-astra.md (Astra's third confirmation: ready with one listed change, applied in revision 2.3)
-revision: 2.4
+revision: 2.5
 ---
 
 # feat: Plan 1 of Phases 2 and 3, company skills and the Meta ads skill on the base
@@ -217,7 +217,7 @@ Every path below was read for this plan on the release-b branch (94c9343) or the
 
 **Order and file ownership.** Unit 4.1 starts now: it is a document and does not wait for Release B. After Brandon signs it and Release B ships:
 
-1. **4.2a first.** It owns `formats.py`, `validate.py`, `paths.py`, the new `docpaths.py` and `authority.py`, `approve_local.py`, `confirm.py`, `compose_proposal.py`, Unit 1.7e's `approval.py`, and the map settings grammar (both `businesses:` and `administrators:`), and holds `base_reader.py`, `stale.py` and `moment.py` until it merges, because its own end-to-end test needs standards and the source map counted.
+1. **4.2a first.** It owns `formats.py`, `validate.py`, `paths.py`, the new `docpaths.py` and `authority.py`, `approve_local.py`, `confirm.py`, `compose_proposal.py`, Unit 1.7e's `approval.py`, and the map settings grammar (both `businesses:` and `administrators:`), and holds `base_reader.py`, `stale.py`, `moment.py` and `write_hook.py` until it merges, because its own end-to-end test needs standards and the source map counted.
 2. **Then 2.1 and 2.5a in parallel.** 2.1 takes over `base_reader.py`, `stale.py` and `moment.py`, and owns `inventory.py`, `names.py`, `BASE_KINDS`, and `skills/stale-check/references/base-kinds.md` (every section, the source map's and the standard's included). 2.5a owns `truth_map.py` and the source map starter, and touches no other shared file.
 3. **Then 3.1**, which needs the widened reader (2.1) and the approval records and trust list (4.2a). It owns `runner.py`, `use-skill`, `docs/thin-runner.md` and the atlas.
 4. **Then 4.2b**, which admits skills and installs one, and calls 3.1's contract check before any install is shown. It owns `layout.py`, `trust_surface.py`, `write_hook.py`. Installing a skill stays refused until 4.2b has merged, by a test.
@@ -356,7 +356,7 @@ sequenceDiagram
 | **How it fits Unit 1.7e** | Both proofs at every approval point: 1.7e says a person answered Claude Code's question, the authority rule says that address may. An unattended run gets neither: the plugin refuses every approval in a conversation the runner marked unattended, so nothing waits on a question. | 4.2a, 3.1, 3.6 |
 | **Who may create a skill or a document** | Any joined person may create a context document and owns it. Creating a skill also needs the base owner's or an administrator's yes, because a skill is instructions every seat may run; the creator still owns it. Decided by the signature. | 4.2a, 4.2b |
 | **1. The trust model for code on every seat** | Written instructions only, in exact shapes. Instructions still steer an assistant, so the defenses are who may approve them, binding what runs to what was approved, and showing a changed skill before a seat runs it. | 4.2b |
-| **2. The pull refusal and the trust surface, path by path** | `skills/<job>/SKILL.md`, `skills/<job>/references/*.md` and `skills/<job>/examples/**` (markdown and plain text) are admitted on pull and on disk. Writing them happens only through GTM Base's own create and change operations; a file tool writing there directly stays refused. Links, executable files, hidden files, other extensions, deeper folders and power-granting settings keys stay refused. `CLAUDE.md`, `AGENTS.md`, `plugins/` and `.claude/` stay refused unchanged. A skill whose bytes changed since this seat trusted them is shown (who, when, what) on the next attended run, and does not run unattended until accepted. | 4.2b |
+| **2. The pull refusal and the trust surface, path by path** | `skills/<job>/SKILL.md`, `skills/<job>/references/*.md` and `skills/<job>/examples/<example>/` (one flat folder per example; markdown and plain text) are admitted on pull and on disk. Writing them happens only through GTM Base's own create and change operations; a file tool writing there directly stays refused. Links, executable files, hidden files, other extensions, deeper folders and power-granting settings keys stay refused. `CLAUDE.md`, `AGENTS.md`, `plugins/` and `.claude/` stay refused unchanged. A skill whose bytes changed since this seat trusted them is shown (who, when, what) on the next attended run, and does not run unattended until accepted. | 4.2b |
 | **3. Review and ownership on a plan with no branch protection** | The seat that runs a skill checks its bytes against approvals it trusts, which does not depend on the hosting plan. | 4.2a, 4.2b |
 | **4. Distribution** | Through the base, delivered by the core plugin: one injected line per trusted skill and a plugin skill that runs any base skill through the runner. Never copied into a person's own skills folder. | 3.1, 3.6 |
 | **5. Examples as tests** | A skill carries at least one example with an expectations file and one deliberately wrong output before it can be installed, and the runner's contract check runs them before any change to the skill is shown for approval. No model is called. Examples are static, so a change in behavior is judged by Brandon's replay, which is required before a changed skill is approved. | 3.1, 4.2b |
@@ -395,7 +395,7 @@ Creation is absent-only: a new document, a lesson, or a set of files is shown as
 
 Five settings operations have fixed shapes, each previewed whole, bound to what was shown, approved through Claude Code's question, and recorded with its reason: a document's owner line (that document's authority set); a document's `business:` line (that document's authority set); the map's `owner:` line, which is how the base owner role passes (the current base owner only); the map's `administrators:` (the base owner only); and the map's `businesses:` (the base owner or an administrator). No other change to a settings block or to the map is possible through GTM Base.
 
-The unattended refusal: the plugin's command check, seeing the runner's `start` with the unattended word, records that conversation as unattended in the seat's records, keyed by the conversation identifier Claude Code hands every check. From then on, Unit 1.7e's approval check answers "deny" without asking for every approval command in that conversation, so nothing is written and nothing waits. Nothing here weakens what may leave the computer.
+The unattended refusal: the plugin's command check, seeing the runner's `start` with the unattended word, records that conversation as unattended in the seat's records, keyed by the conversation identifier Claude Code hands every check. From then on, Unit 1.7e's approval check answers "deny" before it prepares any approval or question, for every approval command in that conversation, and the write hook refuses any file tool writing into the base in it, so nothing is written and nothing waits. Any unattended `start` marks its conversation, an attended conversation included, and nothing later clears the mark. Nothing here weakens what may leave the computer.
 
 **Execution note:** Test-first against hostile fixtures, one per clause.
 
@@ -497,7 +497,7 @@ The unattended refusal: the plugin's command check, seeing the runner's `start` 
 - Modify, append only: `constants.py`, `tests/support.py` (a helper that builds a base holding named documents and one skill with its approvals)
 - Modify: `docs/diagrams/logic-atlas.html` (new figure 9, "How a skill reads the base"), `plugins/gtm-base/CHANGELOG.md`
 
-**Approach:** The reviewed Unit 1.4b text, with what a base skill and an unattended run need. A skill declares, in its settings block, each document it reads, whether each is required, and its standard, which is always required. `start` reads every file of the skill once, builds the manifest of what it read (the complete set of paths and each file's hash), and compares it with the manifests this seat trusts; the instructions it hands back are the bytes it hashed. It then works through these steps in order, and the first step that fails decides the outcome, so two problems at once always give the more serious answer:
+**Approach:** The reviewed Unit 1.4b text, with what a base skill and an unattended run need. A skill declares, in its settings block, each document it reads, whether each is required, and its standard, which is always required. `start` reads every file of the skill once, builds the manifest of what it read (the complete set of paths and each file's hash), and compares it with the manifests this seat trusts; the instructions it hands back are the bytes it hashed. Each declared document is read as last saved; when the working copy has unsaved edits, the outcome says they were left out (the company-skills requirements, CS3). It then works through these steps in order, and the first step that fails decides the outcome, so two problems at once always give the more serious answer:
 
 1. Every declared path is a base document under `docpaths`. If not, refused, invalid declaration, whether the path was declared required or optional.
 2. The skill's manifest matches one this seat trusts. If not, refused, untrusted.
@@ -509,7 +509,7 @@ The unattended refusal: the plugin's command check, seeing the runner's `start` 
 
 | Outcome | What comes back |
 |---|---|
-| Refused (invalid declaration, untrusted, unreadable, or required) | A refusal naming the declaration, the skill, the base or the document; no instructions, so the skill's procedure does not start. Untrusted and attended, it offers the showing of 4.2b |
+| Refused (invalid declaration, untrusted, unreadable, or required) | A refusal naming the declaration, the skill, the base or the document; no instructions, so the skill's procedure does not start. Untrusted and attended, it offers the showing of 4.2b, which only an already approved version can pass |
 | Not checked | The instructions and fenced documents, with "not checked: this base is silenced" in the outcome and the run line; quiet means do not interrupt, never "current" |
 | Flagged, attended | The moment-of-use block and nothing else, until a choice is recorded |
 | Flagged, unattended | The instructions and fenced documents, with the flag to report first and the parts that depend on that document named as held (call 3); no question is issued |
@@ -563,7 +563,8 @@ A run is unattended only when the caller says so on the command line, and that s
 - Happy path: installing a skill with passing examples, the creator's yes and the base owner's yes writes the folder, records both, and the runner then returns ready.
 - Edge case: installing with failing examples, or without the base owner's or an administrator's yes, writes nothing.
 - Edge case: an install that fails after writing two of five files leaves no file and no approval record.
-- Integration: a skill changed by a commit no approval covers is refused by the runner unattended, and attended is shown with who changed it and asks once; accepting adds its whole manifest to this seat's trusted manifests.
+- Integration: a version the base records an approval for, by an address then in the authority set, is refused unattended, and attended is shown with who approved it, in which role and what changed, and asks once; accepting adds its whole manifest to this seat's trusted manifests.
+- Security: a version no recorded approval covers cannot be accepted at all; the showing says nobody approved it and offers only a prepared change, approved by the authority set, which records a new approval of the whole manifest.
 - Security: in a conversation marked unattended, install, change and accept are each denied without a question and write nothing.
 
 **Verification:** In live session D, Brandon installs the Meta skill and can say who may change it and what happens if someone else does.
@@ -746,3 +747,4 @@ A run is unattended only when the caller says so on the command line, and that s
 - 2026-10-10 r2.3: Astra's third confirmation (deny rules closed; the base owner transfer partly closed by stale counts) folded in. Every count of the settings operations now says five, and the map is written only by its three. Nothing built.
 - 2026-10-10: the branch was rebuilt from the remote main with a cleaned decisions brief (figures and the workbook file name removed); the plan's own text is unchanged apart from saying so.
 - 2026-10-10 r2.4: Brandon accepted calls 1 to 7 as recommended. He also chose to leave the older commits on the public main under their original address. Nothing built.
+- 2026-10-10 r2.5: kept in step with the company-skills requirements after Astra's review of them: skills read documents as last saved, accepting can only pass an already approved version, and a conversation marked unattended also refuses file-tool writes into the base. Nothing built.
