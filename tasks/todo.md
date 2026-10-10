@@ -1378,7 +1378,7 @@ Plan: `docs/plans/2026-10-10-002-feat-plan-1-company-skills-and-meta-skill-plan.
 - [x] This repository's git address set to Brandon's personal one (repo config, all worktrees); the branch rebased onto
       origin/main and every commit re-authored under it. 120 older commits already on the public main carry the Gridwise
       address; changing those means rewriting the public main, which is Brandon's call
-- [ ] Brandon answers the seven calls (1 two businesses, 2 SC-M, 3 unattended flag, 4 old skill copy, 5 releases, 6 ownership guarantee, 7 lessons)
+- [x] Brandon answered the seven calls on 2026-10-10, all as recommended (1 two businesses, 2 SC-M, 3 unattended flag, 4 old skill copy, 5 releases, 6 ownership guarantee, 7 lessons)
 - [ ] Unit 4.1 runs first and Brandon signs the brainstorm before Unit 4.2 is briefed
 
 #### Review (Plan 1)
