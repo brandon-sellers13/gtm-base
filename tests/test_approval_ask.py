@@ -851,6 +851,147 @@ class TestARealTicketReachesTheRealWriter(unittest.TestCase):
             self.assertIn(expected, owners, name)
 
 
+class _Reached(Exception):
+    """The script reached a library write; the test stops it there."""
+
+
+class TestEachCommandReachesTheWriteItsTicketOpens(unittest.TestCase):
+    """Astra's confirmation of the Release B fixes, finding 8.
+
+    Comparing all the writes tickets open with all the writes writers ask for
+    would not notice two commands swapping theirs. So each approval command
+    is run here as Claude Code runs it after a yes, through the script's own
+    main, with no hold and the ticket the hook made, and the first write the
+    script reaches must be one that ticket opens. The write is stopped as it
+    is reached, so no prepared state is needed for the proof.
+    """
+
+    def reached(self, script, arguments, root):
+        import contextlib
+        import importlib.util
+        import io
+
+        import shlex
+
+        command = "python3 %s %s" % (script, " ".join(shlex.quote(word) for word in arguments))
+        output = asked(self, command, cwd=root)
+        kept = json.loads(support.read(os.path.join(approval.folder_path(), tickets()[0])))
+        spec = importlib.util.spec_from_file_location("gtm_base_reached", script)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        names = []
+        original = approval.require
+
+        def recording(write):
+            names.append(write)
+            raise _Reached()
+
+        here = os.getcwd()
+        os.chdir(root)
+        try:
+            with NotHeld(), mock.patch.object(approval, "require", recording):
+                os.environ[approval.ENV] = nonce_in(output)
+                with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(
+                    io.StringIO()
+                ):
+                    try:
+                        module.main(list(arguments))
+                    except _Reached:
+                        pass
+        finally:
+            os.chdir(here)
+        del original
+        return names, kept["opens"]
+
+    def test_every_approval_command(self):
+        with support.Sandbox() as sandbox:
+            root, base_id = local_base(sandbox)
+            staged = os.path.join(root, constants.PROPOSALS_PENDING_DIR, "stg-" + "c" * 16 + ".md")
+            support.write(staged, support.staging_template())
+            reason = os.path.join(sandbox.path, "reason.txt")
+            support.write(reason, "It changed.\n")
+            draft = os.path.join(sandbox.path, "draft.md")
+            support.write(draft, "a draft\n")
+            commands = (
+                (APPROVE_LOCAL, ["--staging", staged, "--approve", "--shown", "a" * 64]),
+                (APPROVE_LOCAL, ["--staging", staged, "--drop"]),
+                (CONFIRM, ["--question", "q-1", "--answer", "yes"]),
+                (CONFIRM, ["--question", "q-1", "--answer", "not-now"]),
+                (MOMENT, ["--file", "context/icps.md", "--answer", "fix", "--question", "q-1"]),
+                (MOMENT, ["--file", "context/icps.md", "--answer", "reflects", "--question", "q-1"]),
+                (JOIN, ["approve", "--step", "positioning", "--draft", draft, "--run", "r", "--base", root]),
+                (JOIN, ["adopt", "--run", "r", "--segment", "s", "--hash", "a" * 64, "--base", root]),
+                (JOIN, ["adopt-leave", "--run", "r", "--segment", "s", "--base", root]),
+                (JOIN, ["draft-leave", "--segment", "s", "--base", root]),
+                (JOIN, ["reconcile-answer", "--entry", "e", "--file", "context/icps.md", "--answer", "yes", "--base", root]),
+                (JOIN, ["reconcile-answer", "--entry", "e", "--file", "context/icps.md", "--answer", "no", "--base", root]),
+                (JOIN, ["skip", "--step", "positioning", "--run", "r", "--base", root]),
+                (JOIN, ["skip-change", "--base", root]),
+                (JOIN, ["close", "--base", root, "--run", "r", "--got-in-the-way", "It was slow."]),
+                (STALE, ["--move-changes"]),
+                (STALE, ["--not-now-move"]),
+                (STALE, ["--dismiss-quiet-record"]),
+                (STALE, ["--record-change", "record", "--shown", "a" * 64]),
+                (STALE, ["--record-change", "answer", "--change", "e", "--document", "context/icps.md", "--answer", "yes"]),
+                (STALE, ["--record-change", "answer", "--change", "e", "--document", "context/icps.md", "--answer", "no"]),
+                (STALE, ["--record-change", "answer", "--change", "e", "--document", "context/icps.md", "--answer", "not-now"]),
+                (SEAT, ["--quiet", "month"]),
+                (SEAT, ["--quiet", "until-asked"]),
+                (SEAT, ["--weekly-line", "off"]),
+            )
+            # These five check what they were handed against state a test
+            # would have to build first (a question issued, a draft in a
+            # run), so they never reach the write here; for them the
+            # script's own call to the write the ticket opens is read
+            # instead, below. Any other command that stops reaching its
+            # write fails this test.
+            read_instead = {
+                ("confirm.py", "yes"): (CONFIRM, "main", "confirm.answer("),
+                ("confirm.py", "not-now"): (CONFIRM, "main", "confirm.answer("),
+                ("moment.py", "fix"): (MOMENT, "_answer", "moment.fix_it_first("),
+                ("moment.py", "reflects"): (MOMENT, "_answer", "moment.already_reflects("),
+                ("join.py", "approve"): (JOIN, "run_approve", "join_flow.approve_step("),
+            }
+            unreached = []
+            for script, arguments in commands:
+                names, opens = self.reached(script, arguments, root)
+                label = "%s %s" % (os.path.basename(script), " ".join(arguments[:2]))
+                if names:
+                    self.assertEqual(opens[0], names[0], label)
+                    continue
+                key = (
+                    os.path.basename(script),
+                    arguments[0] if script == JOIN else arguments[arguments.index("--answer") + 1],
+                )
+                if key not in read_instead:
+                    unreached.append(label)
+                    continue
+                where, function, call = read_instead[key]
+                self.assertIn(call, self.body_of(where, function), label)
+                write = {
+                    "confirm.answer(": "confirm.answer",
+                    "moment.fix_it_first(": "moment.fix_it_first",
+                    "moment.already_reflects(": "confirm.answer",
+                    "join_flow.approve_step(": "join_flow.approve_step",
+                }[call]
+                self.assertEqual(write, opens[0], label)
+            self.assertEqual([], unreached)
+            # And reflects really goes through the write its ticket opens.
+            from gtmbase import moment as moment_module
+            import inspect
+
+            self.assertIn("confirm.answer(", inspect.getsource(moment_module.already_reflects))
+
+    def body_of(self, path, function):
+        import ast as _ast
+
+        source = support.read(path)
+        for node in _ast.walk(_ast.parse(source)):
+            if isinstance(node, _ast.FunctionDef) and node.name == function:
+                return _ast.get_source_segment(source, node)
+        self.fail("%s has no %s" % (path, function))
+
+
 class TestTheWordsAPersonReads(unittest.TestCase):
     def test_every_new_sentence_is_registered_and_plain(self):
         registered = set(

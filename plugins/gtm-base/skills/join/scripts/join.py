@@ -723,7 +723,7 @@ def run_propose_location(options, out):
     line(out, "parent", proposal.parent)
     line(out, "reason", proposal.reason_code)
     if options.content_folder and not options.beside:
-        line(out, "belongs-with", options.content_folder)
+        held_apart(out, ["belongs-with=%s" % safe_value(options.content_folder)])
         out.write(WILL_BE_LINKED % plain_value(options.content_folder) + "\n")
     if proposal.warning_code:
         line(out, "warning", proposal.warning_code)
@@ -842,9 +842,12 @@ def run_scope(options, out):
             out.write(SCOPE_NOT_A_NAME + "\n")
         return EXIT_REFUSED
     if label:
-        line(out, "covers", label)
-        out.write(
-            constants.SCOPE_HELD_SENTENCE % {"covers": plain_value(label)} + "\n"
+        held_apart(
+            out,
+            [
+                "covers=%s" % safe_value(label),
+                constants.SCOPE_HELD_SENTENCE % {"covers": plain_value(label)},
+            ],
         )
     else:
         line(out, "covers", "whole")
@@ -938,7 +941,8 @@ def run_segments_settle(options, out):
         sentence = refusal.sentence or SEGMENT_REFUSALS.get(
             refusal.code, SEGMENTS_UNREADABLE
         )
-        out.write(sentence + "\n")
+        # A refusal can name the segment it is about.
+        held_apart(out, [sentence])
         return EXIT_REFUSED
     for segment in inventory.segments:
         out.write(
@@ -950,9 +954,10 @@ def run_segments_settle(options, out):
             )
         )
     # Every name in these was checked as it was settled: one line, no
-    # control character, and no longer than the cap.
-    for sentence in segments.readback(inventory):
-        out.write(sentence + "\n")
+    # control character, and no longer than the cap. A name is still
+    # whatever somebody typed, so the read-back is held apart as data
+    # (Astra's confirmation of the Release B fixes, finding 5).
+    held_apart(out, segments.readback(inventory))
     return EXIT_DONE
 
 
@@ -1063,8 +1068,9 @@ def run_list_sources(options, out):
         out.write("needs-second-yes=true\n")
     if listing.appears_multi_company:
         out.write("appears-multi-company=true\n")
-        for hint in listing.company_hints:
-            line(out, "company-hint", hint)
+        held_apart(
+            out, ["company-hint=%s" % safe_value(hint) for hint in listing.company_hints]
+        )
     return EXIT_DONE
 
 
@@ -1128,16 +1134,23 @@ def run_add_paste(options, out):
 
 def say_left_out(out, left_out):
     """Say which of the person's own documents could not be used, and why."""
-    for label, reason in left_out or ():
-        out.write("Left out: %s (%s)\n" % (safe_value(label), safe_value(reason)))
+    # A label is the name of their file, so it is held apart as data (Astra's
+    # confirmation of the Release B fixes, finding 5).
+    held_apart(
+        out,
+        [
+            "Left out: %s (%s)" % (safe_value(label), safe_value(reason))
+            for label, reason in left_out or ()
+        ],
+    )
 
 
 def say_removed(out, removed):
     """Say what was taken out of each document, in one sentence for each."""
-    for label, counts in removed or ():
-        sentence = sources.removed_sentence(label, counts)
-        if sentence:
-            out.write(sentence + "\n")
+    held_apart(
+        out,
+        [sources.removed_sentence(label, counts) for label, counts in removed or ()],
+    )
 
 
 def explicit_count(files, folders):
@@ -1269,13 +1282,18 @@ def a_reading_refusal(refusal, out):
     return True
 
 
-def say_older_versions(out, superseded):
+def older_version_lines(superseded):
     """One line for the assistant for each version a draft leaves out."""
-    for version in superseded or ():
-        out.write(
-            "left-out=%s reason=%s\n"
-            % (safe_value(version.older_line), safe_value(constants.REASON_OLDER_VERSION))
-        )
+    return [
+        "left-out=%s reason=%s"
+        % (safe_value(version.older_line), safe_value(constants.REASON_OLDER_VERSION))
+        for version in superseded or ()
+    ]
+
+
+def say_older_versions(out, superseded):
+    """The lines for the versions a draft leaves out, held apart as data."""
+    held_apart(out, older_version_lines(superseded))
 
 
 STEP_REFUSALS = {
@@ -1335,19 +1353,21 @@ def run_preview(options, out):
         + len(previewed.superseded),
     )
     line(out, "total", previewed.total)
-    for label in previewed.included_labels[:PREVIEW_LABELS_SHOWN]:
-        line(out, "included", label)
-    for label in previewed.dropped_labels:
-        out.write(
-            "left-out=%s reason=%s\n"
-            % (safe_value(label), safe_value(REASON_OVER_THE_CAP))
-        )
-    for label, reason in previewed.left_out:
-        out.write(
-            "left-out=%s reason=%s\n"
-            % (safe_value(label), safe_value(REASON_UNUSABLE % reason))
-        )
-    say_older_versions(out, previewed.superseded)
+    # Every line here names one of their files, so all of it is held apart as
+    # data (Astra's confirmation of the Release B fixes, finding 5).
+    held_apart(
+        out,
+        ["included=%s" % safe_value(label) for label in previewed.included_labels[:PREVIEW_LABELS_SHOWN]]
+        + [
+            "left-out=%s reason=%s" % (safe_value(label), safe_value(REASON_OVER_THE_CAP))
+            for label in previewed.dropped_labels
+        ]
+        + [
+            "left-out=%s reason=%s" % (safe_value(label), safe_value(REASON_UNUSABLE % reason))
+            for label, reason in previewed.left_out
+        ]
+        + older_version_lines(previewed.superseded),
+    )
     for code in previewed.codes:
         line(out, "note", code)
     say_removed(out, previewed.removed)
@@ -1397,11 +1417,12 @@ def run_assemble(options, out):
         else None
     )
     line(out, "draft", join_flow.draft_path(run_id, step, settled))
-    for label in assembled.included_labels:
-        line(out, "included", label)
-    for label in assembled.dropped_labels:
-        line(out, "dropped", label)
-    say_older_versions(out, assembled.superseded)
+    held_apart(
+        out,
+        ["included=%s" % safe_value(label) for label in assembled.included_labels]
+        + ["dropped=%s" % safe_value(label) for label in assembled.dropped_labels]
+        + older_version_lines(assembled.superseded),
+    )
     for code in assembled.codes:
         line(out, "note", code)
     say_left_out(out, assembled.left_out)
@@ -2021,7 +2042,7 @@ def run_link(options, out):
             return EXIT_REFUSED
         raise
     line(out, "base", root)
-    line(out, "belongs-with", folder)
+    held_apart(out, ["belongs-with=%s" % safe_value(folder)])
     out.write(LINKED + "\n")
     return EXIT_DONE
 
