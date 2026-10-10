@@ -1363,3 +1363,20 @@ Reproduced on the installed 0.3.4: a Write under `~/Gridwise/.claude/worktrees/<
 
 #### Review (0.3.5)
 One correctness review. It confirmed nothing a real base protected is now open, that the read hook and the gate do not over-reach, and that the shell fallback is consistent. It found three things, all fixed with tests: (1) medium, a desktop session's own `.claude/settings*.json` inside the linked folder went from refused to allowed with no question, now asked about; (2) low, when the linked folder's `.claude` is a link, a write to its target skipped the question because the shortcut ran first, so the linked-settings question now runs before the shortcut; (3) low, the atlas stamp went on the wrong figure, now moved. Its testing gap is closed too: a new test refuses a base known only by the account record (map and history removed), and removing that branch of the check fails it. Checked against the 0.3.4 write hook: six of the new tests fail there, and the guards pass. Left as it was: the fallback looks only at the first `.claude` in a path, older than 0.3.5 and an edge case (a base checked out inside a session's working folder).
+
+### 2026-10-10, Plan 1 of Phases 2 and 3 (branch claude/plan-1-meta-skill-3d436e)
+Plan: `docs/plans/2026-10-10-002-feat-plan-1-company-skills-and-meta-skill-plan.md`. Planning only; no product code.
+- [x] Read the decisions brief (D1 to D10, M6, M7, M8, M12), the roadmap on release-b, the build plan through call 59 on the finish branch, and the Meta skill as it runs today (read only)
+- [x] Write revision 1: Units 4.1, 4.2, 2.1, 3.1, 2.4a, 2.5a, 3.5, 3.6 in two releases; SC-M proposed; seven calls for Brandon
+- [x] Astra reviews the plan read only (brief: docs/reviews/2026-10-10-plan-1-review-brief.md); fix and confirm until ready.
+      r1 not ready (16 findings, 2 blockers on the ownership proof) -> r2 not ready (9 narrower) -> r2.1 ready with 2 changes
+      -> r2.2 ready with 1 change -> r2.3 ready to build as written (docs/reviews/2026-10-10-plan-1-verify-4-astra.md)
+- [ ] BEFORE ANY PUSH: rebuild this branch from main without the Gridwise figures in commit dff9f24 (decisions brief, M6/M7);
+      the repository is public and a later commit cannot remove them from history
+- [ ] Brandon answers the seven calls (1 two businesses, 2 SC-M, 3 unattended flag, 4 old skill copy, 5 releases, 6 ownership guarantee, 7 lessons)
+- [ ] Unit 4.1 runs first and Brandon signs the brainstorm before Unit 4.2 is briefed
+
+#### Review (Plan 1)
+Nine units in two releases (C: 4.2a, 2.1, 2.5a, 3.1, 4.2b, 2.4a, 3.5; D: 3.6), plus 4.1 first. The hard part was D5's
+"provable": history fields prove nothing on one computer, so the plan binds each approval to exact bytes and a seat runs a
+skill only as a whole manifest it approved or accepted, with the guarantee stated exactly as call 6. Planning only; no code.

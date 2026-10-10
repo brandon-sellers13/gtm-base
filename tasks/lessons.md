@@ -94,3 +94,12 @@
   that file and leave the rest alone.
 - A guard test only guards if it fails when the code it names is removed. Mutate the branch once and watch the test
   fail before trusting it; the first "base folders still refused" test passed with the changed branch deleted.
+
+## 2026-10-10, Plan 1 of Phases 2 and 3
+- "Provable" ownership cannot rest on matching the owner line, the seat's address and history authors: all three are
+  claims anyone with the computer can write. Bind each approval to the exact bytes approved, and trust a whole skill only
+  as one manifest (every path and hash); per-file approval lets two approved versions be mixed into one nobody approved.
+- A list of allowed tools does not keep a scheduled run from an approval: scheduled tasks inherit a person's allow rules
+  and can wait on a question. Refuse in the plugin, and claim a second control only where it is independently tested.
+- Redacting client figures in a later commit does not remove them from a public repository's history; check before the
+  first commit that carries them, not before the push.
