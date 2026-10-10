@@ -17,6 +17,7 @@ put in quotation marks with its backslashes and quotation marks marked off.
 """
 
 # --- gtm-base shim (copy from here) ---
+import io
 import os
 import sys
 
@@ -290,15 +291,17 @@ def plain_value(value):
 
 
 def held_apart(out, lines):
-    """Lines that can carry a name somebody typed, held apart as data.
+    """Lines that can carry a name somebody typed.
 
-    The name of a file, a folder or a segment is whatever somebody typed,
-    and one shaped like an instruction must never reach the assistant as
-    words around the data (Astra's review of Release B, finding 5).
+    Everything a step prints is held apart as data in one fence by `main`,
+    because the name of a file, a folder or a segment is whatever somebody
+    typed, a slug made from one still reads as words, and chasing each line
+    that might carry one missed some twice (Astra's review of Release B and
+    its confirmations, finding 5). This only keeps the lines together.
     """
-    lines = [text for text in lines if text]
-    if lines:
-        out.write(moment.fenced("\n".join(lines), note=moment.NAMES_NOTE) + "\n")
+    for text in lines:
+        if text:
+            out.write(text + "\n")
 
 
 def line(out, name, value):
@@ -2160,21 +2163,26 @@ def main(argv=None):
         except GtmBaseError:
             sys.stdout.write(BAD_COMPANY + "\n")
             return EXIT_REFUSED
+    # Everything the step prints goes out in one fence, as data, so no name
+    # it carries reaches the assistant as words around the data, whatever
+    # line it is on (Astra's review of Release B and its confirmations,
+    # finding 5). What goes to the error stream never names anything.
+    printed = io.StringIO()
     try:
-        return step(options, sys.stdout)
+        return step(options, printed)
     except IdentityNeeded:
-        sys.stdout.write(NEEDS_EMAIL + "\n")
+        printed.write(NEEDS_EMAIL + "\n")
         return EXIT_REFUSED
     except approval.ApprovalRefused as refusal:
         # Said as it is, so the person hears why and what to do, rather than
         # the sentence for a step that could not be finished (the correctness
         # review of Unit 1.7e, finding 1).
-        sys.stdout.write("codes=%s\n" % safe_value(refusal.code))
-        sys.stdout.write(str(refusal) + "\n")
+        printed.write("codes=%s\n" % safe_value(refusal.code))
+        printed.write(str(refusal) + "\n")
         return EXIT_REFUSED
     except (DraftError, ReviewError) as refusal:
-        sys.stdout.write("codes=%s\n" % safe_value(",".join(_codes_of(refusal))))
-        sys.stdout.write(
+        printed.write("codes=%s\n" % safe_value(",".join(_codes_of(refusal))))
+        printed.write(
             "That step could not be finished, so nothing was written. Go back "
             "to the same step and try it again.\n"
         )
@@ -2185,6 +2193,10 @@ def main(argv=None):
     except Exception:
         sys.stderr.write(WENT_WRONG + "\n")
         return EXIT_ERROR
+    finally:
+        said = printed.getvalue().rstrip("\n")
+        if said:
+            sys.stdout.write(moment.fenced(said, note=moment.NAMES_NOTE) + "\n")
 
 
 def _codes_of(failure):

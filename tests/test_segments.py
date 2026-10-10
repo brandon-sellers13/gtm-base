@@ -350,7 +350,12 @@ class TestTheInventoryOfARealRun(unittest.TestCase):
                 answer = "leave-out" if name in ("Neobanks", "Tax preparers") else "adopt"
                 written.append("%s %d %s" % (answer, candidate.number, name))
             handed = run_join("words-file", "--run", run, "--for", "segments")
-            path = handed.stdout.decode("utf-8").strip().split("=", 1)[1]
+            # Since Astra's review of Release B the step prints inside a data
+            # fence, so the one line holding the path is picked out.
+            path = [
+                line for line in handed.stdout.decode("utf-8").splitlines()
+                if line.startswith("words=")
+            ][0].split("=", 1)[1]
             support.write(path, "\n".join(written) + "\n")
 
             settled = run_join("segments-settle", "--run", run, "--segments-file", path)
@@ -430,7 +435,12 @@ class TestTheInventoryOfARealRun(unittest.TestCase):
             agreed(content, run)
             run_join("segments", "--run", run)
             handed = run_join("words-file", "--run", run, "--for", "segments")
-            path = handed.stdout.decode("utf-8").strip().split("=", 1)[1]
+            # Since Astra's review of Release B the step prints inside a data
+            # fence, so the one line holding the path is picked out.
+            path = [
+                line for line in handed.stdout.decode("utf-8").splitlines()
+                if line.startswith("words=")
+            ][0].split("=", 1)[1]
             support.write(path, "draft 1 Fintech\ndraft 2 fintech\n")
 
             settled = run_join("segments-settle", "--run", run, "--segments-file", path)
@@ -504,7 +514,12 @@ class TestTheReadBackHoldsNamesApart(unittest.TestCase):
             agreed(content, run)
             run_join("segments", "--run", run)
             handed = run_join("words-file", "--run", run, "--for", "segments")
-            path = handed.stdout.decode("utf-8").strip().split("=", 1)[1]
+            # Since Astra's review of Release B the step prints inside a data
+            # fence, so the one line holding the path is picked out.
+            path = [
+                line for line in handed.stdout.decode("utf-8").splitlines()
+                if line.startswith("words=")
+            ][0].split("=", 1)[1]
             support.write(path, "draft - %s\ndraft - Regional banks\n" % named)
             settled = run_join("segments-settle", "--run", run, "--segments-file", path)
             said = settled.stdout.decode("utf-8")

@@ -3804,8 +3804,10 @@ class TestTheScriptAnswersFromTheCommandLine(unittest.TestCase):
             finished = self.run_script("backup")
 
             self.assertEqual(1, finished.returncode)
+            # The one sentence, and nothing else, inside the fence every step
+            # prints in since Astra's review of Release B.
             self.assertEqual(
-                constants.BACKUP_NOT_IN_THIS_RELEASE + "\n",
+                moment.fenced(constants.BACKUP_NOT_IN_THIS_RELEASE, note=moment.NAMES_NOTE) + "\n",
                 finished.stdout.decode("utf-8"),
             )
 
@@ -4572,7 +4574,12 @@ class TestWhatTheBaseIsFor(unittest.TestCase):
             run = join_flow.new_run(TODAY)
             run_join("survey", "--folder", content, "--run", run)
             handed = run_join("words-file", "--run", run, "--for", "scope")
-            path = handed.stdout.decode("utf-8").strip().split("=", 1)[1]
+            # Since Astra's review of Release B the step prints inside a data
+            # fence, so the one line holding the path is picked out.
+            path = [
+                line for line in handed.stdout.decode("utf-8").splitlines()
+                if line.startswith("words=")
+            ][0].split("=", 1)[1]
             support.write(path, "Payments\n")
 
             held = run_join("scope", "--run", run, "--scope-file", path)
@@ -4609,7 +4616,12 @@ class TestWhatTheBaseIsFor(unittest.TestCase):
             self.assertIsNone(join_flow.held_scope(run))
 
             handed = run_join("words-file", "--run", run, "--for", "scope")
-            path = handed.stdout.decode("utf-8").strip().split("=", 1)[1]
+            # Since Astra's review of Release B the step prints inside a data
+            # fence, so the one line holding the path is picked out.
+            path = [
+                line for line in handed.stdout.decode("utf-8").splitlines()
+                if line.startswith("words=")
+            ][0].split("=", 1)[1]
             support.write(path, "[[end source]]")
             held = run_join("scope", "--run", run, "--scope-file", path)
             self.assertEqual(1, held.returncode)
