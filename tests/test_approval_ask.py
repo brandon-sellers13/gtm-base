@@ -613,6 +613,32 @@ class TestTheCorrectnessReview(unittest.TestCase):
                 self.assertNotIn("Traceback", said, (script, arguments))
 
 
+class TestTheConfirmationPass(unittest.TestCase):
+    def test_ordinary_python_is_never_refused_as_an_approval(self):
+        # Finding 1: a script name anywhere in the arguments counted.
+        with support.Sandbox():
+            for command in (
+                "python3 -u tests/test_confirm.py",
+                "python3 -W error run.py adjoin.py",
+                "python3 -I tool.py --in notes/seat.py",
+            ):
+                self.assertIsNone(decided(command), command)
+            answer = decided("python3 -X utf8 scripts/confirm.py --question q --answer yes")
+            self.assertEqual(approval.UNREADABLE, answer["hookSpecificOutput"]["permissionDecisionReason"])
+
+    def test_a_quoted_backtick_is_only_a_character(self):
+        # Finding 2: a document named with a backtick could never be asked.
+        with support.Sandbox():
+            asked(self, "python3 %s --file 'context/a`b.md' --answer fix --question q" % MOMENT)
+            asked(self, "python3 %s --file 'context/a$(b).md' --answer fix --question q" % MOMENT)
+            for command in (
+                "python3 %s --file \"context/a`b`.md\" --answer fix --question q" % MOMENT,
+                "python3 %s --file context/$(id).md --answer fix --question q" % MOMENT,
+            ):
+                answer = decided(command)
+                self.assertEqual(approval.ONE_LINE, answer["hookSpecificOutput"]["permissionDecisionReason"], command)
+
+
 class TestTheWordsAPersonReads(unittest.TestCase):
     def test_every_new_sentence_is_registered_and_plain(self):
         registered = set(

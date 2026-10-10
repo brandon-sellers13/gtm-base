@@ -422,11 +422,41 @@ def _script_and_arguments(words: List[str]) -> Tuple[Optional[str], List[str]]:
     script = os.path.basename(words[index])
     if script in SCRIPTS:
         return script, words[index + 1 :]
-    if index > 1 and any(name in " ".join(words[index:]) for name in SCRIPTS):
+    if (
+        index > 1
+        and index + 1 < len(words)
+        and os.path.basename(words[index + 1]) in SCRIPTS
+    ):
         # An option that takes a value, such as -X utf8, put the value where
-        # the script goes; the script is further on and cannot be read.
+        # the script goes, and the script is the next word, so what it is
+        # handed cannot be read the way it reads it.
         raise Unreadable()
     return None, []
+
+
+def _runs_something_inside(text: str) -> bool:
+    """Whether the shell would run another command inside this line.
+
+    Inside single quotes nothing runs, so a backtick there is only a
+    character, as in a document whose name holds one (the confirmation pass
+    on the reviews of 2026-10-10, finding 2). Anywhere else, double quotes
+    included, it runs.
+    """
+    quoted = False
+    index = 0
+    while index < len(text):
+        character = text[index]
+        if quoted:
+            if character == "'":
+                quoted = False
+        elif character == "\\":
+            index += 1
+        elif character == "'":
+            quoted = True
+        elif any(text.startswith(mark, index) for mark in _SUBSTITUTIONS):
+            return True
+        index += 1
+    return False
 
 
 def mentions_an_approval_script(command: str) -> bool:
@@ -467,7 +497,7 @@ def find(command: str) -> Found:
     text = str(command or "")
     if not mentions_an_approval_script(text):
         return found
-    if any(mark in text for mark in _SUBSTITUTIONS):
+    if _runs_something_inside(text):
         found.anything_else = True
         found.substituted = True
     for segment in gate.split_segments(text):
