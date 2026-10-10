@@ -135,7 +135,7 @@ class TestManifests(unittest.TestCase):
         )
 
         self.assertEqual("gtm-base", plugin["name"])
-        self.assertEqual("0.3.4", plugin["version"])
+        self.assertEqual("0.3.5", plugin["version"])
         self.assertEqual("Brandon Sellers", plugin["author"]["name"])
         self.assertEqual("MIT", plugin["license"])
         self.assertTrue(plugin["keywords"])
@@ -373,7 +373,7 @@ class TestPlainLanguage(unittest.TestCase):
         with open(atlas, encoding="utf-8") as handle:
             text = handle.read()
         self.assertNotIn("(proposed)", text)
-        self.assertIn("plugin 0.3.4", text)
+        self.assertIn("plugin 0.3.5", text)
         self.assertIn("built in 0.2.6", text)
 
     def test_the_lint_itself_catches_what_it_should(self):
@@ -433,7 +433,7 @@ class TestFakeGh(unittest.TestCase):
 
 class TestConstants(unittest.TestCase):
     def test_constants_import_and_every_path_is_relative(self):
-        self.assertEqual("0.3.4", __import__("gtmbase").__version__)
+        self.assertEqual("0.3.5", __import__("gtmbase").__version__)
         for name in dir(constants):
             if name.startswith("_"):
                 continue

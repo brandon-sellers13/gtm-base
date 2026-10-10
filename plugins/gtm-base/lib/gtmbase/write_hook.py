@@ -105,6 +105,13 @@ CLIENT_SETTINGS_FILES = (
     os.path.join("plugins", "known_marketplaces.json"),
 )
 
+# The files in an assistant folder that a session opened in the folder holding
+# it reads its settings from, and so the ones that can switch GTM Base's checks
+# off there. Inside a linked folder they are asked about for the same reason as
+# the ones above. Everything else in a linked folder is the person's own and is
+# left alone.
+LINKED_FOLDER_SETTINGS_FILES = ("settings.json", "settings.local.json")
+
 # How far up from a file this walks looking for a base. A base sits at the top
 # of its own folders, so a file more levels down than this is not in one.
 MAX_FOLDERS_WALKED = 40
@@ -300,7 +307,10 @@ def _names_a_guarded_folder(named: str, real: str) -> bool:
 
 
 def _guarded_folders_of(root: str) -> List[str]:
-    """The two folders inside one base or one linked folder that are ours."""
+    """The two folders inside one base that are ours.
+
+    Never a linked folder's: that folder is the person's own (0.3.5).
+    """
     return [
         os.path.join(root, REPOSITORY_DIR_NAME),
         os.path.join(root, ASSISTANT_DIR_NAME),
@@ -440,6 +450,43 @@ def _joined_roots() -> List[str]:
     return found
 
 
+def _a_linked_folders_settings(named: str, real_file: str) -> bool:
+    """Whether a write is to the settings of a session opened in a linked folder.
+
+    The folder a base is linked to is the person's own, and GTM Base keeps
+    nothing in it. Until 0.3.5 its assistant folder and repository folder were
+    refused like a base's, so no session the desktop app opened there, each of
+    which works in a folder under the assistant folder, could write a file.
+    Only the settings files are asked about now, because a session opened in
+    the linked folder, or in a folder inside it such as one of those, reads
+    its settings from them, and a change to one can switch GTM Base's checks
+    off there.
+    """
+    wanted = [_folded(name) for name in LINKED_FOLDER_SETTINGS_FILES]
+    raw = machine.load_machine_state_raw()
+    for entry in list(getattr(raw, "joined", None) or []):
+        if not isinstance(entry, dict):
+            continue
+        linked = entry.get("content_root")
+        if not isinstance(linked, str) or not linked:
+            continue
+        # The linked folder's own two, by both spellings of each, which is
+        # what catches a write to where they lead when the folder is a link.
+        for name in LINKED_FOLDER_SETTINGS_FILES:
+            if _reaches(named, real_file, os.path.join(linked, ASSISTANT_DIR_NAME, name)):
+                return True
+        # And the same two names in any assistant folder further down.
+        for side in (named, real_file):
+            if (
+                _folded(os.path.basename(side)) in wanted
+                and _folded(os.path.basename(os.path.dirname(side)))
+                == _folded(ASSISTANT_DIR_NAME)
+                and _reaches(side, side, linked)
+            ):
+                return True
+    return False
+
+
 def _cheaply_a_base(folder: str, joined: Sequence[str]) -> bool:
     """Whether a repository is a base by the questions that start no program."""
     try:
@@ -554,6 +601,11 @@ def problem_with(named: str, real_file: str, cwd: Optional[str] = None) -> Optio
             asking = CODE_CLIENT_SETTINGS
     if asking is None and _reaches(named, real_file, client_plugins_dir()):
         asking = CODE_CLIENT_SETTINGS
+    # Before the shortcut below, because the target of a linked folder's
+    # assistant folder, when that folder is a link, names neither guarded
+    # folder.
+    if asking is None and _a_linked_folders_settings(named, real_file):
+        asking = CODE_CLIENT_SETTINGS
 
     # Every place a known base keeps its history is compared before the
     # shortcut below, because none of those places has to name a guarded
@@ -593,10 +645,8 @@ def problem_with(named: str, real_file: str, cwd: Optional[str] = None) -> Optio
     for entry in list(getattr(raw, "joined", None) or []):
         if not isinstance(entry, dict):
             continue
-        for key in ("root", "content_root"):
-            root = entry.get(key)
-            if not isinstance(root, str) or not root:
-                continue
+        root = entry.get("root")
+        if isinstance(root, str) and root:
             for folder in _guarded_folders_of(root):
                 if _reaches(named, real_file, folder):
                     return (
