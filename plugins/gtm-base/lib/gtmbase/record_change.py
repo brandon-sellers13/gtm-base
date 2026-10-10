@@ -1236,7 +1236,7 @@ def record(
     """
     # Only a command the person allowed through Claude Code's own question
     # writes an approval (Unit 1.7e, Brandon's call 57).
-    approval.require()
+    approval.require("record_change.record")
     git = runner_or_default(runner)
     day = today or state.today()
     refuse_a_shared_copy(base_root, runner=git)
@@ -1389,7 +1389,7 @@ def answer(
     """
     # Only a command the person allowed through Claude Code's own question
     # writes an approval (Unit 1.7e, Brandon's call 57).
-    approval.require()
+    approval.require("record_change.answer")
     git = runner_or_default(runner)
     if given not in ANSWERS:
         raise _refuse(ANSWER_UNKNOWN, CODE_BAD_ANSWER)

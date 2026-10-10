@@ -1982,7 +1982,7 @@ def adoption_approve(
     """
     # Only a command the person allowed through Claude Code's own question
     # writes an approval (Unit 1.7e, Brandon's call 57).
-    approval.require()
+    approval.require("join_flow.adoption_approve")
     segment = segment_to_adopt(run_id, slug)
     git = runner_or_default(runner)
     root, base_id = _adoption_base(base_root, git)
@@ -2446,7 +2446,7 @@ def adoption_leave_out(
     """
     # Only a command the person allowed through Claude Code's own question
     # writes an approval (Unit 1.7e, Brandon's call 57).
-    approval.require()
+    approval.require("join_flow.adoption_leave_out")
     segment = segment_to_adopt(run_id, slug)
     git = runner_or_default(runner)
     root, base_id = _adoption_base(base_root, git)
@@ -3430,7 +3430,7 @@ def draft_leave_out(
     """
     # Only a command the person allowed through Claude Code's own question
     # writes an approval (Unit 1.7e, Brandon's call 57).
-    approval.require()
+    approval.require("join_flow.draft_leave_out")
     git = runner_or_default(runner)
     root, base_id = _adoption_base(base_root, git)
     with _Writing(base_id):
@@ -4207,7 +4207,7 @@ def approve_step(
     """
     # Only a command the person allowed through Claude Code's own question
     # writes an approval (Unit 1.7e, Brandon's call 57).
-    approval.require()
+    approval.require("join_flow.approve_step")
     git = runner_or_default(runner)
     reviewed = review_step(
         step,
@@ -4763,7 +4763,7 @@ def reconcile_yes(
     """
     # Only a command the person allowed through Claude Code's own question
     # writes an approval (Unit 1.7e, Brandon's call 57).
-    approval.require()
+    approval.require("join_flow.reconcile_yes")
     if formats.name_has_a_space(path):
         return Reconciled(
             path,
@@ -4805,7 +4805,7 @@ def reconcile_no(
     """
     # Only a command the person allowed through Claude Code's own question
     # writes an approval (Unit 1.7e, Brandon's call 57).
-    approval.require()
+    approval.require("join_flow.reconcile_no")
     day = now or state.today()
     if isinstance(day, datetime.datetime):
         day = day.date()

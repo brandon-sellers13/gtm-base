@@ -590,7 +590,7 @@ def go_quiet(base_id: str, choice: str):
     """
     from . import approval
 
-    approval.require()
+    approval.require("state.go_quiet")
     if choice == "month":
         until = today() + datetime.timedelta(days=SILENCE_DAYS)
     elif choice == "until-asked":

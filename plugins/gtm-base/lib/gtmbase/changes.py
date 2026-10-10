@@ -672,7 +672,7 @@ def not_now(base_id: str, today: Optional[datetime.date] = None, days: int = Non
     """
     # Only a command the person allowed through Claude Code's own question
     # writes an approval (Unit 1.7e, Brandon's call 57).
-    approval.require()
+    approval.require("changes.not_now")
     day = today or state.today()
     window = (
         constants.DEFAULT_CONFIRMATION_THRESHOLD_DAYS if days is None else days
@@ -2648,7 +2648,7 @@ def migrate(
     """
     # Only a command the person allowed through Claude Code's own question
     # writes an approval (Unit 1.7e, Brandon's call 57).
-    approval.require()
+    approval.require("changes.migrate")
     runner = runner_or_default(git)
     day = today or state.today()
 

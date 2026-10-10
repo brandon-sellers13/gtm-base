@@ -833,7 +833,7 @@ def fix_it_first(
     """
     # Only a command the person allowed through Claude Code's own question
     # writes an approval (Unit 1.7e, Brandon's call 57).
-    approval.require()
+    approval.require("moment.fix_it_first")
     git = runner_or_default(runner)
     if not moment.flagged:
         return MomentAnswer(

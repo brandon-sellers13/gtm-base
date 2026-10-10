@@ -118,16 +118,19 @@ def main(argv=None):
 
     said = []
     try:
-        if options.weekly_line:
-            on = options.weekly_line == "on"
-            state.set_weekly_line(resolution.base_id, on)
-            said.append(WEEKLY_LINE_ON if on else WEEKLY_LINE_OFF)
+        # Staying quiet is an approval, checked before anything else is
+        # written, so a refusal leaves every setting as it was (the
+        # correctness review of Unit 1.7e, finding 5).
         if options.quiet == "month":
             until = state.go_quiet(resolution.base_id, "month")
             said.append(QUIET_FOR_A_MONTH % until.isoformat())
         elif options.quiet == "until-asked":
             state.go_quiet(resolution.base_id, "until-asked")
             said.append(QUIET_UNTIL_ASKED)
+        if options.weekly_line:
+            on = options.weekly_line == "on"
+            state.set_weekly_line(resolution.base_id, on)
+            said.insert(0, WEEKLY_LINE_ON if on else WEEKLY_LINE_OFF)
         if options.speak:
             state.set_silent_until(resolution.base_id, None)
             said.append(SPEAKING_AGAIN)

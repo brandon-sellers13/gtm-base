@@ -91,7 +91,7 @@ class NotHeld(object):
 
     def __enter__(self):
         self.was = approval._held
-        approval._held = False
+        approval._held = frozenset()
         self.env = mock.patch.dict(os.environ, {})
         self.env.start()
         os.environ.pop(approval.ENV, None)
@@ -173,7 +173,6 @@ class TestEveryApprovalAsksThePerson(unittest.TestCase):
             self.assertIn(approval.SAYS_STILL_RIGHT, output["permissionDecisionReason"])
             asked(self, "python3 scripts/approve_local.py --staging s.md --approve --shown x")
             asked(self, "python3 -I scripts/approve_local.py --staging s.md --approve --shown x")
-            asked(self, "env TZ=UTC python3 scripts/approve_local.py --staging s.md --approve --shown x")
 
     def test_anything_else_is_left_alone(self):
         with support.Sandbox():
@@ -347,14 +346,14 @@ class TestTheLibraryRefusesWithoutATicket(unittest.TestCase):
         with support.Sandbox(), NotHeld():
             output = asked(self, "python3 %s --question q --answer yes" % CONFIRM)
             os.environ[approval.ENV] = nonce_in(output)
-            approval.require()
+            approval.require("confirm.answer")
             self.assertEqual([], tickets())
             # The same process goes on holding it, for the writes one
             # approval makes.
-            approval.require()
-            approval._held = False
+            approval.require("confirm.answer")
+            approval._held = frozenset()
             with self.assertRaises(approval.ApprovalRefused):
-                approval.require()
+                approval.require("confirm.answer")
 
     def test_a_ticket_left_too_long_or_made_up_is_refused(self):
         with support.Sandbox(), NotHeld():
@@ -365,11 +364,11 @@ class TestTheLibraryRefusesWithoutATicket(unittest.TestCase):
             )
             with mock.patch.object(approval, "_now", return_value=later):
                 with self.assertRaises(approval.ApprovalRefused):
-                    approval.require()
+                    approval.require("confirm.answer")
             for made_up in ("b" * 48, "short", "../../x", ""):
                 os.environ[approval.ENV] = made_up
                 with self.assertRaises(approval.ApprovalRefused):
-                    approval.require()
+                    approval.require("confirm.answer")
 
 
 # --- Through the script, as the person would meet it --------------------------
@@ -416,8 +415,7 @@ class TestThroughTheScript(unittest.TestCase):
             )
             before = self.head(root)
             arguments = ["--staging", staged, "--approve", "--shown", shown.shown_hash]
-            env = dict(os.environ)
-            env.pop(approval.ENV, None)
+            env = without_a_ticket()
             code, said = self.run_script(root, arguments, env)
             self.assertNotEqual(0, code, said)
             self.assertIn(approval.NOT_ASKED, said)
@@ -433,6 +431,186 @@ class TestThroughTheScript(unittest.TestCase):
             self.assertEqual(0, code, said)
             self.assertNotEqual(before, self.head(root))
             self.assertEqual([], tickets())
+
+
+# --- The two reviews of 2026-10-10 --------------------------------------------
+
+
+def without_a_ticket():
+    """The environment of a command the person never allowed."""
+    env = dict(os.environ)
+    env.pop(approval.ENV, None)
+    env.pop(support.HOLD_VARIABLE, None)
+    return env
+
+
+def run_plain(script, arguments, cwd):
+    finished = subprocess.run(
+        [sys.executable, script] + list(arguments),
+        cwd=cwd,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        env=without_a_ticket(),
+    )
+    return finished.returncode, finished.stdout.decode("utf-8") + finished.stderr.decode("utf-8")
+
+
+def ticket_file(nonce, **fields):
+    from gtmbase.fsutil import atomic_write_json, ensure_dir
+
+    folder = ensure_dir(approval.folder_path())
+    kept = {"session": SESSION, "made": datetime.datetime.now().isoformat()}
+    kept.update(fields)
+    atomic_write_json(
+        os.path.join(folder, hashlib.sha256(nonce.encode("ascii")).hexdigest() + ".json"),
+        kept,
+        inside=folder,
+    )
+
+
+class TestTheSecurityReview(unittest.TestCase):
+    def test_a_ticket_that_says_it_stands_for_ever_is_refused(self):
+        # Finding 1: production code honoured the suite's standing tickets.
+        with support.Sandbox(), NotHeld():
+            nonce = "c" * 48
+            ticket_file(nonce, standing=True, made="2020-01-01T00:00:00",
+                        opens=["confirm.answer"])
+            os.environ[approval.ENV] = nonce
+            with self.assertRaises(approval.ApprovalRefused):
+                approval.require("confirm.answer")
+
+    def test_a_line_asking_for_two_things_is_refused(self):
+        # Finding 2: the sentence named the first, the script ran another.
+        with support.Sandbox():
+            for command in (
+                "python3 %s --staging s --approve --drop --shown x" % APPROVE_LOCAL,
+                "python3 %s --staging s --approve --list --shown x" % APPROVE_LOCAL,
+                "python3 %s --not-now-move --record-change record --shown x" % STALE,
+                "python3 %s --move-changes --record-change answer --change c --document d --answer yes" % STALE,
+                "python3 %s --pending --question q --answer yes" % CONFIRM,
+                "python3 %s --weekly-line off --quiet month" % SEAT,
+                "python3 %s --quiet month --speak" % SEAT,
+            ):
+                answer = decided(command)
+                self.assertIsNotNone(answer, command)
+                self.assertEqual("deny", answer["hookSpecificOutput"]["permissionDecision"], command)
+                self.assertEqual(
+                    approval.TWO_THINGS, answer["hookSpecificOutput"]["permissionDecisionReason"], command
+                )
+
+    def test_a_ticket_opens_only_the_writes_it_was_asked_for(self):
+        with support.Sandbox(), NotHeld():
+            output = asked(self, "python3 %s --question q --answer yes" % CONFIRM)
+            os.environ[approval.ENV] = nonce_in(output)
+            with self.assertRaises(approval.ApprovalRefused):
+                approval.require("approve_local.approve")
+        with support.Sandbox(), NotHeld():
+            output = asked(self, "python3 %s --question q --answer yes" % CONFIRM)
+            os.environ[approval.ENV] = nonce_in(output)
+            approval.require("confirm.answer")
+            with self.assertRaises(approval.ApprovalRefused):
+                approval.require("changes.migrate")
+        with support.Sandbox(), NotHeld():
+            output = asked(
+                self,
+                "python3 %s --record-change answer --change c --document d --answer yes" % STALE,
+            )
+            os.environ[approval.ENV] = nonce_in(output)
+            approval.require("record_change.answer")
+            approval.require("join_flow.reconcile_yes")
+            with self.assertRaises(approval.ApprovalRefused):
+                approval.require("join_flow.reconcile_no")
+
+    def test_only_the_exact_line_the_ticket_was_made_for_passes(self):
+        # Finding 3.
+        with support.Sandbox() as sandbox:
+            output = asked(self, "python3 %s --question q --answer yes" % CONFIRM)
+            rewritten = output["updatedInput"]["command"]
+            other = rewritten.replace("--answer yes", "--answer no")
+            self.assertEqual(
+                gate.sentence_for(gate.REASON_APPROVAL_TICKET),
+                gate.check_command(other, sandbox.path, SESSION),
+            )
+            self.assertEqual(
+                gate.sentence_for(gate.REASON_APPROVAL_TICKET),
+                gate.check_command(rewritten + "; echo more", sandbox.path, SESSION),
+            )
+            self.assertIsNone(gate.check_command(rewritten, sandbox.path, SESSION))
+
+    def test_a_setting_in_front_of_an_approval_is_refused(self):
+        # Finding 5.
+        with support.Sandbox():
+            for command in (
+                "PYTHONPATH=/tmp/x python3 %s --question q --answer yes" % CONFIRM,
+                "env TZ=UTC python3 %s --question q --answer yes" % CONFIRM,
+                "env -i python3 %s --question q --answer yes" % CONFIRM,
+            ):
+                answer = decided(command)
+                self.assertEqual("deny", answer["hookSpecificOutput"]["permissionDecision"], command)
+                self.assertEqual(
+                    approval.ONE_LINE, answer["hookSpecificOutput"]["permissionDecisionReason"], command
+                )
+
+
+class TestTheCorrectnessReview(unittest.TestCase):
+    def test_join_says_the_approval_was_not_asked(self):
+        # Finding 1: join's own handler hid the sentence.
+        with support.Sandbox() as sandbox:
+            root, _base_id = local_base(sandbox)
+            code, said = run_plain(
+                JOIN, ["draft-leave", "--segment", "fintech", "--base", root], root
+            )
+            self.assertNotEqual(0, code, said)
+            self.assertIn(approval.NOT_ASKED, said)
+            self.assertNotIn("Go back to the same step", said)
+            self.assertNotIn("Traceback", said)
+
+    def test_a_look_at_the_move_is_not_an_approval(self):
+        # Finding 2.
+        with support.Sandbox():
+            self.assertIsNone(decided("python3 %s --move-changes --dry-run" % STALE))
+
+    def test_settings_the_script_cannot_read_are_refused_with_a_way_forward(self):
+        # Findings 4 and 6.
+        with support.Sandbox():
+            for command in (
+                "python3 %s --question q --answer yes  # record it" % CONFIRM,
+                "python3 %s --question q --answer yes --no-such-setting" % CONFIRM,
+                "python3 %s reconcile-answer --entry e --file f --answer maybe --base b" % JOIN,
+                "python3 %s --record-change answer --change c --document d --answer bogus" % STALE,
+            ):
+                answer = decided(command)
+                self.assertIsNotNone(answer, command)
+                self.assertEqual("deny", answer["hookSpecificOutput"]["permissionDecision"], command)
+                self.assertEqual(
+                    approval.UNREADABLE, answer["hookSpecificOutput"]["permissionDecisionReason"], command
+                )
+            self.assertEqual([], tickets())
+
+    def test_staying_quiet_refused_writes_nothing_at_all(self):
+        # Finding 5: the weekly line was written before the quiet refused.
+        with support.Sandbox() as sandbox:
+            root, base_id = local_base(sandbox)
+            before = state.load_seat(base_id)
+            code, said = run_plain(SEAT, ["--weekly-line", "off", "--quiet", "month"], root)
+            self.assertNotEqual(0, code, said)
+            self.assertIn(approval.NOT_ASKED, said)
+            self.assertEqual(before, state.load_seat(base_id))
+
+    def test_every_approval_script_refuses_in_a_sentence(self):
+        with support.Sandbox() as sandbox:
+            root, _base_id = local_base(sandbox)
+            for script, arguments in (
+                (APPROVE_LOCAL, ["--staging", "x.md", "--drop"]),
+                (CONFIRM, ["--question", "q", "--answer", "yes"]),
+                (STALE, ["--not-now-move"]),
+                (STALE, ["--record-change", "record", "--shown", "x"]),
+                (SEAT, ["--quiet", "month"]),
+                (JOIN, ["adopt-leave", "--run", "r", "--segment", "s", "--base", root]),
+            ):
+                code, said = run_plain(script, arguments, root)
+                self.assertNotEqual(0, code, (script, arguments, said))
+                self.assertNotIn("Traceback", said, (script, arguments))
 
 
 class TestTheWordsAPersonReads(unittest.TestCase):

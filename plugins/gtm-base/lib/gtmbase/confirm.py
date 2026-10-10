@@ -462,7 +462,7 @@ def answer(
     """
     # Only a command the person allowed through Claude Code's own question
     # writes an approval (Unit 1.7e, Brandon's call 57).
-    approval.require()
+    approval.require("confirm.answer")
     git = runner_or_default(runner)
     moment = now or state.now_utc()
     if isinstance(moment, datetime.date) and not isinstance(moment, datetime.datetime):

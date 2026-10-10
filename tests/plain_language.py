@@ -1039,6 +1039,8 @@ PYTHON_SENTENCES = (
     ("approval", "SAYS_QUIET_UNTIL_ASKED"),
     ("approval", "NOT_ASKED"),
     ("approval", "ONE_LINE"),
+    ("approval", "TWO_THINGS"),
+    ("approval", "UNREADABLE"),
     ("approval", "NOBODY_WOULD_BE_ASKED"),
     ("approval", "CANNOT_ASK"),
     ("approval", "COULD_NOT_PREPARE"),

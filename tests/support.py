@@ -54,27 +54,32 @@ from gtmbase.gitcmd import GitResult  # noqa: E402
 # Unit 1.7e: every library function that writes an approval refuses unless the
 # process was started by a command the person allowed through Claude Code's
 # own question. A test is the person here, so the suite runs as a process
-# that already holds its ticket, and the scripts a test starts as separate
-# processes find a standing ticket in each sandbox's seat folder, named by
-# this value. tests/test_approval_ask.py runs without either, to prove the
-# refusal.
+# that already holds every write, and each script a test starts holds them
+# too, through tests/held/sitecustomize.py, which Python imports as the
+# script starts because its folder is first on the path the script inherits.
+# Nothing in the plugin knows about either. tests/test_approval_ask.py runs
+# without them, to prove the refusal.
 from gtmbase import approval as _approval  # noqa: E402
 
-_approval._held = True
-TEST_TICKET = "7e" * _approval.TICKET_BYTES
-os.environ[_approval.ENV] = TEST_TICKET
+HOLD_VARIABLE = "GTM_BASE_TESTS_HOLD_APPROVAL"
+HELD_FOLDER = os.path.join(os.path.dirname(os.path.abspath(__file__)), "held")
 
 
-def standing_ticket():
-    """Keep the suite's ticket in the seat folder the tests use right now."""
-    from gtmbase.fsutil import atomic_write_json, ensure_dir
+class EveryWrite(frozenset):
+    """What a process holding every approval write holds."""
 
-    folder = ensure_dir(_approval.folder_path())
-    atomic_write_json(
-        _approval._ticket_path(TEST_TICKET),
-        {"session": "", "made": "2026-10-10T00:00:00", "standing": True},
-        inside=folder,
-    )
+    def __contains__(self, name):
+        return True
+
+    def __bool__(self):
+        return True
+
+
+_approval._held = EveryWrite()
+os.environ[HOLD_VARIABLE] = "1"
+os.environ["PYTHONPATH"] = os.pathsep.join(
+    part for part in (HELD_FOLDER, os.environ.get("PYTHONPATH", "")) if part
+)
 
 
 class FakeGitRunner(object):
@@ -366,7 +371,6 @@ class TempHome(object):
         self.path = tempfile.mkdtemp(prefix="gtm-base-home-")
         self._previous = os.environ.get("GTM_BASE_HOME")
         os.environ["GTM_BASE_HOME"] = os.path.join(self.path, "seat")
-        standing_ticket()
         return self
 
     def __exit__(self, kind, value, trace):

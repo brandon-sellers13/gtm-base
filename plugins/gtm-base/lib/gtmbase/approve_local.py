@@ -2328,7 +2328,7 @@ def approve(
     """Apply the prepared change the owner just read, and record their yes."""
     # Only a command the person allowed through Claude Code's own question
     # writes an approval (Unit 1.7e, Brandon's call 57).
-    approval.require()
+    approval.require("approve_local.approve")
     git = runner_or_default(runner)
     moment = _moment_of(now)
     today = _day_of(now)
@@ -2456,7 +2456,7 @@ def drop(
     """
     # Only a command the person allowed through Claude Code's own question
     # writes an approval (Unit 1.7e, Brandon's call 57).
-    approval.require()
+    approval.require("approve_local.drop")
     git = runner_or_default(runner)
     codes: List[str] = []
 
