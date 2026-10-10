@@ -221,23 +221,17 @@ class TestEveryApprovalAsksThePerson(unittest.TestCase):
                 )
             self.assertEqual([], tickets())
 
-    def test_no_approval_runs_where_nobody_would_be_asked(self):
-        # Claude Code's documentation does not say a hook's "ask" is shown
-        # when it is set to run commands without asking, and the live check
-        # could not show it, so an approval is refused there rather than run
-        # with nobody asked (Brandon's call 60).
+    def test_every_mode_is_answered_with_the_same_question(self):
+        # Brandon's call 60, decided 2026-10-10: approvals are not refused
+        # when Claude Code is set to run commands without asking. They are
+        # answered with "ask" and a ticket in every mode, and in those two
+        # modes Claude Code may run them with nobody asked, a limit Brandon
+        # accepted.
         with support.Sandbox():
             command = "python3 %s --question q --answer yes" % CONFIRM
-            for mode in ("bypassPermissions", "dontAsk"):
-                answer = decided(command, mode=mode)
-                self.assertEqual("deny", answer["hookSpecificOutput"]["permissionDecision"])
-                self.assertEqual(
-                    approval.NOBODY_WOULD_BE_ASKED,
-                    answer["hookSpecificOutput"]["permissionDecisionReason"],
-                )
-            self.assertEqual([], tickets())
-            for mode in ("default", "acceptEdits", "auto", "plan", None):
+            for mode in ("bypassPermissions", "dontAsk", "default", "acceptEdits", "auto", "plan", None):
                 asked(self, command, mode=mode)
+            self.assertFalse(hasattr(approval, "NOBODY_WOULD_BE_ASKED"))
 
     def test_an_assistant_that_cannot_ask_is_refused(self):
         with support.Sandbox():

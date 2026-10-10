@@ -21,8 +21,10 @@ forces a permission prompt in auto mode: the classifier can still deny the
 tool call, but it can't approve the call silently." The question was seen on
 Claude Code 2.1.276 in its default mode and with edits accepted, on the same
 day. The documentation does not say what a hook's "ask" does when Claude Code
-is set to run commands without asking at all, so an approval is refused there
-(Brandon's call 60).
+is set to run commands without asking at all (bypassPermissions, dontAsk).
+There an approval is asked the same way, and Claude Code may run it with
+nobody asked: Brandon accepted that limit on 2026-10-10 rather than have
+approvals refused in those modes (call 60).
 
 How the approval knows it was asked. The command the person allows is the
 command the assistant wrote with one thing put in front of it: a ticket, a
@@ -106,10 +108,6 @@ _TICKET_RE = re.compile(r"\A[0-9a-f]{%d}\Z" % (TICKET_BYTES * 2))
 _REWRITTEN_RE = re.compile(
     r"\Aexport %s=([0-9a-f]{%d}); " % (ENV, TICKET_BYTES * 2)
 )
-
-# The permission settings in which Claude Code is documented to run a command
-# without putting any question to the person.
-NOBODY_ASKED_MODES = ("bypassPermissions", "dontAsk")
 
 # The one client that can put a question to the person.
 CLIENT_CLAUDE = "claude"
@@ -209,11 +207,6 @@ ONE_LINE = (
     "own, so the question you are asked covers everything that runs. Ask for "
     "it again on its own."
 )
-NOBODY_WOULD_BE_ASKED = (
-    "GTM Base did not run this approval, because Claude Code is set to run "
-    "commands without asking you, so nobody would be asked. Set Claude Code "
-    "to ask before it runs commands, then ask for it again."
-)
 TWO_THINGS = (
     "GTM Base did not run this, because it asks for more than one thing at "
     "once and you would be asked about only one of them. Ask for each on its "
@@ -269,7 +262,6 @@ SENTENCE_NAMES = (
     "TWO_THINGS",
     "UNREADABLE",
     "NOT_OURS",
-    "NOBODY_WOULD_BE_ASKED",
     "CANNOT_ASK",
     "COULD_NOT_PREPARE",
 )
@@ -830,8 +822,10 @@ def decide(payload: dict, client: str = CLIENT_CLAUDE) -> Optional[dict]:
         return _verdict("deny", TWO_THINGS)
     if found.unreadable:
         return _verdict("deny", UNREADABLE)
-    if payload.get("permission_mode") in NOBODY_ASKED_MODES:
-        return _verdict("deny", NOBODY_WOULD_BE_ASKED)
+    # Every permission mode gets the same question. When Claude Code is set
+    # to run commands without asking (bypassPermissions, dontAsk), it may run
+    # an approval with nobody asked; Brandon accepted that limit rather than
+    # refuse approvals there (call 60, decided 2026-10-10).
     if len(found.says) != 1 or found.anything_else:
         return _verdict("deny", ONE_LINE)
     says, opens = found.says[0], found.opens[0]

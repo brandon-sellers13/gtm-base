@@ -360,9 +360,9 @@ Then wait for their answer. Three rules hold here and nowhere else:
   the same turn.
 - The permission prompt in front of the second run is the person's own step,
   and it is the whole point. GTM Base makes Claude Code ask it for every
-  approval, in every mode that asks anything, with a sentence saying what
-  the approval does, and refuses the approval when Claude Code is set not to
-  ask at all.
+  approval, with a sentence saying what the approval does. When Claude Code
+  is set not to ask at all, it may run the approval without asking; Brandon
+  accepted that limit (call 60).
 - This script never goes on a list of commands that run without being asked
   about.
 

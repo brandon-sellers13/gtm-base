@@ -1048,7 +1048,6 @@ PYTHON_SENTENCES = (
     ("approval", "SAYS_WEEKLY_LINE_OFF"),
     ("approval", "SAYS_REMINDER_LATER"),
     ("approval", "NOT_OURS"),
-    ("approval", "NOBODY_WOULD_BE_ASKED"),
     ("approval", "CANNOT_ASK"),
     ("approval", "COULD_NOT_PREPARE"),
     ("record_change", "EXPLAIN"),
