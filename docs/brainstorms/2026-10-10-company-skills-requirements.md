@@ -3,7 +3,7 @@ date: 2026-10-10
 topic: company-skills
 unit: "Unit 4.1 of docs/plans/2026-10-10-002-feat-plan-1-company-skills-and-meta-skill-plan.md"
 status: awaiting Brandon's signature
-revision: 5
+revision: 6
 ---
 
 # Company skills: who owns them, who may change them, and what a computer will run
@@ -41,6 +41,8 @@ flowchart TB
     J -- no, and nobody approved that version --> N[Refused; it can only be approved as a change, by its authority set]
     J -- no, and nobody is present --> M[Refused; the run reports why]
 ```
+
+In the two Claude Code modes that ask nobody, the questions in this flow are skipped and the approvals and acceptances go through unasked (CS14), except in a conversation marked unattended, where every one of them is refused (CS30).
 
 A change to an existing skill follows the same path from B, with a prepared change in place of the whole skill, and only the skill's owner, the base owner or an administrator may approve it. Passing a document to a new owner, and passing the base owner role itself, are their own small operations, described below.
 
@@ -167,3 +169,4 @@ Signed by Brandon Sellers on ______________, covering everything above, includin
 - 2026-10-10 r3: Astra's confirmation (ready with three changes) folded in: the overtaken check uses the same saved version a skill reads, and a marked conversation stays unattended for every later run. The rest of Astra's changes were to Plan 1, now revision 2.6.
 - 2026-10-10 r4: corrected for Release B's call 60: in the modes that ask nobody, approvals go through unasked, which CS14 now says as an accepted limit, and CS30's refusal is stated to come before any check of the mode.
 - 2026-10-10 r5: CS8 and CS11 qualified by call 60, after Astra's check of revision 4: the authority check holds in every mode, the person's answer only where Claude Code asks.
+- 2026-10-10 r6: a note under the flow says its questions are skipped in the two modes that ask nobody, except in a conversation marked unattended.
