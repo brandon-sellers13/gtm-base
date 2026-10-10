@@ -51,6 +51,31 @@ os.environ[SEAT_HOME_VARIABLE] = unowned_seat_folder()
 
 from gtmbase.gitcmd import GitResult  # noqa: E402
 
+# Unit 1.7e: every library function that writes an approval refuses unless the
+# process was started by a command the person allowed through Claude Code's
+# own question. A test is the person here, so the suite runs as a process
+# that already holds its ticket, and the scripts a test starts as separate
+# processes find a standing ticket in each sandbox's seat folder, named by
+# this value. tests/test_approval_ask.py runs without either, to prove the
+# refusal.
+from gtmbase import approval as _approval  # noqa: E402
+
+_approval._held = True
+TEST_TICKET = "7e" * _approval.TICKET_BYTES
+os.environ[_approval.ENV] = TEST_TICKET
+
+
+def standing_ticket():
+    """Keep the suite's ticket in the seat folder the tests use right now."""
+    from gtmbase.fsutil import atomic_write_json, ensure_dir
+
+    folder = ensure_dir(_approval.folder_path())
+    atomic_write_json(
+        _approval._ticket_path(TEST_TICKET),
+        {"session": "", "made": "2026-10-10T00:00:00", "standing": True},
+        inside=folder,
+    )
+
 
 class FakeGitRunner(object):
     """Records every call and answers from a script the test wrote."""
@@ -341,6 +366,7 @@ class TempHome(object):
         self.path = tempfile.mkdtemp(prefix="gtm-base-home-")
         self._previous = os.environ.get("GTM_BASE_HOME")
         os.environ["GTM_BASE_HOME"] = os.path.join(self.path, "seat")
+        standing_ticket()
         return self
 
     def __exit__(self, kind, value, trace):
