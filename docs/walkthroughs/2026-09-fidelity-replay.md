@@ -95,3 +95,15 @@ what did not, what a reviewer had to correct, the result against each of the
 five points of the bar, and the decision. Real results only, from real runs, and
 no estimate anywhere in it. The number of tests passing on the day the decision
 is recorded goes in with the decision.
+
+## Run record, 2026-10-10 (scores pending Brandon)
+
+The three cases were run on 2026-10-10 on GTM Base 0.4.0 as prepared (branch `claude/release-b-finish-1e1203`, commit 114a73a), on Brandon's instruction, against the frozen keys and the 40,000-character limit for case three. Brandon scores every case; nothing here is a score. The outputs, what each draft read and dropped, and a blank sheet for each case against the five points of the bar are in the private folder, in `runs/2026-10-10/`.
+
+How it was run. Each case ran Release B's own setup flow, step by step as the join skill sets out, in a sandbox of its own, over a folder holding exactly the files that case may read, each checked against its frozen sha256 first (all matched). Every draft was written by a fresh model agent given only the request setup assembled. The person's answers were a plain yes to the places and the list, approval of each draft once setup's own review said it was ready, every open question left open, a skip at the closing question, and no closing note. Case two's list was frozen at the start of its run, as this file requires, and recorded with a sha256 per file in the private folder: setup was pointed at the analytics folder, because the whole client folder is too large for it to survey, and the twelve pages of case one were held out of what a plain yes listed.
+
+What happened, in counts. Case one: twelve files, one older version set aside, nothing dropped by the cap, both drafts ready first time, and eleven pages taken in. Case two: seventy files, every segment drafted, and every request past the cap (the profile read 27 and dropped 42, the positioning read 25 and dropped 44, each segment read 27 and dropped 42). Case three: seventeen files at 40,000 characters, the positioning read 9 and dropped 7 (not the 10 and 6 the earlier simulation in the private list's order gave), and the profile read 11 and dropped 5.
+
+What a reviewer had to correct. In case two, setup's review refused the profile and all eleven segment drafts because its check for unfilled text matches the word "todo" anywhere in a draft, including the list of sources, where the drafts correctly named a file called `todo.md`. As the person, the run had that one entry taken out of each list and changed nothing else. Before that, the profile's drafting agent once removed the one open question it had marked, on its own guess at the cause.
+
+Defects the run found, not fixed during it: the older version of one finished segment page was taken into case one's base, where the release's own rule says the final one wins; and the check for unfilled text reads the list of sources, so a draft that honestly cites a file named like `todo.md` cannot pass without leaving it out.
