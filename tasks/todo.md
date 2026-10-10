@@ -1646,8 +1646,26 @@ Brandon's calls 57 to 59 (plan, "For Brandon"): 1.7e rebuilt as option D, Claude
 - [ ] Brandon: call 60; a live run of D (default, auto, VS Code extension, the desktop Code tab, and whether bypassPermissions shows the question at all).
 - [x] Unit 1.9 prepared: both answer keys unchanged since Brandon's review of 2026-09-27; their sha256 values recorded in the private replay folder (`freeze-and-limit-2026-10-10.md`), frozen the moment Brandon says approved; corpora.md still matches its frozen hash. Case three's limit rechecked with Release B's own reading code: 40,000 characters reads ten of sixteen files (the older version set aside first) and drops six, two segment pages among them. Proposal stands, runner-up 35,000.
 - [ ] Brandon: say approved to freeze the two keys; yes or no to 40,000 for case three; then score the three cases.
-- [ ] Astra's review of all of Release B, fixes, confirm passes.
-- [ ] Release prepared, not merged: 0.4.0 in both manifests, CHANGELOG dated, atlas figures, this file ticked, and Brandon's list.
+- [x] Astra's review of all of Release B (docs/reviews/2026-10-10-release-b-review-astra.md: not ready; 2 critical, 3 high, 2 medium, 1 low), every finding fixed with a test, then two confirmations (verify: six closed, findings 5 and 8 open; verify-2: 8 closed, 5 open), fixed again (every setup step's output in one data fence).
+- [ ] Astra's third confirmation (brief: docs/reviews/2026-10-10-release-b-verify-3-brief.md). Blocked: Codex is at its usage limit until 2026-10-14 06:08. An interim confirmation by a review subagent stands in until then.
+- [x] Release prepared, not merged: 0.4.0 in both manifests and the library, CHANGELOG dated 2026-10-10 (the date changes to the day it ships), atlas figures 5, 6 and 8 and its version, this file ticked (finished work since 2026-09-05 ticked with a note on each), lessons recorded.
+
+#### Review (2026-10-10)
+- Merged into this branch: main at 0.3.4, then 0.3.5 (PR #2). `write_hook.py` and `hooks/write-check.sh` were not edited here.
+- Call 59 (Unit 1.8 finding 1): nothing new stored in a base; names read from the profile's own headings, fenced. Correctness review, four findings fixed; Astra's finding 7 fixed.
+- Unit 1.7e, option D: built on unit-1-7e-d and merged; two reviews and a confirmation pass, then Astra. Fifteen approval points plus five Astra added; the residuals are in the CHANGELOG.
+- Unit 1.9: keys hashed for Brandon's approval; case three's 40,000 rechecked on Release B's code.
+- Suites: the 0.4.0 commit 9141219, 2815 tests OK then 213 from a linked folder OK, exit 0. The final run on the head is recorded below when it lands.
+- A commit that was on local main, dff9f24 "docs: Phase 2 and 3 decisions, settled for Plan 1", is on no branch since main moved to 0.3.5; it is kept on branch keep/phase-2-3-decisions-dff9f24 for whoever wrote it.
+
+#### For Brandon, exactly what is left (2026-10-10)
+1. Call 60: approvals refused when Claude Code is set to run commands without asking (bypassPermissions, dontAsk). Recommended: refuse, as built. Runner-up: allow, and accept that nobody may be asked there.
+2. A live run of option D on 0.4.0: in the default mode, in auto mode, in the VS Code extension, and in the desktop app's Code tab, approve one change and refuse one, and check the question shows "Hook PreToolUse:Bash requires confirmation", GTM Base's sentence, and Yes or No; then in bypassPermissions check the approval is refused with its sentence. Close the terminal tab "hook ask: auto" left from this session's live test, which the auto-mode classifier would not let this session close.
+3. The live check, steps 7 to 10 (docs/walkthroughs/2026-09-release-a-live-check.md) on 0.4.0: the moment of use against the 9 of 10 bar, a setup closing in a scratch folder (now with segments, and every approval asked), ordinary work untouched, your own settings.
+4. Read three steps aloud: join steps 1, 4a and 10 (Unit 1.8).
+5. The fidelity replay: say approved to freeze the two answer keys (hashes in ~/GTM Bases/Gridwise/fidelity-replay/freeze-and-limit-2026-10-10.md); yes or no to 40,000 characters for case three (runner-up 35,000); then run and score the three cases. Case two's list is frozen at the start of its run.
+6. Astra's third confirmation once Codex resets on 2026-10-14 (or with more credits): docs/reviews/2026-10-10-release-b-verify-3-brief.md.
+7. Then your yes to merge this branch into release-b and to release 0.4.0 to main. release-b has moved since this branch began (the 0.3.5 carry, d275d70), so that merge will need a small conflict resolution in the CHANGELOG and this file.
 
 ### 2026-10-10, 0.3.5: the write check refused every write inside a linked folder (branch claude/fix-0-3-5-linked-folder-writes, from main)
 Reproduced on the installed 0.3.4: a Write under `~/Gridwise/.claude/worktrees/<session>/` was denied with "Some folders are GTM Base's own to keep". `write_hook.problem_with` held each joined entry's `content_root` to a base's rules, refusing `<content_root>/.git` and `<content_root>/.claude`, which is where every Claude desktop session there works and where the person's own skills and agents live.
