@@ -112,6 +112,7 @@ python3 -m unittest -v \
   test_record_change.TestFromALinkedFolderEveryTime \
   test_record_change.TestTheCurrentLayout \
   test_record_change.TestTheLocksAreTheOneSystem \
+  test_segment_names.TestAnUpgradedBase \
   test_locks.TestTheQuestionsUnderTheLockFile
 nothing_written_to_a_seat_nobody_made
 rm -rf "$UNOWNED_SEAT"

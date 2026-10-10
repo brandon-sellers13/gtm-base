@@ -128,9 +128,15 @@ name is whatever somebody typed and a tidy one can still read as an
 instruction. A document the product knows by its path has its fixed name. A
 segment is "one of your segments", any other document is "one of your
 documents", and several are counted, as in "your customer profile, two of your
-segments". Where the person's own name for a segment is needed, it comes from
-the list of segments they settled, which GTM Base keeps, and never from the
-disk. `find_file_name_fills` in `tests/plain_language.py` fails on any sentence
+segments". Where the person's own name for a segment is needed during setup,
+it comes from the list of segments they settled, which GTM Base keeps. After
+setup it comes from the customer profile, which names each segment under a
+heading of its own that setup checked against that list: recording a context
+change calls a segment `your segment "Fintech lenders"`, but only inside text
+held apart as data, only when the heading is plain words and the only one
+that makes that segment's file name, and never from the file name itself
+(Brandon's call 59). Every other sentence still counts segments.
+`find_file_name_fills` in `tests/plain_language.py` fails on any sentence
 filled from a file name (Unit 1.8).
 
 ## CLASS: the framework every step ties back to

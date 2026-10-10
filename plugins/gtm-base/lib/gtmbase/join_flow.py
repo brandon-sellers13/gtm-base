@@ -4582,9 +4582,11 @@ def show_entry(text: str, why_when_none: str = WHY_FROM_THE_CLOSING) -> Proposed
 class Reconciliation(object):
     """Which documents the closing asks about, and which it leaves flagged."""
 
-    __slots__ = ("ask_about", "left_flagged", "sentence", "not_owned")
+    __slots__ = ("ask_about", "left_flagged", "sentence", "not_owned", "name_of")
 
-    def __init__(self, ask_about, left_flagged, sentence=None, not_owned=()):
+    def __init__(
+        self, ask_about, left_flagged, sentence=None, not_owned=(), name_of=None
+    ):
         self.ask_about = list(ask_about)
         self.left_flagged = list(left_flagged)
         self.sentence = sentence
@@ -4592,10 +4594,15 @@ class Reconciliation(object):
         # are among `left_flagged` too, and said in a sentence of their own,
         # because this person's review never lists somebody else's document.
         self.not_owned = list(not_owned)
+        # How each question names its document. Recording a change at any
+        # time names a segment by the name its profile keeps (Brandon's call
+        # 59); the closing only ever asks about the two documents it knows.
+        self.name_of = name_of
 
     def questions(self) -> List[str]:
         """The one question to ask about each document, in the order asked."""
-        return [RECONCILE_ASK % names.document_name(path) for path in self.ask_about]
+        name_of = self.name_of or names.document_name
+        return [RECONCILE_ASK % name_of(path) for path in self.ask_about]
 
     def __repr__(self) -> str:
         return "Reconciliation(ask_about=%r, left_flagged=%d)" % (
@@ -4733,11 +4740,13 @@ def reconcile_yes(
     now=None,
     runner: Optional[GitRunner] = None,
     any_document: bool = False,
+    name_of=None,
 ) -> Reconciled:
     """The person says this document already says what the change says.
 
     `any_document` is for a context change recorded at any time, which asks
-    about every document it affects rather than only the two a base needs.
+    about every document it affects rather than only the two a base needs,
+    and `name_of` is how that path names the document.
     """
     if formats.name_has_a_space(path):
         return Reconciled(
@@ -4758,7 +4767,8 @@ def reconcile_yes(
     if result.status != confirm.STATUS_RECORDED:
         return Reconciled(path, False, result.reasons[0] if result.reasons else "",
                           codes=list(result.codes or []))
-    return Reconciled(path, True, RECONCILE_RECORDED % names.document_name(path))
+    name_of = name_of or names.document_name
+    return Reconciled(path, True, RECONCILE_RECORDED % name_of(path))
 
 
 def reconcile_no(
@@ -4768,6 +4778,7 @@ def reconcile_no(
     entry_id: str,
     now=None,
     runner: Optional[GitRunner] = None,
+    name_of=None,
 ) -> Reconciled:
     """The document has not caught up, so it stays flagged and a fix is prepared.
 
@@ -4780,7 +4791,8 @@ def reconcile_no(
     if isinstance(day, datetime.datetime):
         day = day.date()
     entry, entry_file = entry_in_base(base_root, base_id, entry_id, day)
-    document = names.document_name(path)
+    name_of = name_of or names.document_name
+    document = name_of(path)
     if entry is None:
         return Reconciled(
             path, False, RECONCILE_NOT_PREPARED % document,

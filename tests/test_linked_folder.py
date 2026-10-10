@@ -329,6 +329,7 @@ class TestTheSecondRunCoversEveryClassThatStartsAScript(unittest.TestCase):
         "test_segments_left_to_draft": ("run_script",),
         "test_live_check_follow_up": ("run_script", "handed"),
         "test_locks": ("_shown_and_recorded",),
+        "test_segment_names": ("run",),
         "test_record_change": (
             "run",
             "show",

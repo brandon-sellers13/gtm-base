@@ -46,13 +46,15 @@ import os
 import re
 import secrets
 import time
-from typing import List, Optional, Sequence, Tuple
+import unicodedata
+from typing import Callable, Dict, List, Optional, Sequence, Tuple
 
 from . import (
     base_reader,
     compose_proposal,
     confirm,
     constants,
+    drafting,
     formats,
     gitcmd,
     ids,
@@ -64,6 +66,7 @@ from . import (
     paths,
     review,
     scan,
+    segments,
     stale,
     state,
     unsaved,
@@ -378,6 +381,88 @@ def safe_name(path: str) -> str:
         return UNNAMED_DOCUMENT
 
 
+# A segment is called by the name it was given as "your segment "Fintech
+# lenders"", the name in quotation marks so it reads as a name wherever it
+# sits in a sentence (Brandon's call 59).
+SEGMENT_NAMED = 'your segment "%s"'
+
+# The punctuation a kept name may hold beside letters, digits and spaces. A
+# quotation mark, a backtick, a bracket, an angle bracket and any character
+# that draws nothing are left out, so a name can never close the quotation it
+# is read in, open a fence, or hide anything from the person reading it.
+_NAME_PUNCTUATION = frozenset("&'.,-/+()!?:")
+
+
+def _plain_name(heading: str) -> Optional[str]:
+    """The heading's words as a segment's name, or None when any are in doubt."""
+    text = " ".join(str(heading or "").split())
+    if not text or len(text) > constants.SEGMENT_NAME_MAX_CHARS:
+        return None
+    if not any(character.isalpha() for character in text):
+        return None
+    for character in text:
+        if character == " " or character in _NAME_PUNCTUATION:
+            continue
+        if unicodedata.category(character)[0] not in ("L", "N"):
+            return None
+    return text
+
+
+def segment_names(base_root: str) -> Dict[str, str]:
+    """Each segment's name, as the customer profile gives it, by its file name.
+
+    The names people give their segments are kept where every seat can read
+    them, in the base itself: the customer profile names each one under a
+    heading of its own in its Segments part, and setup refuses a profile whose
+    headings are not exactly the segments the person settled, matched by the
+    file name the name makes (`drafting.check_umbrella`). So nothing new is
+    stored for this (Brandon's call 59, Unit 1.8's review, finding 1). A name
+    is kept only when one heading alone makes that file name and its words
+    are plain; anything else leaves that segment "one of your segments". The
+    name is only ever said inside text held apart as data.
+    """
+    relative = layout.where_it_lives(base_root, constants.REQUIRED_CONTEXT_FILES[0])
+    try:
+        if paths.canonical_context_path(base_root, relative) != relative:
+            return {}
+    except (PathError, ValidationError):
+        return {}
+    text = read_text(os.path.join(base_root, relative.replace("/", os.sep)))
+    if text is None:
+        return {}
+    try:
+        _block, body = formats.split_document(text)
+    except (ValidationError, PathError):
+        return {}
+    found: Dict[str, Optional[str]] = {}
+    for heading, _paragraph in drafting.segment_paragraphs(body):
+        slug = segments.slug_for(heading)
+        if not slug:
+            continue
+        # Two headings making one file name are both in doubt.
+        found[slug] = None if slug in found else _plain_name(heading)
+    return dict((slug, name) for slug, name in found.items() if name)
+
+
+def name_in(kept: Dict[str, str]) -> Callable[[str], str]:
+    """How the steps of recording a change name a document, given the kept names."""
+
+    def named(path: str) -> str:
+        said = safe_name(path)
+        if said != names.ONE_OF_YOUR_SEGMENTS:
+            return said
+        stem = os.path.basename(str(path or "").replace(os.sep, "/"))[: -len(".md")]
+        name = kept.get(stem)
+        return SEGMENT_NAMED % name if name else said
+
+    return named
+
+
+def names_for(base_root: str) -> Callable[[str], str]:
+    """`name_in` over the names this base's customer profile keeps."""
+    return name_in(segment_names(base_root))
+
+
 def can_be_asked_about(path: str) -> bool:
     """Whether the questions and answers may be about this document at all.
 
@@ -407,6 +492,7 @@ def documents(base_root: str) -> List[Tuple[int, str, str]]:
     cannot hold, is left off rather than offered and refused later.
     """
     found: List[Tuple[int, str, str]] = []
+    named = names_for(base_root)
     for info in base_reader.context_files(base_root):
         path = info.path
         # A map is left off by what it says it is, wherever it sits (Astra's
@@ -420,7 +506,7 @@ def documents(base_root: str) -> List[Tuple[int, str, str]]:
                 continue
         except (PathError, ValidationError):
             continue
-        found.append((len(found) + 1, path, safe_name(path)))
+        found.append((len(found) + 1, path, named(path)))
     return found
 
 
@@ -782,7 +868,10 @@ def preview(
     # count the segments and other documents rather than naming each, so the
     # cap is measured as though every document were named on its own, which
     # keeps a long list refused as it was rather than folded into a count.
-    one_by_one = ", ".join(safe_name(path) for path in affects)
+    # A segment is said by the name its profile keeps (Brandon's call 59), so
+    # the cap is measured on those names, as they will be shown.
+    named = names_for(base_root)
+    one_by_one = ", ".join(named(path) for path in affects)
     if len(as_shown(one_by_one)) > SHOWN_CHARS:
         raise _refuse(TOO_MANY_DOCUMENTS, CODE_TOO_MANY_DOCUMENTS)
     entry = build_entry(
@@ -793,7 +882,7 @@ def preview(
     # own `four_lines_for` reading the very text that will be written.
     showing = moment.fenced(
         join_flow.four_lines_for(
-            entry, why_when_none(entry), what_in_full=True, name_of=safe_name
+            entry, why_when_none(entry), what_in_full=True, name_of=named
         )
     )
     # The yes is bound to the whole entry rather than to the four lines. That
@@ -1237,6 +1326,8 @@ def record(
             _save_asked(base_id, held)
     except (GtmBaseError, OSError):
         plan = join_flow.Reconciliation([], list(entry.affects))
+    # Each question names a segment by the name its profile keeps.
+    plan.name_of = names_for(base_root)
     return Recorded(entry, relative, plan)
 
 
@@ -1293,7 +1384,8 @@ def answer(
             or entry.run_id is not None
         ):
             raise _refuse(NOT_ASKED, CODE_NOT_ASKED)
-        named = safe_name(relative)
+        name_of = names_for(base_root)
+        named = name_of(relative)
         if given == ANSWER_NOT_NOW:
             result = join_flow.Reconciled(
                 relative, False, LEFT_FLAGGED % _capital(named)
@@ -1302,7 +1394,7 @@ def answer(
             with _writing(base_id):
                 result = join_flow.reconcile_yes(
                     base_root, base_id, relative, str(entry_id), now=now,
-                    runner=git, any_document=True,
+                    runner=git, any_document=True, name_of=name_of,
                 )
             if not result.answered_yes:
                 # A refused yes can be given again once what stood in the way
@@ -1312,7 +1404,7 @@ def answer(
             with _writing(base_id):
                 result = join_flow.reconcile_no(
                     base_root, base_id, relative, str(entry_id), now=now,
-                    runner=git,
+                    runner=git, name_of=name_of,
                 )
         asked["documents"] = [
             path

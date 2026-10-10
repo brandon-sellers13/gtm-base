@@ -1312,6 +1312,11 @@ SAFE_CALLS = frozenset(
         "_the_change_called",
         "how_many",
         "counted",
+        # The namer a step of recording a change is handed, which is only
+        # ever `names.document_name`, `record_change.safe_name`, or what
+        # `record_change.names_for` returns; test_segment_names checks every
+        # namer the plugin hands over is one of those (Brandon's call 59).
+        "name_of",
     )
 )
 
