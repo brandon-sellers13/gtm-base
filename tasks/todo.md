@@ -1374,7 +1374,10 @@ Plan: `docs/plans/2026-10-10-002-feat-plan-1-company-skills-and-meta-skill-plan.
 - [x] Rebuilt this branch from origin/main with a cleaned decisions brief (no goal figures, pipeline figure or workbook name);
       the six Plan 1 commits replayed on top. Local backup ref plan-1-backup-before-rebuild still holds the old history:
       delete it once checked, and never push it
-- [ ] Local main also holds the uncleaned decisions commit; reset it to origin/main before anything is pushed from it
+- [x] Local main reset to origin/main (3c2c377), dropping the uncleaned decisions commit
+- [x] This repository's git address set to Brandon's personal one (repo config, all worktrees); the branch rebased onto
+      origin/main and every commit re-authored under it. 120 older commits already on the public main carry the Gridwise
+      address; changing those means rewriting the public main, which is Brandon's call
 - [ ] Brandon answers the seven calls (1 two businesses, 2 SC-M, 3 unattended flag, 4 old skill copy, 5 releases, 6 ownership guarantee, 7 lessons)
 - [ ] Unit 4.1 runs first and Brandon signs the brainstorm before Unit 4.2 is briefed
 
