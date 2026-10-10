@@ -743,6 +743,114 @@ class TestAstrasReviewOfReleaseB(unittest.TestCase):
         self.assertIn("customer profile", approval.SAYS_LEAVE_SEGMENT_OUT)
 
 
+class TestARealTicketReachesTheRealWriter(unittest.TestCase):
+    """Astra's review of Release B, finding 8: without the suite's hold.
+
+    Every other test runs as a process that holds every write, so a ticket
+    opening one write while the script needs another would pass them all and
+    refuse the person after their yes. These run each approval that needs no
+    prepared state as the person meets it: the hook asks, the ticket goes on
+    the command, and the script, with no hold, must reach its writer, take
+    the ticket, and finish.
+    """
+
+    def run_allowed(self, root, script, arguments):
+        command = "python3 %s %s" % (script, " ".join(arguments))
+        output = asked(self, command, cwd=root)
+        env = without_a_ticket()
+        env[approval.ENV] = nonce_in(output)
+        finished = subprocess.run(
+            [sys.executable, script] + list(arguments),
+            cwd=root,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            env=env,
+        )
+        said = finished.stdout.decode("utf-8") + finished.stderr.decode("utf-8")
+        self.assertNotIn(approval.NOT_ASKED, said, command)
+        self.assertEqual(0, finished.returncode, (command, said))
+        self.assertEqual([], tickets(), command)
+        return said
+
+    def test_each_approval_that_needs_nothing_prepared(self):
+        with support.Sandbox() as sandbox:
+            root, base_id = local_base(sandbox)
+            self.run_allowed(root, SEAT, ["--quiet", "month"])
+            self.run_allowed(root, SEAT, ["--weekly-line", "off"])
+            self.run_allowed(root, STALE, ["--dismiss-quiet-record"])
+            staged = os.path.join(
+                root, constants.PROPOSALS_PENDING_DIR, "stg-" + "b" * 16 + ".md"
+            )
+            support.write(staged, support.staging_template())
+            self.run_allowed(root, APPROVE_LOCAL, ["--staging", staged, "--drop"])
+            self.assertFalse(os.path.exists(staged))
+
+    def test_every_write_a_ticket_opens_is_one_a_writer_asks_for(self):
+        import ast as _ast
+        import glob
+
+        asked_for = set()
+        for path in glob.glob(os.path.join(support.LIB_DIR, "gtmbase", "*.py")):
+            tree = _ast.parse(support.read(path))
+            for node in _ast.walk(tree):
+                if (
+                    isinstance(node, _ast.Call)
+                    and getattr(node.func, "attr", None) == "require"
+                    and getattr(getattr(node.func, "value", None), "id", None) == "approval"
+                    and node.args
+                    and isinstance(node.args[0], _ast.Constant)
+                ):
+                    asked_for.add(node.args[0].value)
+        opened = set()
+        with support.Sandbox():
+            for command, _says in APPROVALS:
+                output = asked(self, command)
+                kept = json.loads(
+                    support.read(os.path.join(approval.folder_path(), tickets()[0]))
+                )
+                opened.update(kept["opens"])
+        for command in (
+            "python3 %s skip --step positioning --base b" % JOIN,
+            "python3 %s skip-change --base b" % JOIN,
+            "python3 %s close --base b --run r --got-in-the-way-file w.txt" % JOIN,
+            "python3 %s --weekly-line off" % SEAT,
+            "python3 %s --dismiss-quiet-record" % STALE,
+        ):
+            with support.Sandbox():
+                asked(self, command)
+                opened.update(
+                    json.loads(
+                        support.read(os.path.join(approval.folder_path(), tickets()[0]))
+                    )["opens"]
+                )
+        # No ticket opens a write nobody asks for, and no writer asks for a
+        # write no ticket opens, which would refuse the person every time.
+        self.assertEqual(set(), opened - asked_for)
+        self.assertEqual(set(), asked_for - opened)
+        # Each writer asks for its own name, so a ticket names exactly what
+        # runs.
+        for name in asked_for:
+            module, function = name.split(".")
+            source = support.read(os.path.join(support.LIB_DIR, "gtmbase", module + ".py"))
+            tree = _ast.parse(source)
+            owners = [
+                node.name
+                for node in _ast.walk(tree)
+                if isinstance(node, _ast.FunctionDef)
+                and any(
+                    isinstance(inner, _ast.Call)
+                    and getattr(inner.func, "attr", None) == "require"
+                    and inner.args
+                    and getattr(inner.args[0], "value", None) == name
+                    for inner in _ast.walk(node)
+                )
+            ]
+            # The reminder is put off inside the whole check, which asks for
+            # it by the name of what it does.
+            expected = {"stale_check.dismiss_quiet_record": "run"}.get(name, function)
+            self.assertIn(expected, owners, name)
+
+
 class TestTheWordsAPersonReads(unittest.TestCase):
     def test_every_new_sentence_is_registered_and_plain(self):
         registered = set(

@@ -1017,6 +1017,7 @@ PYTHON_SENTENCES = (
     ("join_flow", "NOT_OWNED_FLAGGED_ONE"),
     ("join_flow", "NOT_OWNED_FLAGGED_MANY"),
     # Unit 1.7e: what Claude Code's own question says, and the refusals.
+    ("moment", "NAMES_NOTE"),
     ("approval", "ASK_OPENING"),
     ("approval", "ASK_CLOSING"),
     ("approval", "SAYS_APPROVE_CHANGE"),

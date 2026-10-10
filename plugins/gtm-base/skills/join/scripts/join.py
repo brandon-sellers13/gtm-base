@@ -289,6 +289,18 @@ def plain_value(value):
     return text
 
 
+def held_apart(out, lines):
+    """Lines that can carry a name somebody typed, held apart as data.
+
+    The name of a file, a folder or a segment is whatever somebody typed,
+    and one shaped like an instruction must never reach the assistant as
+    words around the data (Astra's review of Release B, finding 5).
+    """
+    lines = [text for text in lines if text]
+    if lines:
+        out.write(moment.fenced("\n".join(lines), note=moment.NAMES_NOTE) + "\n")
+
+
 def line(out, name, value):
     """Write one name and value line, with the value made safe first."""
     out.write("%s=%s\n" % (name, safe_value(value)))
@@ -727,14 +739,15 @@ def run_survey(options, out):
     out.write(found.sentence() + "\n")
     # The number is what a place is dropped by afterwards, in the order the
     # places were written down (finding R9 of Astra's third look).
+    listed = []
     for number, place in enumerate(found.places, start=1):
         counts = " ".join(
             "%s=%d" % (safe_value(kind), place.counts_by_kind[kind])
             for kind, _words in constants.MARKETING_KINDS
             if place.counts_by_kind.get(kind)
         )
-        out.write(
-            "place=%s number=%d score=%d%s mostly=%s\n"
+        listed.append(
+            "place=%s number=%d score=%d%s mostly=%s"
             % (
                 safe_value(place.relative_folder),
                 number,
@@ -748,15 +761,16 @@ def run_survey(options, out):
     # here was read past a name and a first heading (Unit 1.6).
     for number, place in enumerate(found.places, start=1):
         for relative, kind in place.candidates:
-            out.write(
-                "candidate=%s place=%d kind=%s\n"
+            listed.append(
+                "candidate=%s place=%d kind=%s"
                 % (safe_value(relative), number, safe_value(kind))
             )
     for group in found.version_sets:
         for other in group[1:]:
-            out.write(
-                "version-set=%s other=%s\n" % (safe_value(group[0]), safe_value(other))
+            listed.append(
+                "version-set=%s other=%s" % (safe_value(group[0]), safe_value(other))
             )
+    held_apart(out, listed)
     for note in found.notes:
         line(out, "note", note)
     # Two or more places that each hold a customer profile and a positioning
@@ -877,10 +891,13 @@ def run_segments(options, out):
         # sell to several groups, which the next step still takes.
         line(out, "codes", "one-or-none")
         return EXIT_DONE
-    for candidate in found:
-        out.write(
-            "candidate=%s number=%d\n" % (safe_value(candidate.path), candidate.number)
-        )
+    held_apart(
+        out,
+        [
+            "candidate=%s number=%d" % (safe_value(candidate.path), candidate.number)
+            for candidate in found
+        ],
+    )
     out.write(segments.FOUND_SENTENCE % {"count": names.counted(len(found))} + "\n")
     # A document's name is whatever somebody typed when they saved it, so the
     # numbered list is held apart as data like the documents themselves
@@ -1021,16 +1038,19 @@ def run_list_sources(options, out):
     # The number is what the skill names a file by later, because a file name
     # is somebody else's text and a number is not (finding N2), and it is the
     # number of the file written down in that place (finding R9).
-    for number, entry in enumerate(join_flow.files_in_order(listing), start=1):
-        out.write(
-            "read=%s number=%d kind=%s date=%s\n"
+    held_apart(
+        out,
+        [
+            "read=%s number=%d kind=%s date=%s"
             % (
                 safe_value(entry.path),
                 number,
                 safe_value(entry.kind),
                 safe_value(entry.modified_date or "none"),
             )
-        )
+            for number, entry in enumerate(join_flow.files_in_order(listing), start=1)
+        ],
+    )
     out.write("These were left out, and this is why.\n")
     for reason in sorted(listing.excluded_counts):
         out.write(
@@ -1562,7 +1582,8 @@ def an_adoption_refusal(refusal, out):
     line(out, "codes", refusal.code)
     if refusal.code in adopt.OFFERS_A_DRAFT:
         line(out, "draft-instead", "yes")
-    out.write(refusal.sentence + "\n")
+    # The refusal about a reserved name names the segment.
+    held_apart(out, [refusal.sentence])
     return EXIT_REFUSED
 
 
@@ -1597,7 +1618,10 @@ def run_adopt_show(options, out):
     if shown.cleaned.questions:
         line(out, "questions", shown.cleaned.questions)
     for sentence in shown.sentences():
-        out.write(sentence + "\n")
+        if shown.segment.name in sentence:
+            held_apart(out, [sentence])
+        else:
+            out.write(sentence + "\n")
         if sentence == adopt.OPENING_SAID:
             # The first lines are the person's own writing, so they are held
             # apart as data, however they are fenced themselves.
@@ -1663,7 +1687,7 @@ def run_adopt_leave(options, out):
         return an_adoption_refusal(refusal, out)
     except (ReviewError, PathError) as refusal:
         return an_adoption_base_refusal(refusal, out)
-    out.write(sentence + "\n")
+    held_apart(out, [sentence])
     return EXIT_DONE
 
 
@@ -1690,8 +1714,7 @@ def run_resume(options, out):
         line(out, "to-draft", segment.slug)
     for segment in resumed.unreadable:
         line(out, "unreadable", segment.slug)
-    for sentence in resumed.sentences():
-        out.write(sentence + "\n")
+    held_apart(out, resumed.sentences())
     return EXIT_REFUSED if resumed.stopped is not None else EXIT_DONE
 
 
@@ -1702,7 +1725,7 @@ def a_draft_refusal(refusal, out):
     if not sentence:
         raise refusal
     line(out, "codes", code)
-    out.write(sentence + "\n")
+    held_apart(out, [sentence])
     return EXIT_REFUSED
 
 
@@ -1741,20 +1764,22 @@ def run_draft_list(options, out):
     line(out, "segment", shown.segment.slug)
     if shown.code:
         line(out, "codes", shown.code)
-    for sentence in shown.sentences():
-        out.write(sentence + "\n")
+    held_apart(out, shown.sentences())
     # The number is what a file is dropped by, because a file name is
     # somebody else's text and a number is not.
-    for number, entry in enumerate(shown.entries, start=1):
-        out.write(
-            "read=%s number=%d kind=%s date=%s\n"
+    held_apart(
+        out,
+        [
+            "read=%s number=%d kind=%s date=%s"
             % (
                 safe_value(entry.path),
                 number,
                 safe_value(entry.kind),
                 safe_value(entry.modified_date or "none"),
             )
-        )
+            for number, entry in enumerate(shown.entries, start=1)
+        ],
+    )
     for reason in sorted(shown.left_out):
         out.write(
             "left-out=%s count=%d\n" % (safe_value(reason), shown.left_out[reason])
@@ -1800,7 +1825,7 @@ def run_draft_leave(options, out):
         return an_adoption_base_refusal(refusal, out)
     except adopt.AdoptionRefused as refusal:
         return an_adoption_refusal(refusal, out)
-    out.write(sentence + "\n")
+    held_apart(out, [sentence])
     return EXIT_DONE
 
 
