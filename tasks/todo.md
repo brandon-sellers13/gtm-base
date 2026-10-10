@@ -1379,7 +1379,11 @@ Plan: `docs/plans/2026-10-10-002-feat-plan-1-company-skills-and-meta-skill-plan.
       origin/main and every commit re-authored under it. 120 older commits already on the public main carry the Gridwise
       address; changing those means rewriting the public main, which is Brandon's call
 - [x] Brandon answered the seven calls on 2026-10-10, all as recommended (1 two businesses, 2 SC-M, 3 unattended flag, 4 old skill copy, 5 releases, 6 ownership guarantee, 7 lessons)
-- [ ] Unit 4.1 runs first and Brandon signs the brainstorm before Unit 4.2 is briefed
+- [x] Unit 4.1 written: docs/brainstorms/2026-10-10-company-skills-requirements.md, revision 3. Astra and Fable 5.1 said
+      not ready on r1 (Astra 8 findings; Fable 1 blocker, 3 high, 9 medium, 8 low); r2 ready with 3 changes; r3 ready for
+      signature (docs/reviews/2026-10-10-company-skills-verify-2-astra.md). Plan 1 kept in step, now revision 2.6
+- [ ] Brandon signs Unit 4.1 (covers scripts, the extra yes for creating a skill, and the guarantee in CS13 and CS14);
+      Unit 4.2a is not briefed before he signs
 
 #### Review (Plan 1)
 Nine units in two releases (C: 4.2a, 2.1, 2.5a, 3.1, 4.2b, 2.4a, 3.5; D: 3.6), plus 4.1 first. The hard part was D5's
