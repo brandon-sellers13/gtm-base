@@ -570,6 +570,10 @@ because a skipped document is written into the base the first approval makes.
   new one. Their words go here and nowhere else.
 - **Edit.** Take their own wording, put it in the draft file, and check it again
   with `review`.
+- Approving a document, taking a finished page in, leaving a page or a
+  segment out, and the closing's answer about each document are approvals,
+  so Claude Code asks the person before each one runs, with a sentence from
+  GTM Base saying what it does. Run each on a line of its own and wait.
 - **Approve**, the first document they approve, which creates the base:
   `python3 scripts/join.py approve --step <step> --draft <draft file> --run <run identifier> --parent <the parent from step 4a> --company-file <a fresh company file>`.
   Add `--email <address>` when they gave one, and

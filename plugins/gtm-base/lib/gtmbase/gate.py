@@ -63,7 +63,7 @@ import shlex
 import sys
 from typing import List, Optional, Sequence, Tuple
 
-from . import constants, layout, machine, marker, paths, scan, state, trust_surface
+from . import approval, constants, layout, machine, marker, paths, scan, state, trust_surface
 from .errors import GitError
 from .gitcmd import GitRunner, runner_or_default
 
@@ -99,6 +99,9 @@ REASON_BASE_NAME = "changes-the-name-a-base-is-known-by"
 # until the company-skills brainstorm settles who may approve a change to a
 # skill (Unit 1.5b, Brandon's call 13).
 REASON_SKILLS_FILE = "a-file-in-the-skills-folder"
+# A command that sets, reads or clears the ticket an allowed approval carries
+# (Unit 1.7e). Only `approval` may put one on a command.
+REASON_APPROVAL_TICKET = "names-the-approval-ticket"
 
 SENTENCES = {
     REASON_UNTOKENIZABLE: (
@@ -178,6 +181,10 @@ SENTENCES = {
         "GTM Base stopped this because it would send a file in the base's "
         "skills folder, which stays empty until your team has settled who may "
         "approve a change to a skill."
+    ),
+    REASON_APPROVAL_TICKET: (
+        "GTM Base stopped this because it touches the value GTM Base uses to "
+        "tell that you allowed an approval yourself, which only GTM Base may set."
     ),
 }
 
@@ -293,6 +300,10 @@ _SEAT_FOLDER_NAME = re.compile(
     )
 )
 
+
+# The other tools that run a command, which the plugin's hooks file sends here
+# too.
+_OTHER_COMMAND_TOOLS = ("Monitor", "PowerShell")
 
 # --- Verdicts ----------------------------------------------------------------
 
@@ -1854,6 +1865,14 @@ def check_command(
 ) -> Optional[str]:
     """Read one command line. Return the reason to refuse, or None to allow."""
     runner = runner_or_default(git)
+    if approval.ENV in command:
+        # Only the line `approval` itself wrote, carrying the ticket this
+        # conversation is waiting on, may name it, and the rest of that line
+        # is read like any other (Unit 1.7e).
+        rest = approval.rewritten_rest(command, session_id)
+        if rest is None:
+            return sentence_for(REASON_APPROVAL_TICKET)
+        command = rest
     if not mentions_git_or_gh(command):
         if names_the_seat_folder(command):
             return sentence_for(REASON_SEAT_FOLDER)
@@ -2099,6 +2118,22 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
 
     tool_name = payload.get("tool_name")
     tool_input = payload.get("tool_input")
+    session_id = payload.get("session_id")
+    if not isinstance(session_id, str):
+        session_id = None
+    if tool_name in _OTHER_COMMAND_TOOLS and isinstance(tool_input, dict):
+        # Another tool that runs a command. It is not read for sends, but a
+        # ticket waiting in this conversation is taken back before it runs,
+        # and it may not touch a ticket at all (Unit 1.7e).
+        try:
+            approval.take_back(session_id)
+        except Exception:
+            pass
+        if approval.ENV in str(tool_input.get("command") or ""):
+            sys.stdout.write(
+                deny_payload(client, sentence_for(REASON_APPROVAL_TICKET)) + "\n"
+            )
+        return 0
     if tool_name != "Bash" or not isinstance(tool_input, dict):
         return 0
     command = tool_input.get("command")
@@ -2107,9 +2142,6 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     cwd = payload.get("cwd")
     if not isinstance(cwd, str) or not os.path.isdir(cwd):
         cwd = os.getcwd()
-    session_id = payload.get("session_id")
-    if not isinstance(session_id, str):
-        session_id = None
 
     try:
         reason = check_command(command, cwd, session_id)
@@ -2117,4 +2149,16 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         reason = sentence_for(REASON_INTERNAL)
     if reason:
         sys.stdout.write(deny_payload(client, reason) + "\n")
+        return 0
+    # Every approval is put to the person by Claude Code itself (Unit 1.7e,
+    # Brandon's call 57). A check that cannot run never lets an approval
+    # through unasked.
+    try:
+        verdict = approval.decide(payload, client=client)
+    except Exception:
+        verdict = None
+        if approval.mentions_an_approval_script(command):
+            sys.stdout.write(deny_payload(client, approval.COULD_NOT_PREPARE) + "\n")
+    if verdict is not None:
+        sys.stdout.write(json.dumps(verdict) + "\n")
     return 0

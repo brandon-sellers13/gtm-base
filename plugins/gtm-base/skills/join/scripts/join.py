@@ -56,6 +56,7 @@ if _lib not in sys.path:
 import argparse  # noqa: E402
 
 from gtmbase import (  # noqa: E402
+    approval,
     adopt,
     constants,
     create_base,
@@ -2117,6 +2118,13 @@ def main(argv=None):
         return step(options, sys.stdout)
     except IdentityNeeded:
         sys.stdout.write(NEEDS_EMAIL + "\n")
+        return EXIT_REFUSED
+    except approval.ApprovalRefused as refusal:
+        # Said as it is, so the person hears why and what to do, rather than
+        # the sentence for a step that could not be finished (the correctness
+        # review of Unit 1.7e, finding 1).
+        sys.stdout.write("codes=%s\n" % safe_value(refusal.code))
+        sys.stdout.write(str(refusal) + "\n")
         return EXIT_REFUSED
     except (DraftError, ReviewError) as refusal:
         sys.stdout.write("codes=%s\n" % safe_value(",".join(_codes_of(refusal))))

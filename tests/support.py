@@ -51,6 +51,36 @@ os.environ[SEAT_HOME_VARIABLE] = unowned_seat_folder()
 
 from gtmbase.gitcmd import GitResult  # noqa: E402
 
+# Unit 1.7e: every library function that writes an approval refuses unless the
+# process was started by a command the person allowed through Claude Code's
+# own question. A test is the person here, so the suite runs as a process
+# that already holds every write, and each script a test starts holds them
+# too, through tests/held/sitecustomize.py, which Python imports as the
+# script starts because its folder is first on the path the script inherits.
+# Nothing in the plugin knows about either. tests/test_approval_ask.py runs
+# without them, to prove the refusal.
+from gtmbase import approval as _approval  # noqa: E402
+
+HOLD_VARIABLE = "GTM_BASE_TESTS_HOLD_APPROVAL"
+HELD_FOLDER = os.path.join(os.path.dirname(os.path.abspath(__file__)), "held")
+
+
+class EveryWrite(frozenset):
+    """What a process holding every approval write holds."""
+
+    def __contains__(self, name):
+        return True
+
+    def __bool__(self):
+        return True
+
+
+_approval._held = EveryWrite()
+os.environ[HOLD_VARIABLE] = "1"
+os.environ["PYTHONPATH"] = os.pathsep.join(
+    part for part in (HELD_FOLDER, os.environ.get("PYTHONPATH", "")) if part
+)
+
 
 class FakeGitRunner(object):
     """Records every call and answers from a script the test wrote."""

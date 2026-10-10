@@ -65,6 +65,14 @@ session was read before the backstop had anything to say about it. Hearing it
 twice costs a sentence. Hearing it not at all costs the person a piece of work
 built on a document that had already been overtaken.
 
+Every approval in GTM Base is put to the person by Claude Code itself. When
+you run one, Claude Code stops and asks them, with one sentence from GTM Base
+saying what allowing it does, and only their answer lets it run. Run each
+approval as a command of its own, exactly as the skill writes it, and wait. If
+they choose No, it did not happen: never run it another way. If GTM Base says
+an approval did not come through Claude Code's own question, say so and ask
+whether to ask for it again.
+
 When the person says in conversation that something about the business
 changed, or that a fact the company states is different now, you may offer
 once, in this one sentence, to record it: "Shall I record that as a context

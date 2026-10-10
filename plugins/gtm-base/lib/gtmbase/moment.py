@@ -41,6 +41,7 @@ import re
 from typing import List, Optional
 
 from . import (
+    approval,
     base_reader,
     compose_proposal,
     confirm,
@@ -830,6 +831,9 @@ def fix_it_first(
     whether it is right, and leaving the question unanswered for ever said the
     person never replied when they had (finding M3 of the 2026-09-20 review).
     """
+    # Only a command the person allowed through Claude Code's own question
+    # writes an approval (Unit 1.7e, Brandon's call 57).
+    approval.require("moment.fix_it_first")
     git = runner_or_default(runner)
     if not moment.flagged:
         return MomentAnswer(

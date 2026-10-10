@@ -99,6 +99,10 @@ another folder first.
 
 ## Running it
 
+Each answer below is an approval, so Claude Code asks the person before it
+runs, with a sentence from GTM Base saying what it does. Run it on a line of
+its own and wait for their answer; if they choose No, nothing was recorded.
+
 - `python3 scripts/confirm.py --question <id> --answer yes`
 
 - A no needs their own words, so ask this skill for somewhere to put them

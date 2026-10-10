@@ -36,6 +36,7 @@ import tempfile
 from typing import List, Optional, Sequence
 
 from . import (
+    approval,
     adopt,
     base_reader,
     callmarkers,
@@ -1979,6 +1980,9 @@ def adoption_approve(
     again. A page this same page's earlier attempt left written and not saved
     is finished rather than refused.
     """
+    # Only a command the person allowed through Claude Code's own question
+    # writes an approval (Unit 1.7e, Brandon's call 57).
+    approval.require("join_flow.adoption_approve")
     segment = segment_to_adopt(run_id, slug)
     git = runner_or_default(runner)
     root, base_id = _adoption_base(base_root, git)
@@ -2440,6 +2444,9 @@ def adoption_leave_out(
     held, so a page another window has just saved is never taken back
     (Astra's review of the merged units, finding 1).
     """
+    # Only a command the person allowed through Claude Code's own question
+    # writes an approval (Unit 1.7e, Brandon's call 57).
+    approval.require("join_flow.adoption_leave_out")
     segment = segment_to_adopt(run_id, slug)
     git = runner_or_default(runner)
     root, base_id = _adoption_base(base_root, git)
@@ -3421,6 +3428,9 @@ def draft_leave_out(
     saved stays saved and is said to be. Once nothing is left to finish, the
     record is let go.
     """
+    # Only a command the person allowed through Claude Code's own question
+    # writes an approval (Unit 1.7e, Brandon's call 57).
+    approval.require("join_flow.draft_leave_out")
     git = runner_or_default(runner)
     root, base_id = _adoption_base(base_root, git)
     with _Writing(base_id):
@@ -4195,6 +4205,9 @@ def approve_step(
     base is recorded as belonging with it at the moment the base first exists,
     rather than in a later step that a closed window could skip.
     """
+    # Only a command the person allowed through Claude Code's own question
+    # writes an approval (Unit 1.7e, Brandon's call 57).
+    approval.require("join_flow.approve_step")
     git = runner_or_default(runner)
     reviewed = review_step(
         step,
@@ -4748,6 +4761,9 @@ def reconcile_yes(
     about every document it affects rather than only the two a base needs,
     and `name_of` is how that path names the document.
     """
+    # Only a command the person allowed through Claude Code's own question
+    # writes an approval (Unit 1.7e, Brandon's call 57).
+    approval.require("join_flow.reconcile_yes")
     if formats.name_has_a_space(path):
         return Reconciled(
             path,
@@ -4787,6 +4803,9 @@ def reconcile_no(
     it waits for the person to approve it the way every other prepared change
     does.
     """
+    # Only a command the person allowed through Claude Code's own question
+    # writes an approval (Unit 1.7e, Brandon's call 57).
+    approval.require("join_flow.reconcile_no")
     day = now or state.today()
     if isinstance(day, datetime.datetime):
         day = day.date()

@@ -359,7 +359,10 @@ Then wait for their answer. Three rules hold here and nowhere else:
 - The showing and the yes are two separate runs, and they must never happen in
   the same turn.
 - The permission prompt in front of the second run is the person's own step,
-  and it is the whole point.
+  and it is the whole point. GTM Base makes Claude Code ask it for every
+  approval, in every mode that asks anything, with a sentence saying what
+  the approval does, and refuses the approval when Claude Code is set not to
+  ask at all.
 - This script never goes on a list of commands that run without being asked
   about.
 
