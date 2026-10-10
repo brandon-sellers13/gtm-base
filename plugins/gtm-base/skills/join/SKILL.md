@@ -570,8 +570,10 @@ because a skipped document is written into the base the first approval makes.
   new one. Their words go here and nowhere else.
 - **Edit.** Take their own wording, put it in the draft file, and check it again
   with `review`.
-- Approving a document, taking a finished page in, leaving a page or a
-  segment out, and the closing's answer about each document are approvals,
+- Approving a document, skipping one, taking a finished page in, leaving a
+  page or a segment out, skipping the closing question, the closing's answer
+  about each document, and closing with a note on what got in the way are
+  approvals,
   so Claude Code asks the person before each one runs, with a sentence from
   GTM Base saying what it does. Run each on a line of its own and wait.
 - **Approve**, the first document they approve, which creates the base:

@@ -99,8 +99,9 @@ another folder first.
   not. It says nothing about the offer when it would be made. It reads and
   writes nothing at all, so it is the one to run when somebody wants to know
   where they stand before deciding anything.
-- The move, not now to the move, recording a context change, and each answer
-  about a document after it are approvals, so Claude Code asks the person
+- The move, not now to the move, putting off the quiet-record reminder,
+  recording a context change, and each answer about a document after it are
+  approvals, so Claude Code asks the person
   before each one runs, with a sentence from GTM Base saying what it does.
   Run each on a line of its own and wait for their answer.
 - `python3 scripts/stale_check.py --move-changes` moves a base laid out the

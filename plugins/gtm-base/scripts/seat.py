@@ -129,7 +129,10 @@ def main(argv=None):
             said.append(QUIET_UNTIL_ASKED)
         if options.weekly_line:
             on = options.weekly_line == "on"
-            state.set_weekly_line(resolution.base_id, on)
+            if on:
+                state.set_weekly_line(resolution.base_id, True)
+            else:
+                state.stop_weekly_line(resolution.base_id)
             said.insert(0, WEEKLY_LINE_ON if on else WEEKLY_LINE_OFF)
         if options.speak:
             state.set_silent_until(resolution.base_id, None)

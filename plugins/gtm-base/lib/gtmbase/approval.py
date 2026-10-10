@@ -49,16 +49,18 @@ one out; leaving out a segment still to draft; the closing's yes and no about
 each document; recording a context change at any time and each answer after
 it; the move to the current layout and not now to it; and staying quiet for a
 month or until asked. These are the points the first two builds of this unit
-settled on.
+settled on. Astra's review of Release B added five more, because each writes
+into a base or decides that the person hears less: skipping a document,
+skipping the closing question, the closing's note on what got in the way,
+turning the weekly line off, and putting off the reminder about a quiet
+record of context changes.
 
 Which are not, and why. Using a document as it is writes nothing. The yes to
 read the files setup lists reads and writes nothing in a base, and is bound
-to the exact list shown. Answering an open question prepares a change, which
-is approved like any other. Skipping a document writes a file saying it was
-skipped, which every later step treats as not finished. Closing, resuming,
-giving up a stopped move, putting off the reminder about a long quiet, the
-weekly line and speaking again either write nothing into a base or undo
-something, never decide anything for the person.
+to the exact list shown. Answering an open question prepares a change, which is approved like any
+other. Closing with nothing said, resuming, giving up a stopped move,
+turning the weekly line on and speaking again either write nothing into a
+base or undo something, never decide anything for the person.
 
 What this proves, and what it does not. An approval is written only by a
 command the person allowed through Claude Code's own question, which shows
@@ -157,9 +159,34 @@ SAYS_ADOPT_PAGE = (
     "Allowing it takes the finished page you were just shown into your base as "
     "it stands."
 )
-SAYS_LEAVE_PAGE_OUT = "Allowing it leaves that finished page out of your base."
+SAYS_LEAVE_PAGE_OUT = (
+    "Allowing it leaves that finished page out of your base, unless it was "
+    "already saved there before something stopped, in which case it stays."
+)
 SAYS_LEAVE_SEGMENT_OUT = (
-    "Allowing it leaves that segment out, so it gets no document of its own."
+    "Allowing it leaves that segment out, so it gets no document of its own, "
+    "and may prepare a change to your customer profile saying so, for you to "
+    "approve. A segment already saved before something stopped stays."
+)
+SAYS_SKIP = (
+    "Allowing it saves into your base that you skipped this document, so it "
+    "stays unfinished until it is written."
+)
+SAYS_SKIP_CLOSING = (
+    "Allowing it skips the question about what changed in the business, and "
+    "rests the reminder that no context change has been recorded lately."
+)
+SAYS_CLOSE_NOTE = (
+    "Allowing it saves what you said got in the way into your base, as a "
+    "dated note anyone invited to your base can read."
+)
+SAYS_WEEKLY_LINE_OFF = (
+    "Allowing it stops the one line a week GTM Base says about what is due a "
+    "look."
+)
+SAYS_REMINDER_LATER = (
+    "Allowing it stops GTM Base reminding you, for a while, that no context "
+    "change has been recorded lately."
 )
 SAYS_RECORD_CHANGE = "Allowing it records the context change you were just shown."
 SAYS_MOVE = "Allowing it moves your base to the current layout."
@@ -197,6 +224,10 @@ UNREADABLE = (
     "approval asks for. Run it exactly as the skill writes it, on a line of "
     "its own."
 )
+NOT_OURS = (
+    "GTM Base did not run this approval, because it could not tell that the "
+    "script it runs is GTM Base's own. Run it exactly as the skill writes it."
+)
 CANNOT_ASK = (
     "GTM Base did not run this approval, because this assistant cannot put "
     "the question to you itself. Approve it in Claude Code instead."
@@ -228,10 +259,16 @@ SENTENCE_NAMES = (
     "SAYS_MOVE_LATER",
     "SAYS_QUIET_MONTH",
     "SAYS_QUIET_UNTIL_ASKED",
+    "SAYS_SKIP",
+    "SAYS_SKIP_CLOSING",
+    "SAYS_CLOSE_NOTE",
+    "SAYS_WEEKLY_LINE_OFF",
+    "SAYS_REMINDER_LATER",
     "NOT_ASKED",
     "ONE_LINE",
     "TWO_THINGS",
     "UNREADABLE",
+    "NOT_OURS",
     "NOBODY_WOULD_BE_ASKED",
     "CANNOT_ASK",
     "COULD_NOT_PREPARE",
@@ -346,6 +383,17 @@ def _what(script: str, options) -> Optional[Tuple[str, Tuple[str, ...]]]:
             found = (SAYS_LEAVE_PAGE_OUT, ("join_flow.adoption_leave_out",))
         elif mode == "draft-leave":
             found = (SAYS_LEAVE_SEGMENT_OUT, ("join_flow.draft_leave_out",))
+        elif mode == "skip":
+            # Skipping a step can skip the closing question with it.
+            found = (
+                SAYS_SKIP,
+                ("join_flow.skip_step", "join_flow.skip_the_closing_question"),
+            )
+        elif mode == "skip-change":
+            found = (SAYS_SKIP_CLOSING, ("join_flow.skip_the_closing_question",))
+        elif mode == "close" and (get("got_in_the_way") or get("got_in_the_way_file")):
+            # A closing with nothing said writes no note and asks nothing.
+            found = (SAYS_CLOSE_NOTE, ("join_flow.write_onboarding_note",))
         elif mode == "reconcile-answer":
             answer = _answer(options)
             if answer == "yes":
@@ -361,6 +409,8 @@ def _what(script: str, options) -> Optional[Tuple[str, Tuple[str, ...]]]:
             found = (SAYS_MOVE_LATER, ("changes.not_now",))
         elif get("record_change") == "record":
             found = (SAYS_RECORD_CHANGE, ("record_change.record",))
+        elif get("dismiss_quiet_record") and not get("dry_run"):
+            found = (SAYS_REMINDER_LATER, ("stale_check.dismiss_quiet_record",))
         elif get("record_change") == "answer":
             found = {
                 "yes": (SAYS_ALREADY_SAYS, ("record_change.answer", "join_flow.reconcile_yes")),
@@ -375,6 +425,8 @@ def _what(script: str, options) -> Optional[Tuple[str, Tuple[str, ...]]]:
             found = (SAYS_QUIET_MONTH, ("state.go_quiet",))
         elif quiet == "until-asked":
             found = (SAYS_QUIET_UNTIL_ASKED, ("state.go_quiet",))
+        elif get("weekly_line") == "off":
+            found = (SAYS_WEEKLY_LINE_OFF, ("state.stop_weekly_line",))
     if found is not None:
         chosen = [name for name in _ACTIONS[script] if get(name)]
         if len(chosen) > 1:
@@ -403,12 +455,44 @@ def _read_settings(script: str, arguments: Sequence[str]):
         raise Unreadable()
 
 
-def _script_and_arguments(words: List[str]) -> Tuple[Optional[str], List[str]]:
+class NotOurs(Exception):
+    """An approval script's name on a file that is not GTM Base's own."""
+
+
+def _is_ours(script: str, written: str, folder: Optional[str]) -> bool:
+    """Whether the file a command names is the script GTM Base installed.
+
+    The name alone proves nothing, since any folder can hold a file called
+    join.py, and the file named is the one that runs holding the ticket
+    (Astra's review of Release B, finding 2). So the path is followed the
+    way the shell follows it, from the folder the command runs in, and has
+    to be the installed script itself. A path the hook cannot follow, such
+    as one built from a variable, is never taken to be it.
+    """
+    if folder is None or "$" in written or "`" in written:
+        return False
+    path = os.path.expanduser(written)
+    if not os.path.isabs(path):
+        path = os.path.join(folder, path)
+    expected = os.path.realpath(os.path.join(_PLUGIN_ROOT, *SCRIPTS[script]))
+    try:
+        return os.path.realpath(path) == expected and os.path.isfile(expected)
+    except (OSError, ValueError):
+        return False
+
+
+def _script_and_arguments(
+    words: List[str], folder: Optional[str] = None
+) -> Tuple[Optional[str], List[str]]:
     """The approval script a simple command runs, and what it hands it."""
     if not words:
         return None, []
     first = os.path.basename(words[0])
     if first in SCRIPTS:
+        if "/" not in words[0] or not _is_ours(first, words[0], folder):
+            # By its bare name the shell finds it along PATH, which the hook
+            # cannot follow.
+            raise NotOurs()
         return first, words[1:]
     if not _PYTHON_RE.match(first):
         return None, []
@@ -421,6 +505,8 @@ def _script_and_arguments(words: List[str]) -> Tuple[Optional[str], List[str]]:
         return None, []
     script = os.path.basename(words[index])
     if script in SCRIPTS:
+        if not _is_ours(script, words[index], folder):
+            raise NotOurs()
         return script, words[index + 1 :]
     if (
         index > 1
@@ -459,6 +545,43 @@ def _runs_something_inside(text: str) -> bool:
     return False
 
 
+_DUPLICATION_RE = re.compile(r"\A\d*[<>]&(?:\d+|-)")
+
+
+def _writes_or_reads_a_file(text: str) -> bool:
+    """Whether the shell would send output to a file, or read one, on this line.
+
+    The shell opens the file before the program starts, so a line that
+    approves something and writes a file is more than the approval it shows
+    (Astra's review of Release B, finding 1). Joining one stream to another,
+    as in 2>&1, opens no file. Inside quotes the signs are only characters.
+    """
+    quote = ""
+    index = 0
+    while index < len(text):
+        character = text[index]
+        if quote:
+            if character == quote:
+                quote = ""
+            elif quote == '"' and character == "\\":
+                index += 1
+        elif character == "\\":
+            index += 1
+        elif character in ("'", '"'):
+            quote = character
+        elif character in "<>":
+            start = index
+            while start > 0 and text[start - 1].isdigit():
+                start -= 1
+            if start > 0 and text[start - 1] == "&":
+                return True
+            if not _DUPLICATION_RE.match(text[start:]):
+                return True
+            index += 1
+        index += 1
+    return False
+
+
 def mentions_an_approval_script(command: str) -> bool:
     """Whether the line names any script that can approve something."""
     return any(name in str(command or "") for name in SCRIPTS)
@@ -469,7 +592,7 @@ class Found(object):
 
     __slots__ = (
         "says", "opens", "anything_else", "substituted", "scripts",
-        "unreadable", "two_things",
+        "unreadable", "two_things", "not_ours",
     )
 
     def __init__(self):
@@ -482,9 +605,10 @@ class Found(object):
         self.scripts = 0
         self.unreadable = False
         self.two_things = False
+        self.not_ours = False
 
 
-def find(command: str) -> Found:
+def find(command: str, cwd: Optional[str] = None) -> Found:
     """Read a command line for approvals, the way the script reads itself.
 
     This reading decides only what the person is asked. It is not what keeps
@@ -500,6 +624,9 @@ def find(command: str) -> Found:
     if _runs_something_inside(text):
         found.anything_else = True
         found.substituted = True
+    if _writes_or_reads_a_file(text):
+        found.anything_else = True
+    folder = cwd if cwd and os.path.isabs(cwd) else None
     for segment in gate.split_segments(text):
         try:
             words = shlex.split(segment)
@@ -512,10 +639,19 @@ def find(command: str) -> Found:
             found.anything_else = True
             continue
         if os.path.basename(rest[0]) in _FOLDER_WORDS and len(rest) <= 2 and not assignments:
+            # Followed the way the shell follows it, so a script named
+            # afterwards is looked for where it will really run from.
+            target = rest[1] if len(rest) == 2 else "~"
+            if folder is None or "$" in target or "`" in target:
+                folder = None
+            else:
+                folder = os.path.normpath(
+                    os.path.join(folder, os.path.expanduser(target))
+                )
             continue
         what = None
         try:
-            script, arguments = _script_and_arguments(rest)
+            script, arguments = _script_and_arguments(rest, folder)
             if script is not None:
                 found.scripts += 1
                 what = _what(script, _read_settings(script, arguments))
@@ -525,6 +661,10 @@ def find(command: str) -> Found:
             continue
         except TwoThings:
             found.two_things = True
+            continue
+        except NotOurs:
+            found.scripts += 1
+            found.not_ours = True
             continue
         if what is None:
             found.anything_else = True
@@ -672,8 +812,9 @@ def decide(payload: dict, client: str = CLIENT_CLAUDE) -> Optional[dict]:
         take_back(session, keep=_digest(match.group(1)) + ".json")
         return None
     take_back(session)
-    found = find(command)
-    if not (found.says or found.unreadable or found.two_things):
+    cwd = payload.get("cwd")
+    found = find(command, cwd if isinstance(cwd, str) else None)
+    if not (found.says or found.unreadable or found.two_things or found.not_ours):
         # A command run inside the line can hand an approval script words
         # nobody can read beforehand, so such a line is never let through.
         if found.substituted and found.scripts and client == CLIENT_CLAUDE:
@@ -683,6 +824,8 @@ def decide(payload: dict, client: str = CLIENT_CLAUDE) -> Optional[dict]:
         return _verdict("deny", CANNOT_ASK)
     if found.substituted:
         return _verdict("deny", ONE_LINE)
+    if found.not_ours:
+        return _verdict("deny", NOT_OURS)
     if found.two_things:
         return _verdict("deny", TWO_THINGS)
     if found.unreadable:

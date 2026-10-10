@@ -31,6 +31,7 @@ import re
 from typing import List, Optional, Tuple
 
 from . import (
+    approval,
     base_reader,
     callmarkers,
     changes,
@@ -1126,6 +1127,11 @@ def run(
     # option on the command line is: a session holding the older instructions
     # asks by that name, and refusing it loses the answer just given.
     dismiss_quiet_record = dismiss_quiet_record or dismiss_ledger_behind
+    if dismiss_quiet_record and not dry_run:
+        # Putting the reminder off decides for the person that they hear
+        # less, so it is asked first, before anything else in the run
+        # (Astra's review of Release B, finding 6).
+        approval.require("stale_check.dismiss_quiet_record")
     today = now or state.today()
     if isinstance(today, datetime.datetime):
         today = today.date()

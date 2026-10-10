@@ -138,7 +138,6 @@ NOT_APPROVALS = (
     "python3 %s --file context/icps.md --answer as-is --question q" % MOMENT,
     "python3 %s --file context/icps.md" % MOMENT,
     "python3 %s review --step icp --draft d.md --run r" % JOIN,
-    "python3 %s skip --step positioning --run r --base b" % JOIN,
     "python3 %s close --run r --base b" % JOIN,
     "python3 %s resume --base b" % JOIN,
     "python3 %s --review" % STALE,
@@ -146,7 +145,7 @@ NOT_APPROVALS = (
     "python3 %s --record-change documents" % STALE,
     "python3 %s --record-change show --documents 1" % STALE,
     "python3 %s --answer-question q --answer-file a.txt" % STALE,
-    "python3 %s --weekly-line off" % SEAT,
+    "python3 %s --weekly-line on" % SEAT,
     "python3 %s --speak" % SEAT,
     "ls -la",
     "git status",
@@ -171,8 +170,9 @@ class TestEveryApprovalAsksThePerson(unittest.TestCase):
                 % os.path.join(PLUGIN, "skills", "confirm"),
             )
             self.assertIn(approval.SAYS_STILL_RIGHT, output["permissionDecisionReason"])
-            asked(self, "python3 scripts/approve_local.py --staging s.md --approve --shown x")
-            asked(self, "python3 -I scripts/approve_local.py --staging s.md --approve --shown x")
+            own_folder = os.path.dirname(os.path.dirname(APPROVE_LOCAL))
+            asked(self, "python3 scripts/approve_local.py --staging s.md --approve --shown x", cwd=own_folder)
+            asked(self, "python3 -I scripts/approve_local.py --staging s.md --approve --shown x", cwd=own_folder)
 
     def test_anything_else_is_left_alone(self):
         with support.Sandbox():
@@ -637,6 +637,110 @@ class TestTheConfirmationPass(unittest.TestCase):
             ):
                 answer = decided(command)
                 self.assertEqual(approval.ONE_LINE, answer["hookSpecificOutput"]["permissionDecisionReason"], command)
+
+
+# --- Astra's review of all of Release B, 2026-10-10 -------------------------
+
+
+class TestAstrasReviewOfReleaseB(unittest.TestCase):
+    def test_a_redirection_on_an_approval_line_is_refused(self):
+        # Finding 1: the shell writes the file before the script starts, and
+        # the question never mentioned it.
+        with support.Sandbox():
+            for command in (
+                "python3 %s --question q --answer yes > /base/context/positioning.md" % CONFIRM,
+                "python3 %s --question q --answer yes >> notes.md" % CONFIRM,
+                "python3 %s --question q --answer yes 2> err.txt" % CONFIRM,
+                "python3 %s --question q --answer yes < in.txt" % CONFIRM,
+                "python3 %s --question q --answer yes &> out.txt" % CONFIRM,
+                "python3 %s --question q --answer yes >out.txt" % CONFIRM,
+            ):
+                answer = decided(command)
+                self.assertIsNotNone(answer, command)
+                self.assertEqual(
+                    approval.ONE_LINE, answer["hookSpecificOutput"]["permissionDecisionReason"], command
+                )
+            # Joining the error stream to the output writes no file.
+            asked(self, "python3 %s --question q --answer yes 2>&1" % CONFIRM)
+            asked(self, "python3 %s --file 'context/a>b.md' --answer fix --question q" % MOMENT)
+
+    def test_only_gtm_bases_own_script_is_asked_about(self):
+        # Finding 2: any file of the same name was asked about with the real
+        # script's sentence, and ran holding the ticket.
+        with support.Sandbox() as sandbox:
+            elsewhere = os.path.join(sandbox.path, "material")
+            support.write(os.path.join(elsewhere, "join.py"), "print('anything')\n")
+            support.write(os.path.join(elsewhere, "scripts", "confirm.py"), "print('anything')\n")
+            for command, cwd in (
+                ("python3 ./join.py approve --step icp --draft d --run r --base b", elsewhere),
+                ("python3 join.py approve --step icp --draft d --run r --base b", elsewhere),
+                ("python3 scripts/confirm.py --question q --answer yes", elsewhere),
+                ("cd %s && python3 scripts/confirm.py --question q --answer yes" % elsewhere, sandbox.path),
+                ("join.py approve --step icp --draft d --run r --base b", elsewhere),
+                ("python3 %s/join.py approve --step icp --draft d --run r --base b" % elsewhere, sandbox.path),
+                ("cd $HOME && python3 scripts/confirm.py --question q --answer yes", sandbox.path),
+            ):
+                answer = decided(command, cwd=cwd)
+                self.assertIsNotNone(answer, command)
+                self.assertEqual("deny", answer["hookSpecificOutput"]["permissionDecision"], command)
+                self.assertEqual(
+                    approval.NOT_OURS, answer["hookSpecificOutput"]["permissionDecisionReason"], command
+                )
+            self.assertEqual([], tickets())
+            # The real one, by its path or from its own folder, is asked.
+            asked(self, "python3 %s --question q --answer yes" % CONFIRM, cwd=elsewhere)
+            asked(self, "python3 scripts/confirm.py --question q --answer yes",
+                  cwd=os.path.dirname(os.path.dirname(CONFIRM)))
+            asked(self, "cd %s && python3 scripts/confirm.py --question q --answer yes"
+                  % os.path.dirname(os.path.dirname(CONFIRM)), cwd=elsewhere)
+
+    def test_skipping_and_the_closing_note_are_asked(self):
+        # Finding 3: both write into the base.
+        with support.Sandbox():
+            for command, says, opens in (
+                ("python3 %s skip --step positioning --base b" % JOIN, "SAYS_SKIP",
+                 ["join_flow.skip_step", "join_flow.skip_the_closing_question"]),
+                ("python3 %s skip-change --base b" % JOIN, "SAYS_SKIP_CLOSING",
+                 ["join_flow.skip_the_closing_question"]),
+                ("python3 %s close --base b --run r --got-in-the-way-file w.txt" % JOIN,
+                 "SAYS_CLOSE_NOTE", ["join_flow.write_onboarding_note"]),
+                ("python3 %s --weekly-line off" % SEAT, "SAYS_WEEKLY_LINE_OFF",
+                 ["state.stop_weekly_line"]),
+                ("python3 %s --dismiss-quiet-record" % STALE, "SAYS_REMINDER_LATER",
+                 ["stale_check.dismiss_quiet_record"]),
+            ):
+                output = asked(self, command)
+                self.assertIn(getattr(approval, says), output["permissionDecisionReason"], command)
+                kept = json.loads(support.read(os.path.join(approval.folder_path(), tickets()[0])))
+                self.assertEqual(opens, kept["opens"], command)
+            # A closing with nothing said writes no note and is not asked.
+            self.assertIsNone(decided("python3 %s close --base b --run r" % JOIN))
+            self.assertIsNone(decided("python3 %s --weekly-line on" % SEAT))
+
+    def test_the_new_writers_refuse_without_a_ticket(self):
+        from gtmbase import join_flow, stale_check
+
+        nothing = "not-a-real-thing"
+        with support.Sandbox(), NotHeld():
+            for name, call in (
+                ("join_flow.skip_step", lambda: join_flow.skip_step(nothing, nothing)),
+                ("join_flow.skip_the_closing_question",
+                 lambda: join_flow.skip_the_closing_question(nothing, nothing)),
+                ("join_flow.write_onboarding_note",
+                 lambda: join_flow.write_onboarding_note(nothing, "It was slow.", nothing, nothing)),
+                ("state.stop_weekly_line", lambda: state.stop_weekly_line(nothing)),
+                ("stale_check.run with a dismissal",
+                 lambda: stale_check.run(nothing, nothing, dismiss_quiet_record=True)),
+            ):
+                with self.assertRaises(approval.ApprovalRefused, msg=name):
+                    call()
+
+    def test_leaving_out_says_what_it_can_do(self):
+        # Finding 4: a page or a draft saved before an interruption stays,
+        # and leaving a segment out may prepare a change to the profile.
+        self.assertIn("already saved", approval.SAYS_LEAVE_PAGE_OUT)
+        self.assertIn("already saved", approval.SAYS_LEAVE_SEGMENT_OUT)
+        self.assertIn("customer profile", approval.SAYS_LEAVE_SEGMENT_OUT)
 
 
 class TestTheWordsAPersonReads(unittest.TestCase):

@@ -83,3 +83,5 @@ context change. Otherwise say nothing about it.
 The person can change what GTM Base says on its own, and these are the three
 ways: `python3 '{{seat_script}}' --weekly-line on|off` for the one line a week,
 `--quiet month|until-asked` to keep it quiet, and `--speak` to bring it back.
+Turning the weekly line off and keeping it quiet are approvals, asked by
+Claude Code like any other.

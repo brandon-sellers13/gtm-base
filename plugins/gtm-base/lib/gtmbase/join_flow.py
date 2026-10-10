@@ -4309,6 +4309,9 @@ def skip_step(
     the moment the person had been shown what they would be skipping (finding
     A11 of the release review).
     """
+    # Only a command the person allowed through Claude Code's own question
+    # writes this (Unit 1.7e, Astra's review of Release B, finding 3).
+    approval.require("join_flow.skip_step")
     git = runner_or_default(runner)
     if run_id and step == drafting.STEP_ICP:
         # A run that settled several segments never writes the single
@@ -4853,6 +4856,9 @@ def skip_the_closing_question(
     this base lets a confirmation stand, which is the same window the review
     itself uses.
     """
+    # Only a command the person allowed through Claude Code's own question
+    # writes this (Unit 1.7e, Astra's review of Release B, finding 3).
+    approval.require("join_flow.skip_the_closing_question")
     day = today or state.today()
     if isinstance(day, datetime.datetime):
         day = day.date()
@@ -4919,6 +4925,10 @@ def write_onboarding_note(
     body = str(text or "").strip()
     if not body:
         return None, []
+    # A note goes into the base only through a command the person allowed
+    # through Claude Code's own question (Astra's review of Release B,
+    # finding 3); a closing with nothing said writes none and asks nothing.
+    approval.require("join_flow.write_onboarding_note")
     codes = review.screen(body, _address_for(base_root, email, git))
     if codes:
         return None, codes

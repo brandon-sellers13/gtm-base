@@ -601,6 +601,20 @@ def go_quiet(base_id: str, choice: str):
     return until
 
 
+def stop_weekly_line(base_id: str) -> dict:
+    """Stop the one line a week, on the person's own yes.
+
+    Turning it off decides that the person hears less about their base, so it
+    is put to them by Claude Code itself, as staying quiet is (Astra's review
+    of Release B, finding 6). Turning it back on only undoes that, and asks
+    nothing.
+    """
+    from . import approval
+
+    approval.require("state.stop_weekly_line")
+    return set_weekly_line(base_id, False)
+
+
 def set_silent_until(base_id: str, until) -> dict:
     """Keep the base quiet up to a day, or let it speak again with None.
 
