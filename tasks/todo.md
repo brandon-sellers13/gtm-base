@@ -1358,7 +1358,7 @@ Reproduced on the installed 0.3.4: a Write under `~/Gridwise/.claude/worktrees/<
 - [x] Version 0.3.5 in both manifests, the library and the tests that pin it; CHANGELOG entry; logic atlas caption and stamp.
 - [x] Correctness review subagent, findings fixed.
 - [x] Full suite green (tests/run.sh, 2026-10-10: 2189 tests OK, then 161 in the linked-folder rerun OK).
-- [ ] Pull request opened; then bring the fix into release-b.
+- [x] Pull request opened (brandon-sellers13/gtm-base#2); the fix brought into release-b (d275d70, a merge of this branch with 0.3.4; full suite 2764 OK, then 210 OK).
 - [ ] Brandon: review, then update the installed plugin.
 
 #### Review (0.3.5)
