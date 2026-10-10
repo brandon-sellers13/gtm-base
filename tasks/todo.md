@@ -1382,6 +1382,8 @@ Plan: `docs/plans/2026-10-10-002-feat-plan-1-company-skills-and-meta-skill-plan.
 - [x] Unit 4.1 written: docs/brainstorms/2026-10-10-company-skills-requirements.md, revision 3. Astra and Fable 5.1 said
       not ready on r1 (Astra 8 findings; Fable 1 blocker, 3 high, 9 medium, 8 low); r2 ready with 3 changes; r3 ready for
       signature (docs/reviews/2026-10-10-company-skills-verify-2-astra.md). Plan 1 kept in step, now revision 2.6
+- [x] Corrected for Release B's call 60 (approvals go through unasked in bypassPermissions and dontAsk): requirements
+      revision 6, Plan 1 revision 2.9; Astra ready for signature again (docs/reviews/2026-10-10-company-skills-verify-5-astra.md)
 - [ ] Brandon signs Unit 4.1 (covers scripts, the extra yes for creating a skill, and the guarantee in CS13 and CS14);
       Unit 4.2a is not briefed before he signs
 
