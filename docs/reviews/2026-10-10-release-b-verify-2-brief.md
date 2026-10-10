@@ -1,0 +1,13 @@
+This is the second confirmation of your review of Release B of GTM Base. Your first confirmation is docs/reviews/2026-10-10-release-b-verify-astra.md: findings 1, 2, 3, 4, 6 and 7 closed; findings 5 and 8 still open; the several-segment setup broken at `segments-settle`. The fixes are in commit f7202ee on branch claude/release-b-finish-1e1203, which is HEAD. Between your first confirmation and this one, 0.3.5 was merged in from main (a fix to the check before a file write in a folder linked to a base) and the version was set to 0.4.0. Read only; change nothing. Output a written review in markdown with file paths and line numbers at HEAD.
+
+Answer exactly two questions and do not open a new general hunt; anything else you notice goes in a short "noticed, not assessed" list at the end.
+
+## Question 1: are findings 5 and 8 closed?
+- Finding 5. In plugins/gtm-base/skills/join/scripts/join.py, `held_apart` now also covers the read-back and the refusal in `run_segments_settle`, the `Left out:` lines and the sentences saying what hidden content was removed, every `included=`, `dropped=` and `left-out=` line in the preview and the request for a draft, what the base covers in the person's words, the company hints, and both `belongs-with=` lines. Go through every line join.py writes and say whether any line that can carry a file name, a folder name, a segment name, or the person's own words still reaches the assistant outside a data fence. The `segment=`, `to-draft=` and `unreadable=` lines carry a file name made of lower-case letters, digits and hyphens only; say whether you consider those acceptable. tests/test_segments.py TestTheReadBackHoldsNamesApart is the new test.
+- Finding 8. tests/test_approval_ask.py TestEachCommandReachesTheWriteItsTicketOpens runs every approval command through the script's own main, with no hold and the hook's real ticket, and requires the first write reached to be the one the ticket opens; five that need prepared state are checked by reading the script's dispatch instead. A deliberate swap of the writes for `join.py approve` and `join.py adopt` was seen to fail it. Say whether that closes the finding, and what it still cannot see.
+
+## Question 2: did these commits, or the 0.3.5 merge, break any ordinary path?
+Recheck the several-segment setup path end to end through `segments-settle`, and the paths you marked WORKS in your first confirmation, for anything the new commits or the merge could have changed. Say WORKS or BROKEN for each, with the failing file and line.
+
+## Output
+The two answers, then the short "noticed, not assessed" list, then the verdict: ready to release, or not ready (naming exactly which item fails).
