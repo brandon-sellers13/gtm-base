@@ -403,7 +403,12 @@ def _plain_name(heading: str) -> Optional[str]:
     for character in text:
         if character == " " or character in _NAME_PUNCTUATION:
             continue
-        if unicodedata.category(character)[0] not in ("L", "N"):
+        category = unicodedata.category(character)
+        # A modifier letter can look like a quotation mark, and the Hangul
+        # fillers are letters that draw nothing (the review of call 59).
+        if category[0] not in ("L", "N") or category == "Lm":
+            return None
+        if "FILLER" in unicodedata.name(character, "FILLER"):
             return None
     return text
 
@@ -441,7 +446,17 @@ def segment_names(base_root: str) -> Dict[str, str]:
             continue
         # Two headings making one file name are both in doubt.
         found[slug] = None if slug in found else _plain_name(heading)
-    return dict((slug, name) for slug, name in found.items() if name)
+    # A segment kept in both the current folder and the older one is two
+    # files, and naming both would point two numbers at one name.
+    return dict(
+        (slug, name)
+        for slug, name in found.items()
+        if name
+        and not all(
+            os.path.lexists(os.path.join(base_root, folder, slug + ".md"))
+            for folder in names.SEGMENT_DIRS
+        )
+    )
 
 
 def name_in(kept: Dict[str, str]) -> Callable[[str], str]:
@@ -451,8 +466,14 @@ def name_in(kept: Dict[str, str]) -> Callable[[str], str]:
         said = safe_name(path)
         if said != names.ONE_OF_YOUR_SEGMENTS:
             return said
-        stem = os.path.basename(str(path or "").replace(os.sep, "/"))[: -len(".md")]
-        name = kept.get(stem)
+        folder, _sep, file_name = (
+            str(path or "").replace(os.sep, "/").strip().rpartition("/")
+        )
+        # Only a file sitting directly in a folder segments are kept in is a
+        # segment the profile names; a copy in a folder below it is not.
+        if folder not in names.SEGMENT_DIRS:
+            return said
+        name = kept.get(file_name[: -len(".md")])
         return SEGMENT_NAMED % name if name else said
 
     return named
@@ -492,7 +513,7 @@ def documents(base_root: str) -> List[Tuple[int, str, str]]:
     cannot hold, is left off rather than offered and refused later.
     """
     found: List[Tuple[int, str, str]] = []
-    named = names_for(base_root)
+    name_of = names_for(base_root)
     for info in base_reader.context_files(base_root):
         path = info.path
         # A map is left off by what it says it is, wherever it sits (Astra's
@@ -506,7 +527,7 @@ def documents(base_root: str) -> List[Tuple[int, str, str]]:
                 continue
         except (PathError, ValidationError):
             continue
-        found.append((len(found) + 1, path, named(path)))
+        found.append((len(found) + 1, path, name_of(path)))
     return found
 
 
@@ -870,8 +891,13 @@ def preview(
     # keeps a long list refused as it was rather than folded into a count.
     # A segment is said by the name its profile keeps (Brandon's call 59), so
     # the cap is measured on those names, as they will be shown.
-    named = names_for(base_root)
-    one_by_one = ", ".join(named(path) for path in affects)
+    name_of = names_for(base_root)
+    one_by_one = ", ".join(name_of(path) for path in affects)
+    if len(as_shown(one_by_one)) > SHOWN_CHARS:
+        # Names too long to fit are counted instead, as before call 59, so a
+        # change to every segment is never refused for the names alone.
+        name_of = safe_name
+        one_by_one = ", ".join(name_of(path) for path in affects)
     if len(as_shown(one_by_one)) > SHOWN_CHARS:
         raise _refuse(TOO_MANY_DOCUMENTS, CODE_TOO_MANY_DOCUMENTS)
     entry = build_entry(
@@ -882,7 +908,7 @@ def preview(
     # own `four_lines_for` reading the very text that will be written.
     showing = moment.fenced(
         join_flow.four_lines_for(
-            entry, why_when_none(entry), what_in_full=True, name_of=named
+            entry, why_when_none(entry), what_in_full=True, name_of=name_of
         )
     )
     # The yes is bound to the whole entry rather than to the four lines. That
@@ -1326,8 +1352,12 @@ def record(
             _save_asked(base_id, held)
     except (GtmBaseError, OSError):
         plan = join_flow.Reconciliation([], list(entry.affects))
-    # Each question names a segment by the name its profile keeps.
-    plan.name_of = names_for(base_root)
+    # Each question names a segment by the name its profile keeps. The change
+    # is written by now, so a name that cannot be read leaves it counted.
+    try:
+        plan.name_of = names_for(base_root)
+    except (GtmBaseError, OSError, ValueError):
+        plan.name_of = safe_name
     return Recorded(entry, relative, plan)
 
 

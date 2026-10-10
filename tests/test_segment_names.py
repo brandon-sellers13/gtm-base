@@ -222,14 +222,90 @@ class TestAnUpgradedBase(unittest.TestCase):
             )
 
 
+class TestTheReviewOfCall59(unittest.TestCase):
+    """The correctness review of the first build, four findings."""
+
+    def test_long_names_never_refuse_a_change_that_was_accepted_before(self):
+        # Finding 1: the cap on the four lines was measured on the names, so a
+        # change to the profile, the positioning and three long-named segments
+        # was refused where counting them had fitted.
+        long_names = (
+            "Mid-market fintech lenders in North America",
+            "Regional banks with under two billion in assets",
+            "Credit unions that lend to small businesses",
+        )
+        with support.Sandbox():
+            company = umbrella_tests.Company(names=long_names)
+            company.umbrella_and_positioning(
+                umbrella_tests.umbrella_text(drafted=long_names)
+            )
+            for name in long_names:
+                company.approve(
+                    drafting.STEP_SEGMENT,
+                    umbrella_tests.segment_text(name),
+                    segment=segments.slug_for(name),
+                )
+            root, base_id = company.root, company.base_id()
+            token, listed = record_change.show_list(root, base_id)
+            shown = record_change.preview(
+                root,
+                base_id,
+                "We changed our pricing.",
+                "Every buyer pays by the seat now.",
+                "The October pricing review.",
+                [str(number) for number, _path, _name in listed],
+                list_token=token,
+            )
+            self.assertIn("three of your segments", shown.showing)
+
+    def test_only_a_segment_file_where_segments_live_is_named(self):
+        # Finding 2: a copy in a folder under the segments folder, or the same
+        # file in the older folder too, read out the live segment's name.
+        with support.Sandbox():
+            company = fresh_base()
+            text = company.read(segments.destination("fintech-lenders"))
+            nested = "%s/old/fintech-lenders.md" % constants.SEGMENTS_DIR
+            older = "%s/regional-banks.md" % constants.LEGACY_SEGMENTS_DIR
+            for relative in (nested, older):
+                support.write(os.path.join(company.root, relative), text)
+            support.git(["add", "-A"], cwd=company.root)
+            support.git(["commit", "-q", "-m", "copies"], cwd=company.root)
+            named = listed_names(company.root)
+            self.assertEqual(names.ONE_OF_YOUR_SEGMENTS, named[nested])
+            self.assertEqual(names.ONE_OF_YOUR_SEGMENTS, named[older])
+            self.assertEqual(
+                names.ONE_OF_YOUR_SEGMENTS,
+                named[segments.destination("regional-banks")],
+            )
+            self.assertEqual(
+                'your segment "Fintech lenders"',
+                named[segments.destination("fintech-lenders")],
+            )
+
+    def test_letters_that_draw_nothing_or_look_like_quotation_marks(self):
+        # Finding 3.
+        for doubtful in (
+            "Fintech\u3164lenders",
+            "Fintech\u115flenders",
+            "Fintech\uffa0lenders",
+            "Fintech lenders \u02ee",
+            "Fintech lenders \u02ba",
+        ):
+            self.assertIsNone(record_change._plain_name(doubtful), repr(doubtful))
+
+
 class TestEveryNamerIsOneThatReadsNoFileName(unittest.TestCase):
     """The plain-language lint trusts a call to `name_of`, so this holds the
     plugin to handing over only namers that never read a name out of a file
     name: `document_name`, `safe_name`, or what `names_for` returns, passed
     on under the same names."""
 
-    ALLOWED_NAMES = frozenset(("document_name", "safe_name", "named", "name_of"))
+    ALLOWED_NAMES = frozenset(("document_name", "safe_name", "name_of"))
     ALLOWED_CALLS = frozenset(("names_for",))
+    # The names the lint trusts a call to.
+    TRUSTED = frozenset(("name_of",))
+    # Where a namer sits when it is handed over by position.
+    POSITIONAL = {"documents_named": 1, "Reconciliation": 4, "name_in": 1}
 
     def given(self, node):
         if isinstance(node, ast.Call):
@@ -239,28 +315,71 @@ class TestEveryNamerIsOneThatReadsNoFileName(unittest.TestCase):
         if isinstance(node, ast.BoolOp):
             return all(self.given(value) for value in node.values)
         callee = getattr(node, "attr", None) or getattr(node, "id", None)
+        if isinstance(node, ast.IfExp):
+            return self.given(node.body) and self.given(node.orelse)
         return callee in self.ALLOWED_NAMES or (
             isinstance(node, ast.Constant) and node.value is None
         )
 
+    def test_the_check_itself_catches_a_namer_that_reads_a_file_name(self):
+        for source in (
+            "documents_named(paths, os.path.basename)\n",
+            "name_of = lambda p: os.path.basename(p)\n",
+            "def f(name_of=os.path.basename):\n    pass\n",
+            "Reconciliation([], [], None, (), os.path.basename)\n",
+        ):
+            self.assertTrue(self.bad_in(ast.parse(source)), source)
+
+    def bad_in(self, tree):
+        found = []
+        for node in ast.walk(tree):
+            for value in self.namers_in(node):
+                if not self.given(value):
+                    found.append(getattr(node, "lineno", 0))
+        return found
+
+    def namers_in(self, node):
+        values = []
+        if isinstance(node, ast.Call):
+            values = [k.value for k in node.keywords if k.arg == "name_of"]
+            # A namer handed over by position (the review of call 59,
+            # finding 4).
+            callee = getattr(node.func, "attr", None) or getattr(
+                node.func, "id", None
+            )
+            at = self.POSITIONAL.get(callee)
+            if at is not None and len(node.args) > at:
+                values.append(node.args[at])
+        elif isinstance(node, (ast.Assign, ast.AnnAssign)):
+            targets = node.targets if isinstance(node, ast.Assign) else [node.target]
+            # Anything bound to a name the lint trusts, however it is
+            # bound, is held to the same list.
+            values = [
+                node.value
+                for target in targets
+                if getattr(target, "attr", None) in self.TRUSTED
+                or getattr(target, "id", None) in self.TRUSTED
+            ]
+        elif isinstance(node, (ast.FunctionDef, ast.Lambda)):
+            arguments = node.args
+            params = arguments.posonlyargs + arguments.args
+            defaults = list(arguments.defaults)
+            paired = list(zip(params[len(params) - len(defaults):], defaults))
+            paired += [
+                (arg, default)
+                for arg, default in zip(arguments.kwonlyargs, arguments.kw_defaults)
+                if default is not None
+            ]
+            values = [
+                default for arg, default in paired if arg.arg in self.TRUSTED
+            ]
+        return values
+
     def test_every_namer_handed_over(self):
         found = []
         for path in plain_language.plugin_python_files():
-            tree = ast.parse(support.read(path))
-            for node in ast.walk(tree):
-                values = []
-                if isinstance(node, ast.Call):
-                    values = [k.value for k in node.keywords if k.arg == "name_of"]
-                elif isinstance(node, ast.Assign):
-                    values = [
-                        node.value
-                        for target in node.targets
-                        if getattr(target, "attr", None) == "name_of"
-                        or getattr(target, "id", None) == "name_of"
-                    ]
-                for value in values:
-                    if not self.given(value):
-                        found.append((os.path.basename(path), node.lineno))
+            for line in self.bad_in(ast.parse(support.read(path))):
+                found.append((os.path.basename(path), line))
         self.assertEqual([], found)
 
 
