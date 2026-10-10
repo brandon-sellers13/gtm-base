@@ -1655,7 +1655,7 @@ Brandon's calls 57 to 59 (plan, "For Brandon"): 1.7e rebuilt as option D, Claude
 - Call 59 (Unit 1.8 finding 1): nothing new stored in a base; names read from the profile's own headings, fenced. Correctness review, four findings fixed; Astra's finding 7 fixed.
 - Unit 1.7e, option D: built on unit-1-7e-d and merged; two reviews and a confirmation pass, then Astra. Fifteen approval points plus five Astra added; the residuals are in the CHANGELOG.
 - Unit 1.9: keys hashed for Brandon's approval; case three's 40,000 rechecked on Release B's code.
-- Suites: the 0.4.0 commit 9141219, 2815 tests OK then 213 from a linked folder OK, exit 0. The final run on the head is recorded below when it lands.
+- Suites (tests/run.sh): the 0.4.0 commit 9141219, 2815 OK then 213 from a linked folder OK; the head's code at e527480, 2818 OK then 214 OK; the final head ae88eb1, 2819 OK then 215 OK. Each exit 0, the seat guard silent.
 - A commit that was on local main, dff9f24 "docs: Phase 2 and 3 decisions, settled for Plan 1", is on no branch since main moved to 0.3.5; it is kept on branch keep/phase-2-3-decisions-dff9f24 for whoever wrote it.
 
 #### For Brandon, exactly what is left (2026-10-10)
