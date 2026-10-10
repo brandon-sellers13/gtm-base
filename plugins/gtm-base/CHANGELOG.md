@@ -1,6 +1,8 @@
 # Changelog
 
-## Unreleased (draft, Units 1.5b, 1.6, 1.7a, 1.7b, 1.7c, 1.7d, 1.7e and 1.8, call 29, the live-check follow-up, and 0.3.3 to 0.3.5 carried)
+## 0.4.0 (2026-10-10)
+
+Release B: Units 1.5b, 1.6, 1.7a to 1.7e and 1.8, call 29, calls 57 to 60, and the live-check follow-up, with 0.3.3 to 0.3.5 carried. Prepared on 2026-10-10 and not yet released; the date changes to the day it ships.
 
 - The first four steps of setting up a base now read the way every later step does. Each says what it is for before it asks anything, and each asks one thing, so the company name and the folder the base will go in are now two steps rather than one. Nothing they do has changed. With that, no step of any skill is excused from the plain-language checks any more.
 
