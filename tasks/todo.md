@@ -1371,8 +1371,10 @@ Plan: `docs/plans/2026-10-10-002-feat-plan-1-company-skills-and-meta-skill-plan.
 - [x] Astra reviews the plan read only (brief: docs/reviews/2026-10-10-plan-1-review-brief.md); fix and confirm until ready.
       r1 not ready (16 findings, 2 blockers on the ownership proof) -> r2 not ready (9 narrower) -> r2.1 ready with 2 changes
       -> r2.2 ready with 1 change -> r2.3 ready to build as written (docs/reviews/2026-10-10-plan-1-verify-4-astra.md)
-- [ ] BEFORE ANY PUSH: rebuild this branch from main without the Gridwise figures in commit dff9f24 (decisions brief, M6/M7);
-      the repository is public and a later commit cannot remove them from history
+- [x] Rebuilt this branch from origin/main with a cleaned decisions brief (no goal figures, pipeline figure or workbook name);
+      the six Plan 1 commits replayed on top. Local backup ref plan-1-backup-before-rebuild still holds the old history:
+      delete it once checked, and never push it
+- [ ] Local main also holds the uncleaned decisions commit; reset it to origin/main before anything is pushed from it
 - [ ] Brandon answers the seven calls (1 two businesses, 2 SC-M, 3 unattended flag, 4 old skill copy, 5 releases, 6 ownership guarantee, 7 lessons)
 - [ ] Unit 4.1 runs first and Brandon signs the brainstorm before Unit 4.2 is briefed
 
