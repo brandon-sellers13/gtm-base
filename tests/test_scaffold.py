@@ -169,11 +169,15 @@ class TestManifests(unittest.TestCase):
         before_a_tool = hooks["hooks"]["PreToolUse"]
         by_tool = {entry["matcher"]: entry for entry in before_a_tool}
         writing = "Write|Edit|MultiEdit|NotebookEdit"
-        self.assertEqual({"Bash", "Read", writing}, set(by_tool))
+        # Unit 1.7e: the check that reads every command also sees the other
+        # tools that run one, so a ticket waiting for the person's answer is
+        # taken back before any of them runs.
+        commands = "Bash|Monitor|PowerShell"
+        self.assertEqual({commands, "Read", writing}, set(by_tool))
         self.assertEqual(3, len(before_a_tool))
-        self.assertEqual(1, len(by_tool["Bash"]["hooks"]))
+        self.assertEqual(1, len(by_tool[commands]["hooks"]))
 
-        declared = by_tool["Bash"]["hooks"][0]
+        declared = by_tool[commands]["hooks"][0]
         self.assertEqual("command", declared["type"])
         self.assertEqual(20, declared["timeout"])
         self.assertIn("${CLAUDE_PLUGIN_ROOT}", declared["command"])
