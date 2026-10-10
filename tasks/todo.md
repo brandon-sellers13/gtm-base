@@ -1632,3 +1632,14 @@ Observed in the Gridwise folder on 2026-10-05: every `codex exec --skip-git-repo
 - [ ] Brandon: review the pull request, then update the installed plugin.
 
 Review: the fix is in `plugins/gtm-base/lib/gtmbase/gate.py` (`mentions_git_or_gh`, `_INERT_WORDS`, `_strip_prefixes`, `REASON_STRICT_UNKNOWN`) with tests in `tests/test_gate.py`. One judgment call: the first-token rule alone would have let `find . -exec git push` and `watch "git push"` run unread, so an unknown program handed the word git keeps the old refusal.
+
+### 2026-10-10, finishing Release B (0.4.0), branch claude/release-b-finish-1e1203 from release-b
+Brandon's calls 57 to 59 (plan, "For Brandon"): 1.7e rebuilt as option D, Claude Code's own permission prompt forced by a hook; 1.7e stays in Release B with a time limit (ships as 0.4.1 if not through review by the time the replay is scored); segment names kept where every seat can read them.
+- [x] Merge main (0.3.4) into the branch; CHANGELOG and this file kept both sides.
+- [x] Calls 57 to 59 and the change log recorded in the plan; call 56 marked superseded.
+- [ ] Merge 0.3.5 from main once it lands (write_hook.py and hooks/write-check.sh are the 0.3.5 session's; not edited here).
+- [ ] Unit 1.8 finding 1: segment names kept where every seat can read them; tests failing first, on a fresh base and an upgraded one.
+- [ ] Unit 1.7e as option D, on its own branch: verify a forced "ask" in default, acceptEdits, auto and bypassPermissions, and in the VS Code extension (docs and a live hook test); build; security and correctness reviews with fixes.
+- [ ] Unit 1.9 prepared: answer key frozen, case three's read limit proposed for Brandon's yes.
+- [ ] Astra's review of all of Release B, fixes, confirm passes.
+- [ ] Release prepared, not merged: 0.4.0 in both manifests, CHANGELOG dated, atlas figures, this file ticked, and Brandon's list.
