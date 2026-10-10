@@ -85,3 +85,12 @@
   runs, not by the letters on the line, and give every distinct refusal its own sentence.
 - When widening an allowlist of harmless programs, check each one for an option that runs something (`find -exec`,
   `xargs`, `timeout`) before adding it; a harmless word with such an option is a bypass of the whole gate.
+
+## 2026-10-10, 0.3.5
+- A linked folder (`content_root`) is the person's own work folder, never a base. A rule written for a base's own
+  folders must not loop over `content_root` as if it were another `root`: doing so refused every write in every
+  Claude desktop session opened there, because the desktop app puts each session's working folder under `.claude`.
+  When the only real risk in a person's folder is one file (here, the settings that can switch hooks off), ask about
+  that file and leave the rest alone.
+- A guard test only guards if it fails when the code it names is removed. Mutate the branch once and watch the test
+  fail before trusting it; the first "base folders still refused" test passed with the changed branch deleted.

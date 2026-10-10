@@ -892,8 +892,13 @@ class TestABasesOwnFoldersWithoutTheList(unittest.TestCase):
 
             self.assertTrue(self.check(target))
 
-    def test_the_settings_of_the_folder_the_base_belongs_with_are_refused(self):
-        """That folder is the one a session is actually opened in."""
+    def test_the_settings_of_the_folder_the_base_belongs_with_are_asked_about(self):
+        """That folder is the one a session is actually opened in.
+
+        It is also the person's own folder, so since 0.3.5 a change to its
+        settings is asked about, the way the settings in their home folder are,
+        rather than refused. TestTheFolderABaseIsLinkedTo has the rest.
+        """
         with support.Sandbox() as sandbox:
             base = Base(sandbox)
             material = os.path.join(sandbox.path, "marketing")
@@ -901,7 +906,11 @@ class TestABasesOwnFoldersWithoutTheList(unittest.TestCase):
             machine.link_content(base.base_id, material)
             target = os.path.join(material, "." + "claude", "settings.json")
 
-            self.assertTrue(self.check(target))
+            answer = write_hook.run(request(target))
+
+            self.assertEqual(
+                "ask", answer["hookSpecificOutput"]["permissionDecision"]
+            )
 
     def test_an_ordinary_repository_is_left_alone(self):
         with support.Sandbox() as sandbox:
@@ -912,6 +921,172 @@ class TestABasesOwnFoldersWithoutTheList(unittest.TestCase):
             target = os.path.join(ordinary, "." + "git", "config")
 
             self.assertFalse(self.check(target))
+
+
+# --- 0.3.5: the folder a base is linked to is the person's own ---------------
+
+
+def a_linked_folder(sandbox):
+    """A joined base, and a folder of the person's own linked to it.
+
+    The folder is a repository with a working folder of its own inside its
+    assistant folder, which is where the Claude desktop app makes one for every
+    session it opens there. That is the shape of the folder where this was
+    seen on the tenth of October.
+    """
+    base = Base(sandbox)
+    material = os.path.join(sandbox.path, "marketing")
+    os.makedirs(material)
+    support.git(["init", "-q", "-b", "main"], cwd=material)
+    support.write(os.path.join(material, "README.md"), "our work\n")
+    support.git(["add", "-A"], cwd=material)
+    support.git(["commit", "-q", "-m", "our work"], cwd=material)
+    session = os.path.join(material, "." + "claude", "worktrees", "a-session")
+    support.git(["worktree", "add", "-q", "-b", "a-session", session], cwd=material)
+    machine.link_content(base.base_id, material)
+    return base, material, session
+
+
+class TestTheFolderABaseIsLinkedTo(unittest.TestCase):
+    """0.3.5. Every write under a linked folder's assistant folder was refused.
+
+    Seen on the tenth of October in a folder linked to a base: the guard held
+    the linked folder's assistant folder and repository folder to a base's
+    rules, so every session the desktop app opened there, each of which works
+    in a folder under the assistant folder, could not write a single file, and
+    neither could the person's own skills and agents. GTM Base keeps nothing in
+    either folder of a linked folder. The two files that can switch its checks
+    off for a session opened there are asked about, the way the person's own
+    settings in their home folder are.
+    """
+
+    def decision(self, path, cwd=None):
+        answer = write_hook.run(request(path, cwd=cwd))
+        if not answer:
+            return "nothing"
+        return answer["hookSpecificOutput"]["permissionDecision"]
+
+    def test_a_file_in_a_session_working_folder_is_left_alone(self):
+        with support.Sandbox() as sandbox:
+            _base, _material, session = a_linked_folder(sandbox)
+            for cwd in (session, None):
+                with self.subTest(cwd=cwd):
+                    self.assertEqual(
+                        "nothing",
+                        self.decision(
+                            os.path.join(session, "docs", "plans", "test.md"), cwd
+                        ),
+                    )
+
+    def test_the_persons_own_assistant_files_are_left_alone(self):
+        assistant = "." + "claude"
+        with support.Sandbox() as sandbox:
+            _base, material, session = a_linked_folder(sandbox)
+            for named in (
+                os.path.join(material, assistant, "skills", "ads", "SKILL.md"),
+                os.path.join(material, assistant, "agents", "reader.md"),
+                os.path.join(material, assistant, "commands", "go.md"),
+                os.path.join(material, assistant, "launch.json"),
+                os.path.join(session, assistant, "launch.json"),
+            ):
+                for cwd in (material, session):
+                    with self.subTest(file=named, cwd=cwd):
+                        self.assertEqual("nothing", self.decision(named, cwd))
+
+    def test_the_linked_folders_own_repository_folder_is_left_alone(self):
+        vcs = "." + "g" + "it"
+        with support.Sandbox() as sandbox:
+            _base, material, session = a_linked_folder(sandbox)
+            for named in (
+                os.path.join(material, vcs, "info", "exclude"),
+                os.path.join(material, vcs, "config"),
+            ):
+                for cwd in (material, session):
+                    with self.subTest(file=named, cwd=cwd):
+                        self.assertEqual("nothing", self.decision(named, cwd))
+
+    def test_its_two_settings_files_are_asked_about(self):
+        with support.Sandbox() as sandbox:
+            _base, material, session = a_linked_folder(sandbox)
+            for name in ("settings.json", "settings.local.json"):
+                named = os.path.join(material, "." + "claude", name)
+                for cwd in (material, session):
+                    with self.subTest(file=name, cwd=cwd):
+                        self.assertEqual("ask", self.decision(named, cwd))
+            for named in (
+                os.path.join(session, "." + "claude", "settings.json"),
+                os.path.join(session, "." + "claude", "settings.local.json"),
+                os.path.join(material, "sub", "." + "Claude", "settings.json"),
+            ):
+                with self.subTest(file=named):
+                    self.assertEqual("ask", self.decision(named, session))
+            answer = write_hook.run(
+                request(os.path.join(material, "." + "claude", "settings.json"))
+            )
+            self.assertEqual(
+                write_hook.ASK_ABOUT_SETTINGS,
+                answer["hookSpecificOutput"]["permissionDecisionReason"],
+            )
+
+    def test_settings_reached_through_a_linked_assistant_folder_are_asked_about(self):
+        """The assistant folder may be a link, and its target names neither name."""
+        with support.Sandbox() as sandbox:
+            _base, material, session = a_linked_folder(sandbox)
+            kept = os.path.join(sandbox.path, "dotfiles", "assistant")
+            os.makedirs(kept)
+            folder = os.path.join(material, "." + "claude")
+            os.rename(folder, os.path.join(kept, "moved"))
+            os.symlink(kept, folder)
+
+            self.assertEqual(
+                "ask", self.decision(os.path.join(kept, "settings.json"), material)
+            )
+            self.assertEqual(
+                "nothing", self.decision(os.path.join(kept, "notes.md"), material)
+            )
+
+    def test_a_base_with_no_map_and_no_history_is_still_known_by_the_record(self):
+        """Only the account record says this folder is a base, and that is enough."""
+        import shutil
+        from gtmbase import constants
+
+        with support.Sandbox() as sandbox:
+            base, material, session = a_linked_folder(sandbox)
+            os.remove(os.path.join(base.root, constants.MAP_PATH))
+            shutil.rmtree(os.path.join(base.root, "." + "g" + "it"))
+            named = os.path.join(base.root, "." + "claude", "settings.json")
+
+            self.assertEqual("deny", self.decision(named, session))
+
+    def test_the_bases_own_folders_are_still_refused(self):
+        vcs = "." + "g" + "it"
+        with support.Sandbox() as sandbox:
+            base, material, session = a_linked_folder(sandbox)
+            for named in (
+                os.path.join(base.root, vcs),
+                os.path.join(base.root, vcs, "config"),
+                os.path.join(base.root, vcs, "hooks", "pre-push"),
+                os.path.join(base.root, "." + "claude", "settings.json"),
+                os.path.join(base.root, "." + "claude", "skills", "x.md"),
+            ):
+                for cwd in (material, session, None):
+                    with self.subTest(file=named, cwd=cwd):
+                        self.assertEqual("deny", self.decision(named, cwd))
+
+    def test_a_link_from_the_linked_folder_into_the_base_is_still_refused(self):
+        vcs = "." + "g" + "it"
+        with support.Sandbox() as sandbox:
+            base, material, session = a_linked_folder(sandbox)
+            history = os.path.join(material, "." + "claude", "history")
+            os.symlink(os.path.join(base.root, vcs), history)
+            settings = os.path.join(material, "." + "claude", "theirs")
+            os.symlink(os.path.join(base.root, "." + "claude"), settings)
+            for named in (
+                os.path.join(history, "config"),
+                os.path.join(settings, "settings.json"),
+            ):
+                with self.subTest(file=named):
+                    self.assertEqual("deny", self.decision(named, session))
 
 
 class TestTheWrapperWhenThePythonHalfCannotLoad(unittest.TestCase):
@@ -1300,6 +1475,35 @@ class TestTheFallbackRefusesOnlyWhatTheRealCheckRefuses(unittest.TestCase):
             ):
                 with self.subTest(file=named):
                     self.assertTrue(self.answer(request(named), root))
+
+    def test_a_linked_folder_is_left_alone_and_its_base_is_not(self):
+        """0.3.5. The smaller check holds a linked folder to the real one's rule.
+
+        It refuses nothing in the linked folder's two folders, as the real
+        check now does. It does not ask about that folder's two settings files
+        either, because it does not read the account's record of linked
+        folders, the same way it does not read the record of joined bases.
+        """
+        vcs = "." + "g" + "it"
+        assistant = "." + "claude"
+        with support.Sandbox() as sandbox:
+            root = self.a_broken_copy(sandbox)
+            base, material, session = a_linked_folder(sandbox)
+            for named in (
+                os.path.join(session, "docs", "plans", "test.md"),
+                os.path.join(material, assistant, "skills", "ads", "SKILL.md"),
+                os.path.join(material, vcs, "info", "exclude"),
+            ):
+                with self.subTest(file=named):
+                    self.assertFalse(
+                        self.answer(request(named, cwd=session), root)
+                    )
+            for named in (
+                os.path.join(base.root, vcs, "config"),
+                os.path.join(base.root, assistant, "settings.json"),
+            ):
+                with self.subTest(file=named):
+                    self.assertTrue(self.answer(request(named, cwd=session), root))
 
     def test_a_folder_name_in_other_letters_finds_the_same_base(self):
         """N3. The candidate is folded before it is matched."""
