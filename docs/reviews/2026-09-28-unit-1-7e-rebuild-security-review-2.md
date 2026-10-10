@@ -1,0 +1,13 @@
+# Unit 1.7e rebuilt: second security review
+
+Reviewer: the security-review agent started by the Unit 1.7e builder, read only, on the diff from 8eefb71 to the branch head, 2026-09-28. Probes ran in a throwaway home and records folder. Overlaps with the orchestrator's review of the same day; the new findings are recorded here.
+
+1. **High, verified.** The approving process honours an assistant-chosen `CLAUDE_CONFIG_DIR`, and the session-start hook's entry point can be run by hand with a forged payload naming a fake transcript, so the assistant can forge a whole approval in one turn. Fix: never honour the config folder in the approving process; record the real transcript's path and inode from the prompt hook and accept only that file; refuse running the session-start entry point by hand.
+2. **High, verified.** One person message answers every open showing; a stale showing stays answerable for up to thirty days. Fix: record the answering entry and refuse its reuse; only the latest showing before a message can be answered by it.
+3. **High, design.** A showing is only the assistant saying it showed something. Fix: put what the person sees in a channel the assistant does not write (a hook on the show scripts that displays a one-line summary to the person directly), and require the yes to follow that display.
+4. **Medium, verified.** The word lists accept negations for destructive answers ("don't drop it" reads as drop, "I don't want you to fix it" as fix, "I already said no" as reflects) and single letters or embedded words as yes. Fix: the negation veto and the whole-message rule for every expected answer; a no never satisfies leave-out.
+5. **Medium, verified.** More gate spellings for writing the transcript and clearing the session variable; a transcript shrunk below the stored offset is reread from the start; a line without a session id counts. Fix: refuse when the variable is absent; refuse a shrunk transcript; require the session id.
+6. **Medium, inferred.** Cross-window confusion when the session variable is cleared. Fix: refuse when absent; use it as the session when present; accept only a session the prompt hook recorded.
+7. **Low.** A message typed while the assistant is still working is recorded as a queued command and skipped, so a "no, stop" typed then is missed. Fix: treat those entries as person entries, at least as vetoes.
+
+Residuals: an assistant that runs a script it wrote can still write the records or the transcript; Claude Code's own permission settings are the durable layer. The move put back after a crash re-runs without a fresh yes. Opening messages such as "ok let's start" read as yes.
