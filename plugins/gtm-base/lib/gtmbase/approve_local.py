@@ -43,6 +43,7 @@ import shutil
 from typing import Dict, List, Optional, Tuple
 
 from . import (
+    approval,
     base_reader,
     compose_proposal,
     confirm,
@@ -2325,6 +2326,9 @@ def approve(
     now: Optional[datetime.datetime] = None,
 ) -> LocalResult:
     """Apply the prepared change the owner just read, and record their yes."""
+    # Only a command the person allowed through Claude Code's own question
+    # writes an approval (Unit 1.7e, Brandon's call 57).
+    approval.require()
     git = runner_or_default(runner)
     moment = _moment_of(now)
     today = _day_of(now)
@@ -2450,6 +2454,9 @@ def drop(
     and the next check has to be able to tell that this change was decided
     about, so the same change is not prepared all over again tomorrow.
     """
+    # Only a command the person allowed through Claude Code's own question
+    # writes an approval (Unit 1.7e, Brandon's call 57).
+    approval.require()
     git = runner_or_default(runner)
     codes: List[str] = []
 

@@ -50,6 +50,7 @@ import unicodedata
 from typing import Callable, Dict, List, Optional, Sequence, Tuple
 
 from . import (
+    approval,
     base_reader,
     compose_proposal,
     confirm,
@@ -1233,6 +1234,9 @@ def record(
     is seen to hold exactly the entry that was approved (Astra's review of
     0.3.3, finding 8).
     """
+    # Only a command the person allowed through Claude Code's own question
+    # writes an approval (Unit 1.7e, Brandon's call 57).
+    approval.require()
     git = runner_or_default(runner)
     day = today or state.today()
     refuse_a_shared_copy(base_root, runner=git)
@@ -1383,6 +1387,9 @@ def answer(
     was written then, and only once. Checking the question, answering it and
     taking it off the list happen under one lock.
     """
+    # Only a command the person allowed through Claude Code's own question
+    # writes an approval (Unit 1.7e, Brandon's call 57).
+    approval.require()
     git = runner_or_default(runner)
     if given not in ANSWERS:
         raise _refuse(ANSWER_UNKNOWN, CODE_BAD_ANSWER)

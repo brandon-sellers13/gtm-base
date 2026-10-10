@@ -80,6 +80,7 @@ import re
 from typing import Dict, List, Optional, Tuple
 
 from . import (
+    approval,
     base_reader,
     compose_proposal,
     constants,
@@ -669,6 +670,9 @@ def not_now(base_id: str, today: Optional[datetime.date] = None, days: int = Non
     It comes back after the same window a set-aside document comes back
     after, because it is the same kind of answer: not no, just not now.
     """
+    # Only a command the person allowed through Claude Code's own question
+    # writes an approval (Unit 1.7e, Brandon's call 57).
+    approval.require()
     day = today or state.today()
     window = (
         constants.DEFAULT_CONFIRMATION_THRESHOLD_DAYS if days is None else days
@@ -2642,6 +2646,9 @@ def migrate(
     has to say that everyone who opens this base is on this release before it
     will touch it.
     """
+    # Only a command the person allowed through Claude Code's own question
+    # writes an approval (Unit 1.7e, Brandon's call 57).
+    approval.require()
     runner = runner_or_default(git)
     day = today or state.today()
 

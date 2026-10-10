@@ -576,6 +576,31 @@ def set_weekly_line(base_id: str, on: bool) -> dict:
     return update_seat(base_id, weekly_line=bool(on))
 
 
+QUIET_CHOICES = ("month", "until-asked")
+
+
+def go_quiet(base_id: str, choice: str):
+    """Keep the base quiet for a month or until asked, on the person's own yes.
+
+    Staying quiet decides for the person that they hear nothing about their
+    base for a while, so it is an approval like any other and is put to them
+    by Claude Code itself (Unit 1.7e, Brandon's default in call 56, kept in
+    call 57). What comes back is the day it lasts until, or the marker for
+    until asked.
+    """
+    from . import approval
+
+    approval.require()
+    if choice == "month":
+        until = today() + datetime.timedelta(days=SILENCE_DAYS)
+    elif choice == "until-asked":
+        until = SILENT_UNTIL_ASKED
+    else:
+        raise ValueError("there is no quiet of that kind")
+    set_silent_until(base_id, until)
+    return until
+
+
 def set_silent_until(base_id: str, until) -> dict:
     """Keep the base quiet up to a day, or let it speak again with None.
 

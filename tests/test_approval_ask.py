@@ -318,10 +318,10 @@ def gated_calls():
     return (
         ("approve_local.approve", lambda: approve_local.approve(nothing, nothing, nothing, nothing)),
         ("approve_local.drop", lambda: approve_local.drop(nothing, nothing, nothing)),
-        ("confirm.answer", lambda: confirm.answer(nothing, nothing, nothing, nothing)),
-        ("moment.fix_it_first", lambda: moment.fix_it_first(nothing, nothing, None, nothing)),
+        ("confirm.answer", lambda: confirm.answer(nothing, nothing, nothing, nothing, nothing)),
+        ("moment.fix_it_first", lambda: moment.fix_it_first(nothing, nothing, None)),
         ("join_flow.approve_step", lambda: join_flow.approve_step(nothing, nothing, nothing)),
-        ("join_flow.adoption_approve", lambda: join_flow.adoption_approve(nothing, nothing, nothing)),
+        ("join_flow.adoption_approve", lambda: join_flow.adoption_approve(nothing, nothing, nothing, nothing)),
         ("join_flow.adoption_leave_out", lambda: join_flow.adoption_leave_out(nothing, nothing, nothing)),
         ("join_flow.draft_leave_out", lambda: join_flow.draft_leave_out(nothing, nothing)),
         ("join_flow.reconcile_yes", lambda: join_flow.reconcile_yes(nothing, nothing, nothing, nothing)),
