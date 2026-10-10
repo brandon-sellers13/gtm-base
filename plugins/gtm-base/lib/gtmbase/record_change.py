@@ -448,15 +448,28 @@ def segment_names(base_root: str) -> Dict[str, str]:
         # Two headings making one file name are both in doubt.
         found[slug] = None if slug in found else _plain_name(heading)
     # A segment kept in both the current folder and the older one is two
-    # files, and naming both would point two numbers at one name.
+    # files, and naming both would point two numbers at one name. Each
+    # folder's files are compared by the name they make, so a file spelled
+    # with capitals counts as the same segment (Astra's review of Release B,
+    # finding 7).
+    held = []
+    twice = set()
+    for folder in names.SEGMENT_DIRS:
+        try:
+            listed = os.listdir(os.path.join(base_root, folder))
+        except OSError:
+            listed = []
+        made = [
+            segments.slug_for(entry[: -len(".md")])
+            for entry in listed
+            if entry.endswith(".md")
+        ]
+        twice.update(slug for slug in made if made.count(slug) > 1)
+        held.append(set(made))
     return dict(
         (slug, name)
         for slug, name in found.items()
-        if name
-        and not all(
-            os.path.lexists(os.path.join(base_root, folder, slug + ".md"))
-            for folder in names.SEGMENT_DIRS
-        )
+        if name and slug not in twice and not all(slug in folder for folder in held)
     )
 
 
@@ -474,7 +487,7 @@ def name_in(kept: Dict[str, str]) -> Callable[[str], str]:
         # segment the profile names; a copy in a folder below it is not.
         if folder not in names.SEGMENT_DIRS:
             return said
-        name = kept.get(file_name[: -len(".md")])
+        name = kept.get(segments.slug_for(file_name[: -len(".md")]))
         return SEGMENT_NAMED % name if name else said
 
     return named

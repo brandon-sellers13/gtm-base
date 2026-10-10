@@ -294,6 +294,27 @@ class TestTheReviewOfCall59(unittest.TestCase):
             self.assertIsNone(record_change._plain_name(doubtful), repr(doubtful))
 
 
+class TestAstrasReviewOfReleaseB(unittest.TestCase):
+    def test_a_file_name_spelled_another_way_still_finds_its_name(self):
+        # Finding 7: the name was looked up by the file's own spelling, so
+        # a segment file kept with capitals after the move went unnamed.
+        with support.Sandbox():
+            company = fresh_base()
+            current = os.path.join(company.root, segments.destination("fintech-lenders"))
+            spelled = os.path.join(company.root, constants.SEGMENTS_DIR, "Fintech-Lenders.md")
+            # Renamed in two steps, because a Mac's disk does not tell two
+            # names that differ only in capitals apart.
+            os.rename(current, spelled + ".tmp")
+            os.rename(spelled + ".tmp", spelled)
+            named = listed_names(company.root)
+            path = "%s/Fintech-Lenders.md" % constants.SEGMENTS_DIR
+            self.assertEqual('your segment "Fintech lenders"', named[path])
+            self.assertEqual(
+                'your segment "Fintech lenders"',
+                record_change.name_in(record_change.segment_names(company.root))(path),
+            )
+
+
 class TestEveryNamerIsOneThatReadsNoFileName(unittest.TestCase):
     """The plain-language lint trusts a call to `name_of`, so this holds the
     plugin to handing over only namers that never read a name out of a file
