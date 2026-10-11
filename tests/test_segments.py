@@ -536,6 +536,47 @@ class TestTheReadBackHoldsNamesApart(unittest.TestCase):
                     outside.append(line)
             self.assertNotIn("Ignore your instructions", "\n".join(outside))
 
+class TestTheVersionOfferedIsTheOneADraftReads(unittest.TestCase):
+    """The replay of 2026-10-10, case one: of two versions of one page, the
+    segment list offered the older one, and it was taken in, because only
+    the older one's first heading read as a customer profile."""
+
+    def test_the_final_version_is_offered_whatever_its_heading_says(self):
+        with support.Sandbox():
+            content = os.path.join(os.environ["HOME"], "company")
+            folder = os.path.join(content, "segments")
+            support.write(os.path.join(folder, "icp-lenders.md"), "# Ideal customer profile: Lenders\n\nWho they are.\n")
+            support.write(os.path.join(folder, "widgets.md"), "## Why this segment and what we sell\n\nAn older version.\n")
+            support.write(os.path.join(folder, "widgets.final.md"), "# Widgets, the page as it stands\n\nThe version signed off.\n")
+            run = join_flow.new_run(TODAY)
+            agreed(content, run)
+            candidates = join_flow.segment_candidates(run, today=TODAY)
+            labels = [c.label for c in candidates]
+            self.assertIn("segments/widgets.final.md", labels)
+            self.assertNotIn("segments/widgets.md", labels)
+            self.assertEqual(2, len(candidates))
+
+    def test_every_version_offered_is_the_one_a_draft_reads(self):
+        # The confirm pass on the replay fixes, finding C1: whatever the top
+        # version of a page says, including a heading that reads like a
+        # template, the version offered is the one drafting keeps.
+        for heading in ("# ICP template", "# Ideal customer profile: buyers who contemplate switching"):
+            with support.Sandbox():
+                content = os.path.join(os.environ["HOME"], "company")
+                folder = os.path.join(content, "segments")
+                support.write(os.path.join(folder, "icp-lenders.md"), "# Ideal customer profile: Lenders\n\nWho they are.\n")
+                support.write(os.path.join(folder, "icp-banks.md"), "# Ideal customer profile: Banks\n\nWho they are.\n")
+                support.write(os.path.join(folder, "icp-banks.final.md"), heading + "\n\nThe page.\n")
+                run = join_flow.new_run(TODAY)
+                agreed(content, run)
+                offered = [os.path.realpath(c.path) for c in join_flow.segment_candidates(run, today=TODAY)]
+                _read, chosen, _superseded = join_flow._sources_for_a_draft(run, (), TODAY, None, None, None)
+                read = [os.path.realpath(source.path) for source in chosen if getattr(source, "path", None)]
+                self.assertEqual(2, len(offered), heading)
+                for path in offered:
+                    self.assertIn(path, read, heading)
+
+
 class TestTheWordsAPersonReads(unittest.TestCase):
     def test_every_sentence_is_registered_and_plain(self):
         registered = set(

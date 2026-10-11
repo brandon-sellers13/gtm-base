@@ -637,6 +637,79 @@ def strip_fence(step: str, model_text: str) -> str:
     return inside + "\n"
 
 
+_SOURCES_KEY_RE = re.compile(r"^(sources?)\s*:(.*)$")
+_LIST_ITEM_RE = re.compile(r"^\s*-(?:\s+(.*)|)$")
+_FILE_LABEL_RE = re.compile(
+    r"^[^\s\[\],][^\[\],]*(?:%s)(?: \(\d{4}-\d{2}-\d{2}\))?$"
+    % "|".join(
+        re.escape(suffix)
+        for suffix in sorted(
+            set(constants.SOURCE_READABLE_SUFFIXES) | set(constants.SOURCE_EXPORT_SUFFIXES)
+        )
+    ),
+    re.IGNORECASE,
+)
+
+
+def _unquoted(item: str) -> str:
+    item = item.strip()
+    if len(item) >= 2 and item[0] == item[-1] and item[0] in "\"'":
+        return item[1:-1].strip()
+    return item
+
+
+def _unnamed(items: Sequence[str]) -> List[str]:
+    """The items that are not a file's name, which the word checks still read.
+
+    A file's name ends in a file ending the plugin reads or lists, so text
+    that only ends like one, such as "e.g" or "v2.1", is still read.
+    """
+    return [item for item in items if not _FILE_LABEL_RE.match(_unquoted(item))]
+
+
+def _without_source_labels(text: str) -> str:
+    """The draft as the word checks read it: the files it cites left out.
+
+    A file is named whatever somebody called it, so a source called todo.md
+    is a source and not a placeholder. Only an item of the sources line (or a
+    change entry's source line, or one item per line under either) that is
+    shaped like a file's name, with or without the date beside it, is left
+    out. Anything else on that line, such as an unfilled TBD, is still read,
+    and so is everything a draft says in its own words (the replay of
+    2026-10-10, case two, and the correctness review of its fix).
+    """
+    lines = text.split("\n")
+    if not lines or lines[0].strip() != formats.FRONTMATTER_FENCE:
+        return text
+    closing = None
+    for index in range(1, len(lines)):
+        if lines[index].strip() == formats.FRONTMATTER_FENCE:
+            closing = index
+            break
+    if closing is None:
+        return text
+    kept = [lines[0]]
+    in_sources = False
+    for line in lines[1:closing]:
+        key = _SOURCES_KEY_RE.match(line)
+        item = _LIST_ITEM_RE.match(line)
+        if key:
+            value = key.group(2).strip()
+            in_sources = not value
+            if value.startswith("[") and value.endswith("]"):
+                items = value[1:-1].split(",") if value[1:-1].strip() else []
+                line = "%s: [%s]" % (key.group(1), ", ".join(i.strip() for i in _unnamed(items)))
+            elif value:
+                line = "%s: %s" % (key.group(1), ", ".join(i.strip() for i in _unnamed([value])))
+        elif in_sources and item:
+            if not _unnamed([item.group(1) or ""]):
+                continue
+        else:
+            in_sources = False
+        kept.append(line)
+    return "\n".join(kept + lines[closing:])
+
+
 def check_words(step: str, text: str) -> None:
     """Refuse the long dash, the words that say nothing, and any placeholder."""
     if EM_DASH in text or EN_DASH in text:
@@ -664,7 +737,7 @@ def parse(step: str, model_text: str) -> Draft:
     if step not in STEPS:
         raise DraftError(step, "unknown-step")
     text = strip_fence(step, model_text)
-    check_words(step, text)
+    check_words(step, _without_source_labels(text))
 
     try:
         block, body = formats.split_document(text)

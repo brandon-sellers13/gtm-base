@@ -636,6 +636,86 @@ class TestEveryRefusalNamesItsStepAndOneThing(unittest.TestCase):
         )
         drafting.parse(drafting.STEP_ICP, allowed)
 
+    def test_a_file_named_like_a_placeholder_may_be_cited_as_a_source(self):
+        # The replay of 2026-10-10, case two: every draft that correctly named
+        # a file called todo.md among its sources was refused, and could only
+        # pass by leaving that file out. The sources line names the person's
+        # files, so the words in it are theirs and are not checked.
+        import re as _re
+
+        text = captured("icp.md")
+        cited = _re.sub(
+            r"^sources: \[(.*)\]$",
+            lambda m: "sources: [%s, tasks/todo.md (2026-09-17), notes-tbd.md (2026-09-18)]" % m.group(1),
+            text,
+            count=1,
+            flags=_re.M,
+        )
+        self.assertIn("todo.md", cited)
+        drafting.parse(drafting.STEP_ICP, cited)
+        # The same words in the document itself are still refused.
+        self.assertEqual(
+            "icp:placeholder",
+            refusal(self, drafting.STEP_ICP, cited.replace("## Use cases\n", "## Use cases\n\nTODO\n", 1)),
+        )
+
+    def test_the_sources_line_still_checks_what_is_not_a_file_name(self):
+        # The correctness review of the replay fixes: only an item shaped like
+        # a file's name is the person's own words; anything else on the line
+        # is still checked.
+        import re as _re
+
+        text = captured("icp.md")
+        for unfilled, code in (
+            ("TBD", "icp:placeholder"),
+            ("insert the sources here", "icp:placeholder"),
+            ("notes.md, seamless notes", "icp:banned-word:seamless"),
+        ):
+            changed = _re.sub(r"^sources: \[.*\]$", "sources: [%s]" % unfilled, text, count=1, flags=_re.M)
+            self.assertEqual(code, refusal(self, drafting.STEP_ICP, changed), unfilled)
+
+    def test_a_sources_list_one_item_per_line_may_cite_todo(self):
+        import re as _re
+
+        text = captured("icp.md")
+        listed = _re.sub(
+            r"^sources: \[.*\]$",
+            "sources:\n  - acme-icp.md (2026-08-14)\n  - tasks/todo.md (2026-09-17)",
+            text, count=1, flags=_re.M,
+        )
+        drafting.parse(drafting.STEP_ICP, listed)
+
+    def test_text_that_only_ends_like_a_file_is_still_checked(self):
+        # The confirm pass on the replay fixes, finding C2: only an ending the
+        # plugin reads or lists counts as a file's name.
+        import re as _re
+
+        text = captured("icp.md")
+        for unfilled in ("TBD pending interviews e.g", "todo see v2.1"):
+            changed = _re.sub(r"^sources: \[.*\]$", "sources: [%s]" % unfilled, text, count=1, flags=_re.M)
+            self.assertEqual("icp:placeholder", refusal(self, drafting.STEP_ICP, changed), unfilled)
+
+    def test_every_way_of_writing_the_sources_may_cite_todo(self):
+        # The confirm pass on the replay fixes, finding C3: each form the
+        # settings block accepts.
+        import re as _re
+
+        text = captured("icp.md")
+        for written in (
+            'sources: ["tasks/todo.md (2026-09-17)", acme-icp.md]',
+            "sources:\n  - 'tasks/todo.md'",
+            "sources:\n- tasks/todo.md (2026-09-17)",
+            "sources : [tasks/todo.md]",
+        ):
+            changed = _re.sub(r"^sources: \[.*\]$", lambda _m: written, text, count=1, flags=_re.M)
+            self.assertIn("todo.md", changed)
+            drafting.parse(drafting.STEP_ICP, changed)
+
+    def test_a_change_entry_may_cite_todo_as_its_source(self):
+        text = captured("change-entry.md").replace("source: pricing-notes.txt", "source: tasks/todo.md (2026-09-17)")
+        self.assertIn("todo.md", text)
+        drafting.parse(drafting.STEP_CHANGE, text)
+
     def test_a_section_the_profile_always_carries_may_not_be_empty(self):
         self.assertEqual(
             "icp:empty-section:Use cases",
