@@ -112,3 +112,9 @@
   missed six print sites.
 - The installed gate refuses any line holding git beside another program, and any line naming the seat folder or its
   variable, even inside a heredoc. Run git alone on its line, and put edits that mention either into a script file.
+- When one module offers a choice and another acts on it, the test must check that what is acted on is what was
+  offered, not only what the list shows. The replay fix that skipped a template when offering a segment page made the
+  offered page the one version drafting leaves out; only a test against what drafting really reads caught it.
+- Skip as little as possible when exempting text from a check. Skipping the whole sources line let "TBD" through, and
+  "ends in a dot and a few letters" let "e.g" through; the exemption that held was an item ending in a file ending the
+  plugin really reads or lists.
