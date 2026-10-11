@@ -1085,6 +1085,22 @@ PYTHON_SENTENCES = (
     ("record_change", "NOT_ALL_TAKEN_BACK"),
     ("record_change", "BUSY"),
     ("record_change", "SAVING_ELSEWHERE"),
+    # Plan 1, Unit 4.2a: creating a document and the five settings operations.
+    ("operations", "NOT_A_DOCUMENT"),
+    ("operations", "ALREADY_THERE"),
+    ("operations", "SCREENED"),
+    ("operations", "NO_ADDRESS"),
+    ("operations", "BAD_VALUE"),
+    ("operations", "NOT_AN_OPERATION"),
+    ("operations", "NOT_WAITING"),
+    ("operations", "MOVED"),
+    ("operations", "NOT_ALLOWED"),
+    ("operations", "UNSAVED"),
+    ("operations", "NOT_ON_MAIN"),
+    ("operations", "COULD_NOT_SAVE"),
+    ("operations", "DONE_CREATED"),
+    ("operations", "DONE_SETTING"),
+    ("write_hook", "UNATTENDED_REFUSED"),
     # Plan 1, Unit 2.1: the inventory.
     ("inventory", "PURPOSE"),
     ("inventory", "NOT_STATED"),
@@ -1357,6 +1373,9 @@ SAFE_CALLS = frozenset(
         "_as_of",
         "_happened_on",
         "owners_of",
+        # The addresses in a document's authority set (Plan 1, Unit 4.2a):
+        # its owners, the base owner and the administrators, never a name.
+        "who_may_approve",
         "document_name",
         "documents_named",
         "plain_name",

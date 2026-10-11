@@ -78,6 +78,7 @@ NO_FALLBACK = (
 MAP_WITH_TWO = """---
 kind: map
 owner: owner@example.com
+businesses: insights (Acme Insights), courier-app (the courier app)
 sources: []
 status: draft
 ---
@@ -88,7 +89,6 @@ status: draft
 
 confirmation_threshold_days: 30
 not_now_days: 7
-businesses: insights (Acme Insights), courier-app (the courier app)
 """
 
 

@@ -20,7 +20,9 @@ import re
 from typing import Dict, List, Optional, Sequence
 
 from . import (
+    authority,
     callmarkers,
+    docpaths,
     constants,
     formats,
     ids,
@@ -148,8 +150,20 @@ def newest_date_in(value) -> Optional[str]:
     return max(found) if found else None
 
 
-def context_files(root: str) -> "List[stale.ContextFileInfo]":
-    """Every context file the base holds, with its owners and its dates."""
+def context_files(
+    root: str, git: Optional[GitRunner] = None
+) -> "List[stale.ContextFileInfo]":
+    """Every document the base holds, with its owners and its dates.
+
+    Every file under the context folder, as always, and since Plan 1's Unit
+    4.2a a standard at `standards/<job>.md` and the source map at
+    `access/stack.md`, so each is owned, confirmed and flagged like any other
+    document (`docpaths`). Nothing reached through a link is read.
+
+    Asked with a runner, each file also carries its authority set as the base
+    last saved it: its owners, the base owner and the administrators. Without
+    one, the owners are all there is, as before.
+    """
     files: List[stale.ContextFileInfo] = []
     context_root = os.path.join(root, constants.CONTEXT_DIR)
     for dirpath, dirnames, filenames in os.walk(context_root):
@@ -159,35 +173,67 @@ def context_files(root: str) -> "List[stale.ContextFileInfo]":
                 continue
             full = os.path.join(dirpath, name)
             relative = os.path.relpath(full, root).replace(os.sep, "/")
-            text = read_text(full)
-            if text is None:
-                continue
-            try:
-                block, _body = formats.split_document(text)
-                fields = formats.parse_frontmatter(block)
-            except (ValidationError, PathError):
-                fields = {}
-            try:
-                owners = validate.validate_owner(fields.get("owner"))
-            except ValidationError:
-                owners = []
-            try:
-                sources_date = newest_date_in(fields.get("sources"))
-            except Exception:
-                sources_date = None
-            files.append(
-                stale.ContextFileInfo(
-                    path=relative,
-                    owners=owners,
-                    exists=True,
-                    sources_date=sources_date,
-                    status=str(fields.get("status") or ""),
-                    kind=str(fields.get("kind") or ""),
-                    # Read from the body every time, never stored (Unit 1.7b).
-                    open_questions=callmarkers.questions(text),
-                )
-            )
+            info = _file_info(root, relative, git)
+            if info is not None:
+                files.append(info)
+    for relative in documents_outside_context(root):
+        info = _file_info(root, relative, git)
+        if info is not None:
+            files.append(info)
     return files
+
+
+def documents_outside_context(root: str) -> List[str]:
+    """The standards and the source map this base holds, as paths, in a fixed order."""
+    found: List[str] = []
+    standards = os.path.join(root, constants.STANDARDS_DIR)
+    if os.path.isdir(standards) and not os.path.islink(standards):
+        for name in sorted(os.listdir(standards)):
+            relative = constants.STANDARDS_DIR + "/" + name
+            kind = docpaths.classify(relative)
+            if kind is not None and kind.kind == docpaths.KIND_STANDARD:
+                found.append(relative)
+    access = os.path.join(root, constants.ACCESS_DIR)
+    if not os.path.islink(access) and os.path.isfile(
+        os.path.join(root, constants.STACK_PATH.replace("/", os.sep))
+    ):
+        found.append(constants.STACK_PATH)
+    return found
+
+
+def _file_info(root: str, relative: str, git: Optional[GitRunner]):
+    """One document as the stale library wants it, or None when it cannot be read."""
+    text = read_text(os.path.join(root, relative.replace("/", os.sep)))
+    if text is None:
+        return None
+    try:
+        block, _body = formats.split_document(text)
+        fields = formats.parse_frontmatter(block)
+    except (ValidationError, PathError):
+        fields = {}
+    try:
+        owners = validate.validate_owner(fields.get("owner"))
+    except ValidationError:
+        owners = []
+    try:
+        sources_date = newest_date_in(fields.get("sources"))
+    except Exception:
+        sources_date = None
+    return stale.ContextFileInfo(
+        path=relative,
+        owners=owners,
+        exists=True,
+        sources_date=sources_date,
+        status=str(fields.get("status") or ""),
+        kind=str(fields.get("kind") or ""),
+        # Read from the body every time, never stored (Unit 1.7b).
+        open_questions=callmarkers.questions(text),
+        authority=(
+            authority.at(root, relative, runner=git).addresses()
+            if git is not None
+            else None
+        ),
+    )
 
 
 # The code a file gets when the same entry sits in both folders saying two
@@ -453,7 +499,7 @@ def ledger(
             # at its older path, and it still means that document.
             path = layout.where_it_lives(root, path)
             try:
-                kept.append(paths.canonical_context_path(root, path))
+                kept.append(docpaths.canonical(root, path))
             except (PathError, ValidationError):
                 if collect is None:
                     state.append_dropped_path(
@@ -486,7 +532,23 @@ class AuthorsUnavailable(GtmBaseError):
 
 
 def line_authors(root: str, relative: str, git: GitRunner) -> "Dict[int, str]":
-    """Who added each line of one file, which is the only identity we trust.
+    """Who added each line of one file, which is the only identity we trust."""
+    return {
+        number: author
+        for number, (author, _commit) in line_authors_and_revisions(
+            root, relative, git
+        ).items()
+    }
+
+
+# The revision git names for a line nobody has saved yet.
+_NOT_SAVED = re.compile(r"^0+$")
+
+
+def line_authors_and_revisions(
+    root: str, relative: str, git: GitRunner
+) -> "Dict[int, tuple]":
+    """Who added each line of one file, and the revision that added it.
 
     A file nobody has saved yet has no authors and that is an answer. A read
     that failed or ran out of time is not an answer, and it raises rather than
@@ -506,15 +568,20 @@ def line_authors(root: str, relative: str, git: GitRunner) -> "Dict[int, str]":
             "who wrote the lines of one of the base's records could not be read",
             code="unreadable",
         )
-    authors: Dict[int, str] = {}
+    authors: Dict[int, tuple] = {}
     current: Optional[int] = None
+    revision: Optional[str] = None
     for line in result.stdout.split("\n"):
         header = _BLAME_HEADER.match(line.strip())
         if header:
             current = int(header.group(1))
+            revision = line.strip().split(" ", 1)[0]
             continue
         if line.startswith("author-mail ") and current is not None:
-            authors[current] = line[len("author-mail ") :].strip().strip("<>")
+            authors[current] = (
+                line[len("author-mail ") :].strip().strip("<>"),
+                revision,
+            )
     return authors
 
 
@@ -526,6 +593,7 @@ def confirmations(root: str, git: GitRunner) -> "List[stale.ConfirmationRecord]"
     as unowned would flag documents their owners had already confirmed.
     """
     records: List[stale.ConfirmationRecord] = []
+    judged: Dict[tuple, "authority.AuthoritySet"] = {}
     folder = os.path.join(root, constants.CONFIRMATIONS_DIR)
     if not os.path.isdir(folder):
         return records
@@ -536,7 +604,7 @@ def confirmations(root: str, git: GitRunner) -> "List[stale.ConfirmationRecord]"
         text = read_text(os.path.join(folder, name))
         if text is None:
             continue
-        authors = line_authors(root, relative, git)
+        authors = line_authors_and_revisions(root, relative, git)
         for number, raw in enumerate(text.split("\n"), start=1):
             line = raw.strip()
             if not line or line.startswith("#"):
@@ -548,20 +616,53 @@ def confirmations(root: str, git: GitRunner) -> "List[stale.ConfirmationRecord]"
             # A line written before the base was moved names the document at
             # its older path, and it still settles that document.
             parsed.file = layout.where_it_lives(root, parsed.file)
+            author, revision = authors.get(number, (None, None))
             records.append(
-                stale.ConfirmationRecord(parsed, authors.get(number), None)
+                stale.ConfirmationRecord(
+                    parsed,
+                    author,
+                    revision,
+                    allowed=_allowed_then(root, parsed.file, author, revision, git, judged),
+                )
             )
     return records
 
 
+def _allowed_then(root, relative, address, revision, git, judged) -> bool:
+    """Whether an address was in a file's authority set at one saved revision.
+
+    The question CS4 of the signed company-skills requirements asks of every
+    confirmation and every acceptance: authority as it stood then, read from
+    the saved document and the saved map. A line nobody has saved yet was
+    given by nobody, so it is never allowed. Answers are kept for the run in
+    `judged`, because one revision is usually asked about many times.
+    """
+    if not address or not revision or _NOT_SAVED.match(revision):
+        return False
+    key = (relative, revision)
+    if key not in judged:
+        judged[key] = authority.at(root, relative, revision, runner=git)
+    return judged[key].role_of(address) is not None
+
+
 def _context_paths_of(correction) -> List[str]:
-    """The files under the context folder a record lists, in its own order."""
+    """The documents a record lists, in its own order.
+
+    The files under the context folder, as always, and since Plan 1's Unit
+    4.2a a standard and the source map, because a prepared change may now
+    change them and its record's hash is taken over every document it wrote.
+    """
     prefix = constants.CONTEXT_DIR + "/"
-    return [
-        path
-        for path in getattr(correction, "touched_paths", []) or []
-        if isinstance(path, str) and path.startswith(prefix)
-    ]
+    found = []
+    for path in getattr(correction, "touched_paths", []) or []:
+        if not isinstance(path, str):
+            continue
+        kind = docpaths.classify(path)
+        if path.startswith(prefix) or (
+            kind is not None and kind.kind in (docpaths.KIND_STANDARD, docpaths.KIND_STACK)
+        ):
+            found.append(path)
+    return found
 
 
 def hash_at_commit(
@@ -591,7 +692,15 @@ def hash_at_commit(
 def accepted_by(
     root: str, relative: str, default_branch: Optional[str], git: GitRunner
 ):
-    """Who brought one file onto the shared line of work, and on what day.
+    """Who brought one file onto the shared line of work, and on what day."""
+    email, day, _revision = accepted_at(root, relative, default_branch, git)
+    return email, day
+
+
+def accepted_at(
+    root: str, relative: str, default_branch: Optional[str], git: GitRunner
+):
+    """Who brought one file onto the shared line of work, on what day, in which revision.
 
     The shared line of work is read along its own first parent only, so the
     change that put the file there is the one the team accepted rather than the
@@ -631,16 +740,16 @@ def accepted_by(
     args.extend(record_names(relative))
     found = git.run(args, cwd=root, timeout=LOCAL_TIMEOUT_SECONDS)
     if not found.ok:
-        return None, None
+        return None, None, None
     for line in found.stdout.split("\n"):
         parts = line.strip().split("\x1f")
         if len(parts) != 3:
             continue
-        _commit, email, day = (part.strip() for part in parts)
+        commit, email, day = (part.strip() for part in parts)
         if not email or not _DATE_IN_TEXT.match(day):
             continue
-        return email, day
-    return None, None
+        return email, day, commit
+    return None, None, None
 
 
 def record_names(relative: str) -> List[str]:
@@ -690,6 +799,7 @@ def corrections(
     saying the file is right.
     """
     records: List[stale.CorrectionRecord] = []
+    judged: Dict[tuple, "authority.AuthoritySet"] = {}
     if default_branch is None:
         default_branch = _default_branch(root, git)
     for relative in correction_files(root):
@@ -735,7 +845,9 @@ def corrections(
             for path in (correction.touched_paths or [])
         ]
         co_modified = [layout.where_it_lives(root, path) for path in co_modified]
-        merged_by, merged_on = accepted_by(root, relative, default_branch, git)
+        merged_by, merged_on, merged_in = accepted_at(
+            root, relative, default_branch, git
+        )
         records.append(
             stale.CorrectionRecord(
                 correction,
@@ -744,6 +856,11 @@ def corrections(
                 hashed,
                 merged_by_email=merged_by,
                 merged_on=merged_on,
+                merged_allowed={
+                    path: _allowed_then(root, path, merged_by, merged_in, git, judged)
+                    for path in correction.touched_paths
+                    if isinstance(path, str)
+                },
             )
         )
     return records
@@ -829,7 +946,7 @@ def read_base(
 
     return BaseInputs(
         settings=settings,
-        files=context_files(base_root),
+        files=context_files(base_root, git),
         ledger=ledger(base_root, base_id, day, collect=dropped),
         confirmations=confirmations(base_root, git),
         corrections=corrections(base_root, git, default),

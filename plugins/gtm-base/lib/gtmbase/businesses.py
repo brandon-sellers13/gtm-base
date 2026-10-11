@@ -11,11 +11,11 @@ is the whole company's; this reading of requirement P40 is recorded for
 Brandon to confirm, because P40 says "counts for no business" without that
 split.
 
-This module only reads. Unit 4.2a of Plan 1 owns the grammar of both settings
-and the operations that change them, and it adopts or replaces this reader
-when it is built; until then nothing in GTM Base writes either setting. The
-grammar here is the smallest one that fits the map's existing settings, one
-`name: value` line under the map's Settings heading:
+This module only reads; the operations that change either setting are Unit
+4.2a's (`settings_operations`). The list is one line in the settings block at
+the top of the map, beside the base owner's `owner:` line (the signed
+company-skills requirements, CS2), written the way that block writes any
+value, on one line or as a list:
 
     businesses: insights (Acme Insights), courier-app (the courier app)
 
@@ -58,9 +58,6 @@ CODE_UNREADABLE = "businesses-unreadable"
 _SLUG_RE = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
 # One business in the list: its short name, then its name in brackets.
 _ITEM_RE = re.compile(r"^(?P<slug>[^\s()]+)(?:\s*\((?P<name>[^()]*)\))?$")
-_SETTING_RE = re.compile(
-    r"^[ \t]*%s[ \t]*:(?P<value>.*)$" % re.escape(BUSINESSES_SETTING), re.MULTILINE
-)
 
 # Folders under `context` that are something else already, so no business may
 # be called by their names: the segments of the customer profile, and every
@@ -134,13 +131,20 @@ def check_slug(value: str) -> str:
     return slug
 
 
-def _body_of(map_text: str) -> str:
-    """The map below its settings block, or all of it when it has none."""
+def map_settings(map_text: str) -> Dict:
+    """The map's settings block as plain values, or a refusal when it cannot be read.
+
+    A base with no map at all has no settings, which is not a refusal.
+    """
+    if not (map_text or "").strip():
+        return {}
     try:
-        _block, body = formats.split_document(map_text or "")
+        block, _body = formats.split_document(map_text)
+        return formats.parse_frontmatter(block)
     except (ValidationError, PathError):
-        return map_text or ""
-    return body
+        raise ValidationError(
+            "the settings at the top of the map cannot be read", code=CODE_UNREADABLE
+        )
 
 
 def read_map_businesses(map_text: str) -> List[Business]:
@@ -150,18 +154,21 @@ def read_map_businesses(map_text: str) -> List[Business]:
     map setting out of range is: a business dropped by a guess is a business
     whose missing documents nobody is told about.
     """
-    found = _SETTING_RE.findall(_body_of(map_text))
-    if not found:
+    return businesses_from(map_settings(map_text).get(BUSINESSES_SETTING))
+
+
+def businesses_from(value) -> List[Business]:
+    """The businesses one `businesses:` value lists, read as `read_map_businesses` says."""
+    if value is None:
         return []
-    if len(found) > 1:
-        raise ValidationError(
-            "the map lists its businesses more than once", code=CODE_UNREADABLE
-        )
-    value = found[0].strip()
-    if not value:
+    if isinstance(value, list):
+        items = [str(item) for item in value]
+    else:
+        items = str(value).split(",")
+    if not "".join(items).strip():
         return []
     listed: List[Business] = []
-    for raw in value.split(","):
+    for raw in items:
         match = _ITEM_RE.match(raw.strip())
         if match is None:
             raise ValidationError(

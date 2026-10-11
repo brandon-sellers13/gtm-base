@@ -43,10 +43,12 @@ TODAY = datetime.date(2026, 10, 10)
 INSIGHTS = "insights"
 COURIER = "courier-app"
 
+# The businesses go in the map's settings block, beside its owner (the signed
+# company-skills requirements, CS2).
 MAP_TEMPLATE = """---
 kind: map
 owner: owner@example.com
-sources: []
+%ssources: []
 status: draft
 ---
 
@@ -56,7 +58,7 @@ status: draft
 
 confirmation_threshold_days: 30
 not_now_days: 7
-%s
+
 ## Where things live
 
 The context folder holds what is true about the business.
@@ -228,11 +230,30 @@ class TestTheMapsBusinesses(unittest.TestCase):
                 with self.assertRaises(ValidationError):
                     businesses.read_map_businesses(MAP_TEMPLATE % setting)
 
-    def test_the_setting_is_read_from_the_body_and_not_the_settings_block(self):
+    def test_the_setting_is_read_from_the_settings_block_and_not_the_body(self):
+        """CS2 of the signed company-skills requirements."""
         text = (MAP_TEMPLATE % "").replace(
-            "status: draft", "status: draft\nbusinesses: insights"
+            "not_now_days: 7", "not_now_days: 7\nbusinesses: insights"
         )
         self.assertEqual([], businesses.read_map_businesses(text))
+
+    def test_the_settings_block_may_list_them_either_way_it_lists_anything(self):
+        for setting in (
+            "businesses: [insights (Acme Insights), courier-app (the courier app)]\n",
+            "businesses:\n- insights (Acme Insights)\n- courier-app (the courier app)\n",
+        ):
+            with self.subTest(setting=setting):
+                listed = businesses.read_map_businesses(MAP_TEMPLATE % setting)
+                self.assertEqual([INSIGHTS, COURIER], [one.slug for one in listed])
+                self.assertEqual("the courier app", listed[1].name)
+
+    def test_a_settings_block_that_cannot_be_read_is_refused(self):
+        text = (MAP_TEMPLATE % TWO_BUSINESSES).replace("status: draft", "\tstatus: draft")
+        with self.assertRaises(ValidationError):
+            businesses.read_map_businesses(text)
+
+    def test_no_map_at_all_lists_no_business(self):
+        self.assertEqual([], businesses.read_map_businesses(""))
 
     def test_the_map_settings_the_stale_library_reads_are_unchanged(self):
         text = MAP_TEMPLATE % TWO_BUSINESSES

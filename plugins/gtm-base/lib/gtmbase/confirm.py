@@ -37,6 +37,8 @@ import os
 from typing import List, Optional, Tuple
 
 from . import (
+    authority,
+    docpaths,
     approval,
     base_reader,
     callmarkers,
@@ -224,8 +226,8 @@ NOT_ONE_OF_THE_TWO = (
     "needs, and %s is not one of them, so nothing was recorded."
 )
 NOT_YOUR_DOCUMENT = (
-    "%s is not recorded as yours, so only whoever owns it can say it already "
-    "says what a context change says."
+    "%s is not recorded as yours, so only whoever owns it, the base's owner or "
+    "an administrator can say it already says what a context change says."
 )
 UNSAVED_EDITS_HERE = (
     "There are words in your base that you have not saved, so nothing was "
@@ -487,7 +489,7 @@ def answer(
     trigger = record.get("trigger")
     entry_id = record.get("entry_id") or None
     try:
-        path = paths.canonical_context_path(base_root, record.get("file") or "")
+        path = docpaths.canonical(base_root, record.get("file") or "")
     except (PathError, ValidationError):
         state.append_dropped_path(
             base_id, str(record.get("file") or ""), "dropped-path", entry_id, today
@@ -614,6 +616,14 @@ def _yes(
     default = gate.default_branch(git, base_root)
     if not default:
         return _refused(CODE_NO_DEFAULT_BRANCH, NO_DEFAULT_BRANCH)
+    # The one authority rule (Plan 1, Unit 4.2a): only an address in the
+    # document's authority set says it is still right, and the line records
+    # who and in which role (CS3, CS9).
+    role = authority.at(base_root, path, runner=git).role_of(address)
+    if role is None:
+        return _refused(
+            CODE_NOT_AN_OWNER, NOT_YOUR_DOCUMENT % names.document_name(path)
+        )
 
     line = formats.ConfirmationLine(
         date=today.isoformat(),
@@ -623,6 +633,7 @@ def _yes(
         entry=entry_id if trigger == "ledger" else None,
         question=question_id,
         run=None,
+        role=role,
     )
     try:
         line.validate()
@@ -1053,7 +1064,7 @@ def drafted(
         moment = datetime.datetime(moment.year, moment.month, moment.day)
     today = state.today(moment)
     try:
-        relative_context = paths.canonical_context_path(base_root, path)
+        relative_context = docpaths.canonical(base_root, path)
     except (PathError, ValidationError):
         return _refused(CODE_DROPPED_PATH, DROPPED_PATH)
     if formats.name_has_a_space(relative_context):
@@ -1140,7 +1151,7 @@ def against_change(
     try:
         # A path named at its older place, on a base that has been moved, is
         # the same document at its new one.
-        relative_context = paths.canonical_context_path(
+        relative_context = docpaths.canonical(
             base_root, layout.where_it_lives(base_root, path)
         )
     except (PathError, ValidationError):
@@ -1178,7 +1189,10 @@ def against_change(
     address, _name = _author(base_root, git)
     if not address:
         return _refused(CODE_NO_OWNER_ADDRESS, NO_OWNER_ADDRESS)
-    if address not in _owners_of(base_root, relative_context):
+    # The one authority rule (Plan 1, Unit 4.2a): the document's owners, the
+    # base owner and the administrators, as the base last saved them.
+    role = authority.at(base_root, relative_context, runner=git).role_of(address)
+    if role is None:
         return _refused(CODE_NOT_AN_OWNER, NOT_YOUR_DOCUMENT % document)
 
     disagreeing = refusal_while_written_twice(
@@ -1199,6 +1213,8 @@ def against_change(
         entry=entry_id,
         question=None,
         run=None,
+        # The role that let them confirm it (CS9).
+        role=role,
     )
     relative = confirmations_path_for(relative_context)
     try:

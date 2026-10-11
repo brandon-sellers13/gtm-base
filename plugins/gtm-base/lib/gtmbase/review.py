@@ -34,6 +34,7 @@ from . import (
     confirm,
     constants,
     create_base,
+    docpaths,
     drafting,
     formats,
     fsutil,
@@ -279,9 +280,9 @@ def canonical_affects(draft, base_root: Optional[str] = None) -> List[str]:
     checked = []
     for candidate in _affects_of(draft):
         if base_root:
-            checked.append(paths.canonical_context_path(base_root, candidate))
+            checked.append(docpaths.canonical(base_root, candidate))
         else:
-            checked.append(paths.check_context_path_syntax(candidate))
+            checked.append(docpaths.check_syntax(candidate))
     return checked
 
 

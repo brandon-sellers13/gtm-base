@@ -41,6 +41,7 @@ import re
 from typing import List, Optional
 
 from . import (
+    docpaths,
     approval,
     base_reader,
     compose_proposal,
@@ -549,10 +550,16 @@ def context_path_of(base_root: str, candidate: str) -> Optional[str]:
         if not relative:
             continue
         first = relative.split("/")[0]
-        if _folded(first) != _folded(constants.CONTEXT_DIR):
+        # A standard and the source map are documents too (Plan 1, Unit
+        # 4.2a), so the check runs on them as it does on a context file.
+        outside = docpaths.classify(relative)
+        if _folded(first) != _folded(constants.CONTEXT_DIR) and (
+            outside is None
+            or outside.kind not in (docpaths.KIND_STANDARD, docpaths.KIND_STACK)
+        ):
             continue
         try:
-            return paths.canonical_context_path(root, relative)
+            return docpaths.canonical(root, relative)
         except (PathError, ValidationError):
             continue
     return None
@@ -574,7 +581,13 @@ def _owned_here(inputs, relative: str, base_root: str, git) -> bool:
             if getattr(candidate, "path", None) == relative:
                 info = candidate
                 break
-    return bool(info is not None and email in (getattr(info, "owners", None) or []))
+    # Anyone who may confirm it is asked: its owners, the base owner and the
+    # administrators (Plan 1, Unit 4.2a).
+    return bool(
+        info is not None
+        and email
+        in (getattr(info, "authority", None) or getattr(info, "owners", None) or [])
+    )
 
 
 def _entry_of(inputs, entry_id: str):

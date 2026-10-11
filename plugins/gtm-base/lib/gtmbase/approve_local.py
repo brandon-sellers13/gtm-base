@@ -44,7 +44,9 @@ from typing import Dict, List, Optional, Tuple
 
 from . import (
     approval,
+    authority,
     base_reader,
+    docpaths,
     compose_proposal,
     confirm,
     constants,
@@ -172,8 +174,9 @@ NOT_WAITING_HERE = (
     "waiting in, and that is not where this one is, so nothing was done."
 )
 NOT_AN_OWNER = (
-    "Only an owner of %s can approve a change to it, and this base is set up "
-    "under a different address. It is owned by %s."
+    "Only an owner of %s, the base's owner or an administrator can approve a "
+    "change to it, and this base is set up under a different address. The "
+    "addresses that can are %s."
 )
 NO_OWNER_RECORDED = (
     "%s does not say who owns it, so nobody can approve a change to it here."
@@ -183,9 +186,9 @@ NO_ADDRESS = (
     "cannot tell whether you own what this change touches."
 )
 OUTSIDE_THE_FOLDERS = (
-    "A prepared change may only touch your context files, the record of "
-    "context changes, and the record of what was corrected, and this one "
-    "names a file outside them."
+    "A prepared change may only touch your context files, your standards, your "
+    "source map, the record of context changes, and the record of what was "
+    "corrected, and this one names a file outside them."
 )
 ASSISTANT_FOLDER = (
     "A prepared change may never touch the assistant's own folder, and this "
@@ -411,7 +414,7 @@ def path_problems(staging) -> List[Tuple[str, str]]:
             found.append((CODE_ASSISTANT_FOLDER, ASSISTANT_FOLDER))
             continue
         try:
-            paths.check_repo_path_syntax(candidate, paths.PROPOSAL_PATH_PREFIXES)
+            docpaths.check_proposal_path(candidate)
         except PathError:
             found.append((CODE_OUTSIDE_ALLOWED, OUTSIDE_THE_FOLDERS))
     return found
@@ -464,6 +467,26 @@ def owners_of(base_root: str, relative: str, git=None) -> List[str]:
         return []
 
 
+def approval_roles(
+    base_root: str, ordered: List[str], address: Optional[str], git=None
+) -> Dict[str, Optional[str]]:
+    """The role that lets this address approve each document, or None where it may not.
+
+    One rule for every approval (Plan 1, Unit 4.2a): the document's owners,
+    the base owner and the administrators, read from the last saved version
+    of the document and of the map (`authority.at`).
+    """
+    return {
+        relative: authority.at(base_root, relative, runner=git).role_of(address)
+        for relative in ordered
+    }
+
+
+def who_may_approve(base_root: str, relative: str, git=None) -> List[str]:
+    """Every address in one document's authority set, as the base last saved it."""
+    return authority.at(base_root, relative, runner=git).addresses()
+
+
 def _owner_problems(
     base_root: str, ordered: List[str], address: Optional[str], git=None
 ):
@@ -472,8 +495,10 @@ def _owner_problems(
         return [(CODE_NO_ADDRESS, NO_ADDRESS)]
     found = []
     for relative in ordered:
-        owners = owners_of(base_root, relative, git)
-        if not owners:
+        who = who_may_approve(base_root, relative, git)
+        if address in who:
+            continue
+        if not who:
             found.append(
                 (
                     CODE_NO_OWNER_RECORDED,
@@ -481,13 +506,12 @@ def _owner_problems(
                 )
             )
             continue
-        if address not in owners:
-            found.append(
-                (
-                    CODE_NOT_AN_OWNER,
-                    NOT_AN_OWNER % (names.document_name(relative), ", ".join(owners)),
-                )
+        found.append(
+            (
+                CODE_NOT_AN_OWNER,
+                NOT_AN_OWNER % (names.document_name(relative), ", ".join(who)),
             )
+        )
     return found
 
 
@@ -558,7 +582,7 @@ def _walk_a_hand_edit(base_root: str, staging, git: GitRunner) -> "_Walk":
             )
         texts[relative] = now
     for one in staging.edits:
-        relative = paths.canonical_context_path(base_root, one.path)
+        relative = docpaths.canonical(base_root, one.path)
         was = _head_text(base_root, relative, git) or ""
         now = texts.get(relative)
         if now is None:
@@ -595,7 +619,7 @@ def _walk_the_edits(base_root: str, staging) -> "_Walk":
     for said, edit in zip(
         staging.edits, compose_proposal.in_original_positions(staging.edits)
     ):
-        relative = paths.canonical_context_path(base_root, edit.path)
+        relative = docpaths.canonical(base_root, edit.path)
         if relative not in texts:
             text = read_text(os.path.join(base_root, relative.replace("/", os.sep)))
             if text is None:
@@ -852,7 +876,7 @@ def hand_edit_difference(base_root: str, runner: Optional[GitRunner] = None) -> 
     documents = []
     for relative in changed:
         try:
-            documents.append(paths.canonical_context_path(base_root, relative))
+            documents.append(docpaths.canonical(base_root, relative))
         except (PathError, ValidationError):
             continue
     pieces = []
@@ -1521,6 +1545,21 @@ def _plan_the_writes(base_root, reading, today, moment, git) -> "_Plan":
         correction = compose_proposal.corrections_for(
             staging, today, hash_value, touched, reading.entry_id, reading.source_id
         )
+        # The role that let the approver approve each document, and the hash
+        # of each document's exact approved bytes (CS9). Who approved it is
+        # the author of the saved record.
+        address = _who_is_approving(base_root, git)
+        correction.approved_roles = {
+            relative: role
+            for relative, role in approval_roles(
+                base_root, walk.ordered, address, git
+            ).items()
+            if role is not None
+        }
+        correction.approved_hashes = {
+            relative: authority.bytes_hash(walk.texts[relative].encode("utf-8"))
+            for relative in walk.ordered
+        }
         correction_path = "%s/%s-%s.md" % (
             constants.CORRECTIONS_DIR,
             today.isoformat(),
@@ -1533,6 +1572,8 @@ def _plan_the_writes(base_root, reading, today, moment, git) -> "_Plan":
         files.append((correction_path, correction.render(), False))
 
     confirmations: List[Tuple[str, str, bool]] = []
+    approver = _who_is_approving(base_root, git)
+    roles = approval_roles(base_root, walk.ordered, approver, git)
     for relative in walk.ordered:
         line = formats.ConfirmationLine(
             date=today.isoformat(),
@@ -1542,6 +1583,8 @@ def _plan_the_writes(base_root, reading, today, moment, git) -> "_Plan":
             entry=reading.entry_id if reading.entry_id else None,
             question=None,
             run=None,
+            # The role in which the approver said it is right (CS9).
+            role=roles.get(relative),
         )
         line.validate()
         target = confirm.confirmations_path_for(relative)
