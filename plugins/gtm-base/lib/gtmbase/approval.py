@@ -198,9 +198,37 @@ SAYS_CREATE = (
     "Allowing it writes the new document you were just shown into your base, "
     "with you as its owner."
 )
-SAYS_SET = (
-    "Allowing it changes the one setting you were just shown, and records why."
+SAYS_SET_OWNER = (
+    "Allowing it changes who owns the document you were just shown, and "
+    "records why."
 )
+SAYS_SET_BUSINESS = (
+    "Allowing it changes which business the document you were just shown is "
+    "for, and records why."
+)
+SAYS_SET_MAP_OWNER = (
+    "Allowing it hands the role of owner of your whole base to the address "
+    "you were just shown, and records why. Only that address can hand it on "
+    "after this."
+)
+SAYS_SET_ADMINISTRATORS = (
+    "Allowing it changes who may approve changes to every document in your "
+    "base, to the administrators you were just shown, and records why."
+)
+SAYS_SET_BUSINESSES = (
+    "Allowing it changes the list of businesses your base covers to the one "
+    "you were just shown, and records why."
+)
+# Each settings operation has its own sentence, keyed by the operation the
+# approving command names, because one sentence for all five would ask about
+# handing the base to somebody with the words for a business line.
+_SAYS_FOR_SETTING = {
+    "owner": SAYS_SET_OWNER,
+    "business": SAYS_SET_BUSINESS,
+    "map-owner": SAYS_SET_MAP_OWNER,
+    "administrators": SAYS_SET_ADMINISTRATORS,
+    "businesses": SAYS_SET_BUSINESSES,
+}
 
 # The refusals.
 # Plan 1, Unit 4.2a (CS30): a conversation the runner marked unattended gets
@@ -268,7 +296,11 @@ SENTENCE_NAMES = (
     "SAYS_QUIET_MONTH",
     "SAYS_QUIET_UNTIL_ASKED",
     "SAYS_CREATE",
-    "SAYS_SET",
+    "SAYS_SET_OWNER",
+    "SAYS_SET_BUSINESS",
+    "SAYS_SET_MAP_OWNER",
+    "SAYS_SET_ADMINISTRATORS",
+    "SAYS_SET_BUSINESSES",
     "UNATTENDED",
     "SAYS_SKIP",
     "SAYS_SKIP_CLOSING",
@@ -447,7 +479,10 @@ def _what(script: str, options) -> Optional[Tuple[str, Tuple[str, ...]]]:
         if get("approve_creation"):
             found = (SAYS_CREATE, ("operations.approve",))
         elif get("approve_setting"):
-            found = (SAYS_SET, ("operations.approve",))
+            says = _SAYS_FOR_SETTING.get(str(get("operation") or ""))
+            if says is None:
+                raise Unreadable()
+            found = (says, ("operations.approve",))
     if found is not None:
         chosen = [name for name in _ACTIONS[script] if get(name)]
         if len(chosen) > 1:
