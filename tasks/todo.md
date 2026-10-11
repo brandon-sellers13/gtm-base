@@ -1722,5 +1722,6 @@ Briefed by the orchestrating session after Brandon signed the company-skills req
 - [ ] Astra's outside review of all four commits (Codex rate-limited until 2026-10-14).
 
 #### Review (Unit 4.2a)
+- Commits 94aa730, a523d9a (approval.py), 16fd6a4 (review fixes), db647ab (approval.py). Suites: 94aa730 3018 OK then 217 OK; db647ab 3063 OK then 223 OK from a linked folder, exit 0.
 - Deviations recorded for Brandon: (1) CS9's address is the author of the saved record or line, not text in it, because the check before a send refuses any address but the base owner's; (2) a standard or the source map joins the time-based review only once first confirmed; (3) CS3 changed three older tests' premises (a document with no owner is the base owner's to approve; the base owner's confirmation counts anywhere; a stranger's yes is refused before it is written); (4) CS9 records are written on approvals made on this computer, not yet on the shared-copy path, which the backup plan decides.
 - The security review's high finding: a prepared operation kept on the seat was trusted at approval, so a rewritten file could pass the map's owner role through a "creation" question. Approval now works every change out again from the base and refuses anything that differs from what was shown.
