@@ -22,11 +22,13 @@ number from passing as the folder that used to hold that number. Where it is
 not recorded it is null on both sides and the comparison simply does not use
 it.
 
-`mount` and `volume` say which disk the folder is on. An external disk can come
-back with a different device number after it is plugged in again, and without
-the volume's own identifier the folder would look like a different folder every
-time. With it, the case is recognised for what it is and reported as such
-rather than guessed at.
+`mount` and `volume` say which disk the folder is on. A disk can come back with
+a different device number after it is plugged in again, and so can the
+computer's own disk after a restart, and without the volume's own identifier
+the folder would look like a different folder every time. With it on both
+records and agreeing, the folder is the same folder and its new device number
+is written down; with it disagreeing, the folder is on another disk and that is
+reported as such rather than guessed at.
 
 `remote` is the address of the shared copy when the folder is itself looked
 after by another tool. It is never used to find a folder. It is only ever a
@@ -273,9 +275,10 @@ def matches(recorded, current, recorded_path: Optional[str] = None) -> str:
     """What the two records say about each other, in one word.
 
     `same` means this is the folder that was recorded, where it was recorded.
-    `moved` means it is the same folder under a different name. `remounted`
-    means the folder is recognisable but the disk it sits on is not the disk it
-    was on, which is a case for asking rather than for assuming. `different`
+    `moved` means it is the same folder under a different name. Either can come
+    back with a new device number on the same disk, which `needs_refresh` says.
+    `remounted` means the folder is recognisable but the disk it sits on is not
+    the disk it was on, which is a case for asking rather than for assuming. `different`
     means there is not enough agreement to call it the same folder at all, and
     is what an absent or unreadable record always comes back as.
     """
@@ -299,13 +302,44 @@ def matches(recorded, current, recorded_path: Optional[str] = None) -> str:
     # treating it as one would ask a person to reconnect a folder that never
     # went anywhere.
     both_have_volume = left.get("volume") is not None and right.get("volume") is not None
-    volumes_differ = both_have_volume and left.get("volume") != right.get("volume")
-    if left.get("dev") != right.get("dev") or volumes_differ:
+    if both_have_volume and left.get("volume") != right.get("volume"):
+        return REMOUNTED
+    # A device number is handed out when a disk is mounted, so the same disk
+    # can come back from a restart with a new one. When both records carry the
+    # disk's own identifier and it agrees, the new number says nothing about
+    # the folder, and the caller writes the new one down (finding 1 of step 7
+    # of the Release A live check: every linked folder came unlinked after a
+    # restart). Without that identifier on both sides a new number is still a
+    # disk that came back, because nothing else vouches for it.
+    if left.get("dev") != right.get("dev") and not both_have_volume:
         return REMOUNTED
 
     if recorded_path is None:
         return SAME
-    return SAME if points_at(recorded_path, right) else MOVED
+    if points_at(recorded_path, right):
+        return SAME
+    # A restart changes the device number and leaves the folder where it was.
+    # A new device number together with a new place is what a copy of the
+    # whole disk mounted somewhere else looks like, so that is still a disk
+    # that came back as another one (security review of 0.3.6).
+    if left.get("dev") != right.get("dev"):
+        return REMOUNTED
+    return MOVED
+
+
+def needs_refresh(recorded, current) -> bool:
+    """Whether a record `matches` accepted carries a device number gone stale.
+
+    Only ever asked after `matches` said `same` or `moved`, which it says with
+    a new device number only when the disk's own identifier agreed on both
+    sides. The record is then written again from the folder as it is now, so
+    the comparison on the next start is the plain one.
+    """
+    left = _as_dict(recorded)
+    right = _as_dict(current)
+    if left is None or right is None:
+        return False
+    return left.get("dev") != right.get("dev")
 
 
 def points_at(path: str, record) -> bool:

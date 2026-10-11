@@ -2150,6 +2150,17 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     if reason:
         sys.stdout.write(deny_payload(client, reason) + "\n")
         return 0
+    if _asks_about_settings(command, cwd):
+        # Asked before anything else, so a line that also runs an approval
+        # gets this question and no ticket, and its approval is refused. A
+        # ticket waiting in this conversation is still taken back, as it is
+        # before any other command.
+        try:
+            approval.take_back(session_id)
+        except Exception:
+            pass
+        sys.stdout.write(ask_payload(client) + "\n")
+        return 0
     # Every approval is put to the person by Claude Code itself (Unit 1.7e,
     # Brandon's call 57). A check that cannot run never lets an approval
     # through unasked.
@@ -2162,3 +2173,30 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     if verdict is not None:
         sys.stdout.write(json.dumps(verdict) + "\n")
     return 0
+
+
+def _asks_about_settings(command: str, cwd: str) -> bool:
+    """Whether a line writes a file that can switch the checks off (0.3.6).
+
+    Step 10 of the Release A live check: a shell command rewrote the person's
+    settings and nothing was asked, because the question lived only on the
+    file tools. A check that cannot finish asks rather than lets it through.
+    """
+    from . import settings_writes
+
+    try:
+        return settings_writes.writes_a_settings_file(command, cwd)
+    except Exception:
+        return True
+
+
+def ask_payload(client: str) -> str:
+    """The question the write check asks about the same files, word for word.
+
+    Claude Code shows the reason in its permission prompt. The write check
+    asks every client the same way, and so does this.
+    """
+    from . import write_hook
+
+    del client
+    return json.dumps(write_hook.question())

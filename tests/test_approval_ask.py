@@ -986,6 +986,44 @@ class TestEachCommandReachesTheWriteItsTicketOpens(unittest.TestCase):
         self.fail("%s has no %s" % (path, function))
 
 
+class TestWithTheSettingsQuestion(unittest.TestCase):
+    """0.3.6 asks before a shell line writes the person's settings, and the
+    merge into Release B puts that question ahead of the approvals."""
+
+    def hook(self, command, cwd):
+        finished = subprocess.run(
+            ["sh", os.path.join(PLUGIN, "hooks", "pre-push-gate.sh"), "claude"],
+            input=json.dumps(payload(command, cwd=cwd)).encode("utf-8"),
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            env=dict(os.environ, CLAUDE_PLUGIN_ROOT=PLUGIN),
+        )
+        return json.loads(finished.stdout.decode("utf-8"))["hookSpecificOutput"]
+
+    def settings(self):
+        claude = os.path.join(os.path.realpath(os.environ["HOME"]), ".claude")
+        os.makedirs(os.path.join(claude, "plugins"), exist_ok=True)
+        support.write(os.path.join(claude, "settings.json"), "{}\n")
+
+    def test_a_line_writing_the_settings_still_takes_a_waiting_ticket_back(self):
+        with support.Sandbox() as sandbox:
+            self.settings()
+            asked(self, "python3 %s --question q --answer yes" % CONFIRM)
+            self.assertEqual(1, len(tickets()))
+            output = self.hook("echo '{}' > ~/.claude/settings.json", sandbox.path)
+            self.assertEqual("ask", output["permissionDecision"])
+            self.assertEqual([], tickets())
+
+    def test_an_approval_that_also_writes_the_settings_gets_no_ticket(self):
+        with support.Sandbox() as sandbox:
+            self.settings()
+            command = "python3 %s --question q --answer yes > ~/.claude/settings.json" % CONFIRM
+            output = self.hook(command, sandbox.path)
+            self.assertEqual("ask", output["permissionDecision"])
+            self.assertNotIn("updatedInput", output)
+            self.assertEqual([], tickets())
+
+
 class TestTheWordsAPersonReads(unittest.TestCase):
     def test_every_new_sentence_is_registered_and_plain(self):
         registered = set(

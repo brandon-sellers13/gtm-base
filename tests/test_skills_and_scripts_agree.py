@@ -798,6 +798,13 @@ class TestTheSkillsAsTheyAreWritten(unittest.TestCase):
         # Unit 1.8 split step 4 so each part asks one thing; the parent now
         # comes from step 4a, where the folder is proposed.
         "<the parent from step 4a>": lambda self, state, command: state.get("parent"),
+        # The company a base is for is the folder it sits in, which is what
+        # naming a base by its company matches (0.3.6).
+        "<company name>": lambda self, state, command: (
+            os.path.basename(os.path.dirname(state["base"].rstrip(os.sep)))
+            if state.get("base")
+            else None
+        ),
         "<draft file>": lambda self, state, command: state.get("draft"),
         "<the path it printed>": _the_path_it_printed,
         "<id>": lambda self, state, command: (
@@ -1300,7 +1307,15 @@ class TestTheSkillsAsTheyAreWritten(unittest.TestCase):
         """Run one command line of a walk and keep what it leaves behind."""
         self.before(mode, state, command)
         filled = self.fill(command, state)
-        finished = self.run_line(filled, state["cwd"])
+        cwd = state["cwd"]
+        if mode == "link" and not {"--folder", "--folder-file"} & set(
+            shlex.split(filled)
+        ):
+            # The skill runs "link this folder to my base" from the folder
+            # being linked, which links that folder (0.3.6). Run from inside
+            # the base, as the rest of the walk is, it is rightly refused.
+            cwd = state["material"]
+        finished = self.run_line(filled, cwd)
         printed = finished.stdout.decode("utf-8")
         if mode in self.REFUSED_ON_PURPOSE:
             self.assertNotEqual(

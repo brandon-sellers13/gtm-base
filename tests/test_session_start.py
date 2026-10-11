@@ -717,8 +717,12 @@ class SessionStartTest(support.PastTheFirstBackupReview, SessionStartHelpers):
         self.add_files(root)
 
         context = self.context_of(self.run_hook(root))
+        # The map's fence, which is the one longer than three marks. The list
+        # of the base's documents has a fence of its own (0.3.6).
         opening = [
-            line for line in context.split("\n") if line.startswith("`") and "data" in line
+            line
+            for line in context.split("\n")
+            if line.startswith("````") and "data" in line
         ]
         self.assertEqual(1, len(opening))
         self.assertGreater(len(opening[0]) - len("data"), 3)

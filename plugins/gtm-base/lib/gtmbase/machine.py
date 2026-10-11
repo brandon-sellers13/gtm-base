@@ -612,7 +612,7 @@ def relink_content(base_id: str, content_root: str, runner=None) -> MachineState
 
 
 def rewrite_content_root(
-    base_id: str, new_root: str, expected_root: str, identity=None
+    base_id: str, new_root: str, expected_root: str, identity=None, expected_identity=None
 ) -> MachineState:
     """Follow a folder that was renamed, but only if nobody moved it first.
 
@@ -629,6 +629,15 @@ def rewrite_content_root(
         if entry is None:
             raise StateError("that base is not joined", code="unknown-id")
         if entry.get("content_root") != expected_root:
+            raise StateError(
+                "that base belongs with a different folder now", code=CODE_STALE_LINK
+            )
+        # The record of the folder, too, when the caller read one: a window
+        # that linked the same path again in the meantime wrote a new record,
+        # and this run's older one must not replace it.
+        if expected_identity is not None and folder_identity.clean(
+            entry.get("content_identity")
+        ) != folder_identity.clean(expected_identity):
             raise StateError(
                 "that base belongs with a different folder now", code=CODE_STALE_LINK
             )
