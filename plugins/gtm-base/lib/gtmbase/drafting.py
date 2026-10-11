@@ -637,6 +637,28 @@ def strip_fence(step: str, model_text: str) -> str:
     return inside + "\n"
 
 
+_SOURCES_LINE_RE = re.compile(r"^(sources:).*$", re.M)
+
+
+def _without_source_labels(text: str) -> str:
+    """The draft as the word checks read it: the sources line left empty.
+
+    The sources line names the person's own files, and a file is named
+    whatever somebody called it, so a file called todo.md is a source and
+    not a placeholder. Only that one line of the settings block is left out;
+    everything a draft says in its own words is still checked (the replay of
+    2026-10-10, case two).
+    """
+    lines = text.split("\n")
+    if not lines or lines[0].strip() != formats.FRONTMATTER_FENCE:
+        return text
+    for index in range(1, len(lines)):
+        if lines[index].strip() == formats.FRONTMATTER_FENCE:
+            block = _SOURCES_LINE_RE.sub(r"\1 []", "\n".join(lines[1:index]), count=1)
+            return "\n".join([lines[0], block] + lines[index:])
+    return text
+
+
 def check_words(step: str, text: str) -> None:
     """Refuse the long dash, the words that say nothing, and any placeholder."""
     if EM_DASH in text or EN_DASH in text:
@@ -664,7 +686,7 @@ def parse(step: str, model_text: str) -> Draft:
     if step not in STEPS:
         raise DraftError(step, "unknown-step")
     text = strip_fence(step, model_text)
-    check_words(step, text)
+    check_words(step, _without_source_labels(text))
 
     try:
         block, body = formats.split_document(text)

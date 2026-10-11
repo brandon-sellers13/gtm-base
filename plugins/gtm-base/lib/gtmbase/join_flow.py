@@ -1454,28 +1454,39 @@ def segment_candidates(run_id: str, today=None) -> List[segments.Candidate]:
         def __init__(self, path):
             self.path = path
 
-    found = []
+    def _describes_a_segment(real):
+        name = os.path.basename(real)
+        heading = "" if name.casefold().endswith(".csv") else sources_module.first_heading(real)
+        if sources_module.kind_of(name, heading) != "customer-profile":
+            return False
+        words = ("%s %s" % (name, heading)).casefold()
+        stem = os.path.splitext(name)[0].casefold()
+        return not (
+            any(word in words for word in constants.DRAFT_LAST_WORDS)
+            or stem in constants.DRAFT_LAST_NAMES
+        )
+
+    # Versions are grouped across every file agreed to before anything is
+    # left out, so the version offered is the one a draft reads, the final
+    # one first, even when only an older version's name or heading says it
+    # describes a segment (the replay of 2026-10-10, case one, where the
+    # older version of a page was offered and taken in).
+    readable = []
     for path in consent.paths:
         try:
             real = sources_module.read_allowed(consent, path)
         except ConsentError:
             continue
-        if not os.path.isfile(real):
-            continue
-        name = os.path.basename(real)
-        heading = "" if name.casefold().endswith(".csv") else sources_module.first_heading(real)
-        if sources_module.kind_of(name, heading) != "customer-profile":
-            continue
-        words = ("%s %s" % (name, heading)).casefold()
-        stem = os.path.splitext(name)[0].casefold()
-        if any(word in words for word in constants.DRAFT_LAST_WORDS) or (
-            stem in constants.DRAFT_LAST_NAMES
-        ):
-            continue
-        found.append(_Found(real))
-    groups = sources_module.version_groups(
-        found, lambda item: sources_module.date_for_file(item.path, today=day).date
+        if os.path.isfile(real):
+            readable.append(_Found(real))
+    every_group = sources_module.version_groups(
+        readable, lambda item: sources_module.date_for_file(item.path, today=day).date
     )
+    groups = [
+        group
+        for group in every_group
+        if any(_describes_a_segment(member.path) for member in group)
+    ]
     candidates = []
     for number, group in enumerate(groups, start=1):
         path = group[0].path

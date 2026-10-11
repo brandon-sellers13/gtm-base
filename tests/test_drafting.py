@@ -636,6 +636,29 @@ class TestEveryRefusalNamesItsStepAndOneThing(unittest.TestCase):
         )
         drafting.parse(drafting.STEP_ICP, allowed)
 
+    def test_a_file_named_like_a_placeholder_may_be_cited_as_a_source(self):
+        # The replay of 2026-10-10, case two: every draft that correctly named
+        # a file called todo.md among its sources was refused, and could only
+        # pass by leaving that file out. The sources line names the person's
+        # files, so the words in it are theirs and are not checked.
+        import re as _re
+
+        text = captured("icp.md")
+        cited = _re.sub(
+            r"^sources: \[(.*)\]$",
+            lambda m: "sources: [%s, tasks/todo.md (2026-09-17), notes-tbd.md (2026-09-18)]" % m.group(1),
+            text,
+            count=1,
+            flags=_re.M,
+        )
+        self.assertIn("todo.md", cited)
+        drafting.parse(drafting.STEP_ICP, cited)
+        # The same words in the document itself are still refused.
+        self.assertEqual(
+            "icp:placeholder",
+            refusal(self, drafting.STEP_ICP, cited.replace("## Use cases\n", "## Use cases\n\nTODO\n", 1)),
+        )
+
     def test_a_section_the_profile_always_carries_may_not_be_empty(self):
         self.assertEqual(
             "icp:empty-section:Use cases",
