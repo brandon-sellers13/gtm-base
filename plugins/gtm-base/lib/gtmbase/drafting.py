@@ -637,16 +637,34 @@ def strip_fence(step: str, model_text: str) -> str:
     return inside + "\n"
 
 
-_SOURCES_KEY_RE = re.compile(r"^(sources?):(.*)$")
-_LIST_ITEM_RE = re.compile(r"^\s+-\s*(.*)$")
+_SOURCES_KEY_RE = re.compile(r"^(sources?)\s*:(.*)$")
+_LIST_ITEM_RE = re.compile(r"^\s*-(?:\s+(.*)|)$")
 _FILE_LABEL_RE = re.compile(
-    r"^[^\s\[\],][^\[\],]*\.[A-Za-z0-9]{1,8}(?: \(\d{4}-\d{2}-\d{2}\))?$"
+    r"^[^\s\[\],][^\[\],]*(?:%s)(?: \(\d{4}-\d{2}-\d{2}\))?$"
+    % "|".join(
+        re.escape(suffix)
+        for suffix in sorted(
+            set(constants.SOURCE_READABLE_SUFFIXES) | set(constants.SOURCE_EXPORT_SUFFIXES)
+        )
+    ),
+    re.IGNORECASE,
 )
 
 
+def _unquoted(item: str) -> str:
+    item = item.strip()
+    if len(item) >= 2 and item[0] == item[-1] and item[0] in "\"'":
+        return item[1:-1].strip()
+    return item
+
+
 def _unnamed(items: Sequence[str]) -> List[str]:
-    """The items that are not a file's name, which the word checks still read."""
-    return [item for item in items if not _FILE_LABEL_RE.match(item.strip())]
+    """The items that are not a file's name, which the word checks still read.
+
+    A file's name ends in a file ending the plugin reads or lists, so text
+    that only ends like one, such as "e.g" or "v2.1", is still read.
+    """
+    return [item for item in items if not _FILE_LABEL_RE.match(_unquoted(item))]
 
 
 def _without_source_labels(text: str) -> str:
@@ -684,7 +702,7 @@ def _without_source_labels(text: str) -> str:
             elif value:
                 line = "%s: %s" % (key.group(1), ", ".join(i.strip() for i in _unnamed([value])))
         elif in_sources and item:
-            if not _unnamed([item.group(1)]):
+            if not _unnamed([item.group(1) or ""]):
                 continue
         else:
             in_sources = False

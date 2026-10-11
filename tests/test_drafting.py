@@ -685,6 +685,32 @@ class TestEveryRefusalNamesItsStepAndOneThing(unittest.TestCase):
         )
         drafting.parse(drafting.STEP_ICP, listed)
 
+    def test_text_that_only_ends_like_a_file_is_still_checked(self):
+        # The confirm pass on the replay fixes, finding C2: only an ending the
+        # plugin reads or lists counts as a file's name.
+        import re as _re
+
+        text = captured("icp.md")
+        for unfilled in ("TBD pending interviews e.g", "todo see v2.1"):
+            changed = _re.sub(r"^sources: \[.*\]$", "sources: [%s]" % unfilled, text, count=1, flags=_re.M)
+            self.assertEqual("icp:placeholder", refusal(self, drafting.STEP_ICP, changed), unfilled)
+
+    def test_every_way_of_writing_the_sources_may_cite_todo(self):
+        # The confirm pass on the replay fixes, finding C3: each form the
+        # settings block accepts.
+        import re as _re
+
+        text = captured("icp.md")
+        for written in (
+            'sources: ["tasks/todo.md (2026-09-17)", acme-icp.md]',
+            "sources:\n  - 'tasks/todo.md'",
+            "sources:\n- tasks/todo.md (2026-09-17)",
+            "sources : [tasks/todo.md]",
+        ):
+            changed = _re.sub(r"^sources: \[.*\]$", lambda _m: written, text, count=1, flags=_re.M)
+            self.assertIn("todo.md", changed)
+            drafting.parse(drafting.STEP_ICP, changed)
+
     def test_a_change_entry_may_cite_todo_as_its_source(self):
         text = captured("change-entry.md").replace("source: pricing-notes.txt", "source: tasks/todo.md (2026-09-17)")
         self.assertIn("todo.md", text)

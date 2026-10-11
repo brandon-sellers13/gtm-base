@@ -1454,24 +1454,17 @@ def segment_candidates(run_id: str, today=None) -> List[segments.Candidate]:
         def __init__(self, path):
             self.path = path
 
-    def _heading(real):
+    def _describes_a_segment(real):
         name = os.path.basename(real)
-        return "" if name.casefold().endswith(".csv") else sources_module.first_heading(real)
-
-    def _is_a_template(real):
-        name = os.path.basename(real)
-        words = ("%s %s" % (name, _heading(real))).casefold()
+        heading = "" if name.casefold().endswith(".csv") else sources_module.first_heading(real)
+        if sources_module.kind_of(name, heading) != "customer-profile":
+            return False
+        words = ("%s %s" % (name, heading)).casefold()
         stem = os.path.splitext(name)[0].casefold()
-        return (
+        return not (
             any(word in words for word in constants.DRAFT_LAST_WORDS)
             or stem in constants.DRAFT_LAST_NAMES
         )
-
-    def _describes_a_segment(real):
-        name = os.path.basename(real)
-        if sources_module.kind_of(name, _heading(real)) != "customer-profile":
-            return False
-        return not _is_a_template(real)
 
     # Versions are grouped across every file agreed to before anything is
     # left out, so the version offered is the one a draft reads, the final
@@ -1496,9 +1489,10 @@ def segment_candidates(run_id: str, today=None) -> List[segments.Candidate]:
     ]
     candidates = []
     for number, group in enumerate(groups, start=1):
-        # The best version that is not a template or a read-me, so a final
-        # version that is only a blank form is never the one offered.
-        path = next(member.path for member in group if not _is_a_template(member.path))
+        # The version drafting keeps, whatever it says, so the page offered
+        # is always the page a draft reads (the confirm pass on the replay
+        # fixes, finding C1).
+        path = group[0].path
         try:
             label = os.path.relpath(path, root) if root else os.path.basename(path)
         except ValueError:
