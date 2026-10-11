@@ -189,8 +189,10 @@ class TestTheBlocksOfABody(unittest.TestCase):
             "| a | b |\n|---|---|\n| c | d |\n\n## Evidence by segment\n\nSetup's own words.\n"
         )
         found = citations.blocks(body)
+        # The table's header row names columns and is not a block (the
+        # correctness review of the summarize-first build, L13).
         self.assertEqual(
-            ["paragraph", "item", "item", "row", "row"], [block.kind for block in found]
+            ["paragraph", "item", "item", "row"], [block.kind for block in found]
         )
         self.assertEqual("First paragraph\nstill the first.", found[0].text)
         self.assertEqual("- one\n  carried on", found[1].text)
@@ -312,7 +314,7 @@ class TestTheDocumentSetupWrites(Run):
         self.assertIn("[^%s]" % lenders, written)
         self.assertRegex(
             written,
-            r'\[\^%s\]: ~/company/segments/icp-lenders\.md \(\d{4}-\d{2}-\d{2}\), "Lenders buy when defaults rise\."' % lenders,
+            r'\[\^%s\]: segments/icp-lenders\.md \(\d{4}-\d{2}-\d{2}\), "Lenders buy when defaults rise\."' % lenders,
         )
 
     def test_every_customer_sits_under_its_segment_beside_its_own_words(self):
@@ -334,7 +336,7 @@ class TestTheDocumentSetupWrites(Run):
         fields = formats.parse_frontmatter(formats.split_document(written)[0])
         names = [entry.split(" (")[0] for entry in fields["sources"]]
         self.assertEqual(
-            ["~/company/about.md", "~/company/segments/icp-lenders.md", "~/company/segments/icp-banks.md"],
+            ["company/about.md", "segments/icp-lenders.md", "segments/icp-banks.md"],
             names,
         )
 

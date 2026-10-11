@@ -32,7 +32,16 @@ _HEADING_RE = re.compile(r"^\s{0,3}#{1,6}\s")
 _ITEM_RE = re.compile(r"^\s*(?:[-+*]|\d+[.)])\s+")
 _TABLE_RULE_RE = re.compile(r"^\s*\|?\s*:?-{3,}")
 _MARKER_RE = re.compile(constants.YOUR_CALL_PATTERN, re.IGNORECASE)
-_FIGURE_RE = re.compile(r"\d(?:[\d,.]*\d)?")
+# A figure, whole: its currency sign, its digits, and the unit right after it.
+_FIGURE_RE = re.compile(
+    r"(?<![\w.,])[$\u20ac\u00a3]?\s?\d(?:[\d,.]*\d)?"
+    r"(?:\s?(?:%|percent\b|per cent\b|k\b|m\b|bn\b|b\b|x\b|million\b|billion\b|thousand\b))?"
+)
+# The endings that make a company's name formal, left off when it is matched.
+_NAME_ENDINGS = re.compile(
+    r"[,\s]+(?:inc|incorporated|corp|corporation|co|company|ltd|limited|llc|plc|gmbh|group|holdings)\.?$",
+    re.IGNORECASE,
+)
 
 # The one sentence a draft writes where the material does not cover a part
 # it has to carry. It cites nothing, because there is nothing to cite.
@@ -62,7 +71,15 @@ CODE_UNKNOWN_NOTE = "cites-a-note-it-did-not-read"
 CODE_FIGURE = "figure-not-in-its-notes"
 CODE_CUSTOMER = "customer-named"
 CODE_NOT_SETTLED = "open-stated-as-settled"
-CODES = (CODE_UNCITED, CODE_UNKNOWN_NOTE, CODE_FIGURE, CODE_CUSTOMER, CODE_NOT_SETTLED)
+CODE_HEADING_CITES = "a-heading-cites-a-note"
+CODES = (
+    CODE_UNCITED,
+    CODE_UNKNOWN_NOTE,
+    CODE_FIGURE,
+    CODE_CUSTOMER,
+    CODE_NOT_SETTLED,
+    CODE_HEADING_CITES,
+)
 
 # The sections setup writes itself, which a draft never writes and review
 # never checks as the draft's own sentences.
@@ -138,6 +155,11 @@ def blocks(body: str) -> List[Block]:
             close(index - 1)
             continue
         if _TABLE_RULE_RE.match(line):
+            # The row just above this line is the table's header, which
+            # names columns and says nothing to cite.
+            if found and found[-1].kind == "row" and found[-1].last == index - 1:
+                gone = found.pop()
+                state["counts"]["row"] -= 1
             continue
         if _ITEM_RE.match(line):
             close(index - 1)
@@ -169,54 +191,112 @@ def without_citations(text: str) -> str:
 
 
 def _names_in(text: str, names: Iterable[str]) -> bool:
-    evened = notes_module.even_out(without_citations(text))
+    """Whether a line names a customer as the material writes it.
+
+    Matched in the line's own letter case, so an ordinary word that happens
+    to be a customer's name, such as box, is not one.
+    """
+    plain = " ".join(without_citations(text).split())
     for name in names:
-        if re.search(r"(?<![a-z0-9])%s(?![a-z0-9])" % re.escape(name), evened):
+        if re.search(r"(?<![\w])%s(?![\w])" % re.escape(name), plain):
             return True
     return False
+
+
+def _forms_of(name: str) -> List[str]:
+    """A customer's name as written, and without its formal ending."""
+    written = " ".join(str(name or "").split())
+    forms = [written] if written else []
+    short = _NAME_ENDINGS.sub("", written).strip()
+    if short and short not in forms and len(short) > 1:
+        forms.append(short)
+    return forms
 
 
 def customer_names(
     found: Sequence["notes_module.Note"], company: str, segment_names: Sequence[str]
 ) -> List[str]:
-    """The customers the notes name, as they are matched in a draft.
+    """The customers the notes name, in each form a draft might write them.
 
     A name that is also a segment's name, or that sits inside the company's
-    own name or a segment's, is never a reason to refuse a sentence.
+    own name or a segment's, is never a reason to refuse a sentence, and
+    neither is the company's own name.
     """
-    guarded = [notes_module.even_out(name) for name in [company] + list(segment_names)]
+    guarded = [notes_module.even_out(name) for name in [company] + list(segment_names) if name]
     names: List[str] = []
     for item in found:
         if item.kind != notes_module.KIND_CUSTOMER or not item.customer:
             continue
-        evened = notes_module.even_out(item.customer)
-        if not evened or evened in names:
-            continue
-        if any(evened == other or evened in other for other in guarded if other):
-            continue
-        names.append(evened)
+        for form in _forms_of(item.customer):
+            evened = notes_module.even_out(form)
+            if not evened or form in names:
+                continue
+            if any(evened == other or evened in other or other in evened for other in guarded):
+                continue
+            names.append(form)
     return names
+
+
+def _figures(text: str) -> List[str]:
+    return [figure.strip() for figure in _FIGURE_RE.findall(without_citations(text))]
+
+
+_A_UNIT = r"\s?(?:%|percent\b|per cent\b|k\b|m\b|bn\b|b\b|x\b|million\b|billion\b|thousand\b)"
+
+
+def _figure_in(figure: str, quote: str) -> bool:
+    """Whether a figure, unit and all, stands whole in one quote.
+
+    A number written with no unit matches only where the quote gives it none
+    either, so 14 never stands for 14%.
+    """
+    evened = notes_module.even_out(figure)
+    if not evened:
+        return False
+    bare = not re.search(_A_UNIT + r"$", evened)
+    tail = r"(?![\d])" + (r"(?!%s)" % _A_UNIT if bare else "")
+    return bool(
+        re.search(r"(?<![\d.,])%s%s" % (re.escape(evened), tail), notes_module.even_out(quote))
+    )
+
+
+def _fixed(text: str) -> bool:
+    lines = [line.strip().lstrip("-*+ ").strip() for line in text.split("\n") if line.strip()]
+    return bool(lines) and all(without_citations(line).strip() in _FIXED for line in lines)
 
 
 def check(
     body: str,
     readable: Dict[str, "notes_module.Note"],
     customers: Sequence[str],
+    allowed_headings: Sequence[str] = (),
 ) -> List[tuple]:
     """Every problem in one body, as (block, code) pairs, in reading order.
 
     `readable` holds the notes this draft read, by id. `customers` holds the
     names `customer_names` gave for every note of the run, so a customer the
     draft did not read about is still never named in its sentences.
+    `allowed_headings` are the settled segments' names, which a heading may
+    carry as they are, digits and all.
     """
     problems: List[tuple] = []
+    allowed = set(notes_module.even_out(name) for name in allowed_headings)
     for number, line in enumerate(str(body or "").split("\n"), start=1):
         if any(line.strip().startswith(head) for head in SETUP_HEADINGS):
             problems.append((Block(0, number, "line", line, number - 1, number - 1), CODE_SETUP_SECTION))
+            continue
+        if _HEADING_RE.match(line):
+            heading = Block(0, number, "heading", line, number - 1, number - 1)
+            title = line.strip().lstrip("#").strip()
+            if CITATION_RE.search(line):
+                problems.append((heading, CODE_HEADING_CITES))
+            if _names_in(title, customers):
+                problems.append((heading, CODE_CUSTOMER))
+            if _figures(title) and notes_module.even_out(title) not in allowed:
+                problems.append((heading, CODE_FIGURE))
     for block in blocks(body):
         text = block.text
-        bare = without_citations(text).strip()
-        if bare in _FIXED:
+        if _fixed(text):
             continue
         ids = cited(text)
         if not ids:
@@ -225,9 +305,9 @@ def check(
         if any(note_id not in readable for note_id in ids):
             problems.append((block, CODE_UNKNOWN_NOTE))
             continue
-        quotes = " ".join(notes_module.even_out(readable[i].quote) for i in ids)
-        for figure in _FIGURE_RE.findall(without_citations(text)):
-            if notes_module.even_out(figure) not in quotes:
+        quotes = [readable[i].quote for i in ids]
+        for figure in _figures(text):
+            if not any(_figure_in(figure, quote) for quote in quotes):
                 problems.append((block, CODE_FIGURE))
                 break
         if _names_in(text, customers):
@@ -247,8 +327,8 @@ def take_out(body: str, problems: Sequence[tuple]) -> str:
     lines = str(body or "").split("\n")
     failing = sorted(set((block.first, block.last) for block, _code in problems), reverse=True)
     for first, last in failing:
-        lines[first : last + 1] = [TAKEN_OUT]
-    return "\n".join(lines)
+        lines[first : last + 1] = ["", TAKEN_OUT, ""]
+    return re.sub(r"\n{3,}", "\n\n", "\n".join(lines))
 
 
 # --- The support check: an independent read of each line (U5) ----------------
@@ -264,6 +344,7 @@ NEIGHBOURS_MAX = 12
 CODE_SUPPORT_NO_FENCE = "support-no-fence"
 CODE_SUPPORT_INCOMPLETE = "support-incomplete"
 CODE_SUPPORT_NOT_CHECKED = "support-not-checked"
+CODE_SUPPORT_DRAFT_CHANGED = "support-draft-changed"
 
 
 def checkable(body: str) -> List[Block]:
@@ -338,8 +419,8 @@ def take_out_beyond(body: str, verdicts: Dict[int, str]) -> str:
         if verdicts.get(number) == VERDICT_BEYOND
     ]
     for first, last in sorted(failing, reverse=True):
-        lines[first : last + 1] = [BEYOND_TAKEN_OUT]
-    return "\n".join(lines)
+        lines[first : last + 1] = ["", BEYOND_TAKEN_OUT, ""]
+    return re.sub(r"\n{3,}", "\n\n", "\n".join(lines))
 
 
 # --- What setup writes into the document itself (U6) --------------------------
@@ -353,6 +434,14 @@ _STATUS_WORDS = {
     notes_module.ON_HOLD: "on hold",
     notes_module.OPEN: "open",
 }
+
+
+def _one_line(item):
+    """A note as a document shows it: its words and names on one line each."""
+    shown = notes_module.Note(item.row(), id=item.id)
+    for field in ("quote", "customer", "segment"):
+        setattr(shown, field, " ".join(str(getattr(item, field) or "").split()))
+    return shown
 
 
 class Rendered(object):
@@ -401,9 +490,13 @@ def render(
 
     names = list(segment_order)
     for item in found:
+        # A segment the person did not settle is named only when the file's
+        # own words hold its name, which the notes check makes sure of.
         if item.kind in (notes_module.KIND_SEGMENT, notes_module.KIND_CUSTOMER):
             if item.segment and item.segment not in names:
                 names.append(item.segment)
+    found = [_one_line(item) for item in found]
+    by_id = dict((item.id, item) for item in found)
     if only_segment is not None:
         names = [only_segment]
 
@@ -436,8 +529,8 @@ def render(
         if not item.settled
     ]
     lines.extend(
-        "- " + NOT_NOTED % file_names.get(int(number), "S%s" % number)
-        for number, _code in sorted(set((int(n), c) for n, c in not_noted))
+        "- " + NOT_NOTED % file_names.get(number, "S%s" % number)
+        for number in sorted(set(int(n) for n, _c in not_noted))
     )
     still_open.extend(lines or [NOTHING_OPEN])
     still_open.append("")

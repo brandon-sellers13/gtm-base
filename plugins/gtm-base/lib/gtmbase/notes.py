@@ -245,10 +245,13 @@ def assemble(
         "batch": "%d of %d" % (batch.number, total),
         "sources": batch_listing(batch) + "\n\n" + batch.fenced,
     }
-    text = template
-    for field, value in values.items():
-        text = text.replace("{{%s}}" % field, value)
-    return text
+    # One pass, so a value that happens to hold another placeholder is
+    # never filled in a second time.
+    return re.sub(
+        r"\{\{(%s)\}\}" % "|".join(values),
+        lambda match: values[match.group(1)],
+        template,
+    )
 
 
 # --- Reading back and checking the notes (U2) ---------------------------------
@@ -277,17 +280,20 @@ CODE_NO_FENCE = "no-fence"
 CODE_NOTES_WAITING = "notes-waiting"
 CODE_NOT_THE_NOTES_FILE = "not-the-notes-file"
 CODE_FILE_NOT_NOTED = "file-not-noted"
+CODE_UNREADABLE_LINE = "a-line-could-not-be-read"
+# What a customer, a figure or a segment may never hold: line breaks and the
+# marks that build a heading, a table, a link, a fence or a tag.
+_MARKUP = re.compile(r"[\n\r`#|<>\[\]{}]")
 
 _FIELDS = ("source", "kind", "segment", "customer", "figure", "status", "quote")
 
 # Words that say the material has not settled something. The firmest status
 # the words allow is the one the note may carry, whatever the note says.
 _ON_HOLD_WORDS = re.compile(r"\b(on hold|paused|parked|shelved|deprioriti[sz]ed)\b")
-_PROPOSED_WORDS = re.compile(r"\b(propos\w*|plans? to|planned)\b")
+_PROPOSED_WORDS = re.compile(r"\b(propos(e|ed|es|al|als|ing)|plans? to|planned)\b")
 _OPEN_WORDS = re.compile(
     r"\b(to be (clarified|confirmed|decided|determined|agreed)|tbc|tbd|open questions?"
     r"|unclear|unconfirmed|unknown|hypothes\w*|assum\w*|not yet (decided|confirmed|agreed))\b"
-    r"|\?"
 )
 
 
@@ -320,17 +326,49 @@ def even_out(text: str) -> str:
     of emphasis, tables, headings and lists taken out, letter case folded,
     and every run of spacing and line breaks made one space.
     """
+    return evened_with_places(text)[0]
+
+
+_LIST_MARK = re.compile(r"(?m)^[ \t]*(?:[-+*]|\d+[.)])[ \t]+")
+_RULE_MARK = re.compile(r"(?<=\s)-{3,}(?=\s)")
+_DROPPED = set("*_`~")
+_AS_SPACE = set("|>#")
+_TIGHT = set(".,;:!?")
+
+
+def evened_with_places(text: str):
+    """The evened text, and for each of its characters the place in `text`
+    it came from, so a match can be read back as the file's own words."""
     import unicodedata
 
-    evened = unicodedata.normalize("NFKC", str(text or ""))
-    evened = evened.translate(_PLAIN_MARKS)
-    evened = re.sub(r"(?m)^\s*(?:[-+*]|\d+[.)])\s+", " ", evened)
-    evened = re.sub(r"[*_`~]+", "", evened)
-    evened = re.sub(r"[|>#]+", " ", evened)
-    evened = re.sub(r"(?<=\s)-{3,}(?=\s)", " ", evened)
-    evened = re.sub(r"\s+", " ", evened)
-    evened = re.sub(r" (?=[.,;:!?])", "", evened)
-    return evened.strip().casefold()
+    raw = str(text or "")
+    blank = set()
+    for pattern in (_LIST_MARK, _RULE_MARK):
+        for match in pattern.finditer(raw):
+            blank.update(range(match.start(), match.end()))
+    out: List[str] = []
+    places: List[int] = []
+    for index, character in enumerate(raw):
+        pieces = " " if index in blank else unicodedata.normalize("NFKC", character)
+        for piece in pieces:
+            piece = piece.translate(_PLAIN_MARKS)
+            if piece in _DROPPED:
+                continue
+            if piece in _AS_SPACE or piece.isspace():
+                piece = " "
+            for folded in piece.casefold():
+                if folded == " ":
+                    if not out or out[-1] == " ":
+                        continue
+                elif folded in _TIGHT and out and out[-1] == " ":
+                    out.pop()
+                    places.pop()
+                out.append(folded)
+                places.append(index)
+    while out and out[-1] == " ":
+        out.pop()
+        places.pop()
+    return "".join(out), places
 
 
 _PLAIN_MARKS = dict(
@@ -372,42 +410,73 @@ def notes_lines(text: str) -> Optional[List[str]]:
 
 
 def _sections(text: str):
-    """A file as its headed sections: each heading with the text under it."""
+    """A file as its headed sections: every heading above, and the text under."""
     sections = []
-    heading = ""
+    chain: List[tuple] = []
     body: List[str] = []
     for line in str(text or "").split("\n"):
-        if re.match(r"^\s{0,3}#{1,6}\s", line):
-            sections.append((heading, "\n".join(body)))
-            heading, body = line, [line]
+        match = re.match(r"^\s{0,3}(#{1,6})\s", line)
+        if match:
+            sections.append(([title for _level, title in chain], "\n".join(body)))
+            level = len(match.group(1))
+            chain = [(lvl, title) for lvl, title in chain if lvl < level] + [(level, line)]
+            body = [line]
             continue
         body.append(line)
-    sections.append((heading, "\n".join(body)))
+    sections.append(([title for _level, title in chain], "\n".join(body)))
     return sections
+
+
+def _where(evened_quote: str, body: str):
+    """The paragraph and the sentence a quote sits in, inside one section."""
+    for paragraph in re.split(r"\n\s*\n", body):
+        if evened_quote and evened_quote in even_out(paragraph):
+            for sentence in re.split(r"(?<=[.!?])\s+", paragraph):
+                if evened_quote in even_out(sentence):
+                    return paragraph, sentence
+            return paragraph, paragraph
+    return "", ""
+
+
+def _firmest(said: str, sentence: str) -> str:
+    floor = SETTLED
+    folded = said.casefold()
+    if _PROPOSED_WORDS.search(folded):
+        floor = PROPOSED
+    if _ON_HOLD_WORDS.search(folded):
+        floor = ON_HOLD
+    if _OPEN_WORDS.search(folded) or "?" in sentence:
+        floor = OPEN
+    return floor
 
 
 def floor_status(status: str, quote: str, whole_text: str) -> str:
     """The firmest status the material's own words allow for one note.
 
-    The words of the quote count, and so do the words of the heading the
-    quote sits under, so a figure from a section headed as on hold is on
-    hold however plainly it is stated (the replay of 2026-10-10, case two).
+    The words of the quote count, and so do the sentence and paragraph it
+    sits in and every heading above it, so a figure under a heading that says
+    paused is paused however plainly it is stated (the replay of 2026-10-10,
+    case two). Where the same words sit in more than one place, the least
+    settled of those places counts.
     """
     evened_quote = even_out(quote)
-    heading = ""
-    for title, body in _sections(whole_text):
-        if evened_quote and evened_quote in even_out(body):
-            heading = title
-            break
-    said = (quote + " \n " + heading).casefold()
-    floor = SETTLED
-    if _PROPOSED_WORDS.search(said):
-        floor = PROPOSED
-    if _ON_HOLD_WORDS.search(said):
-        floor = ON_HOLD
-    if _OPEN_WORDS.search(said):
-        floor = OPEN
+    floor = _firmest(quote, quote)
+    for headings, body in _sections(whole_text):
+        paragraph, sentence = _where(evened_quote, body)
+        if not paragraph:
+            continue
+        found = _firmest(" \n ".join([quote, paragraph] + headings), sentence + " " + quote)
+        if _FIRMNESS[found] < _FIRMNESS[floor]:
+            floor = found
     return status if _FIRMNESS[status] <= _FIRMNESS[floor] else floor
+
+
+def _section_headings(evened_quote: str, whole_text: str) -> List[str]:
+    """Every heading above the first place the words sit."""
+    for headings, body in _sections(whole_text):
+        if _where(evened_quote, body)[0]:
+            return headings
+    return []
 
 
 class BatchChecked(object):
@@ -421,7 +490,9 @@ class BatchChecked(object):
         self.not_noted = not_noted
 
 
-def check_batch(text: str, batch: Batch, screen) -> BatchChecked:
+def check_batch(
+    text: str, batch: Batch, screen, segment_names: Sequence[str] = ()
+) -> BatchChecked:
     """Check one batch's notes against the files the batch read.
 
     Every refusal names the line of the notes and what is wrong with it,
@@ -432,26 +503,32 @@ def check_batch(text: str, batch: Batch, screen) -> BatchChecked:
     """
     lines = notes_lines(text)
     if lines is None:
-        return BatchChecked([], [CODE_NO_FENCE], [])
+        # Nothing could be read, so every file of the batch is not noted.
+        return BatchChecked(
+            [], [CODE_NO_FENCE], [(number, CODE_NO_FENCE) for number in batch.numbers]
+        )
     whole = {}
     for part in batch.parts:
         whole[part.number] = part.original.text
-    evened = dict((number, even_out(text)) for number, text in whole.items())
+    evened = dict((number, evened_with_places(text)) for number, text in whole.items())
     rows: List[dict] = []
     problems: List[str] = []
     not_noted: List[tuple] = []
     noted = set()
     line_number = 0
+    unplaced = False
     for raw in lines:
         if not raw.strip():
             continue
         line_number += 1
-        found, code = _one_note(raw, whole, evened, screen)
+        found, code = _one_note(raw, whole, evened, screen, segment_names)
         if code:
             problems.append("note-%d:%s" % (line_number, code))
             source = found.get("source") if isinstance(found, dict) else None
             if isinstance(source, int) and source in whole:
                 not_noted.append((source, code))
+            else:
+                unplaced = True
             continue
         noted.add(found["source"])
         if found["kind"] != KIND_NOTHING:
@@ -460,10 +537,15 @@ def check_batch(text: str, batch: Batch, screen) -> BatchChecked:
         if number not in noted:
             problems.append("%s:S%d" % (CODE_FILE_NOT_NOTED, number))
             not_noted.append((number, CODE_FILE_NOT_NOTED))
+    if unplaced:
+        # A line that could not be read says nothing about which file it
+        # was for, so every file of the batch may be missing something.
+        for number in batch.numbers:
+            not_noted.append((number, CODE_UNREADABLE_LINE))
     return BatchChecked(rows, problems, not_noted)
 
 
-def _one_note(raw: str, whole, evened, screen):
+def _one_note(raw: str, whole, evened, screen, segment_names=()):
     try:
         row = json.loads(raw)
     except ValueError:
@@ -498,12 +580,29 @@ def _one_note(raw: str, whole, evened, screen):
         return row, "no-quote"
     if len(quote) > QUOTE_MAX:
         return row, "quote-too-long"
+    for field in ("customer", "figure"):
+        if _MARKUP.search(clean[field]):
+            return row, "markup-in-a-field"
     found = screen(quote)
     if found:
         return row, "screened-%s" % found[0]
     evened_quote = even_out(quote)
-    if not evened_quote or evened_quote not in evened[source]:
+    evened_file, places = evened[source]
+    at = evened_file.find(evened_quote) if evened_quote else -1
+    if at < 0:
         return row, "quote-not-in-file"
+    # What is kept is the file's own words where the quote matched, never
+    # the copy, so a disguised address or key is screened as the file has it.
+    span = whole[source][places[at] : places[at + len(evened_quote) - 1] + 1]
+    if re.search(r"\n[ \t]*[|#]|\|[ \t]*\n|\n[ \t]*\n", span):
+        return row, "quote-spans-rows"
+    kept = re.sub(r"\s+", " ", span).strip()
+    if "```" in kept or "[[" in kept or "]]" in kept:
+        return row, "quote-holds-markup"
+    for text in (kept, re.sub(r"[*_`~]", "", _plain(kept))):
+        found = screen(text)
+        if found:
+            return row, "screened-%s" % found[0]
     if kind == KIND_CUSTOMER and not clean["customer"]:
         return row, "no-customer"
     if clean["customer"] and even_out(clean["customer"]) not in evened_quote:
@@ -512,8 +611,39 @@ def _one_note(raw: str, whole, evened, screen):
         return row, "figure-not-in-quote"
     if kind == KIND_SEGMENT and not clean["segment"]:
         return row, "no-segment"
-    clean["status"] = floor_status(clean["status"], quote, whole[source])
+    settled = dict((_slug(name), name) for name in segment_names)
+    if clean["segment"]:
+        if _slug(clean["segment"]) in settled:
+            clean["segment"] = settled[_slug(clean["segment"])]
+        elif _MARKUP.search(clean["segment"]) or even_out(clean["segment"]) not in evened_quote:
+            # A segment is one the person settled, or a name the file's own
+            # words hold, and nothing else reaches the base as a label.
+            return row, "unknown-segment"
+    if kind in (KIND_CUSTOMER, KIND_SEGMENT) and settled:
+        named = [
+            name
+            for slug, name in settled.items()
+            if any(even_out(name) in even_out(title) for title in _section_headings(evened_quote, whole[source]))
+        ]
+        # A note naming no segment is placed by its page later; one naming a
+        # segment its own heading does not is credited to the wrong one.
+        if named and clean["segment"] and clean["segment"] not in named:
+            return row, "segment-not-its-section"
+    clean["quote"] = kept
+    clean["status"] = floor_status(clean["status"], kept, whole[source])
     return clean, None
+
+
+def _plain(text: str) -> str:
+    import unicodedata
+
+    return unicodedata.normalize("NFKC", text).translate(_PLAIN_MARKS)
+
+
+def _slug(name: str) -> str:
+    from . import segments
+
+    return segments.slug_for(name)
 
 
 # --- The notes a draft reads (U3) ---------------------------------------------

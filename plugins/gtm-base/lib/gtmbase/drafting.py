@@ -795,7 +795,10 @@ def parse(step: str, model_text: str) -> Draft:
     if step not in STEPS:
         raise DraftError(step, "unknown-step")
     text = strip_fence(step, model_text)
-    check_words(step, _without_source_labels(without_setup_sections(text)))
+    # Only a document written from the notes has sections setup writes, so
+    # only its words are read without them (the correctness review, M12).
+    exempt = step in (STEP_ICP, STEP_UMBRELLA, STEP_POSITIONING, STEP_SEGMENT)
+    check_words(step, _without_source_labels(without_setup_sections(text) if exempt else text))
 
     try:
         block, body = formats.split_document(text)

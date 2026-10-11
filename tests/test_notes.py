@@ -336,7 +336,7 @@ class Checked(unittest.TestCase):
     def good(self):
         return [
             note(self.pricing, 'We charge "per seat" at $40 a month, and Acme Bank pays it for all 300 seats.',
-                 kind="customer", segment="Regional banks", customer="Acme Bank", figure="$40"),
+                 kind="customer", segment="", customer="Acme Bank", figure="$40"),
             note(self.pricing, "| Team | $40 a month |", figure="$40"),
             note(self.segments, "Regional banks buy first.", kind="segment", segment="Regional banks"),
         ]
@@ -557,7 +557,7 @@ def three_files_rows(label, number):
         "icp-lenders.md": [
             note(number, "Lenders buy when defaults rise.", kind="segment", segment="Lenders"),
             note(number, "Harbor Lending signed for a year.", kind="customer",
-                 segment="Banks", customer="Harbor Lending"),
+                 segment="", customer="Harbor Lending"),
         ],
         "icp-banks.md": [
             note(number, "Granite Bank tried it and did not renew.", kind="customer",
