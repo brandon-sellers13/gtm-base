@@ -192,7 +192,18 @@ the base up you name the folder your marketing material lives in, and the base
 is linked to that folder. From then on, opening Claude Code in your own folder
 brings the base with it: the map, the one question for the day, and anything a
 teammate changed. Opening the base's own folder works too, and so does opening
-the folder that contains it.
+the folder that contains it. Restarting your computer does not disconnect the
+two.
+
+Each session opened there also starts knowing where your base is and which
+documents it holds, and it is told to read them, and to check each one against
+the context changes you recorded before using it, whenever you ask for
+something about who you sell to, what you say, or how you say it. Outside GTM
+Base's own skills that check is best effort. The assistant is told to run it,
+and a second check catches a document as it is opened, but nothing can make an
+assistant open your documents for a request that does not seem to need them.
+Naming the document in your request, as in "read my customer profile, then
+draft the email", is the sure way.
 
 Three things you can say about that link at any time:
 

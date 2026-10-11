@@ -630,28 +630,60 @@ Add `--got-in-the-way-file <path to their words>` when they said something.
 Three sentences reach this skill at any time, from any session, and each one is
 one command. None of them needs a base to be open in the session, which matters,
 because the folder somebody wants to link is their own folder and is not a base.
+These commands are run from the folder the person is working in, so each one
+names the script by its whole path. Run each exactly as it is written here,
+with nothing added in front of it and nothing taken off.
 
-Say "link this folder to my base", ask for somewhere to put the folder with
-`python3 scripts/join.py words-file --base <base folder or company name> --for folder`,
-write the folder into the path it prints, and run
-`python3 scripts/join.py link --base <base folder or company name> --folder-file <the path it printed>`,
-using the folder they are working in when they did not name one. The base can be
-named by its folder or by the company it is for, so "link this folder to my Acme
-base" is enough, and `--base` can be left off altogether when there is only one
-base on the computer. When there is more than one and they named none, the
-command names the ones it could have meant and changes nothing, so ask which.
-It refuses a folder that already belongs with another base and names that base, a
-folder that is a base or sits inside one, and a folder that is not on the
-computer.
+When they say "link this folder to my base", run this from the folder they are
+working in:
 
-Say "unlink this folder from my base" and run
-`python3 scripts/join.py unlink --base <base folder or company name>`. The base
-itself is not touched, and it still opens in its own folder.
+```
+python3 "${CLAUDE_SKILL_DIR}/scripts/join.py" link
+```
 
-Say "show my linked folders" and run `python3 scripts/join.py links`, which
-prints one line per base with its name, its own folder, and the folder it belongs
-with, or `none`. Run this whenever a name they gave was not found, and show them
-the list so they can name one from it.
+It links the folder it runs in. Add `--base <company name>` only when there is
+more than one base on the computer: "link this folder to my Acme base" names
+Acme. When there is more than one and they named none, the command names the
+ones it could have meant and changes nothing, so ask which and run it again
+with `--base`. The same goes for every command below. It refuses the home
+folder itself, which holds every other folder.
+
+When they name a different folder from the one they are working in, the folder
+travels in a file like any other words they typed. First:
+
+```
+python3 "${CLAUDE_SKILL_DIR}/scripts/join.py" words-file --for folder
+```
+
+Write the folder into the path it prints, and then:
+
+```
+python3 "${CLAUDE_SKILL_DIR}/scripts/join.py" link --folder-file <the path it printed>
+```
+
+The link refuses a folder that already belongs with another base and names that
+base, a folder that is a base or sits inside one, and a folder that is not on
+the computer. Say its sentence as printed, and never explain how the command
+takes its folder.
+
+When they say "unlink this folder from my base", run:
+
+```
+python3 "${CLAUDE_SKILL_DIR}/scripts/join.py" unlink
+```
+
+The base itself is not touched, and it still opens in its own folder. With
+more than one base, add `--base <company name>` the same way.
+
+When they say "show my linked folders", run:
+
+```
+python3 "${CLAUDE_SKILL_DIR}/scripts/join.py" links
+```
+
+It prints one line per base with its name, its own folder, and the folder it
+belongs with, or `none`. Run this whenever a name they gave was not found, and
+show them the list so they can name one from it.
 
 Once a folder is linked, every other GTM Base skill runs from that folder
 exactly as it runs from the base's own folder. So never run `links`, or

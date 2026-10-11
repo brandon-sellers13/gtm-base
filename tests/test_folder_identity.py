@@ -130,8 +130,11 @@ class TestComparingTwoRecords(unittest.TestCase):
             )
 
     def test_a_different_device_number_is_a_disk_that_came_back(self):
-        recorded = self.record()
-        current = self.record(dev=101)
+        """With no disk identifier to vouch for it. When both records carry one
+        and it agrees, a new device number is the same folder after a restart
+        (tests/test_restart_keeps_the_link.py)."""
+        recorded = self.record(volume=None)
+        current = self.record(dev=101, volume=None)
 
         self.assertEqual(
             folder_identity.REMOUNTED, folder_identity.matches(recorded, current, "/x")
