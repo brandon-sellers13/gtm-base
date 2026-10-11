@@ -1085,6 +1085,31 @@ PYTHON_SENTENCES = (
     ("record_change", "NOT_ALL_TAKEN_BACK"),
     ("record_change", "BUSY"),
     ("record_change", "SAVING_ELSEWHERE"),
+    # Plan 1, Unit 2.1: the inventory.
+    ("inventory", "PURPOSE"),
+    ("inventory", "NOT_STATED"),
+    ("inventory", "NOT_STATED_ONE"),
+    ("inventory", "UNLISTED"),
+    ("inventory", "UNLISTED_ONE"),
+    ("inventory", "DISAGREE"),
+    ("inventory", "DISAGREE_ONE"),
+    ("inventory", "SETTING_LATER"),
+    ("inventory", "BUSINESSES_UNREADABLE"),
+    ("inventory", "DATES_UNREADABLE"),
+    ("inventory", "SCOPE_FINDING"),
+    ("inventory", "SCOPE_OFFER"),
+    ("inventory", "DRAFT_OFFER"),
+    ("inventory", "DRAFTING_LATER"),
+    ("inventory", "DRAFTING_LATER_REST"),
+    ("inventory", "NOTHING_MISSING"),
+    # Plan 1, Unit 2.5a: the source map's rows.
+    ("truth_map", "ROW_INCOMPLETE"),
+    ("truth_map", "ROW_MALFORMED"),
+    ("truth_map", "OTHER_COLUMNS"),
+    ("truth_map", "BUSINESS_NOT_IN_MAP"),
+    ("truth_map", "BUSINESSES_UNREADABLE"),
+    ("truth_map", "SCREENED"),
+    ("truth_map", "UNREADABLE"),
 )
 
 # Constants that read like a sentence but that no person ever reads. Each one

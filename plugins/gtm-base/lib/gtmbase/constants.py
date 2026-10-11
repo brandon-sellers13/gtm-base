@@ -1024,3 +1024,42 @@ UMBRELLA_LEFT_OUT_SENTENCE = (
 # The umbrella and a segment want what the profile wants first.
 DRAFT_RELEVANCE["umbrella"] = DRAFT_RELEVANCE["icp"]
 DRAFT_RELEVANCE["segment"] = DRAFT_RELEVANCE["icp"]
+
+# --- The kinds a base can hold (added by Unit 2.1 of Plan 1) ----------------
+
+from collections import namedtuple as _namedtuple  # noqa: E402
+
+# One kind of document a base can hold, as the inventory reads against it.
+# `key` names the kind in the machine's lines and in the reference that
+# explains it. `pattern` is where the current layout keeps it; `<job>` stands
+# for the one job a standard or a skill is for. `differs_by_business` says
+# whether each business a base covers needs its own (in a folder named for the
+# business under `context`, or flat with a `business:` line), or one serves
+# the whole company. `adoptable` says whether a finished page can be taken in
+# as it stands, which today only setup does, for a segment of the customer
+# profile. `draftable` says whether this release can draft it on request; each
+# kind's own unit flips it (Units 2.4a and 3.5, and 2.5a's prompt).
+BaseKind = _namedtuple(
+    "BaseKind", "key pattern differs_by_business adoptable draftable"
+)
+
+# In order: the nine kinds of the context standard, then the source map, the
+# standard for a job, and a skill (Plan 1, Unit 2.1). Brandon's call 1 of
+# Plan 1 puts goals and metric definitions in a folder per business; the
+# product, the profile, the buyer personas, the positioning and the messaging
+# differ by business for the same reason, and one voice, one design guide, one
+# source map, and one standard and one skill per job serve the whole company.
+BASE_KINDS = (
+    BaseKind("goals", "context/goals.md", True, False, False),
+    BaseKind("product", "context/product.md", True, False, False),
+    BaseKind("icps", "context/icps.md", True, True, False),
+    BaseKind("buyer-personas", "context/buyer-personas.md", True, False, False),
+    BaseKind("positioning", "context/positioning.md", True, False, False),
+    BaseKind("messaging", "context/messaging.md", True, False, False),
+    BaseKind("voice", "context/voice.md", False, False, False),
+    BaseKind("design", "context/design.md", False, False, False),
+    BaseKind("metrics", "context/metrics.md", True, False, False),
+    BaseKind("stack", STACK_PATH, False, False, False),
+    BaseKind("standard", STANDARDS_DIR + "/<job>.md", False, False, False),
+    BaseKind("skill", SKILLS_DIR + "/<job>/SKILL.md", False, False, False),
+)
