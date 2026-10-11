@@ -55,6 +55,7 @@ from . import (
     marker,
     moment,
     names,
+    notes as notes_module,
     paths,
     review,
     segments,
@@ -3872,6 +3873,261 @@ def assemble_step(
         read.removed,
         superseded=superseded,
     )
+
+
+# --- The notes taken before anything is drafted (the summarize-first stage) ---
+
+
+class NotesPlanned(object):
+    """Every file this run reads, numbered, and the batches they are read in."""
+
+    __slots__ = ("sources", "batches", "superseded", "left_out", "removed", "digest")
+
+    def __init__(self, found, batches, superseded, left_out, removed):
+        self.sources = list(found)
+        self.batches = list(batches)
+        self.superseded = list(superseded)
+        self.left_out = list(left_out)
+        self.removed = list(removed)
+        self.digest = notes_module.plan_digest(self.batches)
+
+    def __repr__(self) -> str:
+        return "NotesPlanned(files=%d, batches=%d)" % (
+            len(self.sources),
+            len(self.batches),
+        )
+
+
+class NotesMade(object):
+    """The request for one batch, and the file its notes are written to."""
+
+    __slots__ = ("prompt", "notes", "batch", "total")
+
+    def __init__(self, prompt, notes, batch, total):
+        self.prompt = prompt
+        self.notes = notes
+        self.batch = batch
+        self.total = total
+
+
+def notes_plan(
+    run_id: str, paste_files: Sequence[str] = (), today=None
+) -> NotesPlanned:
+    """Every file on the agreed list, one version of each, packed into batches.
+
+    The same reading every draft goes through, with nothing narrowed and
+    nothing left out for room: each file is read in full, in as many batches
+    as it takes.
+    """
+    day = today or state.today()
+    read, chosen, superseded = _sources_for_a_draft(
+        run_id, paste_files, day, None, None, None
+    )
+    return NotesPlanned(
+        chosen,
+        notes_module.pack(chosen),
+        superseded,
+        read.left_out,
+        read.removed,
+    )
+
+
+def notes_file(run_id: str, number) -> str:
+    """Where the assistant writes the notes for one batch."""
+    return os.path.join(drafts_dir(run_id), "notes-%d.md" % int(number))
+
+
+def _segments_for_notes(run_id: str) -> str:
+    """The settled segments, held apart as data, for a notes request."""
+    inventory = load_inventory(run_id)
+    names = [
+        segment.name
+        for segment in (inventory.segments if inventory is not None else [])
+        if segment.answer != constants.SEGMENT_LEAVE_OUT
+    ]
+    said = "\n".join("- %s" % name for name in names) or (
+        "No segments were settled for this base."
+    )
+    try:
+        return drafting.said_as_data("the segments", said)
+    except SourceRejected:
+        raise DraftError(NOTES_STEP, "unusable-name")
+
+
+NOTES_STEP = "notes"
+NOTES_PROMPT_FILE = "notes.md"
+
+
+def notes_assemble(
+    run_id: str,
+    number,
+    company: str,
+    paste_files: Sequence[str] = (),
+    today=None,
+    plugin_root: Optional[str] = None,
+) -> NotesMade:
+    """Build the request for one batch and write it into the run's own folder."""
+    planned = notes_plan(run_id, paste_files, today)
+    batch = notes_module.batch_numbered(planned.batches, number)
+    root = plugin_root or drafting.plugin_root_default()
+    template = read_text(
+        os.path.join(root, drafting.PROMPTS_DIR, NOTES_PROMPT_FILE)
+    )
+    if template is None:
+        raise DraftError(NOTES_STEP, "no-prompt-file")
+    text = notes_module.assemble(
+        template,
+        batch,
+        drafting._checked_company(NOTES_STEP, company),
+        _segments_for_notes(run_id),
+        len(planned.batches),
+    )
+    path = os.path.join(scratch_dir(run_id), "notes-%d-prompt.md" % batch.number)
+    atomic_write_text(path, text, inside=paths.seat_home())
+    return NotesMade(path, notes_file(run_id, batch.number), batch, len(planned.batches))
+
+
+class NotesChecked(object):
+    """What came of checking one batch: kept or not, and what was wrong."""
+
+    __slots__ = ("accepted", "problems", "count", "attempt", "dropped")
+
+    def __init__(self, accepted, problems, count, attempt, dropped):
+        self.accepted = accepted
+        self.problems = list(problems)
+        self.count = count
+        self.attempt = attempt
+        self.dropped = list(dropped)
+
+
+class Notebook(object):
+    """Every checked note of a run, numbered, and what could not be noted."""
+
+    __slots__ = ("notes", "not_noted", "sources", "planned")
+
+    def __init__(self, notes, not_noted, planned):
+        self.notes = list(notes)
+        self.not_noted = list(not_noted)
+        self.sources = list(planned.sources)
+        self.planned = planned
+
+    def note(self, note_id: str):
+        for item in self.notes:
+            if item.id == note_id:
+                return item
+        return None
+
+
+def _notes_record(run_id: str, number) -> str:
+    folder = ensure_dir(os.path.join(scratch_dir(run_id), "notes"))
+    return os.path.join(folder, "batch-%d.json" % int(number))
+
+
+def _read_notes_record(run_id: str, number):
+    text = read_text(_notes_record(run_id, number))
+    if text is None:
+        return None
+    try:
+        record = json.loads(text)
+    except ValueError:
+        return None
+    return record if isinstance(record, dict) else None
+
+
+def _record_counts(record, planned, batch) -> bool:
+    """Whether a kept record is for this very batch of this very list."""
+    return bool(
+        record
+        and record.get("plan") == planned.digest
+        and record.get("batch") == batch.digest
+    )
+
+
+def notes_check(
+    run_id: str,
+    number,
+    notes_path: str,
+    paste_files: Sequence[str] = (),
+    today=None,
+) -> NotesChecked:
+    """Check one batch's notes against its files, and keep them once they hold.
+
+    Only the file setup named for this batch is read. Notes that hold up are
+    kept in the run's own folder, beside the digest of the list they were
+    taken from, so notes taken before the list changed never count. After
+    the third refusal of the same batch, the notes that held up are kept and
+    everything else is recorded as not noted, rather than refused for ever.
+    """
+    planned = notes_plan(run_id, paste_files, today)
+    batch = notes_module.batch_numbered(planned.batches, number)
+    named = notes_file(run_id, batch.number)
+    if os.path.realpath(str(notes_path or "")) != os.path.realpath(named):
+        raise notes_module.NotesRefused(
+            "these are not the notes setup named for this batch",
+            notes_module.CODE_NOT_THE_NOTES_FILE,
+        )
+    text = read_text(named)
+    checked = notes_module.check_batch(text or "", batch, review.screen)
+    earlier = _read_notes_record(run_id, batch.number)
+    attempt = 1
+    if _record_counts(earlier, planned, batch) and not earlier.get("done"):
+        attempt = int(earlier.get("attempts", 0)) + 1
+    accepted = not checked.problems or attempt >= notes_module.ATTEMPTS
+    record = {
+        "plan": planned.digest,
+        "batch": batch.digest,
+        "attempts": attempt,
+        "done": accepted,
+        "rows": checked.rows if accepted else [],
+        "not_noted": [list(item) for item in checked.not_noted] if accepted else [],
+    }
+    atomic_write_text(
+        _notes_record(run_id, batch.number),
+        json.dumps(record, sort_keys=True) + "\n",
+        inside=paths.seat_home(),
+    )
+    return NotesChecked(
+        accepted,
+        [] if accepted else checked.problems,
+        len(checked.rows),
+        attempt,
+        checked.problems if accepted else [],
+    )
+
+
+def notes_status(run_id: str, paste_files: Sequence[str] = (), today=None):
+    """Each batch of this run, by number, and whether its notes are done."""
+    planned = notes_plan(run_id, paste_files, today)
+    return [
+        (
+            batch.number,
+            "done"
+            if _record_counts(_read_notes_record(run_id, batch.number), planned, batch)
+            and _read_notes_record(run_id, batch.number).get("done")
+            else "waiting",
+        )
+        for batch in planned.batches
+    ]
+
+
+def notes_for_drafts(
+    run_id: str, paste_files: Sequence[str] = (), today=None
+) -> Notebook:
+    """Every note of this run, numbered n1 onwards, once every batch is done."""
+    planned = notes_plan(run_id, paste_files, today)
+    found = []
+    not_noted = []
+    for batch in planned.batches:
+        record = _read_notes_record(run_id, batch.number)
+        if not (_record_counts(record, planned, batch) and record.get("done")):
+            raise notes_module.NotesRefused(
+                "a batch of notes is still waiting", notes_module.CODE_NOTES_WAITING
+            )
+        for row in record.get("rows", []):
+            found.append(notes_module.Note(row, id="n%d" % (len(found) + 1)))
+        for source, code in record.get("not_noted", []):
+            not_noted.append((int(source), str(code)))
+    return Notebook(found, not_noted, planned)
 
 
 class VersionLeftOut(object):

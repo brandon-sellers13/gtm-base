@@ -68,6 +68,7 @@ from gtmbase import (  # noqa: E402
     machine,
     moment,
     names,
+    notes,
     offer_answer,
     paths,
     review,
@@ -115,6 +116,19 @@ BAD_COMPANY = (
 CANNOT_SKIP_FIRST = (
     "There is no base yet, so this first document cannot be skipped. Approve "
     "it, edit it, or ask what is wrong with it."
+)
+NO_SUCH_BATCH = (
+    "That batch of notes is not one this setup has, so nothing was prepared. "
+    "Run the notes plan again and use a batch number it gives."
+)
+NOT_THESE_NOTES = (
+    "Those are not the notes setup named for that batch, so nothing was "
+    "checked. Write the notes to the file notes-assemble printed."
+)
+NOTES_AGAIN = (
+    "Some of these notes do not hold up against their files, so they were not "
+    "kept. Write the notes for this batch again from the same request, fixing "
+    "the lines named."
 )
 NO_SOURCES_LEFT = (
     "None of the material you named could be used for this step, so there was "
@@ -319,6 +333,12 @@ def build_parser():
     parser.add_argument(
         "--segment",
         help="the file name the segments step printed for one segment to draft",
+    )
+    parser.add_argument(
+        "--batch", help="the number of one batch of notes, from notes-plan"
+    )
+    parser.add_argument(
+        "--notes", help="the file notes-assemble named for one batch's notes"
     )
     parser.add_argument(
         "--questions-open",
@@ -1456,6 +1476,99 @@ def run_assemble(options, out):
     return EXIT_DONE
 
 
+def run_notes_plan(options, out):
+    """How many batches every agreed file is read in, before any draft."""
+    run_id = need(options, "run", out)
+    if not run_id:
+        return EXIT_ERROR
+    try:
+        planned = join_flow.notes_plan(run_id, paste_files=options.paste_file)
+    except ConsentError as refusal:
+        if not a_reading_refusal(refusal, out):
+            raise
+        return EXIT_REFUSED
+    line(out, "files", str(len(planned.sources)))
+    line(out, "batches", str(len(planned.batches)))
+    held_apart(out, older_version_lines(planned.superseded))
+    say_left_out(out, planned.left_out)
+    say_removed(out, planned.removed)
+    return EXIT_DONE
+
+
+def run_notes_assemble(options, out):
+    """The request for one batch of notes, and the file the notes go in."""
+    run_id = need(options, "run", out)
+    batch = need(options, "batch", out)
+    company = need(options, "company", out)
+    if not run_id or not batch or not company:
+        return EXIT_ERROR
+    try:
+        made = join_flow.notes_assemble(
+            run_id, batch, company, paste_files=options.paste_file
+        )
+    except ConsentError as refusal:
+        if not a_reading_refusal(refusal, out):
+            raise
+        return EXIT_REFUSED
+    except notes.NotesRefused as refusal:
+        line(out, "codes", refusal.code)
+        out.write(NO_SUCH_BATCH + "\n")
+        return EXIT_REFUSED
+    line(out, "prompt", made.prompt)
+    line(out, "notes", made.notes)
+    line(out, "batch", "%d of %d" % (made.batch.number, made.total))
+    return EXIT_DONE
+
+
+def run_notes_check(options, out):
+    """Check one batch's notes against its files, and keep them once they hold."""
+    run_id = need(options, "run", out)
+    batch = need(options, "batch", out)
+    named = need(options, "notes", out)
+    if not run_id or not batch or not named:
+        return EXIT_ERROR
+    try:
+        checked = join_flow.notes_check(
+            run_id, batch, named, paste_files=options.paste_file
+        )
+    except ConsentError as refusal:
+        if not a_reading_refusal(refusal, out):
+            raise
+        return EXIT_REFUSED
+    except notes.NotesRefused as refusal:
+        line(out, "codes", refusal.code)
+        out.write(NOT_THESE_NOTES + "\n")
+        return EXIT_REFUSED
+    line(out, "accepted", "yes" if checked.accepted else "no")
+    line(out, "notes", str(checked.count))
+    line(out, "attempt", "%d of %d" % (checked.attempt, notes.ATTEMPTS))
+    for problem in checked.problems:
+        line(out, "problem", problem)
+    for problem in checked.dropped:
+        line(out, "not-noted", problem)
+    if not checked.accepted:
+        out.write(NOTES_AGAIN + "\n")
+        return EXIT_REFUSED
+    return EXIT_DONE
+
+
+def run_notes_status(options, out):
+    """Which batches of notes are done, so a run that stopped picks up again."""
+    run_id = need(options, "run", out)
+    if not run_id:
+        return EXIT_ERROR
+    try:
+        found = join_flow.notes_status(run_id, paste_files=options.paste_file)
+    except ConsentError as refusal:
+        if not a_reading_refusal(refusal, out):
+            raise
+        return EXIT_REFUSED
+    for number, state in found:
+        out.write("batch=%d %s\n" % (number, state))
+    line(out, "waiting", str(sum(1 for _n, state in found if state != "done")))
+    return EXIT_DONE
+
+
 def run_review(options, out):
     step = need(options, "step", out)
     draft = need(options, "draft", out)
@@ -2156,6 +2269,10 @@ MODES = {
     "add-paste": run_add_paste,
     "preview": run_preview,
     "assemble": run_assemble,
+    "notes-plan": run_notes_plan,
+    "notes-assemble": run_notes_assemble,
+    "notes-check": run_notes_check,
+    "notes-status": run_notes_status,
     "review": run_review,
     "what-is-wrong": run_what_is_wrong,
     "approve": run_approve,
