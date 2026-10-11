@@ -1384,7 +1384,7 @@ Plan: `docs/plans/2026-10-10-002-feat-plan-1-company-skills-and-meta-skill-plan.
       signature (docs/reviews/2026-10-10-company-skills-verify-2-astra.md). Plan 1 kept in step, now revision 2.6
 - [x] Corrected for Release B's call 60 (approvals go through unasked in bypassPermissions and dontAsk): requirements
       revision 6, Plan 1 revision 2.9; Astra ready for signature again (docs/reviews/2026-10-10-company-skills-verify-5-astra.md)
-- [ ] Brandon signs Unit 4.1 (covers scripts, the extra yes for creating a skill, and the guarantee in CS13 and CS14);
+- [x] Brandon signs Unit 4.1 (covers scripts, the extra yes for creating a skill, and the guarantee in CS13 and CS14); signed 2026-10-10;
       Unit 4.2a is not briefed before he signs
 
 #### Review (Plan 1)

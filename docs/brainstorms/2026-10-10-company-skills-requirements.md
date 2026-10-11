@@ -2,7 +2,7 @@
 date: 2026-10-10
 topic: company-skills
 unit: "Unit 4.1 of docs/plans/2026-10-10-002-feat-plan-1-company-skills-and-meta-skill-plan.md"
-status: awaiting Brandon's signature
+status: signed by Brandon, 2026-10-10
 revision: 6
 ---
 
@@ -160,9 +160,11 @@ Brandon signs below. Then Unit 4.2a is briefed from Requirements CS1 to CS18 and
 
 **Signature**
 
-Signed by Brandon Sellers on ______________, covering everything above, including the three items under "Resolve Before Planning".
+Signed by Brandon Sellers on October 10, 2026, covering everything above, including the three items under "Resolve Before Planning".
 
 ## Revision Log
+
+- 2026-10-10: signed by Brandon, given in the orchestrating session after a summary of the requirements and the three items under "Resolve Before Planning". The note given with the summary: because only the base owner can pass the owner role (CS16, CS18), a base whose owner may leave should name an administrator and pass the owner role before that person goes.
 
 - 2026-10-10 r1: written from decision D5, Plan 1's Unit 4.1 table (revision 2.4, with calls 1 to 7 decided), the roadmap's eight questions, and the Meta skill's real files. Awaiting Astra's review and Brandon's signature.
 - 2026-10-10 r2: Astra's review (not ready, eight findings) and Fable 5.1's (not ready, one blocker, three high, nine medium, eight low) folded in. Accepting can only pass a version somebody with authority already approved; the honest limit for documents is stated; the settings keys, the map's roles, the two yeses, confirmations, the screens, the four admission paths, the placeholder, `.claude/settings.json`, and the unattended mark are made exact; an unattended flag is handled as Plan 1's runner sets out.
