@@ -37,6 +37,7 @@ from . import (
     businesses,
     callmarkers,
     constants,
+    docpaths,
     formats,
     layout,
     names,
@@ -501,10 +502,10 @@ def _confirmed_on(
 
     The stale library is handed the documents exactly as they were read here,
     so a confirmation is counted against the same text the table describes.
-    Only documents under `context` are handed over, because they are the only
-    ones a confirmation can name until Unit 4.2a widens the path rule; every
-    other kind is simply not confirmed yet. Nothing that is read is recorded:
-    a refused path comes back in a list and is let go.
+    Every document a confirmation can name is handed over, a standard and the
+    source map included; a skill's files are not confirmed this way. Nothing
+    that is read is recorded: a refused path comes back in a list and is let
+    go.
     """
     files = [
         stale.ContextFileInfo(
@@ -518,7 +519,7 @@ def _confirmed_on(
         )
         for one in documents
         if one.state != STATE_UNREADABLE
-        and one.path.startswith(constants.CONTEXT_DIR + "/")
+        and docpaths.may(docpaths.classify(one.path), docpaths.OP_CONFIRM)
     ]
     try:
         inputs = base_reader.read_base(

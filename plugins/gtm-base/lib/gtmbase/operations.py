@@ -32,6 +32,7 @@ once.
 from __future__ import annotations
 
 import datetime
+import json
 import os
 import secrets
 from typing import Dict, List, Optional, Sequence, Tuple
@@ -46,6 +47,7 @@ from . import (
     docpaths,
     formats,
     ids,
+    layout,
     paths,
     review,
     scan,
@@ -215,7 +217,15 @@ def _kept_path(base_id: str, prepared_id: str) -> Optional[str]:
 
 def _shown_value(kept: dict) -> str:
     """The value a yes is bound to: every byte to be written and everything it rests on."""
-    parts = [kept["kind"], kept.get("operation") or "", kept["reason"], kept["by"]]
+    parts = [
+        kept["kind"],
+        kept.get("operation") or "",
+        json.dumps(kept.get("value"), sort_keys=True),
+        str(kept.get("path") or ""),
+        kept["reason"],
+        kept["by"],
+        str(kept.get("made") or ""),
+    ]
     for change in kept["changes"]:
         parts.extend([change["path"], change["before"] or "-", change["after"]])
     return ids.content_hash("\x1f".join(parts))
@@ -231,8 +241,18 @@ def _keep(base_id: str, kept: dict) -> Prepared:
 
 
 def _artifact(kept: dict) -> str:
-    """The whole of what would be written, each file under its path, and the reason."""
+    """The whole of what would be written, each file under its path, and the reason.
+
+    A settings change opens with the one line as it is and as it would be, so
+    a change of who owns the base is not one line lost in a whole map.
+    """
     pieces = []
+    for change in kept["changes"]:
+        if "line_before" in change:
+            pieces.append(
+                "[[the line now]]\n%s\n[[the line after]]\n%s\n[[end line]]"
+                % (change["line_before"], change["line_after"])
+            )
     for change in kept["changes"]:
         pieces.append("[[file: %s]]\n%s[[end file]]" % (change["path"], change["after"]))
     pieces.append("[[reason]]\n%s\n[[end reason]]" % kept["reason"])
@@ -270,6 +290,51 @@ def _stamped(text: str, address: str) -> str:
     return formats.render_document(fields, body)
 
 
+def _screened(base_root: str, relative: str, text: str, address: str) -> None:
+    """Refuse a document holding what a prepared change may never carry.
+
+    The screens a prepared change gets, with the owner's own address let
+    through on its settings lines as it always is, and for the source map its
+    own check for credentials, which the check before a send and the start of
+    a session both hold it to.
+    """
+    if review.screen(
+        text, owner_email=address, frontmatter_lines=review.frontmatter_line_numbers(text)
+    ):
+        raise _refuse(CODE_SCREENED, SCREENED)
+    if relative == constants.STACK_PATH:
+        allowlist, _code = scan.load_allowlist(base_root)
+        if scan.scan_source_map(text, allowlist):
+            raise _refuse(CODE_SCREENED, SCREENED)
+
+
+def _creatable(base_root: str, relative: str, git: GitRunner) -> str:
+    """The path of a document that may be created here and is not here yet, in either layout.
+
+    A path only the older layout uses is never written, and a path whose other
+    layout's counterpart is already there is refused too, because the new
+    file would stand in for a document somebody else owns wherever the two
+    layouts are read as one.
+    """
+    try:
+        found = docpaths.check(base_root, relative)
+    except PathError:
+        raise _refuse(CODE_NOT_A_DOCUMENT, NOT_A_DOCUMENT)
+    if not docpaths.may(found, docpaths.OP_CREATE) or layout.is_older_path(found.path):
+        raise _refuse(CODE_NOT_A_DOCUMENT, NOT_A_DOCUMENT)
+    for candidate in [found.path] + [layout.counterpart(found.path) or ""]:
+        if not candidate:
+            continue
+        full = os.path.join(base_root, candidate.replace("/", os.sep))
+        if os.path.lexists(full) or _in_head(base_root, candidate, git):
+            raise _refuse(CODE_ALREADY_THERE, ALREADY_THERE)
+    return found.path
+
+
+def _owners_of(text: str) -> List[str]:
+    return authority.owners_in(text)
+
+
 # --- Creating ----------------------------------------------------------------------
 
 
@@ -283,9 +348,8 @@ def prepare_creation(
     """Prepare new documents to be written together, stamped with their creator.
 
     Every path has to be a place the create operation may write, nothing may
-    be there yet, and every file has to pass the screens a prepared change
-    gets, with the creator's own address on the owner line let through as it
-    always is.
+    be there yet in either layout, and every file has to pass the screens a
+    prepared change gets.
     """
     git = runner_or_default(runner)
     address = _address(base_root, git)
@@ -294,28 +358,25 @@ def prepare_creation(
     seen = set()
     changes = []
     for relative, text in files:
-        try:
-            found = docpaths.check(base_root, relative)
-        except PathError:
+        path = _creatable(base_root, relative, git)
+        if path in seen:
             raise _refuse(CODE_NOT_A_DOCUMENT, NOT_A_DOCUMENT)
-        if not docpaths.may(found, docpaths.OP_CREATE) or found.path in seen:
-            raise _refuse(CODE_NOT_A_DOCUMENT, NOT_A_DOCUMENT)
-        seen.add(found.path)
-        full = os.path.join(base_root, found.path.replace("/", os.sep))
-        if os.path.lexists(full) or _in_head(base_root, found.path, git):
-            raise _refuse(CODE_ALREADY_THERE, ALREADY_THERE)
+        seen.add(path)
         stamped = _stamped(text, address)
-        if review.screen(
-            stamped,
-            owner_email=address,
-            frontmatter_lines=review.frontmatter_line_numbers(stamped),
-        ):
-            raise _refuse(CODE_SCREENED, SCREENED)
-        changes.append({"path": found.path, "before": None, "after": stamped})
+        _screened(base_root, path, stamped, address)
+        changes.append({"path": path, "before": None, "after": stamped})
     _screen_reason(base_root, reason)
     return _keep(
         base_id,
-        {"kind": KIND_CREATE, "operation": None, "reason": reason, "by": address, "changes": changes},
+        {
+            "kind": KIND_CREATE,
+            "operation": None,
+            "value": None,
+            "reason": reason,
+            "by": address,
+            "made": _now().isoformat(),
+            "changes": changes,
+        },
     )
 
 
@@ -331,8 +392,8 @@ def _list_value(value) -> List[str]:
     return [part.strip() for part in text.split(",")] if text.strip() else []
 
 
-def _rendered(operation: str, value, base_root: str, relative: Optional[str], git) -> str:
-    """The new value as its settings line writes it, or a refusal when it is not one."""
+def _intended(operation: str, value, base_root: str, relative: str, git):
+    """What the setting is meant to read as afterwards, and the line that writes it."""
     if any(
         isinstance(piece, str) and ("\n" in piece or "\r" in piece)
         for piece in (value if isinstance(value, (list, tuple)) else [value])
@@ -343,24 +404,31 @@ def _rendered(operation: str, value, base_root: str, relative: Optional[str], gi
             addresses = validate.validate_owner(_list_value(value))
             if operation == SET_MAP_OWNER and len(addresses) != 1:
                 raise ValidationError("the base has one owner", code=CODE_BAD_VALUE)
-            return addresses[0] if len(addresses) == 1 else "[%s]" % ", ".join(addresses)
+            line = addresses[0] if len(addresses) == 1 else "[%s]" % ", ".join(addresses)
+            return addresses, line
         if operation == SET_ADMINISTRATORS:
             listed = _list_value(value)
             addresses = validate.validate_owner(listed) if listed else []
             if len(set(addresses)) != len(addresses):
                 raise ValidationError("an address listed twice", code=CODE_BAD_VALUE)
-            return "[%s]" % ", ".join(addresses)
+            return addresses, "[%s]" % ", ".join(addresses)
         if operation == SET_BUSINESSES:
             listed = businesses.businesses_from(_list_value(value))
-            return ", ".join(
+            line = ", ".join(
                 one.slug if not one.name else "%s (%s)" % (one.slug, one.name)
                 for one in listed
             )
+            # A business's name is somebody's typing that lands in the map, so
+            # it gets the screens any other typing gets.
+            allowlist, _code = scan.load_allowlist(base_root)
+            if scan.scan_text(line, allowlist, "the businesses"):
+                raise _refuse(CODE_SCREENED, SCREENED)
+            return [(one.slug, one.name) for one in listed], line
         if operation == SET_BUSINESS:
             said = str(value or "").strip()
             if said == businesses.WHOLE_COMPANY:
-                return said
-            map_text = _head_or_disk(base_root, constants.MAP_PATH, git)
+                return said, said
+            map_text = _saved_text(base_root, constants.MAP_PATH, git)
             listed = [one.slug for one in businesses.read_map_businesses(map_text)]
             folder = businesses.folder_of(relative or "")
             if said not in listed or (
@@ -369,17 +437,44 @@ def _rendered(operation: str, value, base_root: str, relative: Optional[str], gi
                 and folder != said
             ):
                 raise ValidationError("not a business the map lists", code=CODE_BAD_VALUE)
-            return said
+            return said, said
     except ValidationError:
         raise _refuse(CODE_BAD_VALUE, BAD_VALUE)
     raise _refuse(CODE_NOT_AN_OPERATION, NOT_AN_OPERATION)
 
 
-def _head_or_disk(base_root: str, relative: str, git: GitRunner) -> str:
+def _reads_back(operation: str, after: str, intended) -> bool:
+    """Whether the new file, read the way each setting's reader reads it, says what was meant."""
+    try:
+        block, _body = formats.split_document(after)
+        fields = formats.parse_frontmatter(block)
+    except (ValidationError, PathError):
+        return False
+    try:
+        if operation == SET_OWNER:
+            return validate.validate_owner(fields.get("owner")) == intended
+        if operation == SET_MAP_OWNER:
+            return authority.roles_from_map(after).base_owner == intended[0]
+        if operation == SET_ADMINISTRATORS:
+            roles = authority.roles_from_map(after)
+            return (
+                authority.CODE_ADMINISTRATORS_UNREADABLE not in roles.problems
+                and roles.administrators == intended
+            )
+        if operation == SET_BUSINESSES:
+            listed = businesses.read_map_businesses(after)
+            return [(one.slug, one.name) for one in listed] == intended
+        if operation == SET_BUSINESS:
+            return str(fields.get(businesses.BUSINESS_FIELD) or "").strip() == intended
+    except ValidationError:
+        return False
+    return False
+
+
+def _saved_text(base_root: str, relative: str, git: GitRunner) -> str:
+    """One file as the base last saved it, or nothing when it never has."""
     shown = git.run(["show", "HEAD:" + relative], cwd=base_root)
-    if shown.ok:
-        return shown.stdout
-    return read_text_exactly(os.path.join(base_root, relative.replace("/", os.sep))) or ""
+    return shown.stdout if shown.ok else ""
 
 
 def _with_setting(text: str, key: str, rendered: str) -> str:
@@ -440,17 +535,29 @@ def _only_that_changed(before: str, after: str, key: str) -> None:
         raise _refuse(CODE_BAD_VALUE, BAD_VALUE)
 
 
-def prepare_setting(
-    base_root: str,
-    base_id: str,
-    operation: str,
-    reason: str,
-    path: Optional[str] = None,
-    value=None,
-    runner: Optional[GitRunner] = None,
-) -> Prepared:
-    """Prepare one settings line to change, the whole new file shown first."""
-    git = runner_or_default(runner)
+def _the_line(text: str, key: str) -> str:
+    """The one settings line a key is on, with any list lines under it, for the showing."""
+    lines = text.split("\n")
+    found: List[str] = []
+    for index in range(1, len(lines)):
+        if lines[index].strip() == formats.FRONTMATTER_FENCE:
+            break
+        if found:
+            if lines[index].lstrip(" ").startswith("-"):
+                found.append(lines[index])
+                continue
+            break
+        if lines[index].partition(":")[0].strip() == key and not lines[index].startswith((" ", "-")):
+            found.append(lines[index])
+    return "\n".join(found) if found else "(no %s line)" % key
+
+
+def _setting_change(base_root: str, operation: str, path, value, git: GitRunner) -> dict:
+    """Work out one settings change from the base as it is now, checking every rule.
+
+    Preparing runs this, and approving runs it again from the base as it is
+    then, so what is written never depends on anything kept between the two.
+    """
     if operation not in SETTINGS_OPERATIONS:
         raise _refuse(CODE_NOT_AN_OPERATION, NOT_AN_OPERATION)
     if operation in _DOCUMENT_OPERATIONS:
@@ -465,27 +572,52 @@ def prepare_setting(
         if path not in (None, constants.MAP_PATH):
             raise _refuse(CODE_NOT_A_DOCUMENT, NOT_A_DOCUMENT)
         relative = constants.MAP_PATH
-    address = _address(base_root, git)
     full = os.path.join(base_root, relative.replace("/", os.sep))
-    if os.path.islink(full):
+    if os.path.islink(full) or os.path.islink(os.path.dirname(full)):
         raise _refuse(CODE_NOT_A_DOCUMENT, NOT_A_DOCUMENT)
     before = read_text_exactly(full)
     if before is None or not _in_head(base_root, relative, git):
         raise _refuse(CODE_NOT_A_DOCUMENT, NOT_A_DOCUMENT)
     key = _KEY[operation]
-    after = _with_setting(before, key, _rendered(operation, value, base_root, relative, git))
+    intended, line = _intended(operation, value, base_root, relative, git)
+    after = _with_setting(before, key, line)
     _only_that_changed(before, after, key)
+    if not _reads_back(operation, after, intended):
+        raise _refuse(CODE_BAD_VALUE, BAD_VALUE)
+    return {
+        "path": relative,
+        "before": ids.exact_hash(before),
+        "after": after,
+        "line_before": _the_line(before, key),
+        "line_after": _the_line(after, key),
+    }
+
+
+def prepare_setting(
+    base_root: str,
+    base_id: str,
+    operation: str,
+    reason: str,
+    path: Optional[str] = None,
+    value=None,
+    runner: Optional[GitRunner] = None,
+) -> Prepared:
+    """Prepare one settings line to change, the line and the whole new file shown first."""
+    git = runner_or_default(runner)
+    change = _setting_change(base_root, operation, path, value, git)
+    address = _address(base_root, git)
     _screen_reason(base_root, reason)
     return _keep(
         base_id,
         {
             "kind": KIND_SETTING,
             "operation": operation,
+            "value": value if isinstance(value, (str, type(None))) else list(value),
+            "path": path,
             "reason": reason,
             "by": address,
-            "changes": [
-                {"path": relative, "before": ids.exact_hash(before), "after": after}
-            ],
+            "made": _now().isoformat(),
+            "changes": [change],
         },
     )
 
@@ -493,17 +625,77 @@ def prepare_setting(
 # --- Approving --------------------------------------------------------------------
 
 
-def _role_for(kept: dict, base_root: str, address: str, git: GitRunner) -> Optional[str]:
+def _now() -> datetime.datetime:
+    return datetime.datetime.now()
+
+
+def _too_old(kept: dict) -> bool:
+    """Whether a prepared operation has waited longer than an approval question may."""
+    try:
+        made = datetime.datetime.fromisoformat(str(kept.get("made")))
+    except (TypeError, ValueError):
+        return True
+    age = (_now() - made).total_seconds()
+    return age < 0 or age > approval.KEPT_SECONDS
+
+
+def _rebuilt(kept: dict, base_root: str, address: str, git: GitRunner) -> List[dict]:
+    """Every change, worked out again from the base as it stands, or a refusal.
+
+    The prepared operation waits in this seat's folder, and a file there can be
+    rewritten by anything that runs commands, value bound to it included. So
+    nothing about where or what to write is taken from it: a creation's every
+    path is checked again and its bytes screened again, with the approving
+    address on its owner line, and a setting is worked out again from the
+    operation and the value. What comes back has to be exactly what was shown.
+    """
+    changes = kept.get("changes")
+    if not isinstance(changes, list) or not changes:
+        raise _refuse(CODE_NOT_WAITING, NOT_WAITING)
+    if kept.get("kind") == KIND_CREATE:
+        if kept.get("operation") is not None or kept.get("value") is not None:
+            raise _refuse(CODE_NOT_WAITING, NOT_WAITING)
+        rebuilt = []
+        seen = set()
+        for change in changes:
+            path = _creatable(base_root, str(change.get("path")), git)
+            after = change.get("after")
+            if path in seen or not isinstance(after, str) or change.get("before") is not None:
+                raise _refuse(CODE_MOVED, MOVED)
+            seen.add(path)
+            if _owners_of(after) != [address] or _stamped(after, address) != after:
+                raise _refuse(CODE_MOVED, MOVED)
+            _screened(base_root, path, after, address)
+            rebuilt.append({"path": path, "before": None, "after": after})
+        return rebuilt
+    if kept.get("kind") == KIND_SETTING and len(changes) == 1:
+        again = _setting_change(
+            base_root, kept.get("operation"), kept.get("path"), kept.get("value"), git
+        )
+        if (again["path"], again["before"], again["after"]) != (
+            changes[0].get("path"),
+            changes[0].get("before"),
+            changes[0].get("after"),
+        ):
+            raise _refuse(CODE_MOVED, MOVED)
+        return [again]
+    raise _refuse(CODE_NOT_WAITING, NOT_WAITING)
+
+
+def _role_for(kept: dict, changes: List[dict], base_root: str, address: str, git: GitRunner) -> Optional[str]:
     """The role that lets this address approve this operation, or None."""
-    if kept["kind"] == KIND_CREATE:
-        # The creator approves what they create and owns it (CS1, CS5). Only
-        # the address stamped on it at the showing may.
-        return authority.ROLE_OWNER if address == kept["by"] else None
-    operation = kept["operation"]
-    relative = kept["changes"][0]["path"]
-    if operation in _DOCUMENT_OPERATIONS:
-        return authority.at(base_root, relative, runner=git).role_of(address)
-    roles = authority.roles_from_map(_head_or_disk(base_root, constants.MAP_PATH, git))
+    try:
+        if kept["kind"] == KIND_CREATE:
+            # The creator approves what they create and owns it (CS1, CS5).
+            # The owner line was checked to name exactly this address.
+            return authority.ROLE_OWNER
+        operation = kept["operation"]
+        relative = changes[0]["path"]
+        if operation in _DOCUMENT_OPERATIONS:
+            return authority.at(base_root, relative, runner=git).role_of(address)
+        roles = authority.roles_from_map(_saved_text(base_root, constants.MAP_PATH, git))
+    except authority.AuthorityUnavailable:
+        return None
     if address == roles.base_owner:
         return authority.ROLE_BASE_OWNER
     if operation == SET_BUSINESSES and address in roles.administrators:
@@ -511,20 +703,10 @@ def _role_for(kept: dict, base_root: str, address: str, git: GitRunner) -> Optio
     return None
 
 
-def _unmoved(base_root: str, change: dict, git: GitRunner) -> bool:
-    full = os.path.join(base_root, change["path"].replace("/", os.sep))
-    if change["before"] is None:
-        return not os.path.lexists(full) and not _in_head(base_root, change["path"], git)
-    text = read_text_exactly(full)
-    if text is None or ids.exact_hash(text) != change["before"]:
-        return False
-    return _head_or_disk(base_root, change["path"], git) == text
-
-
-def _record(kept: dict, address: str, role: str, today: datetime.date) -> Tuple[str, str]:
+def _record(kept: dict, changes: List[dict], role: str, today: datetime.date) -> Tuple[str, str]:
     """The record of this approval, and where it goes in the record of corrections."""
     staging_id = kept["prepared_id"]
-    touched = [change["path"] for change in kept["changes"]]
+    touched = [change["path"] for change in changes]
     if kept["kind"] == KIND_CREATE:
         what = "Created %s." % ", ".join(touched)
     else:
@@ -536,33 +718,33 @@ def _record(kept: dict, address: str, role: str, today: datetime.date) -> Tuple[
         intake_path="none",
         mode="none",
         third_party=False,
-        content_hash=ids.content_hash("".join(change["after"] for change in kept["changes"])),
+        content_hash=ids.content_hash("".join(change["after"] for change in changes)),
         correction_class="other",
         marker=validate.marker_line(staging_id),
         touched_paths=touched,
         what_changed=what,
-        why=kept["reason"],
+        why=str(kept.get("reason") or ""),
         approved_roles={path: role for path in touched},
         approved_hashes={
             change["path"]: authority.bytes_hash(change["after"].encode("utf-8"))
-            for change in kept["changes"]
+            for change in changes
         },
     ).validate()
     where = "%s/%s-%s.md" % (constants.CORRECTIONS_DIR, today.isoformat(), staging_id)
     return where, record.render()
 
 
-def _creators_yes(base_root, kept, address, role, today, moment):
+def _creators_yes(base_root, changes, role, today, moment):
     """The creator's confirmation of each new document a confirmation may name.
 
     Creating a document is its owner saying it is right, so it joins the
-    review's clock from the day it is created, recorded with who said so and
-    the role (CS9). A lesson is never confirmed, so it gets none.
+    review's clock from the day it is created, recorded with the role (CS9).
+    A lesson is never confirmed, so it gets none.
     """
     from . import confirm
 
     lines = []
-    for change in kept["changes"]:
+    for change in changes:
         if not docpaths.may(docpaths.classify(change["path"]), docpaths.OP_CONFIRM):
             continue
         line = formats.ConfirmationLine(
@@ -574,7 +756,9 @@ def _creators_yes(base_root, kept, address, role, today, moment):
         )
         line.validate()
         target = confirm.confirmations_path_for(change["path"])
-        existing = read_text_exactly(os.path.join(base_root, target.replace("/", os.sep)))
+        existing = read_text_exactly(confirm.checked_confirmations_path(base_root, target))
+        if existing and not existing.endswith("\n"):
+            existing += "\n"
         text = (existing if existing else confirm.FILE_HEADER) + line.render() + "\n"
         lines.append((target, text))
     return lines
@@ -611,12 +795,14 @@ def approve(
     runner: Optional[GitRunner] = None,
     now: Optional[datetime.datetime] = None,
     kind: Optional[str] = None,
+    operation: Optional[str] = None,
 ) -> Done:
     """Write one prepared operation, if this address may and nothing has moved.
 
-    `kind` is what the command that approves it says it approves, a creation
-    or a setting, because Claude Code's question said that and nothing else.
-    A prepared operation of the other kind is not written.
+    `kind`, and for a setting `operation`, are what the command that approves
+    it names, because Claude Code's question said exactly that. A prepared
+    operation of another kind or another operation is not written. Nothing
+    kept since the showing is trusted: every change is worked out again.
     """
     # Only a command the person allowed through Claude Code's own question
     # writes an approval (Unit 1.7e, Brandon's call 57).
@@ -630,32 +816,41 @@ def approve(
         return Done(False, CODE_NOT_WAITING, NOT_WAITING)
     if kind is not None and kept.get("kind") != kind:
         return Done(False, CODE_NOT_WAITING, NOT_WAITING)
-    if not shown or shown != _shown_value(kept):
+    if operation is not None and kept.get("operation") != operation:
+        return Done(False, CODE_NOT_WAITING, NOT_WAITING)
+    try:
+        if not shown or shown != _shown_value(kept):
+            return Done(False, CODE_MOVED, MOVED)
+    except (KeyError, TypeError):
+        return Done(False, CODE_NOT_WAITING, NOT_WAITING)
+    if _too_old(kept):
         return Done(False, CODE_MOVED, MOVED)
     try:
         address = _address(base_root, git)
+        on_main, _code = paths.head_is_default_branch(base_root, runner=git)
+        if not on_main:
+            return Done(False, CODE_NOT_ON_MAIN, NOT_ON_MAIN)
+        if not unsaved.look(base_root, git).clean:
+            return Done(False, CODE_UNSAVED, UNSAVED)
+        changes = _rebuilt(kept, base_root, address, git)
+        if kept["kind"] == KIND_CREATE and address != kept.get("by"):
+            return Done(False, CODE_NOT_ALLOWED, NOT_ALLOWED)
+        role = _role_for(kept, changes, base_root, address, git)
+        if role is None:
+            return Done(False, CODE_NOT_ALLOWED, NOT_ALLOWED)
+        record_path, record_text = _record(kept, changes, role, today)
+        if os.path.lexists(os.path.join(base_root, record_path.replace("/", os.sep))):
+            return Done(False, CODE_MOVED, MOVED)
+        writes = [(change["path"], change["after"]) for change in changes]
+        writes.append((record_path, record_text))
+        if kept["kind"] == KIND_CREATE:
+            moment = now if isinstance(now, datetime.datetime) else state.now_utc()
+            writes.extend(_creators_yes(base_root, changes, role, today, moment))
     except Refused as refusal:
         return Done(False, refusal.code, str(refusal))
-    role = _role_for(kept, base_root, address, git)
-    if role is None:
-        return Done(False, CODE_NOT_ALLOWED, NOT_ALLOWED)
-    on_main, _code = paths.head_is_default_branch(base_root, runner=git)
-    if not on_main:
-        return Done(False, CODE_NOT_ON_MAIN, NOT_ON_MAIN)
-    if not unsaved.look(base_root, git).clean:
-        return Done(False, CODE_UNSAVED, UNSAVED)
-    if not all(_unmoved(base_root, change, git) for change in kept["changes"]):
-        return Done(False, CODE_MOVED, MOVED)
-
-    record_path, record_text = _record(kept, address, role, today)
-    writes = [(change["path"], change["after"]) for change in kept["changes"]]
-    writes.append((record_path, record_text))
-    if kept["kind"] == KIND_CREATE:
-        moment = now if isinstance(now, datetime.datetime) else state.now_utc()
-        writes.extend(_creators_yes(base_root, kept, address, role, today, moment))
+    except (GtmBaseError, KeyError, TypeError, ValueError):
+        return Done(False, CODE_NOT_WAITING, NOT_WAITING)
     targets = [relative for relative, _text in writes]
-    if os.path.lexists(os.path.join(base_root, record_path.replace("/", os.sep))):
-        return Done(False, CODE_MOVED, MOVED)
     kept_bytes: Dict[str, Optional[bytes]] = {}
     written: List[str] = []
     try:
@@ -680,4 +875,27 @@ def approve(
         DONE_CREATED if kept["kind"] == KIND_CREATE else DONE_SETTING,
         paths=targets,
         saved_work=saved,
+    )
+
+
+# --- What a hand edit may not change ------------------------------------------------
+
+
+def authority_lines_changed(before: str, after: str) -> bool:
+    """Whether one version of a document says a different owner or business than the other.
+
+    Those two lines change only through their own operations (CS15 and CS17),
+    shown whole and recorded with the reason, so a change made by hand that
+    moves either is refused. Every other setting a person may still edit by
+    hand. A settings block that cannot be read on either side counts as moved.
+    """
+    try:
+        old_block, _old = formats.split_document(before)
+        new_block, _new = formats.split_document(after)
+        old = formats.parse_frontmatter(old_block)
+        new = formats.parse_frontmatter(new_block)
+    except (ValidationError, PathError):
+        return True
+    return any(
+        old.get(key) != new.get(key) for key in ("owner", businesses.BUSINESS_FIELD)
     )

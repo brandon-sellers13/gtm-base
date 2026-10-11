@@ -619,7 +619,10 @@ def _yes(
     # The one authority rule (Plan 1, Unit 4.2a): only an address in the
     # document's authority set says it is still right, and the line records
     # who and in which role (CS3, CS9).
-    role = authority.at(base_root, path, runner=git).role_of(address)
+    try:
+        role = authority.at(base_root, path, runner=git).role_of(address)
+    except authority.AuthorityUnavailable:
+        role = None
     if role is None:
         return _refused(
             CODE_NOT_AN_OWNER, NOT_YOUR_DOCUMENT % names.document_name(path)
@@ -1191,7 +1194,10 @@ def against_change(
         return _refused(CODE_NO_OWNER_ADDRESS, NO_OWNER_ADDRESS)
     # The one authority rule (Plan 1, Unit 4.2a): the document's owners, the
     # base owner and the administrators, as the base last saved them.
-    role = authority.at(base_root, relative_context, runner=git).role_of(address)
+    try:
+        role = authority.at(base_root, relative_context, runner=git).role_of(address)
+    except authority.AuthorityUnavailable:
+        role = None
     if role is None:
         return _refused(CODE_NOT_AN_OWNER, NOT_YOUR_DOCUMENT % document)
 

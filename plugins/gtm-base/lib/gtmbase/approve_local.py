@@ -56,6 +56,7 @@ from . import (
     layout,
     moment,
     names,
+    operations,
     paths,
     report,
     review,
@@ -92,6 +93,9 @@ CODE_HAS_SHARED_COPY = "has-shared-copy"
 CODE_CANNOT_TELL = compose_proposal.CODE_CANNOT_TELL
 CODE_NOT_WAITING_HERE = "not-where-prepared-changes-wait"
 CODE_NOT_AN_OWNER = "not-an-owner"
+CODE_AUTHORITY_UNREADABLE = "authority-unreadable"
+CODE_OWNER_LINE_BY_HAND = "owner-or-business-line-by-hand"
+CODE_SOURCE_MAP_SECRET = "source-map-secret"
 CODE_NO_OWNER_RECORDED = "no-owner-recorded"
 CODE_NO_ADDRESS = "no-address-for-this-seat"
 CODE_OUTSIDE_ALLOWED = "path-outside-the-folders-a-change-may-touch"
@@ -184,6 +188,19 @@ NO_OWNER_RECORDED = (
 NO_ADDRESS = (
     "GTM Base does not know which address this base is yours under, so it "
     "cannot tell whether you own what this change touches."
+)
+AUTHORITY_UNREADABLE = (
+    "GTM Base could not read from the saved history who may approve %s, so "
+    "nothing was approved. Ask again in a moment."
+)
+OWNER_LINE_BY_HAND = (
+    "%s now names a different owner or business than it did, and those change "
+    "only through their own step, which shows the change and records why, so "
+    "nothing was approved."
+)
+SOURCE_MAP_SECRET = (
+    "Your source map would hold something shaped like a password, a key or a "
+    "token, which it never holds, so nothing was approved."
 )
 OUTSIDE_THE_FOLDERS = (
     "A prepared change may only touch your context files, your standards, your "
@@ -495,7 +512,16 @@ def _owner_problems(
         return [(CODE_NO_ADDRESS, NO_ADDRESS)]
     found = []
     for relative in ordered:
-        who = who_may_approve(base_root, relative, git)
+        try:
+            who = who_may_approve(base_root, relative, git)
+        except authority.AuthorityUnavailable:
+            found.append(
+                (
+                    CODE_AUTHORITY_UNREADABLE,
+                    AUTHORITY_UNREADABLE % names.document_name(relative),
+                )
+            )
+            continue
         if address in who:
             continue
         if not who:
@@ -1315,6 +1341,36 @@ def _read_and_check(base_root, base_id, staging_path, git, today, whole=False):
     )
     if owner_problems:
         return _many(STATUS_REFUSED, staging.staging_id, owner_problems), None
+
+    # Plan 1, Unit 4.2a. Who owns a document and which business it is for
+    # change only through their own operations (CS15, CS17), so a change made
+    # by hand that moves either is refused; and the source map is held to its
+    # own credential screen on every way in.
+    for relative in walk.ordered:
+        if by_hand and operations.authority_lines_changed(
+            _head_text(base_root, relative, git) or "", walk.texts[relative]
+        ):
+            return (
+                _refused(
+                    STATUS_REFUSED,
+                    CODE_OWNER_LINE_BY_HAND,
+                    OWNER_LINE_BY_HAND % names.document_name(relative),
+                    staging.staging_id,
+                ),
+                None,
+            )
+        if relative == constants.STACK_PATH:
+            allowlist, _code = compose_proposal.scan.load_allowlist(base_root)
+            if compose_proposal.scan.scan_source_map(walk.texts[relative], allowlist):
+                return (
+                    _refused(
+                        STATUS_REFUSED,
+                        CODE_SOURCE_MAP_SECRET,
+                        SOURCE_MAP_SECRET,
+                        staging.staging_id,
+                    ),
+                    None,
+                )
 
     differences = (
         whole_difference(base_root, walk.ordered, git) if by_hand else None
@@ -2217,7 +2273,7 @@ def _finish_unfinished_work(
         ordered = [
             str(item.get("path"))
             for item in items
-            if str(item.get("path", "")).startswith(constants.CONTEXT_DIR + "/")
+            if docpaths.classify(str(item.get("path", ""))) is not None
         ]
         codes.append(CODE_RESUMED)
         return LocalResult(

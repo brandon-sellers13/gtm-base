@@ -207,9 +207,21 @@ def check(base_root: str, candidate) -> DocPath:
     here = os.path.realpath(base_root)
     walked = here
     for part in found.path.split("/"):
+        parent = walked
         walked = os.path.join(walked, part)
         if os.path.islink(walked):
             raise PathError("this path passes through a link", code="link")
+        # On a disk that folds letter case, a name spelled differently from
+        # the file that is there would reach that file while every saved
+        # version is asked about the other spelling, so only the exact name
+        # on the disk is taken.
+        if os.path.lexists(walked):
+            try:
+                there = os.listdir(parent)
+            except OSError:
+                raise PathError("this path cannot be read", code="unreadable")
+            if part not in there:
+                raise PathError("this path is spelled differently on disk", code="spelling")
     resolved = os.path.realpath(os.path.join(here, found.path))
     if not resolved.startswith(here.rstrip(os.sep) + os.sep):
         raise PathError("this path leaves the base", code="outside-base")

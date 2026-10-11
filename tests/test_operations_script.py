@@ -57,6 +57,12 @@ def prepared_from(said):
     return match.group(1), match.group(2)
 
 
+def operation_from(said):
+    match = re.search(r"operation=(\S+)", said)
+    assert match, said
+    return match.group(1)
+
+
 class TestTheScript(unittest.TestCase):
     def test_a_business_line_shown_then_approved(self):
         with support.Sandbox() as sandbox:
@@ -78,7 +84,15 @@ class TestTheScript(unittest.TestCase):
             # Approving it as the other kind writes nothing.
             code, _said = run_in(root, ["--approve-creation", prepared, "--shown", shown])
             self.assertEqual(1, code)
-            code, said = run_in(root, ["--approve-setting", prepared, "--shown", shown])
+            self.assertEqual("business", operation_from(said))
+            # Named as another operation than the one prepared, nothing is written.
+            code, _said = run_in(
+                root, ["--approve-setting", prepared, "--operation", "map-owner", "--shown", shown]
+            )
+            self.assertEqual(1, code)
+            code, said = run_in(
+                root, ["--approve-setting", prepared, "--operation", "business", "--shown", shown]
+            )
             self.assertEqual(0, code, said)
             self.assertIn("business: insights", support.read(os.path.join(root, operating.POSITIONING)))
 
@@ -141,7 +155,10 @@ class TestTheScript(unittest.TestCase):
             )
             self.assertEqual(0, code, said)
             prepared, shown = prepared_from(said)
-            code, said = run_in(root, ["--approve-setting", prepared, "--shown", shown])
+            code, said = run_in(
+                root,
+                ["--approve-setting", prepared, "--operation", operation_from(said), "--shown", shown],
+            )
             self.assertEqual(0, code, said)
             self.assertIn(
                 "administrators: [%s]" % operating.WRITER,

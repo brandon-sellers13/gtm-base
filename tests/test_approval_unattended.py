@@ -28,7 +28,7 @@ def command_for(script, arguments):
 
 EVERY_APPROVAL = [command_for(script, arguments) for script, arguments, _s, _o in table.ASKED] + [
     "python3 %s --approve-creation stg-0123456789abcdef --shown abc" % OPERATIONS,
-    "python3 %s --approve-setting stg-0123456789abcdef --shown abc" % OPERATIONS,
+    "python3 %s --approve-setting stg-0123456789abcdef --operation map-owner --shown abc" % OPERATIONS,
 ]
 
 
@@ -88,7 +88,10 @@ class TestEveryApprovalIsRefusedInEveryMode(unittest.TestCase):
     def test_a_record_that_cannot_be_read_refuses_every_conversation(self):
         with support.Sandbox():
             authority.mark_unattended("nobody-watching")
-            support.write(authority.unattended_path(), "not json")
+            import shutil
+
+            shutil.rmtree(authority.unattended_path())
+            support.write(authority.unattended_path(), "not a folder")
             answer = asking.decided(EVERY_APPROVAL[0], session="somebody-here")
             self.assertEqual("deny", answer["hookSpecificOutput"]["permissionDecision"])
 
@@ -99,7 +102,8 @@ class TestTheNewEntries(unittest.TestCase):
     def test_asked(self):
         for arguments, says in (
             (["--approve-creation", "stg-0123456789abcdef", "--shown", "x"], approval.SAYS_CREATE),
-            (["--approve-setting", "stg-0123456789abcdef", "--shown", "x"], approval.SAYS_SET),
+            (["--approve-setting", "stg-0123456789abcdef", "--operation", "business", "--shown", "x"],
+             approval.SAYS_SET_BUSINESS),
         ):
             with self.subTest(arguments=arguments):
                 self.assertEqual((says, ("operations.approve",)), table.what("operations.py", arguments))

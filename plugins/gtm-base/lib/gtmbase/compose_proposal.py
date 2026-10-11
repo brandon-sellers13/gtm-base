@@ -1594,6 +1594,7 @@ CODE_LOCAL_MAP = "hand-edit-touches-the-map"
 CODE_LOCAL_TOO_LONG = "hand-edit-too-long"
 CODE_LOCAL_NOTHING = "no-hand-edit"
 CODE_LOCAL_NO_SECTION = "hand-edit-outside-any-heading"
+CODE_LOCAL_SETTINGS = "hand-edit-moves-the-owner-or-business"
 
 
 def _changed_files(base_root: str, git: GitRunner) -> Tuple[List[str], str]:
@@ -1992,9 +1993,24 @@ def stage_local_edit(
             docpaths.canonical(base_root, relative)
         except PathError:
             raise ValidationError(
-                "Only files in the context folder can be proposed this way, and "
-                "this one is not in it.",
+                "Only your documents can be proposed this way, and this file is "
+                "not one of them.",
                 code=CODE_LOCAL_OUTSIDE,
+            )
+        # Who owns a document and which business it is for change only
+        # through their own operations (Plan 1, Unit 4.2a, CS15 and CS17).
+        from . import operations
+
+        head = git.run(["show", "HEAD:" + relative], cwd=base_root)
+        now = read_text(os.path.join(base_root, relative.replace("/", os.sep)))
+        if head.ok and now is not None and operations.authority_lines_changed(
+            head.stdout, now
+        ):
+            raise ValidationError(
+                "That edit changes who owns a document or which business it is "
+                "for, and those change only through their own step, which shows "
+                "the change and records why.",
+                code=CODE_LOCAL_SETTINGS,
             )
     if _added_characters(diff) > constants.LOCAL_EDIT_MAX_CHARS:
         raise ValidationError(

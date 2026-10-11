@@ -1021,7 +1021,11 @@ PYTHON_SENTENCES = (
     ("approval", "ASK_OPENING"),
     # Plan 1, Unit 4.2a.
     ("approval", "SAYS_CREATE"),
-    ("approval", "SAYS_SET"),
+    ("approval", "SAYS_SET_OWNER"),
+    ("approval", "SAYS_SET_BUSINESS"),
+    ("approval", "SAYS_SET_MAP_OWNER"),
+    ("approval", "SAYS_SET_ADMINISTRATORS"),
+    ("approval", "SAYS_SET_BUSINESSES"),
     ("approval", "UNATTENDED"),
     ("approval", "ASK_CLOSING"),
     ("approval", "SAYS_APPROVE_CHANGE"),
@@ -1105,6 +1109,9 @@ PYTHON_SENTENCES = (
     ("operations", "DONE_CREATED"),
     ("operations", "DONE_SETTING"),
     ("write_hook", "UNATTENDED_REFUSED"),
+    ("approve_local", "AUTHORITY_UNREADABLE"),
+    ("approve_local", "OWNER_LINE_BY_HAND"),
+    ("approve_local", "SOURCE_MAP_SECRET"),
     # Plan 1, Unit 2.1: the inventory.
     ("inventory", "PURPOSE"),
     ("inventory", "NOT_STATED"),

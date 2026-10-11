@@ -109,6 +109,11 @@ def build_parser():
         "--approve-setting",
         help="write the settings change that was shown, by its prepared name",
     )
+    parser.add_argument(
+        "--operation",
+        choices=operations.SETTINGS_OPERATIONS,
+        help="with --approve-setting, the operation the showing printed",
+    )
     parser.add_argument("--shown", help="the value the showing printed")
     return parser
 
@@ -124,11 +129,15 @@ def _words(path, base_id, claims):
     return claim.text
 
 
-def _show(prepared):
+def _show(prepared, operation=None):
     sys.stdout.write(moment.fenced(prepared.artifact) + "\n")
     sys.stdout.write(
-        "   [for the assistant] prepared=%s shown=%s\n"
-        % (prepared.prepared_id, prepared.shown)
+        "   [for the assistant] prepared=%s shown=%s%s\n"
+        % (
+            prepared.prepared_id,
+            prepared.shown,
+            " operation=%s" % operation if operation else "",
+        )
     )
 
 
@@ -156,7 +165,12 @@ def main(argv=None):
         kind = operations.KIND_CREATE if options.approve_creation else operations.KIND_SETTING
         try:
             done = operations.approve(
-                root, base_id, prepared_id, options.shown or "", kind=kind
+                root,
+                base_id,
+                prepared_id,
+                options.shown or "",
+                kind=kind,
+                operation=options.operation if options.approve_setting else None,
             )
         except GtmBaseError as failure:
             sys.stdout.write(str(failure) + "\n")
@@ -205,7 +219,7 @@ def main(argv=None):
             return EXIT_ERROR
         for claim in claims:
             wordsfile.consume_claim(claim)
-        _show(prepared)
+        _show(prepared, options.set)
         return EXIT_DONE
 
     sys.stderr.write(NEEDS_THE_WORDS + "\n")

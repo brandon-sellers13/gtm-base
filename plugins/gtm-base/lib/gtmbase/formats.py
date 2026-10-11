@@ -913,8 +913,8 @@ class ConfirmationLine(object):
             expected = CONFIRMATION_TOKENS + CONFIRMATION_ROLE_TOKENS
         if len(parts) != len(expected):
             raise ValidationError(
-                "a confirmation line carries exactly %d values"
-                % len(CONFIRMATION_TOKENS),
+                "a confirmation line carries %d values, or %d with its role"
+                % (len(CONFIRMATION_TOKENS), len(CONFIRMATION_TOKENS) + 1),
                 code="wrong-token-count",
             )
         values = {}

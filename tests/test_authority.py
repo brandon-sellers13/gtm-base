@@ -209,11 +209,12 @@ class TestJudgedAsItStoodThen(unittest.TestCase):
             found = authority.at(base.root, "context/strategy/positioning.md", older)
             self.assertEqual(authority.ROLE_OWNER, found.role_of(WRITER))
 
-    def test_a_revision_nobody_can_read_grants_nothing(self):
+    def test_a_revision_nobody_can_read_is_not_an_answer(self):
+        """The correctness review of 2026-10-10, finding 3: it raises, never grants or denies."""
         with support.Sandbox() as sandbox:
             base = Base(sandbox)
-            found = authority.at(base.root, "context/positioning.md", "0" * 40)
-            self.assertEqual([], found.addresses())
+            with self.assertRaises(authority.AuthorityUnavailable):
+                authority.at(base.root, "context/positioning.md", "0" * 40)
 
 
 class TestTheManifest(unittest.TestCase):
@@ -331,7 +332,10 @@ class TestTheUnattendedMark(unittest.TestCase):
         """A broken record never unmarks one that was readable before it broke."""
         with support.Sandbox():
             authority.mark_unattended("conversation-one")
-            support.write(authority.unattended_path(), "not json")
+            import shutil
+
+            shutil.rmtree(authority.unattended_path())
+            support.write(authority.unattended_path(), "not a folder")
             # Unreadable means the answer cannot be given, which refuses.
             self.assertTrue(authority.is_unattended("conversation-one"))
             self.assertTrue(authority.is_unattended("conversation-two"))

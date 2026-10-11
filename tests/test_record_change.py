@@ -580,6 +580,15 @@ class TestTheDocuments(LocalCase):
     def test_any_document_is_asked_about_and_one_nobody_here_owns_is_not(self):
         self.base.write(MESSAGING, MESSAGING_TEXT)
         self.base.write(SOMEBODY_ELSES, PRICING_TEXT)
+        # Since Plan 1's Unit 4.2a the base owner may answer for any document
+        # (CS3), so here somebody else owns the base, and this seat holds no
+        # role in the document it does not own.
+        self.base.write(
+            constants.MAP_PATH,
+            support.read(os.path.join(self.base.root, constants.MAP_PATH)).replace(
+                "owner: owner@example.com", "owner: boss@example.test", 1
+            ),
+        )
         self.base.save("two more documents")
         code, out, _err = self.flow.run(["--record-change", "documents"])
         self.assertEqual(
@@ -1482,6 +1491,17 @@ class TestTheCurrentLayout(unittest.TestCase):
     def test_counts_a_person_reads_are_in_words(self):
         with support.Sandbox() as sandbox:
             base = class_base(sandbox, others=True)
+            # Since Plan 1's Unit 4.2a the base owner may answer for any
+            # document (CS3), so somebody else owns the base here.
+            map_path = os.path.join(base.root, constants.MAP_PATH)
+            support.write(
+                map_path,
+                support.read(map_path).replace(
+                    "owner: owner@example.com", "owner: boss@example.test", 1
+                ),
+            )
+            support.git(["add", "-A"], cwd=base.root)
+            support.git(["commit", "-q", "-m", "another base owner"], cwd=base.root)
             flow = Flow(self, base.root)
             code, out, err = flow.run(["--record-change", "documents"])
             self.assertEqual(0, code, out + err)

@@ -1697,7 +1697,7 @@ Built ahead of Release B shipping and ahead of Unit 4.2a, as the plan's "depende
 - [x] `truth_map.py` (new): the source map's five-column table parsed and validated, screened, never calling anything; the template's empty table.
 - [x] Tests first: `tests/test_inventory.py`, `tests/test_stack.py`; watch them fail, then build.
 - [x] Full suite, correctness review subagent, findings fixed, suite again.
-- [ ] Commit; hand-over note in the shared notes folder.
+- [x] Commit 977cf64 (suite 2918 OK, then 217 OK from a linked folder); hand-over note in the shared notes folder.
 Deferred, with the reason (they need Unit 4.2a's path rule or its operations): a standard flagged and blocked at the moment of use; a skill past its threshold due in the review; reading the base at its last saved revision for the runner; the inventory inside the review; human names for business-folder documents in sentences; a prepared change adding a source map row; the drafting prompt for source map rows.
 
 #### Review (Plan 1 read side)
@@ -1708,12 +1708,19 @@ Deferred, with the reason (they need Unit 4.2a's path rule or its operations): a
 - Follow-up: Astra's outside review of this branch (Codex is rate-limited until 2026-10-14).
 
 ### 2026-10-10, Plan 1 Unit 4.2a: one authority rule, one path rule, approvals bound to bytes (same branch)
-Briefed by the orchestrating session after Brandon signed the company-skills requirements (commit 80378c6 on claude/plan-1-meta-skill-3d436e). Built from CS1 to CS18 and CS30 and the plan's Unit 4.2a text. Release B's approval machinery (`approval.py`) is built on, never changed in behavior; the two edits it needs (CS30's refusal as `approval.decide`'s first test, and the new commands in its table) were put to the orchestrating session before any code.
-- [ ] The map's settings block (CS2): one `owner:`, `administrators:` (may be empty), `businesses:`; 2.1's reader moves from the body's Settings section to the block.
-- [ ] `docpaths.py`: which paths may be a base document, of what kind, and which operation may write each; every module that answered part of that asks it.
-- [ ] `authority.py`: the authority set of a document as of a saved version (CS3, CS4); roles; approval records with approver, role, date and hashes (CS9); a skill's manifest (CS10); this seat's trusted manifests (CS11); the record of conversations marked unattended (CS30).
-- [ ] Approve, confirm, the stale computation and the moment of use ask `authority` only.
-- [ ] Creation, absent-only and all or nothing (CS5, CS6 groundwork); a lesson at `learning/lessons/<slug>.md`.
-- [ ] The five settings operations (CS15 to CS17), each previewed, bound, recorded with its reason.
-- [ ] Prepared changes reach standards and the source map (closing call 43).
-- [ ] Tests first, one hostile fixture per clause; full suite; correctness and security review subagents; fixes; commit.
+Briefed by the orchestrating session after Brandon signed the company-skills requirements (commit 80378c6 on claude/plan-1-meta-skill-3d436e). Built from CS1 to CS18 and CS30 and the plan's Unit 4.2a text. The two `approval.py` edits were cleared by the orchestrating session first and sit in commits of their own.
+- [x] The map's settings block (CS2): one `owner:`, `administrators:` (may be empty), `businesses:`; 2.1's reader moved to the block.
+- [x] `docpaths.py`: which paths may be a base document, of what kind, and which operation may write each; every module that answered part of that asks it.
+- [x] `authority.py`: the authority set as of a saved revision (CS3, CS4), failing closed when the history cannot be read; a skill's manifest (CS10); this seat's trusted manifests (CS11); one file per conversation marked unattended (CS30).
+- [x] Approve, confirm, the stale computation, the review, the moment of use and setup's closing ask `authority` only. Records carry roles and byte hashes; confirmation lines carry the role; no new field writes an address.
+- [x] Creation, absent-only in either layout and all or nothing, with the creator's confirmation; a lesson at `learning/lessons/<slug>.md`.
+- [x] The five settings operations, each shown with the one line before and after, bound, re-worked out from the base at approval, recorded with the reason; a hand edit may not move an owner or business line.
+- [x] Prepared changes reach standards and the source map; every way into the source map runs its credential screen, the send check included.
+- [x] `approval.py` (own commits): CS30 refusal as `decide()`'s first test in every mode; create and the five settings operations in the table, each with its own sentence.
+- [x] Tests first; correctness and security review subagents (2 high and 9 lower, and 1 high and 5 lower), every finding fixed with a test that failed first.
+- [ ] The propose-change skill text for `operations.py` (needs the skill-walk test's placeholders), before live session C.
+- [ ] Astra's outside review of all four commits (Codex rate-limited until 2026-10-14).
+
+#### Review (Unit 4.2a)
+- Deviations recorded for Brandon: (1) CS9's address is the author of the saved record or line, not text in it, because the check before a send refuses any address but the base owner's; (2) a standard or the source map joins the time-based review only once first confirmed; (3) CS3 changed three older tests' premises (a document with no owner is the base owner's to approve; the base owner's confirmation counts anywhere; a stranger's yes is refused before it is written); (4) CS9 records are written on approvals made on this computer, not yet on the shared-copy path, which the backup plan decides.
+- The security review's high finding: a prepared operation kept on the seat was trusted at approval, so a rewritten file could pass the map's owner role through a "creation" question. Approval now works every change out again from the base and refuses anything that differs from what was shown.

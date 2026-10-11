@@ -35,8 +35,8 @@ import os
 from typing import Dict, List, Optional
 
 from . import constants, docpaths, formats, layout, paths, validate
-from .errors import PathError, ValidationError
-from .fsutil import atomic_write_json, ensure_dir, read_json, read_text
+from .errors import GtmBaseError, PathError, ValidationError
+from .fsutil import atomic_write_json, atomic_write_text, ensure_dir, read_json, read_text
 from .gitcmd import GitRunner, runner_or_default
 
 # The roles that allow an approval or a confirmation, most particular first.
@@ -58,9 +58,20 @@ CODE_ADMINISTRATORS_UNREADABLE = "administrators-unreadable"
 # How long a local git call made while judging authority may take.
 LOCAL_TIMEOUT_SECONDS = 5
 
-# The files this seat keeps.
+# The files this seat keeps. A conversation marked unattended is one file of
+# its own in a folder, made in one step, so two marks at once never lose one.
 TRUSTED_FILE = "trusted-manifests.json"
-UNATTENDED_FILE = "unattended-conversations.json"
+UNATTENDED_FOLDER = "unattended-conversations"
+
+
+class AuthorityUnavailable(GtmBaseError):
+    """Who may approve could not be read from the saved history.
+
+    A read that failed or ran out of time is not an answer (as
+    `base_reader.AuthorsUnavailable` says of who wrote a line), so it never
+    grants anything and never takes a confirmation away: the caller refuses,
+    or says nothing.
+    """
 
 
 # --- The roles in the map --------------------------------------------------------
@@ -178,13 +189,36 @@ def authority_from(document_text: Optional[str], map_text: Optional[str]) -> Aut
     return AuthoritySet(owners_in(document_text), roles_from_map(map_text))
 
 
+def _unavailable() -> AuthorityUnavailable:
+    return AuthorityUnavailable(
+        "who may approve a document could not be read from the saved history",
+        code="unreadable",
+    )
+
+
 def _saved(base_root: str, revision: str, relative: str, git: GitRunner) -> Optional[str]:
+    """One file as a revision saved it, None when that revision has no such file.
+
+    The tree is asked first, so a file the revision does not hold and a read
+    that failed are told apart; only the first is an answer.
+    """
+    listed = git.run(
+        ["ls-tree", "-z", revision, "--", relative],
+        cwd=base_root,
+        timeout=LOCAL_TIMEOUT_SECONDS,
+    )
+    if not listed.ok:
+        raise _unavailable()
+    if not listed.stdout.strip("\x00\n "):
+        return None
     shown = git.run(
         ["show", "%s:%s" % (revision, relative)],
         cwd=base_root,
         timeout=LOCAL_TIMEOUT_SECONDS,
     )
-    return shown.stdout if shown.ok else None
+    if not shown.ok:
+        raise _unavailable()
+    return shown.stdout
 
 
 def _saved_document(
@@ -209,32 +243,34 @@ def at(
 
     The revision is the moment the question is about: the last saved one for
     an approval happening now, and the one that added a confirmation line for
-    a confirmation (CS4). Only when the question is about now, and the base
-    has never saved this document or its map, is the version on the disk used,
-    because there is no saved one to read. A revision nobody can read grants
-    nothing.
+    a confirmation (CS4). Only when the question is about now is the disk ever
+    read: a document the base has never saved is judged by the words in front
+    of the person, and a base with no saved history at all by its map as it
+    stands. A base that has saved anything is never judged by an unsaved map.
+    A read that fails raises `AuthorityUnavailable` rather than answering.
     """
     git = runner_or_default(runner)
+    if revision == "HEAD" and not _has_history(base_root, git):
+        document = read_text(os.path.join(base_root, relative.replace("/", os.sep)))
+        map_text = read_text(os.path.join(base_root, constants.MAP_PATH.replace("/", os.sep)))
+        return authority_from(document, map_text)
     document = _saved_document(base_root, revision, relative, git)
     map_text = _saved(base_root, revision, constants.MAP_PATH, git)
-    if revision == "HEAD":
-        if document is None and not _ever_saved(base_root, relative, git):
-            document = read_text(os.path.join(base_root, relative.replace("/", os.sep)))
-        if map_text is None and not _ever_saved(base_root, constants.MAP_PATH, git):
-            map_text = read_text(os.path.join(base_root, constants.MAP_PATH.replace("/", os.sep)))
-    if document is None and map_text is None:
-        return AuthoritySet()
+    if document is None and revision == "HEAD":
+        document = read_text(os.path.join(base_root, relative.replace("/", os.sep)))
     return authority_from(document, map_text)
 
 
-def _ever_saved(base_root: str, relative: str, git: GitRunner) -> bool:
-    """Whether the last saved revision holds this path, or the base has none at all."""
-    head = git.run(["rev-parse", "--verify", "-q", "HEAD"], cwd=base_root)
-    if not head.ok:
+def _has_history(base_root: str, git: GitRunner) -> bool:
+    """Whether the base has saved anything at all, or a refusal when that cannot be read."""
+    head = git.run(
+        ["rev-parse", "--verify", "-q", "HEAD"], cwd=base_root, timeout=LOCAL_TIMEOUT_SECONDS
+    )
+    if head.ok:
+        return True
+    if head.code == 1:
         return False
-    return git.run(
-        ["cat-file", "-e", "HEAD:" + relative], cwd=base_root, timeout=LOCAL_TIMEOUT_SECONDS
-    ).ok
+    raise _unavailable()
 
 
 # --- What an approval is bound to ----------------------------------------------------
@@ -291,11 +327,13 @@ def manifest_of(base_root: str, base_id: str, skill: str) -> Optional[Manifest]:
     there is no skill here to trust, which is refused rather than skipped,
     because a file skipped is a file that runs unseen.
     """
-    folder = os.path.join(base_root, constants.SKILLS_DIR, skill)
-    if os.path.islink(folder) or not os.path.isdir(folder):
+    skills = os.path.join(base_root, constants.SKILLS_DIR)
+    folder = os.path.join(skills, skill)
+    if os.path.islink(skills) or os.path.islink(folder) or not os.path.isdir(folder):
         return None
     files: Dict[str, str] = {}
-    for dirpath, dirnames, filenames in os.walk(folder):
+    unreadable: List[OSError] = []
+    for dirpath, dirnames, filenames in os.walk(folder, onerror=unreadable.append):
         for name in list(dirnames):
             if os.path.islink(os.path.join(dirpath, name)):
                 return None
@@ -309,7 +347,7 @@ def manifest_of(base_root: str, base_id: str, skill: str) -> Optional[Manifest]:
             if hashed is None:
                 return None
             files[relative] = hashed
-    if constants.SKILLS_DIR + "/" + skill + "/SKILL.md" not in files:
+    if unreadable or constants.SKILLS_DIR + "/" + skill + "/SKILL.md" not in files:
         return None
     return Manifest(base_id, skill, files)
 
@@ -374,40 +412,50 @@ def trust(base_id: str, manifest: Manifest, approver: str, role: str) -> None:
 
 
 def unattended_path() -> str:
-    return os.path.join(paths.seat_home_path(), UNATTENDED_FILE)
+    """The folder that holds one file for each conversation marked unattended."""
+    return os.path.join(paths.seat_home_path(), UNATTENDED_FOLDER)
+
+
+def _mark_name(conversation: str) -> str:
+    return hashlib.sha256(conversation.encode("utf-8")).hexdigest()
 
 
 def is_unattended(conversation: Optional[str]) -> bool:
     """Whether a conversation was marked unattended, which no later start undoes.
 
-    A record that exists and cannot be read answers yes for every
+    A record that is there and cannot be read answers yes for every
     conversation, because a wrong yes only refuses approvals, which is the
     safe direction, and a wrong no would let one through in a run nobody is
     watching.
     """
     if not conversation:
         return False
-    path = unattended_path()
-    if not os.path.lexists(path):
+    folder = unattended_path()
+    if not os.path.lexists(folder):
         return False
-    value = read_json(path)
-    if not isinstance(value, list):
+    if os.path.islink(folder) or not os.path.isdir(folder):
         return True
-    return conversation in value
+    try:
+        os.listdir(folder)
+    except OSError:
+        return True
+    return os.path.lexists(os.path.join(folder, _mark_name(conversation)))
 
 
 def mark_unattended(conversation: str) -> None:
-    """Mark one conversation unattended for the rest of its life."""
+    """Mark one conversation unattended for the rest of its life.
+
+    Each mark is a file of its own, made in one step, so a second mark never
+    rewrites the first, and a record that cannot be read is never replaced.
+    """
     if not conversation or not isinstance(conversation, str):
         raise ValueError("only a conversation with an identifier can be marked")
-    path = unattended_path()
-    marked: List[str] = []
-    if os.path.lexists(path):
-        value = read_json(path)
-        if isinstance(value, list):
-            marked = [str(item) for item in value]
-    if conversation in marked:
-        return
-    marked.append(conversation)
-    home = ensure_dir(paths.seat_home_path())
-    atomic_write_json(path, marked, inside=home)
+    folder = unattended_path()
+    if os.path.lexists(folder) and (os.path.islink(folder) or not os.path.isdir(folder)):
+        raise ValidationError(
+            "the record of runs nobody watches cannot be read", code="unattended-unreadable"
+        )
+    ensure_dir(folder)
+    mark = os.path.join(folder, _mark_name(conversation))
+    if not os.path.lexists(mark):
+        atomic_write_text(mark, "unattended\n", inside=folder)
