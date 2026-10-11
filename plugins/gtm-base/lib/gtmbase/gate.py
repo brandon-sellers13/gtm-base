@@ -2042,4 +2042,34 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         reason = sentence_for(REASON_INTERNAL)
     if reason:
         sys.stdout.write(deny_payload(client, reason) + "\n")
+        return 0
+    if _asks_about_settings(command, cwd):
+        sys.stdout.write(ask_payload(client) + "\n")
     return 0
+
+
+def _asks_about_settings(command: str, cwd: str) -> bool:
+    """Whether a line writes a file that can switch the checks off (0.3.6).
+
+    Step 10 of the Release A live check: a shell command rewrote the person's
+    settings and nothing was asked, because the question lived only on the
+    file tools. A check that cannot finish asks rather than lets it through.
+    """
+    from . import settings_writes
+
+    try:
+        return settings_writes.writes_a_settings_file(command, cwd)
+    except Exception:
+        return True
+
+
+def ask_payload(client: str) -> str:
+    """The question the write check asks about the same files, word for word.
+
+    Claude Code shows the reason in its permission prompt. The write check
+    asks every client the same way, and so does this.
+    """
+    from . import write_hook
+
+    del client
+    return json.dumps(write_hook.question())

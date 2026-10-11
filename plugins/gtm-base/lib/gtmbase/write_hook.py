@@ -487,6 +487,25 @@ def _a_linked_folders_settings(named: str, real_file: str) -> bool:
     return False
 
 
+def asks_about(named: str, real_file: str) -> bool:
+    """Whether a write here is one to ask about: a file that can switch the
+    checks off. The command check asks the same question of a shell line that
+    writes one of these (0.3.6), so the two checks share this answer.
+
+    The person's own settings and the plugin registry, anything under the
+    folder the client keeps its plugins in, and a linked folder's settings.
+    The last is looked at before any shortcut, because the target of a linked
+    folder's assistant folder, when that folder is a link, names no guarded
+    folder.
+    """
+    for settings in client_settings_files():
+        if _reaches(named, real_file, settings):
+            return True
+    if _reaches(named, real_file, client_plugins_dir()):
+        return True
+    return _a_linked_folders_settings(named, real_file)
+
+
 def _cheaply_a_base(folder: str, joined: Sequence[str]) -> bool:
     """Whether a repository is a base by the questions that start no program."""
     try:
@@ -595,17 +614,7 @@ def problem_with(named: str, real_file: str, cwd: Optional[str] = None) -> Optio
     # be both: a link under the folder the client keeps its plugins in,
     # pointing into a base's own history folder, is a refusal wearing a
     # question's hat. Finding P2 of the confirmation round.
-    asking = None
-    for settings in client_settings_files():
-        if _reaches(named, real_file, settings):
-            asking = CODE_CLIENT_SETTINGS
-    if asking is None and _reaches(named, real_file, client_plugins_dir()):
-        asking = CODE_CLIENT_SETTINGS
-    # Before the shortcut below, because the target of a linked folder's
-    # assistant folder, when that folder is a link, names neither guarded
-    # folder.
-    if asking is None and _a_linked_folders_settings(named, real_file):
-        asking = CODE_CLIENT_SETTINGS
+    asking = CODE_CLIENT_SETTINGS if asks_about(named, real_file) else None
 
     # Every place a known base keeps its history is compared before the
     # shortcut below, because none of those places has to name a guarded

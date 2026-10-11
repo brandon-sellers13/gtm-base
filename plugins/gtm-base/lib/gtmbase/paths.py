@@ -330,6 +330,7 @@ class Resolution(object):
         "entry",
         "content_root",
         "repair_root",
+        "repair_identity",
         "conflict_roots",
     )
 
@@ -342,6 +343,7 @@ class Resolution(object):
         content_root=None,
         repair_root=None,
         conflict_roots=None,
+        repair_identity=None,
     ):
         self.root = root
         self.base_id = base_id
@@ -354,6 +356,11 @@ class Resolution(object):
         # question, so it happens here; writing it down is a change, so it
         # happens in the one half of the session start that may write.
         self.repair_root = repair_root
+        # The folder's record as it is now, when the one written down carries
+        # a device number a restart has since changed on the same disk. It is
+        # written down in the same half of the session start, for the same
+        # reason.
+        self.repair_identity = repair_identity
         # The base folders of every base claiming this folder, when more than
         # one of them does and nothing may therefore be opened.
         self.conflict_roots = list(conflict_roots or [])
@@ -430,7 +437,9 @@ def _linked(here: str, entries, git):
     for entry, recorded_root, recorded in linked:
         verdict = folder_identity.matches(recorded, current, recorded_root)
         if verdict in (folder_identity.SAME, folder_identity.MOVED):
-            claims.append((entry, verdict))
+            claims.append(
+                (entry, verdict, folder_identity.needs_refresh(recorded, current))
+            )
             continue
         if folder_identity.points_at(recorded_root, current) or (
             os.path.exists(recorded_root)
@@ -440,7 +449,7 @@ def _linked(here: str, entries, git):
 
     if len(claims) > 1:
         roots = sorted(
-            str(entry.get("root") or "") for entry, _verdict in claims
+            str(entry.get("root") or "") for entry, _verdict, _stale in claims
         )
         return Resolution(None, None, CODE_LINK_CONFLICT, None, conflict_roots=roots)
     if not claims:
@@ -448,7 +457,7 @@ def _linked(here: str, entries, git):
             return Resolution(None, None, CODE_LINK_MISMATCH, None)
         return None
 
-    entry, verdict = claims[0]
+    entry, verdict, stale = claims[0]
     root = entry.get("root")
     if not isinstance(root, str) or not is_base_shaped(root):
         return None
@@ -478,6 +487,7 @@ def _linked(here: str, entries, git):
         entry,
         content_root=current.path,
         repair_root=current.path if verdict == folder_identity.MOVED else None,
+        repair_identity=current if stale else None,
     )
 
 

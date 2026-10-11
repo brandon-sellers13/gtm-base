@@ -503,6 +503,26 @@ def words_key(options, out):
             return resolution.base_id
     except Exception:
         pass
+    # Then the way the link step finds a base: by the company it is for, or
+    # as the only base there is. Linking a folder again starts from a folder
+    # that is not linked any more, often naming the base by its company, and
+    # the look above finds neither, so the first command the skill showed
+    # refused (finding 2 of step 7 of the Release A live check).
+    try:
+        _root, base_id = join_flow.find_base(options.base, cwd=os.getcwd())
+        if base_id:
+            return base_id
+    except GtmBaseError as refusal:
+        if refusal.code == join_flow.MORE_THAN_ONE_BASE:
+            roots = list(getattr(refusal, "roots", []) or []) + ["", ""]
+            out.write(
+                MORE_THAN_ONE_BASE % (plain_value(roots[0]), plain_value(roots[1]))
+                + "\n"
+            )
+            line(out, "codes", refusal.code)
+            return None
+    except Exception:
+        pass
     out.write(NEEDS_A_RUN_OR_SESSION + "\n")
     return None
 
@@ -1211,10 +1231,41 @@ def named_base(options, out):
         return None, None
 
 
+# The home folder and the top of the disk hold every client's folders, so a
+# base linked to either would open in every session (security review of
+# 0.3.6, which found `link` with no folder named could link whichever folder
+# the shell had last moved to).
+FOLDER_TOO_WIDE = (
+    "That folder holds all of your other folders, so it was not linked. Open "
+    "Claude Code in the folder you keep this company's material in and say it "
+    "again there."
+)
+CODE_FOLDER_TOO_WIDE = "folder-too-wide"
+
+
+def _too_wide_to_link(folder):
+    try:
+        real = os.path.realpath(os.path.expanduser(folder))
+    except Exception:
+        return False
+    wide = {os.path.realpath(os.path.expanduser("~")), os.path.realpath(os.sep)}
+    return real in wide
+
+
 def run_link(options, out):
-    folder = the_folder(options, out)
+    # The folder the command runs in, when none is named, because "link this
+    # folder to my base" is said from the folder itself and the skill shows
+    # the command with nothing else on it.
+    if options.folder or options.folder_file:
+        folder = the_folder(options, out)
+    else:
+        folder = os.getcwd()
     if not folder:
         return EXIT_ERROR
+    if _too_wide_to_link(folder):
+        out.write(FOLDER_TOO_WIDE + "\n")
+        line(out, "codes", CODE_FOLDER_TOO_WIDE)
+        return EXIT_REFUSED
     root, base_id = named_base(options, out)
     if root is None:
         return EXIT_REFUSED

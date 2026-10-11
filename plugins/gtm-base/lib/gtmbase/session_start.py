@@ -61,6 +61,7 @@ from . import (
     ids,
     install_git_hook,
     machine,
+    names,
     paths,
     stale,
     state,
@@ -496,6 +497,9 @@ def _run(payload, client, now, git, root_of_plugin, part):
 def _repair_link(resolution) -> None:
     """Follow the folder a base belongs with, once, after it was renamed.
 
+    The same write brings the folder's device number up to date when a restart
+    changed it on the same disk, so the next start compares like with like.
+
     Only the half of the session start that may write ever gets here, and the
     write only lands if the record still points where this run read it. Another
     window may have disconnected the folder or connected a different one while
@@ -503,14 +507,22 @@ def _repair_link(resolution) -> None:
     somebody has since made.
     """
     new_root = getattr(resolution, "repair_root", None)
+    identity = getattr(resolution, "repair_identity", None)
     entry = getattr(resolution, "entry", None)
-    if not new_root or not isinstance(entry, dict):
+    if not isinstance(entry, dict) or not (new_root or identity is not None):
+        return
+    recorded_root = entry.get("content_root")
+    if not new_root:
+        new_root = recorded_root
+    if not new_root:
         return
     try:
         machine.rewrite_content_root(
             resolution.base_id,
             new_root,
-            entry.get("content_root"),
+            recorded_root,
+            identity=identity,
+            expected_identity=entry.get("content_identity") if identity is not None else None,
         )
     except Exception:
         return
@@ -957,7 +969,7 @@ def _daily_work(
     settings = _settings_of(map_text)
     offer = _setup_offer(root, root_of_plugin)
     tail = _tail(blocks, root, base_id, root_of_plugin, offer, now, part)
-    context = _fill_main(blocks, map_text, settings, changes, "", tail)
+    context = _fill_main(blocks, map_text, settings, changes, "", tail, root)
     return _render(part, context, offer.visible or None)
 
 
@@ -1005,7 +1017,7 @@ def _stalled(blocks, root, git, root_of_plugin, sentence, part):
     settings = _settings_of(map_text)
     note = AS_OF % _as_of(root, git)
     context = _fill_main(
-        blocks, map_text, settings, 0, note, _moment_block(blocks, root_of_plugin)
+        blocks, map_text, settings, 0, note, _moment_block(blocks, root_of_plugin), root
     )
     return _render(part, context, sentence)
 
@@ -1023,21 +1035,110 @@ def fence_for(text: str) -> str:
     return "`" * max(3, longest + 1)
 
 
-def _fill_main(blocks, map_text, settings, changes, status_note, question_text):
-    shown_map = map_text[: constants.MAX_MAP_CHARS]
-    text = fill(
-        blocks.get("main", ""),
+def _fill_main(blocks, map_text, settings, changes, status_note, question_text, root=None):
+    """The whole injected text, with the map given the room the rest leaves.
+
+    The text is cut at the session start's budget, and the hard rule about
+    using a document comes last, so a long map used to be able to push the end
+    of the rule off. Everything but the map is laid out first, and the map is
+    shown in whatever room is left, never more than its own cap.
+    """
+    values = {
+        "changes": changes,
+        "status_note": status_note,
+        "documents": _documents_block(blocks, root),
+        "threshold_days": settings.confirmation_threshold_days,
+        "not_now_days": settings.not_now_days,
+        "tail": question_text,
+    }
+
+    def laid_out(shown_map):
+        values["fence"] = fence_for(shown_map)
+        values["map"] = shown_map
+        return fill(blocks.get("main", ""), values)
+
+    room = constants.MAX_INJECTION_CHARS - len(laid_out(""))
+    shown_map = map_text[: max(0, min(constants.MAX_MAP_CHARS, room))]
+    text = laid_out(shown_map)
+    # A longer fence for the shorter map can cost a character or two.
+    while len(text) > constants.MAX_INJECTION_CHARS and shown_map:
+        shown_map = shown_map[: len(shown_map) - (len(text) - constants.MAX_INJECTION_CHARS)]
+        text = laid_out(shown_map)
+    return text[: constants.MAX_INJECTION_CHARS]
+
+
+# The most documents the list names, and the most characters it may take, so
+# the list, the map and the rule after them fit the session start's budget
+# together (`constants.MAX_INJECTION_CHARS`). A test holds the three to it.
+MAX_DOCUMENTS_LISTED = 24
+MAX_DOCUMENTS_CHARS = 1600
+# What a document's path inside the base may be made of before it is listed.
+# A name comes out of the base and the list is read by the assistant, so a path
+# carrying anything else is counted rather than repeated.
+_PLAIN_DOCUMENT_PATH = re.compile(r"^[A-Za-z0-9 ._/-]{1,160}$")
+# The two documents every finished setup leaves, listed first.
+_FIRST_DOCUMENTS = ("context/strategy/icp.md", "context/strategy/positioning.md")
+MORE_DOCUMENTS = "and %d more under %s"
+
+
+def _documents_block(blocks, root) -> str:
+    """Where the base is and which documents it holds, by name and by path.
+
+    Finding 2 of step 7 of the Release A live check: an ordinary request never
+    reached the base's documents (none of two), because nothing here said where
+    the base was or what it held, and a session that searched for them too
+    shallowly told the person the base had no customer profile. The flag can
+    only fire on a document the assistant opens, so the session now starts
+    knowing exactly where each one is.
+    """
+    template = blocks.get("documents", "")
+    if not template or not root:
+        return ""
+    folder = os.path.realpath(root)
+    if any(ord(character) < 32 or ord(character) == 127 for character in folder):
+        return ""
+    found = [
+        info.path
+        for info in _context_files(root)
+        if info.path != constants.MAP_PATH
+    ]
+    ordered = [path for path in _FIRST_DOCUMENTS if path in found] + sorted(
+        path for path in found if path not in _FIRST_DOCUMENTS
+    )
+    lines: List[str] = []
+    used = 0
+    left_out = 0
+    for relative in ordered:
+        if not _PLAIN_DOCUMENT_PATH.match(relative) or ".." in relative.split("/"):
+            left_out += 1
+            continue
+        try:
+            name = names.document_name(relative)
+        except ValueError:
+            left_out += 1
+            continue
+        row = "%s: %s" % (name, os.path.join(folder, *relative.split("/")))
+        if len(lines) >= MAX_DOCUMENTS_LISTED or used + len(row) > MAX_DOCUMENTS_CHARS:
+            left_out += 1
+            continue
+        lines.append(row)
+        used += len(row) + 1
+    if left_out:
+        lines.append(
+            MORE_DOCUMENTS
+            % (left_out, os.path.join(folder, constants.CONTEXT_DIR))
+        )
+    if not lines:
+        lines.append("no documents yet")
+    listed = "\n".join(lines)
+    return fill(
+        template,
         {
-            "changes": changes,
-            "status_note": status_note,
-            "fence": fence_for(shown_map),
-            "map": shown_map,
-            "threshold_days": settings.confirmation_threshold_days,
-            "not_now_days": settings.not_now_days,
-            "tail": question_text,
+            "fence": fence_for(folder + "\n" + listed),
+            "base_folder": folder,
+            "documents": listed,
         },
     )
-    return text[: constants.MAX_INJECTION_CHARS]
 
 
 # --- Reading the base ---------------------------------------------------
