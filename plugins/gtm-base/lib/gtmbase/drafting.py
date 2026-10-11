@@ -637,26 +637,59 @@ def strip_fence(step: str, model_text: str) -> str:
     return inside + "\n"
 
 
-_SOURCES_LINE_RE = re.compile(r"^(sources:).*$", re.M)
+_SOURCES_KEY_RE = re.compile(r"^(sources?):(.*)$")
+_LIST_ITEM_RE = re.compile(r"^\s+-\s*(.*)$")
+_FILE_LABEL_RE = re.compile(
+    r"^[^\s\[\],][^\[\],]*\.[A-Za-z0-9]{1,8}(?: \(\d{4}-\d{2}-\d{2}\))?$"
+)
+
+
+def _unnamed(items: Sequence[str]) -> List[str]:
+    """The items that are not a file's name, which the word checks still read."""
+    return [item for item in items if not _FILE_LABEL_RE.match(item.strip())]
 
 
 def _without_source_labels(text: str) -> str:
-    """The draft as the word checks read it: the sources line left empty.
+    """The draft as the word checks read it: the files it cites left out.
 
-    The sources line names the person's own files, and a file is named
-    whatever somebody called it, so a file called todo.md is a source and
-    not a placeholder. Only that one line of the settings block is left out;
-    everything a draft says in its own words is still checked (the replay of
-    2026-10-10, case two).
+    A file is named whatever somebody called it, so a source called todo.md
+    is a source and not a placeholder. Only an item of the sources line (or a
+    change entry's source line, or one item per line under either) that is
+    shaped like a file's name, with or without the date beside it, is left
+    out. Anything else on that line, such as an unfilled TBD, is still read,
+    and so is everything a draft says in its own words (the replay of
+    2026-10-10, case two, and the correctness review of its fix).
     """
     lines = text.split("\n")
     if not lines or lines[0].strip() != formats.FRONTMATTER_FENCE:
         return text
+    closing = None
     for index in range(1, len(lines)):
         if lines[index].strip() == formats.FRONTMATTER_FENCE:
-            block = _SOURCES_LINE_RE.sub(r"\1 []", "\n".join(lines[1:index]), count=1)
-            return "\n".join([lines[0], block] + lines[index:])
-    return text
+            closing = index
+            break
+    if closing is None:
+        return text
+    kept = [lines[0]]
+    in_sources = False
+    for line in lines[1:closing]:
+        key = _SOURCES_KEY_RE.match(line)
+        item = _LIST_ITEM_RE.match(line)
+        if key:
+            value = key.group(2).strip()
+            in_sources = not value
+            if value.startswith("[") and value.endswith("]"):
+                items = value[1:-1].split(",") if value[1:-1].strip() else []
+                line = "%s: [%s]" % (key.group(1), ", ".join(i.strip() for i in _unnamed(items)))
+            elif value:
+                line = "%s: %s" % (key.group(1), ", ".join(i.strip() for i in _unnamed([value])))
+        elif in_sources and item:
+            if not _unnamed([item.group(1)]):
+                continue
+        else:
+            in_sources = False
+        kept.append(line)
+    return "\n".join(kept + lines[closing:])
 
 
 def check_words(step: str, text: str) -> None:

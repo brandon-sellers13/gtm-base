@@ -659,6 +659,37 @@ class TestEveryRefusalNamesItsStepAndOneThing(unittest.TestCase):
             refusal(self, drafting.STEP_ICP, cited.replace("## Use cases\n", "## Use cases\n\nTODO\n", 1)),
         )
 
+    def test_the_sources_line_still_checks_what_is_not_a_file_name(self):
+        # The correctness review of the replay fixes: only an item shaped like
+        # a file's name is the person's own words; anything else on the line
+        # is still checked.
+        import re as _re
+
+        text = captured("icp.md")
+        for unfilled, code in (
+            ("TBD", "icp:placeholder"),
+            ("insert the sources here", "icp:placeholder"),
+            ("notes.md, seamless notes", "icp:banned-word:seamless"),
+        ):
+            changed = _re.sub(r"^sources: \[.*\]$", "sources: [%s]" % unfilled, text, count=1, flags=_re.M)
+            self.assertEqual(code, refusal(self, drafting.STEP_ICP, changed), unfilled)
+
+    def test_a_sources_list_one_item_per_line_may_cite_todo(self):
+        import re as _re
+
+        text = captured("icp.md")
+        listed = _re.sub(
+            r"^sources: \[.*\]$",
+            "sources:\n  - acme-icp.md (2026-08-14)\n  - tasks/todo.md (2026-09-17)",
+            text, count=1, flags=_re.M,
+        )
+        drafting.parse(drafting.STEP_ICP, listed)
+
+    def test_a_change_entry_may_cite_todo_as_its_source(self):
+        text = captured("change-entry.md").replace("source: pricing-notes.txt", "source: tasks/todo.md (2026-09-17)")
+        self.assertIn("todo.md", text)
+        drafting.parse(drafting.STEP_CHANGE, text)
+
     def test_a_section_the_profile_always_carries_may_not_be_empty(self):
         self.assertEqual(
             "icp:empty-section:Use cases",

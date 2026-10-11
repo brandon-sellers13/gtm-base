@@ -556,6 +556,20 @@ class TestTheVersionOfferedIsTheOneADraftReads(unittest.TestCase):
             self.assertNotIn("segments/widgets.md", labels)
             self.assertEqual(2, len(candidates))
 
+    def test_a_template_version_is_never_the_one_offered(self):
+        # The correctness review of the replay fixes, finding 5.
+        with support.Sandbox():
+            content = os.path.join(os.environ["HOME"], "company")
+            folder = os.path.join(content, "segments")
+            support.write(os.path.join(folder, "icp-lenders.md"), "# Ideal customer profile: Lenders\n\nWho they are.\n")
+            support.write(os.path.join(folder, "icp-banks.md"), "# Ideal customer profile: Banks\n\nWho they are.\n")
+            support.write(os.path.join(folder, "icp-banks.final.md"), "# ICP template\n\nFill this in.\n")
+            run = join_flow.new_run(TODAY)
+            agreed(content, run)
+            labels = [c.label for c in join_flow.segment_candidates(run, today=TODAY)]
+            self.assertIn("segments/icp-banks.md", labels)
+            self.assertNotIn("segments/icp-banks.final.md", labels)
+
 class TestTheWordsAPersonReads(unittest.TestCase):
     def test_every_sentence_is_registered_and_plain(self):
         registered = set(
