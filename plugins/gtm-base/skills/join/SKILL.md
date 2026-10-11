@@ -450,6 +450,59 @@ python3 scripts/join.py segments-settle --run <run identifier> --segments-file <
   `answer=draft` is drafted on its own in step 6c, and each line marked
   `answer=adopt` is taken in as it stands in step 6d.
 
+### Step 5e. Notes from every file, before anything is drafted
+<!-- step -->
+
+This step will read every file on the list in full and take notes from it, so
+no segment, customer, figure or open question is lost to how much one request
+can hold, and every line of every draft can say where it came from. It runs
+once the segments are settled, and it asks the person nothing.
+
+```
+python3 scripts/join.py notes-plan --run <run identifier>
+```
+
+- It prints `files=` and `batches=`, the number of passes it takes to read
+  everything. Say: I'll read every file you agreed to in full and note what
+  each one says, in that many passes. Then, before the first pass, say the
+  line for it: Reading what you named.
+- It holds every piece of text kept in step 5c without being told, so it
+  needs no `--paste-file`.
+
+For each batch number from 1 to the number it printed:
+
+```
+python3 scripts/join.py words-file --run <run identifier> --for company
+python3 scripts/join.py notes-assemble --run <run identifier> --batch <batch number> --company-file <the path it printed>
+```
+
+- It prints `prompt=`, `notes=`, and `batch=`. Hand each batch to a subagent
+  of its own, up to four at once, and give it only the two paths: tell it to
+  read the file printed as `prompt=`, follow it, and write the notes to the
+  file printed as `notes=`, and nothing else. Never read the material into
+  this conversation yourself; the subagents read it.
+
+When a subagent has written its notes, check them:
+
+```
+python3 scripts/join.py notes-check --run <run identifier> --batch <batch number> --notes <notes file>
+```
+
+- The notes file is the one `notes-assemble` printed, and it is the only file
+  this step will read.
+- `accepted=yes` means that batch is done. Say: Read <the batch number> of
+  <the number of batches>.
+- `accepted=no` with `problem=` lines means some notes do not hold up against
+  their files. Hand the same request and those lines back to a subagent to
+  write that batch's notes again, and check them again.
+- After the third try, setup keeps the notes that held up and prints
+  `not-noted=` lines for the rest. They are listed in each document as not
+  noted, so go on.
+- When a session stops part way, run
+  `python3 scripts/join.py notes-status --run <run identifier>`. It prints
+  each batch as `done` or `waiting`; take the notes for the waiting ones only.
+- `codes=notes-waiting` from any later step means a batch is still waiting.
+
 ### Step 6. What each draft will read
 
 This step shows, before each draft, what that draft will read and what it will
@@ -467,10 +520,14 @@ python3 scripts/join.py preview --step <step> --run <run identifier>
   instead of `icp`: the customer profile across every segment, with one short
   paragraph each.
 
+- Every draft here is written from the notes of step 5e, which read every
+  file in full, so nothing is left out of one for room. Only a file that could
+  not be used, or an older version of a document, is left out.
 - It writes nothing. For the assistant it prints `choice=`, `going-in=`,
   `left-out-count=`, `total=`, the first twenty labels going in, and one
-  `left-out=` line for each file left out, with `reason=over-the-cap`,
-  `reason=unusable:<code>`, or `reason=older-version`.
+  `left-out=` line for each file left out, with `reason=unusable:<code>` or
+  `reason=older-version`. A context change, in step 8, still reads its files
+  directly, and there `reason=over-the-cap` can also appear.
 - Then it prints the sentences to say, and you say them as they are written:
   how much this draft reads and which files it leaves out; when the cap left
   anything out, why a draft reads a limited amount at all; for each older
@@ -498,7 +555,9 @@ widens it.
   command line naming a file is refused outright.
 - A number that is not on the list is refused with `codes=not-consented`. Read
   the list out again and ask which of those they mean.
-- Naming only the older version of a document uses that version.
+- Naming only the older version of a document reads nothing from it,
+  because the notes are taken from the version that is used, and the preview
+  says which that is.
 - A preview they narrowed asks nothing more, because they have answered.
 
 ### Step 6b. The draft, whole
@@ -528,6 +587,9 @@ python3 scripts/join.py assemble --step <step> --run <run identifier> --company-
 - `codes=no-sources` means nothing survived and no request was built. Read
   out the `Left out:` lines, say there was nothing left to draft from, and ask
   for a shorter paste or a narrower folder. Never write a draft from nothing.
+- The request is the notes, not the files. Every paragraph and item you write
+  cites the notes it rests on, as `[n12]`, the way the request says, and
+  setup checks each one.
 
 Before each wait, say the line for that step, and nothing else while the
 person is waiting:
@@ -557,6 +619,12 @@ python3 scripts/join.py review --step <step> --run <run identifier> --draft <dra
   the profile across several segments is checked against them.
 - `codes=umbrella-instead` means draft `umbrella` rather than `icp`, and
   `codes=no-several-segments` means the other way round.
+- Codes naming a section and a line, such as
+  `uncited:section-2-paragraph-1`, mean that line does not rest on the notes
+  it cites. Write those lines again from the same request and check again.
+  After the third refusal of the same draft, `review` takes those lines out
+  itself, prints `taken-out=`, and leaves a question in their place. Say the
+  sentence it prints.
 - `questions=<number>` and a sentence mean the draft leaves that many
   questions for them, each marked in it as `[your call: ...]`. Say the
   sentence before you show the draft.
@@ -565,10 +633,36 @@ python3 scripts/join.py review --step <step> --run <run identifier> --draft <dra
 - Add `--questions-open` to `approve` only when they say to leave the
   questions open, never on your own; without it nothing is written.
 
-When it is ready, show them the whole document and offer the answers they
-actually have. The first document has three: approve it, edit it, or ask what
-is wrong with it. From the second on there are four, with skip among them,
-because a skipped document is written into the base the first approval makes.
+When review says it is ready, have its lines checked against their notes
+by a reader who did not write it, before the person sees it:
+
+```
+python3 scripts/join.py support-assemble --step <step> --run <run identifier>
+python3 scripts/join.py support-check --step <step> --run <run identifier> --answer-support <support answer file>
+```
+
+- `support-assemble` prints `prompt=`, `answer=`, and `lines=`. Hand the
+  file printed as `prompt=` to a fresh subagent that did not write the draft
+  and sees nothing else: tell it to read that file, follow it, and write its
+  answer to the file printed as `answer=`. That answer file is the one
+  `support-check` reads.
+- `support-check` prints `checked=yes`, `taken-out=`, and `shown=`. When
+  `taken-out=` is more than zero, say that many lines said more than their
+  notes support and are now questions in the draft. `codes=support-incomplete`
+  means the answer missed a line: ask the subagent again.
+- The file printed as `shown=` is the document exactly as it will be written,
+  with the evidence for each segment, what the material leaves open, and the
+  file and words behind every line at its foot. That file is what you show.
+- After any edit, run `review`, `support-assemble` and `support-check` again.
+- `codes=support-not-checked` from `approve` means the text is not the text
+  that was checked.
+
+When it is ready, show them the whole `shown=` file and offer the answers
+they actually have:
+
+- The first document has three: approve it, edit it, or ask what is wrong.
+- From the second on there are four, with skip among them, because a skipped
+  document is written into the base the first approval makes.
 
 - **What is wrong with this?** Ask this run for a file to put their answer in
   with `python3 scripts/join.py words-file --run <run identifier> --for answer`,
@@ -613,6 +707,8 @@ python3 scripts/join.py preview --step segment --segment <segment> --run <run id
 python3 scripts/join.py words-file --run <run identifier> --for company
 python3 scripts/join.py assemble --step segment --segment <segment> --run <run identifier> --company-file <the path it printed> --email <their address>
 python3 scripts/join.py review --step segment --segment <segment> --run <run identifier> --draft <draft file>
+python3 scripts/join.py support-assemble --step segment --segment <segment> --run <run identifier> --base <base folder>
+python3 scripts/join.py support-check --step segment --segment <segment> --run <run identifier> --answer-support <support answer file> --base <base folder>
 python3 scripts/join.py approve --step segment --segment <segment> --draft <draft file> --run <run identifier> --base <base folder>
 ```
 
@@ -944,8 +1040,9 @@ python3 scripts/join.py draft-freeze --run <run identifier> --session <session i
 - `codes=draft-list-changed` means a file changed after the list was shown.
   Show the list again and ask again.
 - A list shown after the yes needs a yes of its own before anything is read.
-- Then draft the segment exactly as step 6c does, with this run identifier,
-  from the preview to the approval, and show it whole before the approval.
+- Then take the notes for this run exactly as step 5e does, and draft the
+  segment exactly as step 6c does, with this run identifier, from the preview
+  to the approval, and show it whole before the approval.
 - When they leave the segment out, run this and say what it prints. It is
   never offered again, and nothing is written into any of your documents.
   When the customer profile already names the segment, it prepares a change

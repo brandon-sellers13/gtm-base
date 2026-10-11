@@ -506,3 +506,133 @@ class TestCheckingThroughTheScript(Checked):
         said = ran.stdout.decode("utf-8")
         self.assertIn("batch=1 done", said)
         self.assertIn("waiting=0", said)
+
+
+# --- Drafts read the notes, not the files (U3) --------------------------------
+
+
+LENDERS = """# Ideal customer profile: Lenders
+
+Lenders buy when defaults rise. Harbor Lending signed for a year.
+"""
+BANKS = """# Ideal customer profile: Banks
+
+Banks buy after an audit. Granite Bank tried it and did not renew.
+"""
+COMPANY = """# About us
+
+We sell one platform to lenders and banks.
+This sentence is in the file but in no note.
+"""
+
+
+def take_notes(run, rows_for):
+    """Write and check the notes of every batch, from rows chosen per file label."""
+    planned = join_flow.notes_plan(run, today=TODAY)
+    numbers = dict((source.label, number) for number, source in enumerate(planned.sources, start=1))
+    for batch in planned.batches:
+        rows = []
+        for number in batch.numbers:
+            label = planned.sources[number - 1].label
+            made = rows_for(label, number)
+            rows.extend(made or [note(number, "", kind="nothing")])
+        path = join_flow.notes_file(run, batch.number)
+        support.write(path, fenced_notes(*rows))
+        checked = join_flow.notes_check(run, batch.number, path, today=TODAY)
+        assert checked.accepted, checked.problems
+    return numbers
+
+
+def settle(run):
+    candidates = join_flow.segment_candidates(run, today=TODAY)
+    lines = []
+    for candidate in candidates:
+        name = "Lenders" if "lenders" in candidate.label else "Banks"
+        lines.append("draft %d %s" % (candidate.number, name))
+    join_flow.settle_segments(run, "\n".join(lines) + "\n")
+
+
+def three_files_rows(label, number):
+    return {
+        "icp-lenders.md": [
+            note(number, "Lenders buy when defaults rise.", kind="segment", segment="Lenders"),
+            note(number, "Harbor Lending signed for a year.", kind="customer",
+                 segment="Banks", customer="Harbor Lending"),
+        ],
+        "icp-banks.md": [
+            note(number, "Granite Bank tried it and did not renew.", kind="customer",
+                 segment="Banks", customer="Granite Bank"),
+        ],
+        "about.md": [note(number, "We sell one platform to lenders and banks.")],
+    }.get(label)
+
+
+class TestDraftsReadTheNotes(unittest.TestCase):
+    def setUp(self):
+        self.sandbox = support.Sandbox()
+        self.sandbox.__enter__()
+        self.addCleanup(self.sandbox.__exit__, None, None, None)
+        _content, self.run = agreed(
+            {"segments/icp-lenders.md": LENDERS, "segments/icp-banks.md": BANKS, "about.md": COMPANY}
+        )
+        settle(self.run)
+
+    def test_a_draft_waits_until_every_batch_is_noted(self):
+        with self.assertRaises(notes.NotesRefused) as caught:
+            join_flow.assemble_step("positioning", self.run, "Acme", "o@example.com", today=TODAY)
+        self.assertEqual(notes.CODE_NOTES_WAITING, caught.exception.code)
+
+    def test_the_request_holds_every_note_and_none_of_the_files_own_text(self):
+        take_notes(self.run, three_files_rows)
+        made = join_flow.assemble_step("positioning", self.run, "Acme", "o@example.com", today=TODAY)
+        text = support.read(made.path)
+        for quote in ("Lenders buy when defaults rise.", "Harbor Lending signed for a year.",
+                      "We sell one platform to lenders and banks."):
+            self.assertIn(quote, text)
+        self.assertNotIn("This sentence is in the file but in no note.", text)
+        self.assertIn("[[source: the notes]]", text)
+        self.assertEqual(3, len(made.included_labels))
+        self.assertEqual([], made.dropped_labels)
+
+    def test_a_note_from_a_segments_own_page_is_filed_under_that_segment(self):
+        take_notes(self.run, three_files_rows)
+        book = join_flow.notes_for_drafts(self.run, today=TODAY)
+        harbor = [item for item in book.notes if item.customer == "Harbor Lending"][0]
+        self.assertEqual("Lenders", harbor.segment)
+
+    def test_a_segment_reads_its_own_notes_and_the_company_wide_ones(self):
+        take_notes(self.run, three_files_rows)
+        slug = [s.slug for s in join_flow.load_inventory(self.run).segments if s.name == "Banks"][0]
+        made = join_flow.assemble_step(
+            "segment", self.run, "Acme", "o@example.com", today=TODAY, segment=slug
+        )
+        text = support.read(made.path)
+        self.assertIn("Granite Bank tried it", text)
+        self.assertIn("We sell one platform", text)
+        self.assertNotIn("Harbor Lending", text)
+
+    def test_the_preview_says_every_file_is_read_whatever_the_limit(self):
+        with Limit(600):
+            self.assertGreater(len(join_flow.notes_plan(self.run, today=TODAY).batches), 1)
+            take_notes(self.run, three_files_rows)
+            previewed = join_flow.preview_step(self.run, "positioning", today=TODAY)
+        self.assertEqual(3, len(previewed.included_labels))
+        self.assertEqual([], previewed.dropped_labels)
+        self.assertNotIn("sources-capped", previewed.codes)
+
+    def test_notes_too_long_for_one_request_lose_customer_words_first(self):
+        take_notes(self.run, three_files_rows)
+        book = join_flow.notes_for_drafts(self.run, today=TODAY)
+        fence = lambda text: text
+        full = notes.render_for_draft(book.notes, [], fence, 100000)
+        self.assertEqual([], full.shortened)
+        tight = notes.render_for_draft(book.notes, [], fence, len(full.text) - 10)
+        self.assertTrue(tight.shortened)
+        self.assertEqual([], tight.dropped)
+        self.assertNotIn("Granite Bank tried it", tight.text)
+        tiny = notes.render_for_draft(book.notes, [], fence, 120)
+        self.assertTrue(tiny.dropped)
+        self.assertEqual(["notes-capped"], tiny.codes)
+
+    def test_a_context_change_still_reads_its_files(self):
+        self.assertNotIn("change-entry", join_flow.NOTES_STEPS)

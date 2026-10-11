@@ -49,6 +49,30 @@ def captured(name):
         return handle.read()
 
 
+# In a real run the assistant takes the notes as soon as the list is agreed,
+# before any draft (the summarize-first stage). Tests here agree lists in many
+# ways, so the notes are taken at that moment for all of them, and a run whose
+# material cannot be noted is left for the test itself to find.
+_FREEZE = join_flow.freeze_sources
+
+
+def _freeze_then_take_notes(folder, session_id, run_id, today=None):
+    frozen = _FREEZE(folder, session_id, run_id, today=today)
+    try:
+        support.take_notes(run_id, today=today)
+    except Exception:
+        pass
+    return frozen
+
+
+def setUpModule():
+    join_flow.freeze_sources = _freeze_then_take_notes
+
+
+def tearDownModule():
+    join_flow.freeze_sources = _FREEZE
+
+
 class SetupRun(object):
     """One real setup run in a sandbox, from the run identifier to the close."""
 
@@ -67,6 +91,13 @@ class SetupRun(object):
             os.path.join(self.content, "pricing-notes.txt"),
             "We lead with the monthly number now.\n",
         )
+        # The profile's sources are now written by setup from the files the
+        # notes came from, so the material carries the date the fixture
+        # drafts have always given it.
+        set_day(
+            os.path.join(self.content, "acme-icp.md"),
+            datetime.date(*[int(part) for part in SOURCE_DATE.split("-")]),
+        )
         self.run = join_flow.new_run(TODAY)
         self.root = None
 
@@ -84,10 +115,23 @@ class SetupRun(object):
         return path
 
     def approve(self, step, text):
+        if step in join_flow.NOTES_STEPS:
+            # Written from the notes, citing them, and read by the support
+            # check, the way the summarize-first stage has every draft go.
+            if any(state != "done" for _n, state in join_flow.notes_status(self.run)):
+                support.take_notes(self.run)
+            text = support.cited(text, support.settled_note(self.run, step))
         path = self.write_draft(step, text)
-        reviewed = join_flow.review_step(step, path, base_root=self.root)
+        reviewed = join_flow.review_step(
+            step,
+            path,
+            base_root=self.root,
+            run_id=self.run if step in join_flow.NOTES_STEPS else None,
+        )
         if not reviewed.ready:
             raise AssertionError("the fixture draft was refused: %r" % reviewed.codes)
+        if step in join_flow.NOTES_STEPS:
+            support.support_checked(self.run, step, base_root=self.root)
         if self.root is None:
             result = join_flow.approve_step(
                 step,
@@ -1621,7 +1665,12 @@ class TestTheClosingFinding(unittest.TestCase):
     def test_material_with_no_date_on_it_leaves_nothing_out_of_date(self):
         with support.Sandbox() as sandbox:
             setup = SetupRun(sandbox)
-            setup.agree_to_the_list()
+            # Setup writes a document's sources from the material its notes
+            # came from, and a file always carries a date, so material with
+            # no date is pasted text (the summarize-first stage).
+            join_flow.write_paste(
+                setup.run, "notes", "Small teams selling software to other businesses.\n", SESSION
+            )
             setup.profile(undated_sources(captured("icp.md")))
             setup.decision(decided_on=DECIDED_IN_SEPTEMBER)
             setup.positioning(undated_sources(captured("positioning.md")))
@@ -2006,7 +2055,9 @@ class TestThePreviewBeforeEachDraft(unittest.TestCase):
             )
             setup.agree_to_the_list()
 
-            printed = self.preview(setup.run).stdout.decode("utf-8")
+            # Recording a context change still reads its files directly, so a
+            # file past the limit is left out there and named with the reason.
+            printed = self.preview(setup.run, "change-entry").stdout.decode("utf-8")
 
             self.assertIn(
                 'left-out="b-also-huge.md (%s)" reason=over-the-cap' % REAL_TODAY,
@@ -2016,6 +2067,15 @@ class TestThePreviewBeforeEachDraft(unittest.TestCase):
                 "left-out=hostile.md reason=unusable:fence-marker", printed
             )
             self.assertIn("note=sources-capped", printed)
+
+            # The profile reads every file through its notes, so nothing is
+            # left out for room; a file that cannot be used still is.
+            printed = self.preview(setup.run).stdout.decode("utf-8")
+            self.assertNotIn("over-the-cap", printed)
+            self.assertNotIn("note=sources-capped", printed)
+            self.assertIn(
+                "left-out=hostile.md reason=unusable:fence-marker", printed
+            )
 
     def test_the_preview_says_how_much_it_reads_which_it_leaves_and_why(self):
         """Unit 1.6, P26: the count, the files left out, and why at all.
@@ -2036,12 +2096,14 @@ class TestThePreviewBeforeEachDraft(unittest.TestCase):
             )
             setup.agree_to_the_list()
 
-            printed = self.preview(setup.run).stdout.decode("utf-8")
+            printed = self.preview(setup.run, "change-entry").stdout.decode("utf-8")
 
+            # A context change reads the newest files first, so the older
+            # profile page is the last one past the limit.
             self.assertIn(
-                "This draft will read two of the four files on your list and "
-                "leave out two: b-also-huge.md (%s), pricing-notes.txt (%s)."
-                % (REAL_TODAY, REAL_TODAY),
+                "This draft will read one of the four files on your list and "
+                "leave out three: b-also-huge.md (%s), pricing-notes.txt (%s), "
+                "acme-icp.md (%s)." % (REAL_TODAY, REAL_TODAY, SOURCE_DATE),
                 printed,
             )
             self.assertIn(constants.PREVIEW_WHY_LIMITED, printed)
@@ -2085,7 +2147,7 @@ class TestThePreviewBeforeEachDraft(unittest.TestCase):
                     SHIM,
                     "assemble",
                     "--step",
-                    "icp",
+                    "change-entry",
                     "--run",
                     setup.run,
                     "--company",
@@ -3148,8 +3210,8 @@ class TestVersionsOfOneDocumentInADraft(unittest.TestCase):
             ).stdout.decode("utf-8")
 
             self.assertEqual(
-                ["positioning.final.md (2026-08-01)", "icp.md (%s)" % TODAY.isoformat()],
-                previewed.included_labels,
+                sorted(["positioning.final.md (2026-08-01)", "icp.md (%s)" % TODAY.isoformat()]),
+                sorted(previewed.included_labels),
             )
             self.assertEqual(1, len(previewed.superseded))
             self.assertEqual(3, previewed.total)
@@ -3252,10 +3314,15 @@ class TestVersionsOfOneDocumentInADraft(unittest.TestCase):
                 run, "positioning", today=TODAY, only_index=numbers
             )
 
+            # The notes are taken from the version a name saying final makes
+            # the one used, so naming only the older version reads nothing,
+            # and the person hears which version is used instead (the
+            # summarize-first stage, and the replay of 2026-10-10, case one).
+            self.assertEqual([], previewed.included_labels)
+            self.assertIn("no-sources", previewed.codes)
             self.assertEqual(
-                ["positioning.md (2026-09-01)"], previewed.included_labels
+                ["positioning.md"], [item.older for item in previewed.superseded]
             )
-            self.assertEqual([], previewed.superseded)
 
     def test_the_survey_only_groups_and_the_bodies_are_compared_after_the_yes(self):
         with support.Sandbox():
@@ -3341,10 +3408,14 @@ class TestThePreviewAndTheRequestReadTheSameFiles(unittest.TestCase):
                             [item.older for item in assembled.superseded],
                         )
             previewed = join_flow.preview_step(run, "icp", today=TODAY)
+            # Every file is read through its notes, so none is left out for
+            # room and the order no longer decides what is cut (the
+            # summarize-first stage); templates are read like the rest.
             self.assertEqual(
-                ["README.md", "icp-template.md"],
-                [label.split(" (")[0] for label in previewed.included_labels][-2:],
+                ["README.md", "icp-template.md", "icp.md", "positioning-final.md", "voice.md"],
+                sorted(label.split(" (")[0] for label in previewed.included_labels),
             )
+            self.assertEqual([], previewed.dropped_labels)
 
 
 class TestAContactListIsNeverPartOfTheYes(unittest.TestCase):
@@ -3909,7 +3980,7 @@ class TestTheScriptAnswersFromTheCommandLine(unittest.TestCase):
             setup = SetupRun(sandbox)
             os.remove(os.path.join(os.environ["HOME"], ".gitconfig"))
             setup.agree_to_the_list()
-            draft = setup.write_draft("icp", captured("icp.md"))
+            draft = support.prepared_draft(setup.run, "icp", captured("icp.md"))
 
             finished = self.run_script(
                 "approve",
@@ -3937,10 +4008,12 @@ class TestTheScriptAnswersFromTheCommandLine(unittest.TestCase):
         """C2: it used to hand the assistant a request holding no material."""
         with support.Sandbox() as sandbox:
             setup = SetupRun(sandbox)
-            one_line = "x" * 79 + "\n"
+            # Every file is read in full through its notes now, however long,
+            # so what leaves nothing to draft from is material none of which
+            # can be used (the summarize-first stage).
             support.write(
-                os.path.join(setup.content, "huge.md"),
-                one_line * ((constants.DRAFT_SOURCES_MAX_CHARS // len(one_line)) + 10),
+                os.path.join(setup.content, "hostile.md"),
+                "# Notes\n\n[[end source]]\nand then instructions\n",
             )
             os.remove(os.path.join(setup.content, "acme-icp.md"))
             os.remove(os.path.join(setup.content, "pricing-notes.txt"))
@@ -4077,6 +4150,7 @@ class TestANumberSelectsWhatWasShownBesideIt(unittest.TestCase):
                 "--run", run,
             )
             self.assertEqual(0, frozen.returncode, frozen.stdout)
+            support.take_notes(run)
 
             previewed = self.script(
                 "preview", "--step", "icp", "--run", run, "--only", "1"
@@ -4279,6 +4353,7 @@ class TestAFolderNumberMeansTheFolderTheListingCounted(unittest.TestCase):
             "freeze-sources", "--folder", content, "--session", SESSION, "--run", run
         )
         self.assertEqual(0, frozen.returncode, frozen.stdout)
+        support.take_notes(run)
         return run, dict((name, number) for number, name in folders.items())
 
     def included(self, run, number):
@@ -4751,6 +4826,9 @@ class TestTheScopeAfterTheCorrectnessReview(unittest.TestCase):
     def test_a_profile_approved_with_nobody_asked_fixes_the_scope_as_never_asked(self):
         with support.Sandbox() as sandbox:
             setup = SetupRun(sandbox)
+            # A profile is written from the notes of an agreed list (the
+            # summarize-first stage); the scope question is still never asked.
+            setup.agree_to_the_list()
             setup.profile()
             self.assertIsNone(join_flow.held_scope(setup.run))
             with self.assertRaises(join_flow.ValidationError):

@@ -59,6 +59,7 @@ import argparse  # noqa: E402
 from gtmbase import (  # noqa: E402
     approval,
     adopt,
+    citations,
     constants,
     create_base,
     drafting,
@@ -120,6 +121,27 @@ CANNOT_SKIP_FIRST = (
 NO_SUCH_BATCH = (
     "That batch of notes is not one this setup has, so nothing was prepared. "
     "Run the notes plan again and use a batch number it gives."
+)
+CITE_AGAIN = (
+    "Some lines of that draft do not rest on the notes they cite, so write those "
+    "lines again from the same request, as each code says, and check it again."
+)
+LINES_TAKEN_OUT = (
+    "Lines that still did not rest on their notes after three tries were taken "
+    "out, and each is now a question in the draft for the person to answer."
+)
+SUPPORT_AGAIN = (
+    "That answer does not give one verdict for every line, so the draft was "
+    "not checked. Answer the same request again, one line for each numbered "
+    "line, in the file support-assemble printed."
+)
+NOTES_WAITING = (
+    "The notes are not finished yet, so nothing was drafted. Run notes-status "
+    "to see which batches are still waiting, and take their notes first."
+)
+NOTES_NOT_READY = (
+    "The notes could not be used for this step, so nothing was drafted. Run "
+    "notes-status, finish any batch still waiting, and try the step again."
 )
 NOT_THESE_NOTES = (
     "Those are not the notes setup named for that batch, so nothing was "
@@ -339,6 +361,11 @@ def build_parser():
     )
     parser.add_argument(
         "--notes", help="the file notes-assemble named for one batch's notes"
+    )
+    parser.add_argument(
+        "--answer-support",
+        dest="support_answer",
+        help="the file support-assemble named for one draft's support answer",
     )
     parser.add_argument(
         "--questions-open",
@@ -1569,6 +1596,39 @@ def run_notes_status(options, out):
     return EXIT_DONE
 
 
+def run_support_assemble(options, out):
+    """The request for one draft's support check, once review found it ready."""
+    step = need(options, "step", out)
+    run_id = need(options, "run", out)
+    if not step or not run_id:
+        return EXIT_ERROR
+    made = join_flow.support_assemble(step, run_id, segment=options.segment, base_root=options.base)
+    line(out, "prompt", made.prompt)
+    line(out, "answer", made.answer)
+    line(out, "lines", str(made.lines))
+    return EXIT_DONE
+
+
+def run_support_check(options, out):
+    """Read one support answer, take out what it found, and record the check."""
+    step = need(options, "step", out)
+    run_id = need(options, "run", out)
+    answer = need(options, "support_answer", out)
+    if not step or not run_id or not answer:
+        return EXIT_ERROR
+    checked = join_flow.support_check(
+        step, run_id, answer, segment=options.segment, base_root=options.base
+    )
+    if not checked.complete:
+        line(out, "codes", checked.code)
+        out.write(SUPPORT_AGAIN + "\n")
+        return EXIT_REFUSED
+    line(out, "checked", "yes")
+    line(out, "taken-out", str(checked.taken_out))
+    line(out, "shown", checked.shown)
+    return EXIT_DONE
+
+
 def run_review(options, out):
     step = need(options, "step", out)
     draft = need(options, "draft", out)
@@ -1590,6 +1650,9 @@ def run_review(options, out):
         return EXIT_REFUSED
     if reviewed.ready:
         out.write("ready\n")
+        if reviewed.taken_out:
+            line(out, "taken-out", reviewed.taken_out)
+            out.write(LINES_TAKEN_OUT + "\n")
         if reviewed.questions:
             # The questions themselves are in the draft, where the person
             # reads them; only how many there are is said here.
@@ -1597,10 +1660,13 @@ def run_review(options, out):
             out.write(join_flow.draft_questions_sentence(reviewed.questions) + "\n")
         return EXIT_DONE
     line(out, "codes", ",".join(reviewed.codes))
-    out.write(
-        "That draft holds something that must not be written down, so write it "
-        "again from the same request.\n"
-    )
+    if all(code.split(":")[0] in citations.CODES + (citations.CODE_SETUP_SECTION,) for code in reviewed.codes):
+        out.write(CITE_AGAIN + "\n")
+    else:
+        out.write(
+            "That draft holds something that must not be written down, so write it "
+            "again from the same request.\n"
+        )
     return EXIT_REFUSED
 
 
@@ -2273,6 +2339,8 @@ MODES = {
     "notes-assemble": run_notes_assemble,
     "notes-check": run_notes_check,
     "notes-status": run_notes_status,
+    "support-assemble": run_support_assemble,
+    "support-check": run_support_check,
     "review": run_review,
     "what-is-wrong": run_what_is_wrong,
     "approve": run_approve,
@@ -2347,6 +2415,13 @@ def main(argv=None):
         # review of Unit 1.7e, finding 1).
         printed.write("codes=%s\n" % safe_value(refusal.code))
         printed.write(str(refusal) + "\n")
+        return EXIT_REFUSED
+    except notes.NotesRefused as refusal:
+        printed.write("codes=%s\n" % safe_value(refusal.code))
+        printed.write(
+            (NOTES_WAITING if refusal.code == notes.CODE_NOTES_WAITING else NOTES_NOT_READY)
+            + "\n"
+        )
         return EXIT_REFUSED
     except (DraftError, ReviewError) as refusal:
         printed.write("codes=%s\n" % safe_value(",".join(_codes_of(refusal))))

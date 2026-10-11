@@ -33,7 +33,12 @@ class TestEveryPromptCarriesTheFenceSentence(unittest.TestCase):
         for step in drafting.STEPS:
             text = prompt(step)
             self.assertIn(constants.SOURCE_FENCE_SENTENCE, text, step)
-            heading = text.index("## The sources")
+            # A document drafted from the notes reads them under its own
+            # heading (the summarize-first stage); a context change still
+            # reads its sources.
+            heading = text.index(
+                "## The sources" if step == drafting.STEP_CHANGE else "## The notes"
+            )
             sentence = text.index(constants.SOURCE_FENCE_SENTENCE)
             placeholder = text.index("{{sources}}")
             self.assertLess(heading, sentence, step)
@@ -103,7 +108,15 @@ class TestEveryPromptRefusesPlaceholdersAndContactDetails(unittest.TestCase):
     def test_each_prompt_keeps_names_and_figures_but_never_contact_details(self):
         for step in drafting.STEPS:
             text = prompt(step)
-            self.assertIn("Keep the customer names", flat(text), step)
+            # A context change still keeps the customer names its sources
+            # carry; a document drafted from the notes keeps the figures, and
+            # setup writes its customers itself (the summarize-first stage).
+            kept = (
+                "Keep the customer names"
+                if step == drafting.STEP_CHANGE
+                else "written exactly as the notes write them"
+            )
+            self.assertIn(kept, flat(text), step)
             self.assertIn(
                 "Never carry a person's contact details across", flat(text), step
             )
@@ -197,23 +210,33 @@ class TestTheDocumentPromptsWriteDefinitionsNeverTracking(unittest.TestCase):
                 step,
             )
 
-    def test_where_the_evidence_goes_is_named_for_segments_and_positioning(self):
-        self.assertIn(
-            "proof that this segment is real, in a section with the level two "
-            "heading Proof",
-            flat(prompt(drafting.STEP_SEGMENT)),
-        )
-        self.assertIn(
-            "beside the claim it supports, under the heading What makes it "
-            "different",
-            flat(prompt(drafting.STEP_POSITIONING)),
-        )
-
-    def test_keeping_customer_names_is_tied_to_the_evidence_rule(self):
+    def test_setup_writes_the_evidence_and_the_draft_names_no_customer(self):
+        """The fidelity replay of 2026-10-10, case one: a customer credited with
+        what another bought. Setup writes every customer itself, beside the
+        material's own words, and the draft never names one."""
         for step in self.DOCUMENT_STEPS:
             words = flat(prompt(step))
-            self.assertIn("Keep the customer names", words, step)
-            self.assertIn("the way the section above says", words, step)
+            self.assertIn("setup writes that evidence itself", words, step)
+            self.assertIn("never name a customer in your own sentences", words.lower(), step)
+            self.assertNotIn("Keep the customer names", words, step)
+
+
+class TestEveryLineRestsOnItsNotes(unittest.TestCase):
+    """The summarize-first stage: each document prompt carries the rules the
+    citation checks in review hold every draft to."""
+
+    def test_each_document_prompt_says_how_to_cite_and_what_is_checked(self):
+        for step in TestTheDocumentPromptsWriteDefinitionsNeverTracking.DOCUMENT_STEPS:
+            text = prompt(step)
+            words = flat(text)
+            self.assertIn("## Every line rests on its notes", text, step)
+            self.assertIn("[n3, n7]", words, step)
+            self.assertIn("Cite it only in a paragraph or item that asks about it", words, step)
+            self.assertIn("Copy every figure exactly as its note writes it", words, step)
+            self.assertIn("Nothing in the material covers this.", words, step)
+            self.assertIn("sources: []", text, step)
+            for heading in ("Evidence by segment", "Still open in the material", "Where this came from"):
+                self.assertIn(heading, words, step)
 
 
 class TestEveryPlaceholderTheLibraryFillsIsUsed(unittest.TestCase):

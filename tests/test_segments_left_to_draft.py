@@ -75,19 +75,18 @@ def segment_text(name):
     return adoption.drafted("segment.md").replace("# Fintech lenders", "# %s" % name)
 
 
-def write_draft(run_id, name):
-    settled = join_flow.segment_to_draft(run_id, slug(name))
-    path = join_flow.draft_path(run_id, drafting.STEP_SEGMENT, settled)
-    with io.open(path, "w", encoding="utf-8") as handle:
-        handle.write(segment_text(name))
-    return path
+def write_draft(run_id, name, base_root=None):
+    """A segment's draft, written from the notes and checked as step 6c has it."""
+    return support.prepared_draft(
+        run_id, drafting.STEP_SEGMENT, segment_text(name), segment=slug(name), base_root=base_root
+    )
 
 
 def approve(run_id, company, name, **kwargs):
     """Approve one segment's draft, exactly as step 6c does."""
     return join_flow.approve_step(
         drafting.STEP_SEGMENT,
-        write_draft(run_id, name),
+        write_draft(run_id, name, company.root),
         run_id,
         base_root=company.root,
         now=NOW,
@@ -118,6 +117,7 @@ def finish_later(company, name, run_id=None):
     """Draft one segment in a later session: the list, the yes, the draft, the approval."""
     run_id, shown = listed(company, name, run_id)
     join_flow.draft_freeze(run_id, SESSION_TWO, today=TODAY)
+    support.take_notes(run_id, today=TODAY)
     join_flow.assemble_step(
         drafting.STEP_SEGMENT, run_id, "Acme", EMAIL, today=TODAY, segment=slug(name)
     )
@@ -213,21 +213,24 @@ class TestItSurvivesTheClosing(Case):
         self.assertIsNone(company.read(company.destination(LATER)))
 
         join_flow.draft_freeze(run_three, SESSION_TWO, today=TODAY)
+        support.take_notes(run_three, today=TODAY)
         request = support.read(
             join_flow.assemble_step(
                 drafting.STEP_SEGMENT, run_three, "Acme", EMAIL, today=TODAY,
                 segment=slug(LATER),
             ).path
         )
-        # The page is read inside the data fence, and it is the only file read.
-        opened = constants.SOURCE_FENCE_HEADER % ("icp-%s.md" % slug(LATER))
+        # The page is the only file read, and what was noted from it is read
+        # inside the data fence (the summarize-first stage).
+        self.assertIn("- S1 icp-%s.md" % slug(LATER), request)
+        self.assertNotIn("- S2 ", request)
+        opened = constants.SOURCE_FENCE_HEADER % "the notes"
         self.assertEqual(1, request.count(opened))
         start = request.index(opened)
         end = request.index(constants.SOURCE_FENCE_FOOTER, start)
-        self.assertLess(start, request.index("# %s" % LATER, start), request[start:end])
-        self.assertLess(request.index("# %s" % LATER, start), end)
+        self.assertIn("(from S1;", request[start:end])
         for name in (TAKEN_IN, DRAFTED):
-            self.assertNotIn(constants.SOURCE_FENCE_HEADER % ("icp-%s.md" % slug(name)), request)
+            self.assertNotIn("icp-%s.md" % slug(name), request)
 
         result = approve(run_three, company, LATER)
         self.assertEqual(company.destination(LATER), result.path)
@@ -295,6 +298,7 @@ class TestAChangedListAsksAgain(Case):
         company = self.company
         run_id, _shown = listed(company, LATER)
         join_flow.draft_freeze(run_id, SESSION_TWO, today=TODAY)
+        support.take_notes(run_id, today=TODAY)
         _run, grown = listed(company, LATER, run_id=run_id, added=[self.extra])
         self.assertEqual(
             [
@@ -310,13 +314,14 @@ class TestAChangedListAsksAgain(Case):
             )
         self.assertEqual(join_flow.CODE_ASK_AGAIN, caught.exception.code)
         join_flow.draft_freeze(run_id, SESSION_TWO, today=TODAY)
+        support.take_notes(run_id, today=TODAY)
         request = support.read(
             join_flow.assemble_step(
                 drafting.STEP_SEGMENT, run_id, "Acme", EMAIL, today=TODAY,
                 segment=slug(LATER),
             ).path
         )
-        self.assertIn("branch staff first", request)
+        self.assertIn("regional-call-notes.md", request)
 
     def test_a_file_that_changes_between_the_showing_and_the_yes_asks_again(self):
         company = self.company
@@ -408,6 +413,7 @@ class TestMissingMaterial(Case):
         self.assertEqual([os.path.realpath(os.path.join(moved, "regional.md"))], found.paths)
         self.assertEqual([join_flow.DRAFT_LIST_OFFER % {"name": LATER}], found.sentences())
         join_flow.draft_freeze(run_id, SESSION_TWO, today=TODAY)
+        support.take_notes(run_id, today=TODAY)
         join_flow.assemble_step(
             drafting.STEP_SEGMENT, run_id, "Acme", EMAIL, today=TODAY, segment=slug(LATER)
         )
@@ -473,6 +479,7 @@ class TestLeavingItOutEndsIt(Case):
         set_up_and_close(company)
         run_id, _shown = listed(company, LATER)
         join_flow.draft_freeze(run_id, SESSION_TWO, today=TODAY)
+        support.take_notes(run_id, today=TODAY)
         with recovery.StopAfter(review, "_create_new") as stop:
             with self.assertRaises(recovery.Stopped):
                 approve(run_id, company, LATER)
@@ -522,6 +529,7 @@ class TestTheNoticeIsOne(Case):
         set_up_and_close(company)
         run_id, _shown = listed(company, LATER)
         join_flow.draft_freeze(run_id, SESSION_TWO, today=TODAY)
+        support.take_notes(run_id, today=TODAY)
         with recovery.StopAfter(review, "_create_new") as stop:
             with self.assertRaises(recovery.Stopped):
                 approve(run_id, company, LATER)
@@ -609,6 +617,7 @@ class TestAStopAtEveryStep(Case):
                 snapshot.restore()
                 run_id, _shown = listed(company, LATER)
                 join_flow.draft_freeze(run_id, SESSION_TWO, today=TODAY)
+                support.take_notes(run_id, today=TODAY)
                 stop = make_stop()
                 with stop:
                     with self.assertRaises(recovery.Stopped):
@@ -667,6 +676,7 @@ class TestAStopAtEveryStep(Case):
                 _run, shown = listed(company, LATER, run_id=run_id)
                 self.assertEqual([os.path.realpath(company.pages[LATER])], shown.paths)
                 join_flow.draft_freeze(run_id, SESSION_TWO, today=TODAY)
+                support.take_notes(run_id, today=TODAY)
                 join_flow.assemble_step(
                     drafting.STEP_SEGMENT, run_id, "Acme", EMAIL, today=TODAY,
                     segment=slug(LATER),
@@ -695,6 +705,7 @@ class TestTheCorrectnessReview(Case):
     def a_run_with_a_yes(self, company, name):
         run_id, _shown = listed(company, name)
         join_flow.draft_freeze(run_id, SESSION_TWO, today=TODAY)
+        support.take_notes(run_id, today=TODAY)
         return run_id
 
     def assert_refused(self, code, call, *args, **kwargs):

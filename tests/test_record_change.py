@@ -61,10 +61,10 @@ SKILL = os.path.join(support.PLUGIN_DIR, "skills", "stale-check", "SKILL.md")
 INJECTION = os.path.join(support.TEMPLATES_DIR, "injection.md")
 
 WHAT = (
-    "Our verified driver count is over 1 million since 2017, replacing the 500k "
+    "Our partner bakery count is over 12,000 since 2019, replacing the 3,000 "
     "a year we used to cite."
 )
-WHY = "A review of the full earnings database showed the real number."
+WHY = "A review of the full order database showed the real number."
 SOURCE = "The data team's review in September."
 
 MESSAGING_TEXT = """---
@@ -79,7 +79,7 @@ status: draft
 
 ## The headline
 
-Half a million drivers a year trust us.
+Three thousand bakeries a year trust us.
 """
 
 PRICING_TEXT = """---
@@ -321,7 +321,7 @@ class TestTheWholeFlowThroughTheScript(LocalCase):
         code, out, err = self.flow.show("1,2")
         self.assertEqual(0, code, out + err)
         self.assertIn(join_flow.CHANGE_OPEN, out)
-        self.assertIn("What changed: Our verified driver count", out)
+        self.assertIn("What changed: Our partner bakery count", out)
         self.assertIn("Why: " + WHY, out)
         self.assertIn("What it affects: your customer profile, your positioning", out)
         self.assertIn(moment.FENCE_NOTE, out)
@@ -462,7 +462,7 @@ class TestTheWholeFlowThroughTheScript(LocalCase):
             ["--file", os.path.join(self.base.root, ICP)], self.base.root
         )
         self.assertIn("your customer profile has not caught up with a context change", ran.out)
-        self.assertIn("What changed: Our verified driver count", ran.out)
+        self.assertIn("What changed: Our partner bakery count", ran.out)
 
         code, out, _err = self.flow.run(["--review"])
         self.assertEqual(0, code, out)
@@ -535,7 +535,7 @@ class TestNothingIsWrittenBeforeTheYes(LocalCase):
             paths.seat_dir(self.base.base_id), record_change.WAITING_FILE
         )
         self.assertTrue(waiting.startswith(os.environ["GTM_BASE_HOME"]))
-        payload = support.read(waiting).replace("Our verified", "Our invented")
+        payload = support.read(waiting).replace("Our partner", "Our invented")
         support.write(waiting, payload)
         code, said, _err = self.flow.run(
             ["--record-change", "record", "--shown", value_on(out, "shown")]
@@ -794,8 +794,8 @@ class TestTheWords(LocalCase):
     def test_what_changed_is_shown_whole_and_never_cut(self):
         """Live check step 5, finding 3: a "What changed" cut off mid-number."""
         long = (
-            "Our verified driver count is over 1 million since 2017, replacing "
-            "the 500k a year we used to cite in every deck and on the website."
+            "Our partner bakery count is over 12,000 since 2019, replacing "
+            "the 3,000 a year we used to cite in every catalogue and on the shop."
         )
         self.assertGreater(len(long), names_cap())
         code, out, err = self.flow.show("1", what=long)
@@ -1193,7 +1193,7 @@ class TestTheQuestionIsAboutTheChangeAsWritten(LocalCase):
         change = value_on(out, "change")
         relative = entry_files(self.base.root)[0]
         text = support.read(os.path.join(self.base.root, relative))
-        self.base.write(relative, text.replace("Our verified", "Our invented"))
+        self.base.write(relative, text.replace("Our partner", "Our invented"))
         self.base.save("rewritten in another window")
         head = head_of(self.base.root)
         code, said, _err = self.flow.answer(change, ICP, "yes")

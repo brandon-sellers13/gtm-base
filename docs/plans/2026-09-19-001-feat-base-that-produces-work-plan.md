@@ -880,6 +880,16 @@ Later reads (Astra 7, Fable M5). Approval establishes which document was adopted
 
 **Atlas: figure 7**, which gains the note about what a draft reads and why.
 
+- [ ] **Unit 1.9b: The summarize-first stage, built because the replay failed**
+
+**Goal:** Turn every rule the fidelity replay failed into a pass on the same three cases, by reading every agreed file in full into checked notes and writing every draft from those notes.
+
+**Why:** Brandon scored the three cases on 2026-10-10 and every case failed at least one rule: eight rule passes and seven fails. The fails, described without client material, were a claim credited to the wrong customer, open or on-hold material stated as settled, evidence customers dropped or put under the wrong segment, segments missing under the lowered limit, and claims traceable only by hand. Brandon approved this plan in plan mode on 2026-10-11, with the evidence list in the positioning and the profile, the independent support check kept, and a rehearsal that counts refusals only. The two prepared defect fixes are folded in, and all three cases are re-run once afterwards.
+
+**Approach:** Notes from every file, in batches that each fit one request, checked mechanically against the files (the words copied, the figures and customers inside them, every file accounted for, the status never firmer than the material's own words); drafts written from the notes and citing them; citation checks in review; an independent support check before the person sees a draft; and three parts of each document written by setup itself from the notes: the evidence for each segment, what the material leaves open, and footnotes naming the file, its date, and the exact words.
+
+**Verification:** Every unit's tests fail first. The full suite passes. Correctness and security reviews by subagents, and Astra's review once Codex resets. A rehearsal on the three corpora that counts refusals and never reads the keys. Then the three cases are re-run on the same frozen keys and bar, and Brandon scores them. Building this is not passing; the gate passes only on his scores.
+
 ### Later phases, not detailed here
 
 **What a base holds, the other two skills, and company skills.** Revision 1's Phases 2 to 4, moved word for word to `docs/plans/2026-09-19-002-roadmap-after-phase-1.md` with the review findings that apply to them. Each becomes its own plan after the outbound sequence has been used on real work, because that use will change what the inventory and the rubric files need to hold.

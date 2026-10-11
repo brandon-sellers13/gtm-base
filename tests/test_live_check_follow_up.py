@@ -47,28 +47,28 @@ PROPOSE_SKILL = os.path.join(SKILLS_DIR, "propose-change", "SKILL.md")
 # three sentences and a list, so the showing can be seen to show one sentence.
 WHAT_WE_SELL = (
     "## What we sell\n\n"
-    "We collect earnings and trip data directly from drivers. We hold data on "
-    "500k drivers a year. Buyers who try it, buy it.\n\n"
-    "- **It answers the questions company disclosures cannot.** Analysts use it.\n"
+    "We collect order and delivery data directly from bakeries. We hold data on "
+    "3k bakeries a year. Buyers who try it, buy it.\n\n"
+    "- **It answers the questions trade surveys cannot.** Suppliers use it.\n"
     "- **It is current.** Updated every week.\n"
 )
 THE_CORRECTED_LINE = (
-    "We collect earnings and trip data directly from drivers. We hold data on "
-    "over 1 million drivers since 2017. Buyers who try it, buy it."
+    "We collect order and delivery data directly from bakeries. We hold data on "
+    "over 12k bakeries since 2019. Buyers who try it, buy it."
 )
 FACT_ANSWER = (
-    "Nothing about the business changed. A review against the full earnings "
-    "database back to 2017 showed we can claim over 1 million drivers, where "
-    "we used to cite 500k a year."
+    "Nothing about the business changed. A review against the full order "
+    "database back to 2019 showed we can claim over 12k bakeries, where "
+    "we used to cite 3k a year."
 )
 FACT_LINE = (
-    "Our verified driver count is over 1 million since 2017, replacing the "
-    "500k a year we used to cite"
+    "Our partner bakery count is over 12k since 2019, replacing the "
+    "3k a year we used to cite"
 )
 POSITIONING_TEXT = (
     "---\nkind: positioning\nowner: owner@example.com\nlast_confirmed: "
     "2026-01-01\nsources: []\nstatus: draft\n---\n\n# Positioning\n\n## Proof\n\n"
-    "Data on 500k drivers a year.\n"
+    "Data on 3k bakeries a year.\n"
 )
 
 
@@ -89,7 +89,7 @@ def edit(root, old, new):
 
 
 def correct_the_fact(root):
-    edit(root, "500k drivers a year", "over 1 million drivers since 2017")
+    edit(root, "3k bakeries a year", "over 12k bakeries since 2019")
 
 
 def fix_the_comma(root):
@@ -313,7 +313,7 @@ class TestTheThreeAnswers(unittest.TestCase):
                 compose_proposal.stage_local_edit(
                     root, base_id, FACT_ANSWER, runner=NoRemoteRunner(), now=TODAY,
                     kind=hand_edit.KIND_FACT,
-                    what_changed="Our verified driver count is over 1 million.",
+                    what_changed="Our partner bakery count is over 12k.",
                 )
             self.assertEqual(
                 compose_proposal.CODE_FACT_NOT_REPLACING,
@@ -357,7 +357,7 @@ class TestTheThreeAnswers(unittest.TestCase):
             self.assertNotIn("What changed:", shown.artifact)
             self.assertIn("Buyers who try it[took out: ,] buy it.", shown.artifact)
             self.assertIn("## What we sell", shown.artifact)
-            self.assertNotIn("Analysts use it", shown.artifact)
+            self.assertNotIn("Suppliers use it", shown.artifact)
 
             applied = approve_local.approve(
                 staged, root, base_id, shown.shown_hash, runner=runner, now=NOW
@@ -396,7 +396,7 @@ class TestTheThreeAnswers(unittest.TestCase):
             self.assertEqual(0, code, printed + errors)
             staging = compose_proposal.load_staging(pending_one(root))
             entry = formats.ChangeEntry.parse(staging.decision_block)
-            self.assertIn("replacing the 500k a year", entry.body)
+            self.assertIn("replacing the 3k a year", entry.body)
             self.assertIn(POSITIONING, entry.affects)
 
     def test_the_script_takes_a_wording_fix_with_no_answer_file(self):
@@ -416,8 +416,8 @@ class TestTheThreeAnswers(unittest.TestCase):
             code, printed, errors = run_script(PROPOSE, root, "--hand-edit-difference")
             self.assertEqual(0, code, errors)
             self.assertIn(
-                "We hold data on [took out: 500k][put in: over 1 million] drivers "
-                "[took out: a year][put in: since 2017].",
+                "We hold data on [took out: 3k][put in: over 12k] bakeries "
+                "[took out: a year][put in: since 2019].",
                 printed,
             )
             self.assertIn("## What we sell", printed)
@@ -449,14 +449,14 @@ class TestTheShowingOfAHandEdit(unittest.TestCase):
             shown = approve_local.show(staged, root, base_id, runner=runner, now=TODAY)
 
             marked = (
-                "We hold data on [took out: 500k][put in: over 1 million] drivers "
-                "[took out: a year][put in: since 2017]."
+                "We hold data on [took out: 3k][put in: over 12k] bakeries "
+                "[took out: a year][put in: since 2019]."
             )
             self.assertEqual(1, shown.artifact.count(marked), shown.artifact)
             self.assertIn("## What we sell", shown.artifact)
             # The sentences around it, and the rest of the part, are not shown.
             self.assertNotIn("Buyers who try it", shown.artifact)
-            self.assertNotIn("Analysts use it", shown.artifact)
+            self.assertNotIn("Suppliers use it", shown.artifact)
             self.assertNotIn(approve_local.DIFFERENCE % names.document_name(ICP), shown.artifact)
             self.assertNotIn(approve_local.CARRIES, shown.artifact)
 
@@ -906,6 +906,7 @@ class TestARefusedPageWhoseDraftWasNotFinished(later.Case):
         run_id, shown = later.listed(company, BROKEN)
         self.assertEqual([os.path.realpath(company.pages[BROKEN])], shown.paths)
         join_flow.draft_freeze(run_id, later.SESSION_TWO, today=later.TODAY)
+        support.take_notes(run_id, today=later.TODAY)
         join_flow.assemble_step(
             "segment", run_id, "Acme", later.EMAIL, today=later.TODAY,
             segment=later.slug(BROKEN),
@@ -974,7 +975,7 @@ class TestTheCorrectnessReview(unittest.TestCase):
             # Another computer, or this one after the folder of prepared
             # changes was cleared, knows nothing of it but the saved history.
             shutil.rmtree(os.path.join(root, "work", "proposals"))
-            edit(root, "Analysts use it.", "Analysts use it daily.")
+            edit(root, "Suppliers use it.", "Suppliers use it daily.")
 
             second = compose_proposal.stage_local_edit(
                 root, base_id, None, runner=runner, now=TODAY,
@@ -1009,14 +1010,14 @@ class TestTheCorrectnessReview(unittest.TestCase):
             staged = compose_proposal.stage_local_edit(
                 root, base_id, FACT_ANSWER, runner=runner, now=TODAY,
                 kind=hand_edit.KIND_FACT,
-                what_changed="Our driver count is over 1 million,\nreplacing 500k a year.",
+                what_changed="Our bakery count is over 12k,\nreplacing 3k a year.",
             )
 
             shown = approve_local.show(staged, root, base_id, runner=runner, now=TODAY)
 
             self.assertTrue(
                 four_line(shown.artifact, "What changed:").startswith(
-                    "Our driver count is over 1 million, replacing 500k a year."
+                    "Our bakery count is over 12k, replacing 3k a year."
                 ),
                 shown.artifact,
             )

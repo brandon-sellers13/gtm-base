@@ -400,6 +400,7 @@ class TestTheInventoryOfARealRun(unittest.TestCase):
             self.assertEqual(1, len(join_flow.load_inventory(run).segments))
 
             # The profile is drafted from the one prompt that asks for it whole.
+            support.take_notes(run, today=TODAY)
             assembled = join_flow.assemble_step(
                 "icp", run, "Acme", "dana@acme.test", today=TODAY
             )

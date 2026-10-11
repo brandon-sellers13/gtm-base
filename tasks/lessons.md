@@ -118,3 +118,6 @@
 - Skip as little as possible when exempting text from a check. Skipping the whole sources line let "TBD" through, and
   "ends in a dot and a few letters" let "e.g" through; the exemption that held was an item ending in a file ending the
   plugin really reads or lists.
+- Test fixtures are written from scratch, with an invented company, invented sentences and invented figures, even
+  when the client material is already public. The live check's driver figure reached two test files that way; a push
+  scan that only searches for the replay's own keys will not find wording carried in from an earlier session.

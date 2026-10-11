@@ -252,9 +252,7 @@ class Company(object):
         return self
 
     def _approve(self, step, text):
-        path = join_flow.draft_path(self.run, step)
-        with io.open(path, "w", encoding="utf-8") as handle:
-            handle.write(text)
+        path = support.prepared_draft(self.run, step, text, base_root=self.root)
         if self.root is None:
             result = join_flow.approve_step(
                 step,

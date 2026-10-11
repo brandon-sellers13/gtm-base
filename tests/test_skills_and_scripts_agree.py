@@ -14,6 +14,7 @@ printed. This checks that no command line in any skill carries one.
 """
 
 import importlib.util
+import json
 import os
 import re
 import shlex
@@ -22,6 +23,8 @@ import sys
 import unittest
 
 import support
+
+from gtmbase import join_flow
 
 SKILLS_DIR = os.path.join(support.PLUGIN_DIR, "skills")
 
@@ -806,6 +809,11 @@ class TestTheSkillsAsTheyAreWritten(unittest.TestCase):
             else None
         ),
         "<draft file>": lambda self, state, command: state.get("draft"),
+        # The summarize-first stage: one batch of notes, the file its notes go
+        # in, and the file the support check's answer goes in.
+        "<batch number>": lambda self, state, command: "1",
+        "<notes file>": lambda self, state, command: state.get("notes_file"),
+        "<support answer file>": lambda self, state, command: state.get("support_answer"),
         "<the path it printed>": _the_path_it_printed,
         "<id>": lambda self, state, command: (
             state.get("question")
@@ -925,8 +933,38 @@ class TestTheSkillsAsTheyAreWritten(unittest.TestCase):
         if mode == "add-paste":
             state["paste"] = os.path.join(state["cwd"], "pasted.txt")
             support.write(state["paste"], "We win on setup time.\n")
+        if mode == "notes-check":
+            # The notes a subagent writes from the request, for every batch.
+            support.take_notes(state["run"])
         if mode in ("review", "approve", "preview-change") and state.get("draft"):
-            support.write(state["draft"], self.a_draft_for(state["step"]))
+            text = self.a_draft_for(state["step"])
+            if state["step"] in join_flow.NOTES_STEPS:
+                segment = state.get("segment") if state["step"] == "segment" else None
+                text = support.cited(
+                    text, support.settled_note(state["run"], state["step"], segment)
+                )
+            support.write(state["draft"], text)
+            if mode == "approve" and state["step"] in join_flow.NOTES_STEPS:
+                # The skill says the support check once, in step 6b, and the
+                # assistant runs it for every document before its approval.
+                settled = (
+                    join_flow.segment_to_draft(state["run"], segment) if segment else None
+                )
+                support.write(join_flow.draft_path(state["run"], state["step"], settled), text)
+                support.support_checked(
+                    state["run"], state["step"], segment=segment, base_root=state.get("base")
+                )
+        if mode == "support-check" and state.get("support_answer"):
+            # The answer a fresh subagent writes: one verdict for every line.
+            support.write(
+                state["support_answer"],
+                "```jsonl\n"
+                + "\n".join(
+                    json.dumps({"line": "B%d" % number, "verdict": "supported"})
+                    for number in range(1, int(state.get("support_lines", 0)) + 1)
+                )
+                + "\n```\n",
+            )
 
     # What a walk writes into each kind of words file. They are the words a
     # person would really type at that step, and nothing here is the note GTM
@@ -984,6 +1022,11 @@ class TestTheSkillsAsTheyAreWritten(unittest.TestCase):
             value = self.value_of(printed, name)
             if value:
                 state[name] = value
+        if mode == "notes-assemble":
+            state["notes_file"] = self.value_of(printed, "notes")
+        if mode == "support-assemble":
+            state["support_answer"] = self.value_of(printed, "answer")
+            state["support_lines"] = self.value_of(printed, "lines")
         if mode == "reconcile":
             state["ask_about"] = [
                 line[len("file=") :].strip()

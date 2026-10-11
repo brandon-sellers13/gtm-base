@@ -40,6 +40,7 @@ from . import (
     adopt,
     base_reader,
     callmarkers,
+    citations,
     compose_proposal,
     confirm,
     constants,
@@ -370,14 +371,17 @@ class Reviewed(object):
     questions it leaves for the person (Unit 1.7b).
     """
 
-    __slots__ = ("step", "ready", "codes", "draft", "questions")
+    __slots__ = ("step", "ready", "codes", "draft", "questions", "taken_out")
 
-    def __init__(self, step, ready, codes=None, draft=None, questions=0):
+    def __init__(self, step, ready, codes=None, draft=None, questions=0, taken_out=0):
         self.step = step
         self.ready = bool(ready)
         self.codes = list(codes or [])
         self.draft = draft
         self.questions = int(questions or 0)
+        # How many lines the third refused review took out and turned into
+        # questions, so the person is told rather than left to find them.
+        self.taken_out = int(taken_out or 0)
 
     def __repr__(self) -> str:
         return "Reviewed(step=%r, ready=%r, codes=%r)" % (
@@ -3800,6 +3804,27 @@ def preview_step(
     """
     day = today or state.today()
     settled = _step_is_this_runs(run_id, step, segment)
+    if step in NOTES_STEPS:
+        # Every file was read in full when the notes were taken, so a draft
+        # reads all of them through their notes and nothing is left out.
+        taken = notes_for_a_draft(
+            run_id, step, settled, paste_files, day, only, only_folder, only_index
+        )
+        codes = list(taken.rendered.codes)
+        if not taken.notes:
+            codes.append(drafting.CODE_NO_SOURCES)
+        return Previewed(
+            step,
+            taken.labels,
+            [],
+            taken.labels,
+            codes,
+            taken.read.left_out,
+            taken.read.removed,
+            superseded=taken.superseded,
+            choice=consent_choice(run_id),
+            narrowed=bool(only or only_folder or only_index),
+        )
     read, chosen, superseded = _sources_for_a_draft(
         run_id, paste_files, day, only, only_folder, only_index, settled
     )
@@ -3842,6 +3867,41 @@ def assemble_step(
     """
     day = today or state.today()
     settled = _step_is_this_runs(run_id, step, segment)
+    if step in NOTES_STEPS:
+        taken = notes_for_a_draft(
+            run_id, step, settled, paste_files, day, only, only_folder, only_index
+        )
+        if not taken.notes:
+            # A request with no notes in it would be a document written from
+            # nothing, which setting a base up never puts in front of anybody.
+            refusal = DraftError(step, drafting.CODE_NO_SOURCES)
+            refusal.left_out = list(taken.read.left_out)
+            raise refusal
+        assembly = drafting.assemble_from_notes(
+            step,
+            taken.rendered.text,
+            taken.file_lines,
+            company,
+            day.isoformat() if hasattr(day, "isoformat") else str(day),
+            owner_email,
+            codes=taken.rendered.codes,
+            plugin_root=plugin_root,
+            extra=_extra_for(run_id, step, settled),
+        )
+        path = os.path.join(
+            scratch_dir(run_id), "%s-prompt.md" % _file_stem(step, settled)
+        )
+        atomic_write_text(path, assembly.text, inside=paths.seat_home())
+        return Assembled(
+            path,
+            step,
+            taken.labels,
+            [],
+            assembly.codes,
+            taken.read.left_out,
+            taken.read.removed,
+            superseded=taken.superseded,
+        )
     read, chosen, superseded = _sources_for_a_draft(
         run_id, paste_files, day, only, only_folder, only_index, settled
     )
@@ -3910,6 +3970,32 @@ class NotesMade(object):
         self.total = total
 
 
+def _with_held_pastes(run_id: str, paste_files: Sequence[str] = ()) -> List[str]:
+    """Every paste this run holds, then any other named, each once.
+
+    The notes are taken from every paste the run holds whether or not a step
+    names it, so the notes, the drafts, review and approval all read the same
+    set, and none of them can come out of step with another.
+    """
+    folder = os.path.join(scratch_dir(run_id), PASTES_DIR)
+    try:
+        held = sorted(
+            os.path.join(folder, name)
+            for name in os.listdir(folder)
+            if name.endswith(".txt")
+        )
+    except OSError:
+        held = []
+    found: List[str] = []
+    seen = set()
+    for path in list(held) + list(paste_files or ()):
+        real = os.path.realpath(path)
+        if real not in seen:
+            seen.add(real)
+            found.append(path)
+    return found
+
+
 def notes_plan(
     run_id: str, paste_files: Sequence[str] = (), today=None
 ) -> NotesPlanned:
@@ -3921,7 +4007,7 @@ def notes_plan(
     """
     day = today or state.today()
     read, chosen, superseded = _sources_for_a_draft(
-        run_id, paste_files, day, None, None, None
+        run_id, _with_held_pastes(run_id, paste_files), day, None, None, None
     )
     return NotesPlanned(
         chosen,
@@ -4127,7 +4213,147 @@ def notes_for_drafts(
             found.append(notes_module.Note(row, id="n%d" % (len(found) + 1)))
         for source, code in record.get("not_noted", []):
             not_noted.append((int(source), str(code)))
+    _place_notes(run_id, planned.sources, found)
     return Notebook(found, not_noted, planned)
+
+
+def _place_notes(run_id: str, found_sources, found) -> None:
+    """Put each note under the segment the material puts it in, by its file.
+
+    A note taken from the page the person named for a segment belongs to that
+    segment, whatever the note itself said, so a customer on a finished page
+    is never filed under another one. Any other note naming a settled
+    segment is given that segment's name exactly as the person settled it.
+    """
+    inventory = load_inventory(run_id)
+    if inventory is None:
+        return
+    page_of = {}
+    name_of = {}
+    for segment in inventory.segments:
+        name_of[segment.slug] = segment.name
+        if segment.source:
+            page_of[os.path.realpath(segment.source)] = segment.name
+    for item in found:
+        if item.kind == notes_module.KIND_NOTHING:
+            continue
+        index = int(item.source) - 1
+        source = found_sources[index] if 0 <= index < len(found_sources) else None
+        path = getattr(source, "path", None)
+        if path and os.path.realpath(path) in page_of:
+            item.segment = page_of[os.path.realpath(path)]
+            continue
+        if item.segment:
+            slug = segments.slug_for(item.segment)
+            if slug in name_of:
+                item.segment = name_of[slug]
+
+
+# The steps whose drafts read the notes rather than the files. A context
+# change still reads its few dated sources directly.
+NOTES_STEPS = (
+    drafting.STEP_ICP,
+    drafting.STEP_UMBRELLA,
+    drafting.STEP_POSITIONING,
+    drafting.STEP_SEGMENT,
+)
+
+
+def file_line(number: int, source) -> str:
+    """One file of the run as a draft's request lists it: number, name, date."""
+    line = notes_module.part_label(number, getattr(source, "label", ""))
+    date = getattr(source, "date", None)
+    return "%s (%s)" % (line, date) if date else line
+
+
+class NotesForADraft(object):
+    """The notes one draft reads, and the files they came from."""
+
+    __slots__ = ("book", "notes", "file_lines", "labels", "rendered", "read", "superseded")
+
+    def __init__(self, book, found, file_lines, labels, rendered, read, superseded):
+        self.book = book
+        self.notes = list(found)
+        # Each file as the request lists it, by its number in this run.
+        self.file_lines = list(file_lines)
+        # Each file as the person is told about it, by name and date.
+        self.labels = list(labels)
+        self.rendered = rendered
+        self.read = read
+        self.superseded = list(superseded)
+
+
+def notes_for_a_draft(
+    run_id: str,
+    step: str,
+    settled=None,
+    paste_files: Sequence[str] = (),
+    today=None,
+    only=None,
+    only_folder=None,
+    only_index=None,
+) -> NotesForADraft:
+    """The notes one draft reads: every note, or the part the person narrowed to.
+
+    A segment's draft reads the notes about that segment and the notes about
+    the whole company. Narrowing to some of the files keeps the notes taken
+    from those files, and only those.
+    """
+    day = today or state.today()
+    # The list and any narrowing are checked first, so a list changed after
+    # the yes, or a file that was never on it, is refused for what it is
+    # before anything is said about the notes.
+    pastes = _with_held_pastes(run_id, paste_files)
+    read, chosen, superseded = _sources_for_a_draft(
+        run_id, pastes, day, only, only_folder, only_index, settled
+    )
+    book = notes_for_drafts(run_id, pastes, day)
+    kept_paths = set(
+        os.path.realpath(source.path) for source in chosen if getattr(source, "path", None)
+    )
+    kept_labels = set(source.label for source in chosen if not getattr(source, "path", None))
+    allowed = set()
+    for number, source in enumerate(book.sources, start=1):
+        path = getattr(source, "path", None)
+        if (path and os.path.realpath(path) in kept_paths) or (
+            not path and source.label in kept_labels
+        ):
+            allowed.add(number)
+    found = [item for item in book.notes if int(item.source) in allowed]
+    # The versions set aside are said for the files this draft would have
+    # read, so naming only an older version hears which version is used.
+    named = set(source.label for source in read.sources)
+    superseded = [
+        item for item in book.planned.superseded if item.older in named
+    ]
+    if step == drafting.STEP_SEGMENT and settled is not None:
+        found = [item for item in found if item.segment in ("", settled.name)]
+    inventory = load_inventory(run_id)
+    order = [segment.name for segment in inventory.segments] if inventory else []
+    own = step == drafting.STEP_SEGMENT and settled is not None
+    if own:
+        # A segment's draft reads its own notes first, and its own page leads
+        # the list of files, as it did when drafts read the files.
+        order = [settled.name]
+    rendered = notes_module.render_for_draft(
+        found,
+        order,
+        lambda text: drafting.said_as_data("the notes", text),
+        constants.DRAFT_SOURCES_MAX_CHARS,
+        company_first=not own,
+    )
+    numbers = [number for number in range(1, len(book.sources) + 1) if number in allowed]
+    page = os.path.realpath(settled.source) if own and getattr(settled, "source", "") else None
+    if page:
+        numbers.sort(
+            key=lambda number: 0
+            if getattr(book.sources[number - 1], "path", None)
+            and os.path.realpath(book.sources[number - 1].path) == page
+            else 1
+        )
+    lines = [file_line(number, book.sources[number - 1]) for number in numbers]
+    labels = [drafting.source_line(book.sources[number - 1]) for number in numbers]
+    return NotesForADraft(book, found, lines, labels, rendered, read, superseded)
 
 
 class VersionLeftOut(object):
@@ -4390,9 +4616,10 @@ def review_step(
     settled = None
     if run_id:
         settled = _step_is_this_runs(run_id, step, segment)
-    elif step in (drafting.STEP_UMBRELLA, drafting.STEP_SEGMENT):
-        # Both are measured against the run's own inventory, so neither can
-        # be checked without the run.
+    elif step in NOTES_STEPS:
+        # The umbrella and a segment are measured against the run's own
+        # inventory, and every step written from the notes against the
+        # run's notes, so none of them can be checked without the run.
         raise ReviewError(CODE_NO_RUN, code=CODE_NO_RUN)
     if settled is not None and os.path.basename(draft_file) != os.path.basename(
         draft_path(run_id, step, settled)
@@ -4410,9 +4637,287 @@ def review_step(
     codes = review.screen(draft, _address_for(base_root, email, git))
     if step == drafting.STEP_UMBRELLA:
         codes.extend(drafting.check_umbrella(draft, several_segments(run_id)))
+    taken_out = 0
+    if run_id and step in NOTES_STEPS:
+        problems = _citation_problems(run_id, step, settled, draft)
+        if problems:
+            attempt = _review_attempt(run_id, _file_stem(step, settled))
+            if attempt >= notes_module.ATTEMPTS:
+                # The third time the same lines fail, they become questions
+                # for the person rather than a refusal for ever. Taking a line
+                # out never adds anything, and setup writes every customer
+                # and every open item itself, so none is lost.
+                draft, taken_out = _take_out(step, draft_file, draft, problems)
+                if settled is not None:
+                    draft.destination = settled.destination
+                problems = _citation_problems(run_id, step, settled, draft)
+        codes.extend(citations.codes_for(problems))
     return Reviewed(
-        step, not codes, codes, draft, questions=callmarkers.count(draft.text)
+        step,
+        not codes,
+        codes,
+        draft,
+        questions=callmarkers.count(draft.text),
+        taken_out=taken_out,
     )
+
+
+# --- The support check: an independent read of each line (U5) ----------------
+
+SUPPORT_PROMPT_FILE = "support.md"
+
+
+class SupportMade(object):
+    """The request for one draft's support check, and where its answer goes."""
+
+    __slots__ = ("prompt", "answer", "lines")
+
+    def __init__(self, prompt, answer, lines):
+        self.prompt = prompt
+        self.answer = answer
+        self.lines = lines
+
+
+class SupportChecked(object):
+    """What came of one support answer: complete or not, and what came out."""
+
+    __slots__ = ("complete", "code", "taken_out", "shown")
+
+    def __init__(self, complete, code=None, taken_out=0, shown=None):
+        self.complete = bool(complete)
+        self.code = code
+        self.taken_out = int(taken_out or 0)
+        # The document as it will be written, for the person to read first.
+        self.shown = shown
+
+
+def support_answer_file(run_id: str, step: str, settled=None) -> str:
+    """Where the support check's answer for one draft is written."""
+    return os.path.join(drafts_dir(run_id), "%s-support.md" % _file_stem(step, settled))
+
+
+def _support_record(run_id: str, step: str, settled=None) -> str:
+    folder = ensure_dir(os.path.join(scratch_dir(run_id), "support"))
+    return os.path.join(folder, "%s.json" % _file_stem(step, settled))
+
+
+def _draft_digest(path: str) -> str:
+    return hashlib.sha256((read_text(path) or "").encode("utf-8")).hexdigest()
+
+
+def _ready_draft(step, run_id, segment, base_root=None, email=None, runner=None):
+    """The draft for one step, reviewed and ready, or a refusal."""
+    settled = _step_is_this_runs(run_id, step, segment)
+    path = draft_path(run_id, step, settled)
+    reviewed = review_step(
+        step, path, base_root=base_root, email=email, runner=runner,
+        run_id=run_id, segment=segment,
+    )
+    if not reviewed.ready:
+        raise ReviewError(review.CODE_SCREENED, codes=reviewed.codes)
+    return settled, path, reviewed
+
+
+def support_assemble(
+    step: str,
+    run_id: str,
+    segment: Optional[str] = None,
+    base_root: Optional[str] = None,
+    plugin_root: Optional[str] = None,
+    runner: Optional[GitRunner] = None,
+) -> SupportMade:
+    """Build the support request for one draft that review found ready.
+
+    Each line that cites a note is shown beside the words of its own notes
+    and the other notes about the same segment, fenced as data, so a reader
+    who sees nothing else can say whether the line says more than they do.
+    """
+    if step not in NOTES_STEPS:
+        raise ReviewError("unknown-step", code="unknown-step")
+    settled, path, reviewed = _ready_draft(
+        step, run_id, segment, base_root=base_root, runner=runner
+    )
+    taken = notes_for_a_draft(run_id, step, settled)
+    shown = set(taken.rendered.ids)
+    readable = dict((item.id, item) for item in taken.notes if item.id in shown)
+    body = reviewed.draft.body
+    root = plugin_root or drafting.plugin_root_default()
+    template = read_text(os.path.join(root, drafting.PROMPTS_DIR, SUPPORT_PROMPT_FILE))
+    if template is None:
+        raise DraftError(step, "no-prompt-file")
+    held = drafting.said_as_data(
+        "the draft and its notes",
+        citations.support_text(body, readable, taken.book.notes),
+    )
+    count = len(citations.checkable(body))
+    text = template.replace("{{lines}}", held).replace("{{count}}", str(count))
+    prompt = os.path.join(
+        scratch_dir(run_id), "%s-support-prompt.md" % _file_stem(step, settled)
+    )
+    atomic_write_text(prompt, text, inside=paths.seat_home())
+    return SupportMade(prompt, support_answer_file(run_id, step, settled), count)
+
+
+def support_check(
+    step: str,
+    run_id: str,
+    answer_file: str,
+    segment: Optional[str] = None,
+    base_root: Optional[str] = None,
+    runner: Optional[GitRunner] = None,
+) -> SupportChecked:
+    """Read one support answer, take out what it found, and record the check.
+
+    Only the answer file setup named is read, and only an answer for every
+    line counts. Each line found to say more than its notes is replaced with
+    a question for the person. What is recorded is the digest of the draft
+    as it stands after that, so approving any other text is refused.
+    """
+    settled, path, reviewed = _ready_draft(
+        step, run_id, segment, base_root=base_root, runner=runner
+    )
+    named = support_answer_file(run_id, step, settled)
+    if os.path.realpath(str(answer_file or "")) != os.path.realpath(named):
+        return SupportChecked(False, code="not-the-support-answer")
+    body = reviewed.draft.body
+    verdicts, code = citations.read_support(
+        read_text(named) or "", len(citations.checkable(body))
+    )
+    if verdicts is None:
+        return SupportChecked(False, code=code)
+    beyond = sum(1 for verdict in verdicts.values() if verdict == citations.VERDICT_BEYOND)
+    if beyond:
+        new_body = citations.take_out_beyond(body, verdicts)
+        text = (
+            "```markdown\n"
+            + formats.render_document(reviewed.draft.fields, new_body).rstrip("\n")
+            + "\n```\n"
+        )
+        atomic_write_text(path, text)
+    final = _parse_draft(step, read_text(path) or "")
+    shown, notes_digest = rendered_draft(run_id, step, settled, final)
+    atomic_write_text(shown_file(run_id, step, settled), shown.text)
+    atomic_write_text(
+        _support_record(run_id, step, settled),
+        json.dumps({"draft": _draft_digest(path), "notes": notes_digest}, sort_keys=True)
+        + "\n",
+        inside=paths.seat_home(),
+    )
+    return SupportChecked(True, taken_out=beyond, shown=shown_file(run_id, step, settled))
+
+
+def _shown_name(number: int, source) -> str:
+    """How a file is named in a document's footnotes: its place and its date.
+
+    The place is said from the home folder, such as `~/company/pricing.md`,
+    so the same file is named the same way whichever session wrote the
+    document, and the person can find it. A file outside the home folder is
+    named by its own name, and pasted text by the name it was given.
+    """
+    path = getattr(source, "path", None)
+    name = getattr(source, "label", "") or "a source"
+    if path:
+        home = os.path.realpath(os.path.expanduser("~"))
+        real = os.path.realpath(path)
+        if real.startswith(home + os.sep):
+            name = "~/" + os.path.relpath(real, home).replace(os.sep, "/")
+        else:
+            name = os.path.basename(real)
+    date = getattr(source, "date", None)
+    return "%s (%s)" % (name, date) if date else name
+
+
+def rendered_draft(run_id: str, step: str, settled, draft):
+    """A draft as setup writes it: footnotes, its three sections, its sources.
+
+    The same function makes the copy the person is shown and the document
+    that is written, so the two are always the same.
+    """
+    taken = notes_for_a_draft(run_id, step, settled)
+    names = dict(
+        (number, _shown_name(number, source))
+        for number, source in enumerate(taken.book.sources, start=1)
+    )
+    inventory = load_inventory(run_id)
+    order = [
+        segment.name
+        for segment in (inventory.segments if inventory else [])
+        if segment.answer != constants.SEGMENT_LEAVE_OUT
+    ]
+    only = settled.name if (step == drafting.STEP_SEGMENT and settled is not None) else None
+    if step == drafting.STEP_ICP and not order:
+        only = None
+    made = citations.render(
+        draft.body, taken.notes, names, order, only, taken.book.not_noted
+    )
+    fields = dict(draft.fields)
+    fields["sources"] = made.sources
+    text = (
+        "```markdown\n"
+        + formats.render_document(fields, made.body).rstrip("\n")
+        + "\n```\n"
+    )
+    shown = _parse_draft(step, text)
+    if settled is not None:
+        shown.destination = settled.destination
+    return shown, taken.book.planned.digest
+
+
+def shown_file(run_id: str, step: str, settled=None) -> str:
+    """Where the document as it will be written is kept for the person to read."""
+    return os.path.join(drafts_dir(run_id), "%s-shown.md" % _file_stem(step, settled))
+
+
+def _support_was_checked(run_id: str, step: str, settled, draft_file: str) -> bool:
+    try:
+        record = json.loads(read_text(_support_record(run_id, step, settled)) or "{}")
+    except ValueError:
+        return False
+    if not isinstance(record, dict) or record.get("draft") != _draft_digest(draft_file):
+        return False
+    # Notes taken again after the check would change what is written, so the
+    # check counts only for the notes it was made with.
+    return record.get("notes") == notes_plan(run_id).digest
+
+
+def _citation_problems(run_id: str, step: str, settled, draft) -> list:
+    """What the citation checks find in one draft, against the notes it read."""
+    taken = notes_for_a_draft(run_id, step, settled)
+    shown = set(taken.rendered.ids)
+    readable = dict((item.id, item) for item in taken.notes if item.id in shown)
+    inventory = load_inventory(run_id)
+    names = [segment.name for segment in inventory.segments] if inventory else []
+    customers = citations.customer_names(taken.book.notes, "", names)
+    return citations.check(draft.body, readable, customers)
+
+
+def _review_attempt(run_id: str, stem: str) -> int:
+    """Count one more refused review of one draft, and say which this is."""
+    path = os.path.join(scratch_dir(run_id), "review-attempts.json")
+    try:
+        counts = json.loads(read_text(path) or "{}")
+    except ValueError:
+        counts = {}
+    if not isinstance(counts, dict):
+        counts = {}
+    counts[stem] = int(counts.get(stem, 0)) + 1
+    atomic_write_text(
+        path, json.dumps(counts, sort_keys=True) + "\n", inside=paths.seat_home()
+    )
+    return counts[stem]
+
+
+def _take_out(step: str, draft_file: str, draft, problems):
+    """Write the draft again with each failing line replaced by a question."""
+    body = citations.take_out(draft.body, problems)
+    text = (
+        "```markdown\n"
+        + formats.render_document(draft.fields, body).rstrip("\n")
+        + "\n```\n"
+    )
+    atomic_write_text(draft_file, text)
+    lines = set((block.first, block.last) for block, _code in problems)
+    return _parse_draft(step, text), len(lines)
 
 
 def _parse_draft(step: str, text: str):
@@ -4490,6 +4995,22 @@ def approve_step(
     )
     if not reviewed.ready:
         raise ReviewError(review.CODE_SCREENED, codes=reviewed.codes)
+    if step in NOTES_STEPS and not _support_was_checked(
+        run_id, step, _step_is_this_runs(run_id, step, segment), draft_file
+    ):
+        # Every line of a draft written from the notes is read by the support
+        # check before it is written down, and the text written is the text
+        # that was checked.
+        raise ReviewError(
+            citations.CODE_SUPPORT_NOT_CHECKED, code=citations.CODE_SUPPORT_NOT_CHECKED
+        )
+    if step in NOTES_STEPS:
+        # What is written is the document the person was shown: the draft
+        # with its footnotes and the three sections setup writes from the
+        # notes, and the files it cites as its sources.
+        reviewed.draft, _digest = rendered_draft(
+            run_id, step, _step_is_this_runs(run_id, step, segment), reviewed.draft
+        )
     if reviewed.questions and not questions_open:
         # A draft still asking the person something is written down only once
         # they have been asked and chose to leave it open. The third real run

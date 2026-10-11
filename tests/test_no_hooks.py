@@ -421,6 +421,7 @@ class TestSegmentsFinishedLaterRunNoHook(later.Case):
         later.set_up_and_close(company)
         run_id, _shown = later.listed(company, later.LATER)
         join_flow.draft_freeze(run_id, later.SESSION_TWO, today=later.TODAY)
+        support.take_notes(run_id, today=later.TODAY)
         return company, run_id
 
     def test_a_segment_drafted_and_approved_in_a_later_session(self):
@@ -525,7 +526,7 @@ class TestKeepingAHandEditRunsNoHook(unittest.TestCase):
                 what_changed=follow_up.FACT_LINE,
                 also_affects=[follow_up.POSITIONING],
             )
-            self.assertIn("over 1 million drivers", at_head(root, follow_up.ICP))
+            self.assertIn("over 12k bakeries", at_head(root, follow_up.ICP))
             self.assertEqual(1, len(self.changes_saved(root)))
 
     def test_keeping_a_change_to_the_business(self):

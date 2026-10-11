@@ -161,15 +161,38 @@ class Company(object):
             )
         self.inventory = join_flow.settle_segments(self.run, "\n".join(written) + "\n")
         self.root = None
+        # The notes every draft is written from (the summarize-first stage).
+        support.take_notes(self.run)
 
     def write_draft(self, step, text, segment=None):
         settled = (
             join_flow.segment_to_draft(self.run, segment) if segment else None
         )
+        if step in join_flow.NOTES_STEPS:
+            # Written from the notes and citing them (the summarize-first stage).
+            if any(state != "done" for _n, state in join_flow.notes_status(self.run)):
+                support.take_notes(self.run)
+            text = support.cited(text, support.settled_note(self.run, step, segment))
         path = join_flow.draft_path(self.run, step, settled)
         with io.open(path, "w", encoding="utf-8") as handle:
             handle.write(text)
         return path
+
+    def support_checked(self, step, segment=None):
+        """The support check, answered for a draft review found ready."""
+        if step not in join_flow.NOTES_STEPS:
+            return
+        reviewed = join_flow.review_step(
+            step,
+            join_flow.draft_path(
+                self.run, step, join_flow.segment_to_draft(self.run, segment) if segment else None
+            ),
+            base_root=self.root,
+            run_id=self.run,
+            segment=segment,
+        )
+        if reviewed.ready:
+            support.support_checked(self.run, step, segment=segment, base_root=self.root)
 
     def review(self, step, text, segment=None):
         path = self.write_draft(step, text, segment)
@@ -179,6 +202,7 @@ class Company(object):
 
     def approve(self, step, text, segment=None, questions_open=False):
         path = self.write_draft(step, text, segment)
+        self.support_checked(step, segment)
         if self.root is None:
             result = join_flow.approve_step(
                 step,
@@ -324,12 +348,19 @@ class TestWhatTheUmbrellaSays(unittest.TestCase):
             reviewed = company.review(drafting.STEP_UMBRELLA, pending_umbrella())
             self.assertTrue(reviewed.ready, reviewed.codes)
             company.umbrella_and_positioning(pending_umbrella())
-            body = formats.split_document(company.read(ICP))[1]
-            paragraphs = dict(drafting.segment_paragraphs(body))
+            whole = formats.split_document(company.read(ICP))[1]
+            paragraphs = dict(drafting.segment_paragraphs(whole))
             self.assertEqual(constants.UMBRELLA_PENDING_SENTENCE, paragraphs["Credit unions"])
+            # The draft's own words hold no link. The footnotes setup writes
+            # name the person's own source files, never a file in the base
+            # (summarize-first: rule 4 of the fidelity bar).
+            body = drafting.without_setup_sections(whole)
             self.assertNotIn("](", body)
             self.assertNotIn(".md", body)
             self.assertNotIn(constants.SEGMENTS_DIR, body)
+            footnotes = whole.split("## Where this came from")[1]
+            self.assertNotIn("](", footnotes)
+            self.assertNotIn("context/", footnotes)
 
     def test_a_segment_left_out_but_described_is_refused(self):
         with support.Sandbox():
@@ -497,6 +528,7 @@ class TestAFileAlreadyInTheWay(unittest.TestCase):
         path = company.write_draft(
             drafting.STEP_SEGMENT, segment_text("Fintech lenders"), "fintech-lenders"
         )
+        company.support_checked(drafting.STEP_SEGMENT, "fintech-lenders")
         with self.assertRaises(ReviewError) as caught:
             join_flow.approve_step(
                 drafting.STEP_SEGMENT,
@@ -560,6 +592,7 @@ class TestAFileAlreadyInTheWay(unittest.TestCase):
             path = company.write_draft(
                 drafting.STEP_SEGMENT, segment_text("Fintech lenders"), "fintech-lenders"
             )
+            company.support_checked(drafting.STEP_SEGMENT, "fintech-lenders")
             finished = run_join(
                 "approve",
                 "--step",
@@ -594,6 +627,7 @@ class TestAFileAlreadyInTheWay(unittest.TestCase):
             path = company.write_draft(
                 drafting.STEP_SEGMENT, segment_text("Fintech lenders"), "fintech-lenders"
             )
+            company.support_checked(drafting.STEP_SEGMENT, "fintech-lenders")
             with self.assertRaises(ReviewError) as caught:
                 join_flow.approve_step(
                     drafting.STEP_SEGMENT,

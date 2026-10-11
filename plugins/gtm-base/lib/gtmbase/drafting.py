@@ -510,6 +510,44 @@ def assemble(
     )
 
 
+def assemble_from_notes(
+    step: str,
+    notes_text: str,
+    file_lines: Sequence[str],
+    company: str,
+    today,
+    owner_email: str,
+    codes: Sequence[str] = (),
+    icp_path: Optional[str] = None,
+    plugin_root: Optional[str] = None,
+    extra: Optional[Dict[str, str]] = None,
+) -> Assembly:
+    """Build the request for one step from the checked notes (summarize-first).
+
+    The draft reads the notes taken from every file, already fenced as data,
+    and never the files themselves, so nothing is left out of it for room and
+    every line it writes can say which note it rests on. The files are listed
+    by their number in this run, the way the notes name them.
+    """
+    template = prompt_text(step, plugin_root)
+    name = _checked_company(step, company)
+    listing = ["The files these notes were taken from, each with its number:"]
+    listing.extend("- " + line for line in file_lines)
+    values = {
+        "sources": "\n".join(listing) + "\n\n" + notes_text,
+        "company": name,
+        "today": str(today or ""),
+        "owner_email": str(owner_email or ""),
+        "icp_path": str(icp_path or ICP_PATH),
+    }
+    for field, value in (extra or {}).items():
+        values[field] = str(value or "")
+    text = template
+    for field, value in values.items():
+        text = text.replace("{{%s}}" % field, value)
+    return Assembly(text, list(codes), list(file_lines), [], list(file_lines))
+
+
 def _checked_company(step: str, company) -> str:
     """The company name, or a refusal, before it goes anywhere near a request.
 
@@ -710,6 +748,26 @@ def _without_source_labels(text: str) -> str:
     return "\n".join(kept + lines[closing:])
 
 
+def without_setup_sections(text: str) -> str:
+    """A document without the sections setup writes itself from the notes.
+
+    Those sections hold the material's own words, copied and checked against
+    its files, and the file each came from, so they are not held to the words
+    a draft may use, and a file's name in them is not a link. Review refuses
+    any draft that writes one of these headings itself, so only setup's own
+    sections are ever read this way.
+    """
+    kept: List[str] = []
+    skipping = False
+    for line in str(text or "").split("\n"):
+        stripped = line.strip()
+        if stripped.startswith("## ") or stripped.startswith("# "):
+            skipping = any(stripped.startswith(head) for head in constants.SETUP_WRITTEN_HEADINGS)
+        if not skipping:
+            kept.append(line)
+    return "\n".join(kept)
+
+
 def check_words(step: str, text: str) -> None:
     """Refuse the long dash, the words that say nothing, and any placeholder."""
     if EM_DASH in text or EN_DASH in text:
@@ -737,7 +795,7 @@ def parse(step: str, model_text: str) -> Draft:
     if step not in STEPS:
         raise DraftError(step, "unknown-step")
     text = strip_fence(step, model_text)
-    check_words(step, _without_source_labels(text))
+    check_words(step, _without_source_labels(without_setup_sections(text)))
 
     try:
         block, body = formats.split_document(text)
@@ -830,7 +888,7 @@ def parse(step: str, model_text: str) -> Draft:
         for heading in UMBRELLA_SECTIONS:
             if not sections.get(heading.lower(), "").strip():
                 raise DraftError(step, CODE_EMPTY_SECTION % heading)
-        if _holds_a_link(body):
+        if _holds_a_link(without_setup_sections(body)):
             raise DraftError(step, CODE_LINK)
 
     return Draft(step, text, fields, body, [], present)

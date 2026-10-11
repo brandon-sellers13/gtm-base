@@ -514,3 +514,105 @@ def _one_note(raw: str, whole, evened, screen):
         return row, "no-segment"
     clean["status"] = floor_status(clean["status"], quote, whole[source])
     return clean, None
+
+
+# --- The notes a draft reads (U3) ---------------------------------------------
+
+CODE_NOTES_CAPPED = "notes-capped"
+COMPANY_WIDE = "the whole company"
+
+
+class Rendered(object):
+    """The notes one draft reads, as text, and what had to be shortened."""
+
+    __slots__ = ("text", "ids", "shortened", "dropped")
+
+    def __init__(self, text, ids, shortened, dropped):
+        self.text = text
+        self.ids = list(ids)
+        self.shortened = list(shortened)
+        self.dropped = list(dropped)
+
+    @property
+    def codes(self) -> List[str]:
+        return [CODE_NOTES_CAPPED] if self.dropped else []
+
+
+def _note_line(note: Note, with_words: bool = True) -> str:
+    said = ["from S%d" % note.source, note.kind]
+    if note.customer:
+        said.append("customer: %s" % note.customer)
+    if note.figure:
+        said.append("figure: %s" % note.figure)
+    said.append(note.status)
+    words = '"%s"' % note.quote if with_words else "(words held back)"
+    return "- %s (%s) %s" % (note.id, "; ".join(said), words)
+
+
+def group_notes(
+    found: Sequence[Note], order: Sequence[str] = (), company_first: bool = True
+) -> List[tuple]:
+    """Notes grouped by what they are about: the whole company, then each segment.
+
+    Segments come in the order given, then any other segment the notes name in
+    the order they first appear, so notes about one thing sit side by side and
+    a disagreement in the material is seen as one.
+    """
+    names: List[str] = [""] if company_first else []
+    for name in order:
+        if name not in names:
+            names.append(name)
+    if "" not in names:
+        names.append("")
+    for item in found:
+        if item.segment not in names:
+            names.append(item.segment)
+    return [
+        (name, [item for item in found if item.segment == name])
+        for name in names
+        if any(item.segment == name for item in found)
+    ]
+
+
+def render_for_draft(
+    found: Sequence[Note],
+    order: Sequence[str],
+    fence,
+    limit: int,
+    company_first: bool = True,
+) -> Rendered:
+    """The notes as one draft reads them, fenced by `fence`, within `limit`.
+
+    All of them, with their words, when they fit. When they do not, the
+    customer notes lose their words first, because setup writes the list of
+    customers itself from the notes, words and all. Only when that is not
+    enough are notes left out, from the end, and the draft is told so.
+    """
+    shortened: List[str] = []
+    dropped: List[str] = []
+    kept = list(found)
+
+    def text_for(items, short):
+        blocks = []
+        for name, members in group_notes(items, order, company_first):
+            title = "Notes about %s:" % (name or COMPANY_WIDE)
+            lines = [
+                _note_line(item, not (item.id in short and item.kind == KIND_CUSTOMER))
+                for item in members
+            ]
+            blocks.append(title + "\n" + "\n".join(lines))
+        return fence("\n\n".join(blocks) if blocks else "There are no notes.")
+
+    text = text_for(kept, set())
+    if len(text) > limit:
+        shortened = [item.id for item in kept if item.kind == KIND_CUSTOMER]
+        text = text_for(kept, set(shortened))
+    while len(text) > limit and kept:
+        # Leave out about as much as the overshoot from the end, then look again.
+        over = len(text) - limit
+        while over > 0 and kept:
+            item = kept.pop()
+            dropped.insert(0, item.id)
+            over -= len(_note_line(item, item.id not in shortened)) + 1
+        text = text_for(kept, set(shortened))
+    return Rendered(text, [item.id for item in kept], shortened, dropped)

@@ -882,3 +882,173 @@ def where_a_script_runs(cwd):
     if not from_a_linked_folder():
         return cwd
     return linked_folder_for(cwd) or cwd
+
+
+# --- The summarize-first stage, the way an assistant goes through it ----------
+#
+# A draft is written from the notes taken from every agreed file, cites the
+# notes it rests on, and is read by the support check before it is written
+# down. These stand in for the assistant's part of that in tests whose
+# subject is something else: they write real notes that the real check
+# accepts, cite them, and answer the real support request.
+
+_FLOOR_WORDS = (
+    "propos", "plan", "hold", "paused", "parked", "shelved", "clarif", "confirm",
+    "tbc", "tbd", "question", "unclear", "unknown", "hypothes", "assum", "?",
+)
+
+
+def _a_quote_from(text):
+    """A short line of a file a note can copy word for word, or None."""
+    fallback = None
+    for line in str(text or "").split("\n"):
+        stripped = line.strip().lstrip("#-*|> ").strip()
+        if len(stripped) < 3 or stripped.startswith("---") or "@" in stripped:
+            continue
+        quote = stripped[:200].rsplit(" ", 1)[0] if len(stripped) > 200 else stripped
+        if any(word in quote.lower() for word in _FLOOR_WORDS):
+            fallback = fallback or quote
+            continue
+        return quote
+    return fallback
+
+
+def take_notes(run, today=None, paste_files=()):
+    """Notes for every batch of a run, one plain fact per file, checked."""
+    from gtmbase import join_flow
+
+    planned = join_flow.notes_plan(run, paste_files, today)
+    for batch in planned.batches:
+        rows = []
+        for number in batch.numbers:
+            quote = _a_quote_from(planned.sources[number - 1].text)
+            if quote is None:
+                rows.append({"source": number, "kind": "nothing"})
+                continue
+            rows.append(
+                {
+                    "source": number,
+                    "kind": "fact",
+                    "segment": "",
+                    "customer": "",
+                    "figure": "",
+                    "status": "settled",
+                    "quote": quote,
+                }
+            )
+        path = join_flow.notes_file(run, batch.number)
+        write(path, "```jsonl\n" + "\n".join(json.dumps(row) for row in rows) + "\n```\n")
+        checked = join_flow.notes_check(run, batch.number, path, paste_files, today)
+        assert checked.accepted, checked.problems
+    return join_flow.notes_for_drafts(run, paste_files, today)
+
+
+def settled_note(run, step="icp", segment=None, today=None, paste_files=()):
+    """The id of a settled note the draft for one step reads, for it to cite."""
+    from gtmbase import join_flow
+
+    settled = join_flow.segment_to_draft(run, segment) if segment else None
+    taken = join_flow.notes_for_a_draft(run, step, settled, paste_files, today)
+    shown = set(taken.rendered.ids)
+    for item in taken.notes:
+        if item.settled and item.id in shown:
+            return item.id
+    raise AssertionError("no settled note to cite")
+
+
+def _fixed_sentences():
+    from gtmbase import citations, constants
+
+    found = [citations.NOT_COVERED]
+    for name in ("UMBRELLA_PENDING_SENTENCE", "UMBRELLA_LEFT_OUT_SENTENCE"):
+        found.append(getattr(constants, name))
+    return tuple(found)
+
+
+_FIXED_SENTENCES = _fixed_sentences()
+
+
+def cited(text, note_id="n1"):
+    """A test draft with the note cited at the end of every paragraph and item."""
+    out = []
+    lines = text.split("\n")
+    fence_or_rule = ("```", "---")
+    in_settings = False
+    for index, line in enumerate(lines):
+        stripped = line.strip()
+        if stripped == "---":
+            in_settings = not in_settings
+            out.append(line)
+            continue
+        ends_a_block = index + 1 >= len(lines) or not lines[index + 1].strip() or (
+            lines[index + 1].lstrip().startswith(("#", "- ", "* ", "|", "```"))
+        )
+        if (
+            in_settings
+            or stripped in _FIXED_SENTENCES
+            or not stripped
+            or stripped.startswith("#")
+            or stripped.startswith(fence_or_rule)
+            or "[^" in stripped
+            or not ends_a_block
+        ):
+            out.append(line)
+            continue
+        out.append(line.rstrip() + " [%s]" % note_id)
+    return "\n".join(out)
+
+
+def support_checked(run, step, segment=None, base_root=None):
+    """Answer the support check for one ready draft with every line supported."""
+    from gtmbase import join_flow
+
+    made = join_flow.support_assemble(step, run, segment=segment, base_root=base_root)
+    write(
+        made.answer,
+        "```jsonl\n"
+        + "\n".join(
+            json.dumps({"line": "B%d" % number, "verdict": "supported"})
+            for number in range(1, made.lines + 1)
+        )
+        + "\n```\n",
+    )
+    checked = join_flow.support_check(step, run, made.answer, segment=segment, base_root=base_root)
+    assert checked.complete, checked.code
+    return checked
+
+
+def prepared_draft(run, step, text, segment=None, base_root=None):
+    """A test draft written the way the stage has every draft go, ready to approve.
+
+    Notes are taken if any batch is waiting, the draft cites a note it reads,
+    review must find it ready, and the support check is answered. Steps not
+    written from the notes are written as they are.
+    """
+    from gtmbase import join_flow
+
+    from gtmbase.errors import GtmBaseError
+
+    try:
+        settled = join_flow.segment_to_draft(run, segment) if segment else None
+    except GtmBaseError:
+        # A draft for a segment this run may not draft, which the test means
+        # to see refused: it is written where it would go, as it is.
+        settled = None
+    path = join_flow.draft_path(run, step, settled)
+    prepared = False
+    if step in join_flow.NOTES_STEPS:
+        try:
+            if any(state != "done" for _n, state in join_flow.notes_status(run)):
+                take_notes(run)
+            text = cited(text, settled_note(run, step, segment))
+            prepared = True
+        except (GtmBaseError, AssertionError):
+            prepared = False
+    write(path, text)
+    if prepared:
+        reviewed = join_flow.review_step(
+            step, path, base_root=base_root, run_id=run, segment=segment
+        )
+        if reviewed.ready:
+            support_checked(run, step, segment=segment, base_root=base_root)
+    return path

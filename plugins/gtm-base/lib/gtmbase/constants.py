@@ -1000,6 +1000,14 @@ TEMPLATE_TREE_DIRS = TEMPLATE_TREE_DIRS + (SEGMENTS_DIR,)
 # bracket still counts, because a question half written is still a question
 # nobody answered. A file holding one is neither confirmed nor complete,
 # whatever its status says (requirement P27).
+# The sections setup writes itself into a document drafted from the notes
+# (the summarize-first stage). A draft never writes them, review refuses one
+# that does, and the word checks read them as the material's own words.
+SETUP_WRITTEN_HEADINGS = (
+    "## Evidence by segment",
+    "## Still open in the material",
+    "## Where this came from",
+)
 YOUR_CALL_PATTERN = r"\[\s*your\s+call\s*:([^\]\n]*)(?:\]|$)"
 # Longest a question is carried anywhere it is shown, in characters.
 YOUR_CALL_MAX_CHARS = 200
