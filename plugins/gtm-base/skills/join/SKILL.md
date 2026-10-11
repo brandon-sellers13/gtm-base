@@ -645,8 +645,8 @@ It links the folder it runs in. Add `--base <company name>` only when there is
 more than one base on the computer: "link this folder to my Acme base" names
 Acme. When there is more than one and they named none, the command names the
 ones it could have meant and changes nothing, so ask which and run it again
-with `--base`. The same goes for every command below. It refuses the home
-folder itself, which holds every other folder.
+naming that base the same way. The same goes for every command below. It
+refuses the home folder itself, which holds every other folder.
 
 When they name a different folder from the one they are working in, the folder
 travels in a file like any other words they typed. First:
