@@ -1019,6 +1019,10 @@ PYTHON_SENTENCES = (
     # Unit 1.7e: what Claude Code's own question says, and the refusals.
     ("moment", "NAMES_NOTE"),
     ("approval", "ASK_OPENING"),
+    # Plan 1, Unit 4.2a.
+    ("approval", "SAYS_CREATE"),
+    ("approval", "SAYS_SET"),
+    ("approval", "UNATTENDED"),
     ("approval", "ASK_CLOSING"),
     ("approval", "SAYS_APPROVE_CHANGE"),
     ("approval", "SAYS_DROP_CHANGE"),

@@ -331,6 +331,7 @@ class TestTheSecondRunCoversEveryClassThatStartsAScript(unittest.TestCase):
         "test_locks": ("_shown_and_recorded",),
         "test_segment_names": ("run",),
         "test_inventory": ("run_inventory",),
+        "test_operations_script": ("run_in",),
         "test_record_change": (
             "run",
             "show",

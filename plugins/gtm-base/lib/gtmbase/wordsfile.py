@@ -64,6 +64,9 @@ KINDS = (
     # that settle which segments it holds.
     "scope",
     "segments",
+    # Plan 1, Unit 4.2a: a new document, and the new value of one setting.
+    "document",
+    "value",
 )
 
 # Most bytes one file of somebody's words may hold. A person answering a

@@ -88,6 +88,7 @@ _KEY = {
     SET_BUSINESSES: businesses.BUSINESSES_SETTING,
 }
 KIND_CREATE = "create"
+KIND_SETTING = "setting"
 
 # The library write an approval of either kind performs, which the ticket
 # Claude Code's question hands over has to open (Unit 1.7e).
@@ -478,7 +479,7 @@ def prepare_setting(
     return _keep(
         base_id,
         {
-            "kind": "setting",
+            "kind": KIND_SETTING,
             "operation": operation,
             "reason": reason,
             "by": address,
@@ -609,8 +610,14 @@ def approve(
     shown: str,
     runner: Optional[GitRunner] = None,
     now: Optional[datetime.datetime] = None,
+    kind: Optional[str] = None,
 ) -> Done:
-    """Write one prepared operation, if this address may and nothing has moved."""
+    """Write one prepared operation, if this address may and nothing has moved.
+
+    `kind` is what the command that approves it says it approves, a creation
+    or a setting, because Claude Code's question said that and nothing else.
+    A prepared operation of the other kind is not written.
+    """
     # Only a command the person allowed through Claude Code's own question
     # writes an approval (Unit 1.7e, Brandon's call 57).
     approval.require(WRITE)
@@ -620,6 +627,8 @@ def approve(
     where = _kept_path(base_id, prepared_id)
     kept = read_json(where) if where else None
     if not isinstance(kept, dict) or kept.get("prepared_id") != prepared_id:
+        return Done(False, CODE_NOT_WAITING, NOT_WAITING)
+    if kind is not None and kept.get("kind") != kind:
         return Done(False, CODE_NOT_WAITING, NOT_WAITING)
     if not shown or shown != _shown_value(kept):
         return Done(False, CODE_MOVED, MOVED)

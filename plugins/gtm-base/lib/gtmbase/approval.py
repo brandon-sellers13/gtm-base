@@ -193,8 +193,23 @@ SAYS_QUIET_MONTH = "Allowing it keeps GTM Base quiet for a month."
 SAYS_QUIET_UNTIL_ASKED = (
     "Allowing it keeps GTM Base quiet until you ask for a review."
 )
+# Plan 1, Unit 4.2a: creating a document, and the five settings operations.
+SAYS_CREATE = (
+    "Allowing it writes the new document you were just shown into your base, "
+    "with you as its owner."
+)
+SAYS_SET = (
+    "Allowing it changes the one setting you were just shown, and records why."
+)
 
 # The refusals.
+# Plan 1, Unit 4.2a (CS30): a conversation the runner marked unattended gets
+# no approval of any kind, in any permission mode, because nobody is there to
+# be asked and nothing may wait on an answer.
+UNATTENDED = (
+    "GTM Base did not run this, because this conversation is a run nobody is "
+    "watching, and nothing is approved in one."
+)
 NOT_ASKED = (
     "Nothing was written, because GTM Base could not match this approval to a "
     "yes you gave in Claude Code's own question. That happens when it was run "
@@ -252,6 +267,9 @@ SENTENCE_NAMES = (
     "SAYS_MOVE_LATER",
     "SAYS_QUIET_MONTH",
     "SAYS_QUIET_UNTIL_ASKED",
+    "SAYS_CREATE",
+    "SAYS_SET",
+    "UNATTENDED",
     "SAYS_SKIP",
     "SAYS_SKIP_CLOSING",
     "SAYS_CLOSE_NOTE",
@@ -291,6 +309,8 @@ SCRIPTS = {
     "join.py": ("skills", "join", "scripts", "join.py"),
     "stale_check.py": ("skills", "stale-check", "scripts", "stale_check.py"),
     "seat.py": ("scripts", "seat.py"),
+    # Plan 1, Unit 4.2a.
+    "operations.py": ("skills", "propose-change", "scripts", "operations.py"),
 }
 
 _PYTHON_RE = re.compile(r"\Apython(?:3(?:\.\d+)?)?\Z")
@@ -327,6 +347,9 @@ _ACTIONS = {
         "record_change",
     ),
     "seat.py": ("weekly_line", "quiet", "speak"),
+    "operations.py": (
+        "new_words_file", "create", "set", "approve_creation", "approve_setting",
+    ),
 }
 
 
@@ -419,6 +442,12 @@ def _what(script: str, options) -> Optional[Tuple[str, Tuple[str, ...]]]:
             found = (SAYS_QUIET_UNTIL_ASKED, ("state.go_quiet",))
         elif get("weekly_line") == "off":
             found = (SAYS_WEEKLY_LINE_OFF, ("state.stop_weekly_line",))
+    elif script == "operations.py":
+        # Preparing and showing write nothing into a base; only the yes does.
+        if get("approve_creation"):
+            found = (SAYS_CREATE, ("operations.approve",))
+        elif get("approve_setting"):
+            found = (SAYS_SET, ("operations.approve",))
     if found is not None:
         chosen = [name for name in _ACTIONS[script] if get(name)]
         if len(chosen) > 1:
@@ -789,6 +818,41 @@ def _verdict(decision: str, reason: str, updated: Optional[dict] = None) -> dict
     return {"hookSpecificOutput": output}
 
 
+def _unattended(session: str) -> bool:
+    """Whether the runner marked this conversation unattended, read from its record."""
+    from . import authority
+
+    return authority.is_unattended(session)
+
+
+def _refused_unattended(command: str, cwd, session: str) -> Optional[dict]:
+    """The refusal for an approval in a conversation nobody is watching, or None.
+
+    A line carrying a ticket made before the mark is refused too, and so is
+    any line naming an approval script that cannot be read, because in a run
+    nobody watches a guess is never let through.
+    """
+    if rewritten_rest(command, session) is not None:
+        return _verdict("deny", UNATTENDED)
+    try:
+        found = find(command, cwd if isinstance(cwd, str) else None)
+    except Exception:
+        return _verdict("deny", UNATTENDED)
+    if (
+        found.says
+        or found.unreadable
+        or found.two_things
+        or found.not_ours
+        # A line that runs another command inside it and names an approval
+        # script anywhere could be running one there, which nothing here can
+        # read; with somebody present the library's ticket check is what
+        # refuses it, and with nobody present it is refused here as well.
+        or (found.substituted and mentions_an_approval_script(command))
+    ):
+        return _verdict("deny", UNATTENDED)
+    return None
+
+
 def decide(payload: dict, client: str = CLIENT_CLAUDE) -> Optional[dict]:
     """Claude Code's answer for one command: nothing, a question, or a refusal."""
     tool_input = payload.get("tool_input")
@@ -799,6 +863,13 @@ def decide(payload: dict, client: str = CLIENT_CLAUDE) -> Optional[dict]:
         return None
     session = payload.get("session_id")
     session = session if isinstance(session, str) else None
+    # The first test, before any ticket is taken or made and whatever the
+    # permission mode (Plan 1, Unit 4.2a, CS30): in a conversation the runner
+    # marked unattended, every approval is refused and nothing is asked.
+    if session and _unattended(session):
+        unattended = _refused_unattended(command, payload.get("cwd"), session)
+        if unattended is not None:
+            return unattended
     if rewritten_rest(command, session) is not None:
         match = _REWRITTEN_RE.match(command)
         take_back(session, keep=_digest(match.group(1)) + ".json")
