@@ -94,3 +94,9 @@
   that file and leave the rest alone.
 - A guard test only guards if it fails when the code it names is removed. Mutate the branch once and watch the test
   fail before trusting it; the first "base folders still refused" test passed with the changed branch deleted.
+
+## 2026-10-15, 0.3.7
+- A guarded folder should be the folder that holds the guarded files, not the whole tree above them. Counting all of
+  `~/.claude` as guarded asked about every interpreter run from `~/.claude/projects`, where Claude Code saves large
+  tool results for subagents to read back, about sixty prompts in one session. Guard the exact folders, and catch
+  a climb back out with `..` by resolving the path rather than by widening the folder.
