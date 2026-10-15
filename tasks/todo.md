@@ -1413,3 +1413,12 @@ Two reviews by subagents, one for correctness and one for security, run on the f
 - Left as it is, and said in the CHANGELOG: a script in a file (`python3 fix.py`), a name built from pieces inside a script (`'.clau' + 'de'`), a write over the folder above the assistant folder as a whole, and a question for some lines that only read or only mention a file in passing (a commit message).
 - Residual risks noted by the reviews, not changed: whether a PreToolUse "ask" can turn a command the person's own settings deny into one they can approve is not documented (the write check has asked the same way since 0.3.0); Codex gets "ask" here as the write check already sends it; right after a restart the disk tool may be slow past its two seconds, and then the folder still comes back unlinked, which the person fixes with "link this folder to my base"; a record written without a disk identifier is never filled in; and with a full list of documents the map gets about 2,000 characters instead of 4,000.
 
+
+## 0.3.7: the command check asks about reads inside the assistant folder (2026-10-15)
+
+- [x] Reproduced: a line that moves into a session's tool-results folder under `~/.claude/projects` and reads a file with `python3 -c` was asked about whenever the script held braces or a pattern character, because `_inside_a_guarded_folder` counted every folder inside `~/.claude`.
+- [x] Fix: `_inside_a_guarded_folder` covers `~/.claude` itself, `~/.claude/plugins` and everything inside it, and a linked folder's `.claude` folder. A word with `..` run from anywhere inside `~/.claude` is still worked out in full, so climbing back to the plugins folder is still asked about.
+- [x] Tests in tests/test_command_check_settings.py (`TestTheOtherFoldersInsideTheAssistantFolder`). The read test failed with the 0.3.6 module swapped back in, and all four pass with the fix.
+- [x] Version 0.3.7 in both manifests, the library, the tests that pin it, and the atlas stamp; CHANGELOG 0.3.7.
+- [x] Full suite green (tests/run.sh, 2026-10-15: 2235 tests OK, then 161 in the linked-folder rerun OK).
+- [x] Pull request opened for Brandon.

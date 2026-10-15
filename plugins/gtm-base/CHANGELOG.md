@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.3.7 (2026-10-15)
+
+- The command check no longer asks about lines that only read files kept inside the assistant folder in your home folder. On the fifteenth of October, research sessions in a client folder asked for permission about sixty times, even with permission prompts switched off, each time with the sentence about the file where your assistant is told which safety checks to run. Each of those lines moved into the folder where Claude Code saves a large tool result for the session to read back, under `~/.claude/projects`, and read the result with a short Python command. None of them wrote anything.
+
+- The cause was that 0.3.6 treated the assistant folder in your home folder and every folder inside it as a place where any word could name a settings file, so a program the check does not know, such as Python, was asked about whenever a line ran there. That rule exists so that `rm -rf plugins`, run from the assistant folder, is still asked about even though it never spells out the folder's name. It now covers only the assistant folder itself, its plugins folder and everything inside that, and a linked folder's `.claude` folder. The saved transcripts and tool results, memory, skills, commands and the other folders inside the assistant folder are ordinary folders again, because nothing in them can switch the checks off.
+
+- A settings file is still asked about from those folders whenever a line names it by its whole path, from the home folder, or through the home folder's variable. A line that climbs back out with `..`, such as `rm -rf ../../plugins` run from inside the projects folder, is still worked out in full and asked about.
+
+- Four tests cover this, and the first failed on 0.3.6: reading a tool result with Python or Node from the folder that holds it, or from the skills or commands folder, is not asked about; a write to the settings named in full, or reached with `..`, from that folder is still asked about; `rm -rf plugins` and a Python line that opens `settings.json` to write, both run from the assistant folder, are still asked about; and a redirect into `~/.claude/settings.local.json` is asked about from every folder.
+
 ## 0.3.6 (2026-10-10)
 
 Three things failed the Release A live check on the tenth of October, and this release fixes all three.

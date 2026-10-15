@@ -215,24 +215,59 @@ def _pattern_lands_on_one(pattern: str) -> bool:
     return False
 
 
-def _inside_a_guarded_folder(path: Optional[str]) -> bool:
-    """Whether a folder the line runs in is the assistant folder in the home
-    folder, anything inside it, or a linked folder's assistant folder itself.
-
-    Every word of a command run there is looked at, whatever it is called,
-    because `rm -rf plugins` there names the plugins folder without saying so
-    (correctness review of 0.3.6). The working folders the desktop app makes
-    inside a linked folder's assistant folder are not on the list: the person
-    works in those all day, and the settings in them are named in full.
-    """
+def _under_the_home_assistant_folder(path: Optional[str], plugins_only: bool) -> bool:
+    """Whether a folder is the assistant folder in the home folder or inside
+    it, or, when `plugins_only`, is that folder itself or its plugins folder
+    or anything inside the plugins folder."""
     if not path:
         return False
     home_folder = os.path.join(os.path.expanduser("~"), ASSISTANT_DIR)
     folded = _folded(path.rstrip(os.sep))
     for place in (home_folder, os.path.realpath(home_folder)):
         wanted = _folded(place.rstrip(os.sep))
-        if folded == wanted or folded.startswith(wanted + os.sep):
+        if folded == wanted:
             return True
+        inside = wanted
+        if plugins_only:
+            inside = _folded(os.path.join(place, write_hook.CLIENT_PLUGINS_DIR))
+            if folded == inside:
+                return True
+        if folded.startswith(inside + os.sep):
+            return True
+    return False
+
+
+def _climbs_out(text: str, path: Optional[str]) -> bool:
+    """Whether a word could climb from a folder inside the assistant folder
+    back up to the files, as `rm -rf ../plugins` does from its projects
+    folder. Such a word is worked out in full rather than passed over."""
+    return ".." in text and _under_the_home_assistant_folder(path, False)
+
+
+def _inside_a_guarded_folder(path: Optional[str]) -> bool:
+    """Whether a folder the line runs in is the assistant folder in the home
+    folder itself, its plugins folder or anything inside that, or a linked
+    folder's assistant folder itself.
+
+    Every word of a command run there is looked at, whatever it is called,
+    because `rm -rf plugins` there names the plugins folder without saying so
+    (correctness review of 0.3.6). The other folders inside the assistant
+    folder are not on the list, because nothing in them can switch the checks
+    off and the client reads and writes them all day: the saved transcripts,
+    the tool results it keeps there for a session to read back, memory,
+    skills and commands. A line run from one of those that reads a file with
+    an interpreter was asked about in 0.3.6, about sixty times in one session.
+    A settings file named from there by its whole path, or reached by
+    climbing out with `..`, is still found. The working folders the desktop
+    app makes inside a linked folder's assistant folder are not on the list
+    either: the person works in those all day, and the settings in them are
+    named in full.
+    """
+    if not path:
+        return False
+    if _under_the_home_assistant_folder(path, True):
+        return True
+    folded = _folded(path.rstrip(os.sep))
     for linked in _linked_folders():
         for place in (linked, os.path.realpath(linked)):
             if folded == _folded(os.path.join(place, ASSISTANT_DIR)):
@@ -243,13 +278,16 @@ def _inside_a_guarded_folder(path: Optional[str]) -> bool:
 def _names_one(text: str, where: _Where, pieces_name_the_folder: bool) -> bool:
     """Whether one word of a command, or a path inside it, names one of the files."""
     everything = _inside_a_guarded_folder(where.path)
-    if not everything and not _worth_reading(text):
+    climbs = _climbs_out(text, where.path)
+    if not everything and not climbs and not _worth_reading(text):
         return False
     candidates = [text] + [run for run in _RUN_SPLIT.split(text) if run]
     for candidate in candidates:
         folded = _folded(candidate)
         could = ASSISTANT_DIR in folded or any(name in folded for name in GUARDED_NAMES)
         if everything and not candidate.startswith("-"):
+            could = True
+        if climbs and ".." in candidate:
             could = True
         if not could and not _GLOB.search(candidate):
             continue
@@ -353,7 +391,11 @@ def writes_a_settings_file(command: str, cwd: Optional[str]) -> bool:
     """Whether this shell line writes a file that can switch the checks off."""
     if not command:
         return False
-    if not _worth_reading(command) and not _inside_a_guarded_folder(cwd):
+    if (
+        not _worth_reading(command)
+        and not _inside_a_guarded_folder(cwd)
+        and not _climbs_out(command, cwd)
+    ):
         return False
     return _line_writes(command, _Where(cwd), 0)
 

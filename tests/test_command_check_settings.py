@@ -259,6 +259,68 @@ class TestTheLinesThatDoNotWriteAreLeftAlone(Home):
         self.assertIsNone(self.hook("cat ~/.claude/settings.json"))
 
 
+class TestTheOtherFoldersInsideTheAssistantFolder(Home):
+    """0.3.7. In 0.3.6 every folder inside the assistant folder counted as
+    one of its own, so a line that moved into the folder where the client
+    keeps a session's tool results and read one with an interpreter was asked
+    about, about sixty times in one session, and nothing it ran wrote."""
+
+    def setUp(self):
+        super().setUp()
+        self.results = os.path.join(
+            self.claude, "projects", "a-project", "a-session", "tool-results"
+        )
+        os.makedirs(self.results)
+
+    def test_reading_a_tool_result_with_an_interpreter(self):
+        """Fails on 0.3.6, where every one of these was asked about."""
+        for command, cwd in (
+            (
+                "cd ~/.claude/projects/a-project/a-session/tool-results/; "
+                "python3 -c \"import json; d=json.load(open('result.txt')); "
+                "print({k: 1 for k in d})\"",
+                None,
+            ),
+            (
+                "python3 -c \"import json; d=json.load(open('result.txt')); "
+                "print(d[0]['text'][:500])\"",
+                self.results,
+            ),
+            ("node -e \"console.log(require('./result.json'))\"", self.results),
+            ("cd ~/.claude/skills && python3 -c \"print({1: 2})\"", None),
+            ("cd ~/.claude/commands && cp a.md b.md", None),
+        ):
+            self.assertFalse(self.asks(command, cwd), command)
+            self.assertIsNone(self.hook(command, cwd), command)
+
+    def test_the_files_are_still_found_from_there(self):
+        for command, cwd in (
+            ("echo '{}' > ~/.claude/settings.local.json", self.results),
+            ("rm -rf ../../../../plugins", self.results),
+            ("cd ../../../.. && rm -rf plugins", self.results),
+            (
+                "python3 -c \"open('" + os.path.join(self.claude, "settings.json")
+                + "','w')\"",
+                self.results,
+            ),
+        ):
+            self.assertTrue(self.asks(command, cwd), command)
+
+    def test_the_assistant_folder_itself_is_still_guarded(self):
+        for command, cwd in (
+            ("cd ~/.claude && rm -rf plugins", None),
+            ("cd ~/.claude && python3 -c \"open('settings.json','w')\"", None),
+            ("cd ~/.claude/plugins/cache && python3 -c \"print({1: 2})\"", None),
+        ):
+            self.assertTrue(self.asks(command, cwd), command)
+
+    def test_a_redirect_into_the_local_settings_from_anywhere(self):
+        for cwd in (self.work, self.results, self.home, "/"):
+            self.assertTrue(
+                self.asks("echo '{}' > ~/.claude/settings.local.json", cwd), cwd
+            )
+
+
 class TestTheGateEntryPoint(Home):
     def test_a_check_that_cannot_finish_asks(self):
         real = settings_writes.writes_a_settings_file
