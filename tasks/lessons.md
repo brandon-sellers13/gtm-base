@@ -107,3 +107,9 @@
 - `shlex` in posix mode throws quoting away. Anything that decides what the shell expands has to keep that
   information from before the split, or quoted program text gets read as shell syntax.
 
+## 2026-10-19, 0.3.9
+- A command reader has to know the shell's own words. `do`, `then`, `if`, `!` and `{` stand in front of a command;
+  reading them as program names turns every loop over a variable into an "unknown program handed a variable".
+- When a real line trips two rules, fix the one that is a bug and name the one that is a policy. sed handed a
+  variable can genuinely hide a write; loosening that is a decision, not a fix.
+

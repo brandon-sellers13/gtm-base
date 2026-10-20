@@ -76,6 +76,10 @@ READ_ONLY = (
 # Programs that run text they are handed or read from what is piped to them.
 RUNS_WHAT_IT_IS_HANDED = ("xargs", "eval", "source", ".", "parallel")
 SHELLS = ("sh", "bash", "zsh", "dash", "ksh", "fish")
+# The shell's own words that stand in front of a command, and the words that
+# open a loop or a choice over a list of words, which runs nothing (0.3.9).
+BEFORE_A_COMMAND = ("do", "then", "else", "elif", "if", "while", "until", "!", "{")
+OVER_A_LIST = ("for", "select", "case")
 FOLDER_WORDS = ("cd", "pushd")
 _FIND_WRITES = (
     "-delete", "-exec", "-execdir", "-ok", "-okdir", "-fprint", "-fprint0",
@@ -505,8 +509,17 @@ def _line_writes(command: str, where: _Where, depth: int) -> bool:
         named = [word for word in words if _names_one(word, where, pieces)]
         if named:
             named_anywhere = True
+        # The shell's own words in front of a command are not the program:
+        # in 0.3.8 `do grep -c x "$f"` read as a program this does not know
+        # handed a variable, a write it cannot see.
         words = _strip_prefixes(words)
+        while words and words[0] in BEFORE_A_COMMAND:
+            words = _strip_prefixes(words[1:])
         if not words:
+            continue
+        if words[0] in OVER_A_LIST:
+            # `for f in $(find ...)` runs only the command inside it, which
+            # was read above. The list is words, and what it names counted.
             continue
         program = os.path.basename(words[0])
         arguments = words[1:]
