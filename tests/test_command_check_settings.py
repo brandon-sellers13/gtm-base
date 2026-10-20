@@ -391,6 +391,72 @@ class TestQuotedWordsAndBrokenPatterns(Home):
         self.assertTrue(self.asks("cp /tmp/x ~/.claude/settings.json 'never closed"))
 
 
+# The line that was asked about on 0.3.8 (2026-10-19). It reads the plugin
+# registry, then counts lines in the saved transcripts with a loop. Nothing
+# in it writes anything. It is still asked about, for its `sed` alone: see
+# test_a_variable_in_a_sed_script_is_still_asked_about.
+THE_LOOP_READ = r"""grep -A6 '"gtm-base@gtm-base' ~/.claude/plugins/installed_plugins.json | grep -E 'version|lastUpdated'; ps -axo lstart,command | grep "/Applications/Claude.app/Contents/MacOS/Claude$" | grep -v grep; date; cd ~/.claude/projects && for f in $(find . -name '*.jsonl' -mmin -120); do grep -c "told which safety checks to run" "$f" | sed "s|^|$f: |"; done | grep -v ': 0$'"""
+# The same line with the `sed` stage written as `grep -H`, which prints the
+# same thing. Asked about on 0.3.8 for the loop's `do` alone.
+THE_LOOP_READ_WITH_GREP = THE_LOOP_READ.replace(
+    'grep -c "told which safety checks to run" "$f" | sed "s|^|$f: |"',
+    'grep -Hc "told which safety checks to run" "$f"',
+)
+
+
+class TestTheShellsOwnWords(Home):
+    """0.3.9. The words the shell itself reads in front of a command, such as
+    `do`, `then` and `if`, are not programs. In 0.3.8 `do grep x "$f"` read
+    as a program the check does not know handed a variable, which counts as
+    a write it cannot see, and a line that also named one of the files was
+    asked about."""
+
+    def test_a_loop_that_reads_on_a_line_that_names_a_file(self):
+        """Fails on 0.3.8, where every one of these was asked about."""
+        personal = os.path.join(self.home, "Personal")
+        os.makedirs(personal)
+        os.makedirs(os.path.join(self.claude, "projects"))
+        for command in (
+            'grep x ~/.claude/plugins/installed_plugins.json; '
+            'for f in a; do grep -c x "$f"; done',
+            'grep x ~/.claude/settings.json; for f in $(ls); do wc -l "$f"; done',
+            'grep x ~/.claude/settings.json; if [ -f "$f" ]; then cat "$f"; else echo "$f"; fi',
+            'grep x ~/.claude/settings.json; while read -r f; do head -1 "$f"; done < /tmp/list',
+            'cat ~/.claude/settings.json && ! grep -q x "$f"',
+            'cat ~/.claude/settings.json; { cat "$f"; }',
+            THE_LOOP_READ_WITH_GREP,
+        ):
+            self.assertFalse(self.asks(command, personal), command)
+        self.assertNotEqual(THE_LOOP_READ, THE_LOOP_READ_WITH_GREP)
+        self.assertIsNone(self.hook(THE_LOOP_READ_WITH_GREP, personal))
+
+    def test_a_variable_in_a_sed_script_is_still_asked_about(self):
+        """On purpose. `sed` can write a file (`w`) and run a command (`e`)
+        from its script, so a variable in the script can hide a write, as in
+        `s='1w ~/.claude/settings.json'; sed -n "$s" /tmp/x`. A line that
+        also names one of the files is asked about, the real line included."""
+        personal = os.path.join(self.home, "Personal")
+        os.makedirs(personal)
+        for command in (
+            THE_LOOP_READ,
+            "s='1w ~/.claude/settings.json'; sed -n \"$s\" /tmp/x",
+        ):
+            self.assertTrue(self.asks(command, personal), command)
+
+    def test_a_loop_that_writes_is_still_asked_about(self):
+        for command in (
+            'for f in ~/.claude/settings.json; do echo {} > "$f"; done',
+            "for f in ~/.claude/settings*.json; do rm $f; done",
+            "for f in a; do echo x > ~/.claude/settings.json; done",
+            "for f in a; do cp /tmp/x ~/.claude/settings.json; done",
+            'if true; then rm ~/.claude/settings.json; fi',
+            'grep x ~/.claude/settings.json; for f in a; do python3 -c "$f"; done',
+            "for f in $(echo x > ~/.claude/settings.json); do :; done",
+            'cat ~/.claude/settings.json; do sudo tee "$f"',
+        ):
+            self.assertTrue(self.asks(command), command)
+
+
 class TestTheGateEntryPoint(Home):
     def test_a_check_that_cannot_finish_asks(self):
         real = settings_writes.writes_a_settings_file

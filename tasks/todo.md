@@ -1433,3 +1433,13 @@ Two reviews by subagents, one for correctness and one for security, run on the f
 - [x] Full suite green (tests/run.sh, 2026-10-19: 2242 tests OK, then 161 in the linked-folder rerun OK).
 - [x] Pull request opened for Brandon. Not installed or released.
 
+## 0.3.9: a line that reads a settings file and runs a reading loop is asked about (2026-10-19)
+
+- [x] Reproduced on 0.3.8: `grep x ~/.claude/plugins/installed_plugins.json; for f in a; do grep -c x "$f"; done` asked. `do` was read as the program, an unknown program handed `$f` set `unseen_write`, and the guarded name in the first part set `named_anywhere`.
+- [x] Fix: `_line_writes` reads past `do`, `then`, `else`, `elif`, `if`, `while`, `until`, `!` and `{` to the real command, and treats `for`, `select` and `case` as running nothing (a command substitution in the list is still read on its own).
+- [x] Tests in tests/test_command_check_settings.py (`TestTheShellsOwnWords`). The read test fails with the 0.3.8 module swapped in.
+- [x] Not fixed, on purpose: the real line still asks because of `sed "s|^|$f: |"`. sed can write (`w`) and run commands (`e`) from its script, so a variable in it stays an unseen write. Decision for Brandon.
+- [x] Version 0.3.9 in both manifests, the library, the tests that pin it, and the atlas stamp; CHANGELOG 0.3.9.
+- [x] Full suite green (tests/run.sh, 2026-10-19: 2245 tests OK, then 161 in the linked-folder rerun OK).
+- [x] Pull request opened for Brandon. Not merged, installed or released.
+

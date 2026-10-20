@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.3.9 (2026-10-19)
+
+- The command check no longer asks about a line that reads one of the settings files and also runs a loop that only reads. On 0.3.8, a line that read the plugin registry with `grep` and then counted lines in the saved transcripts with `for f in ...; do grep -c ... "$f"; done` was asked about, with the sentence about the file where your assistant is told which safety checks to run. Nothing in it wrote anything.
+
+- The cause was that the check took the shell's own words for the name of a program. In `do grep -c x "$f"`, it read `do` as a program it does not know, handed a variable, and a program it does not know handed a variable counts as a write it cannot see. A line with a write it cannot see that also names one of the settings files anywhere is asked about. The same was true of `then`, `else`, `if`, `while`, `until`, `!` and `{`, and of the list in `for f in $(...)`. The check now reads past those words to the command they stand in front of, so `do grep` is read as `grep`. The list after `for`, `select` or `case` runs nothing, and the command written inside it is still read on its own.
+
+- A loop that writes is still asked about, such as `for f in ~/.claude/settings.json; do echo {} > "$f"; done`, or a loop whose command writes to a settings file, deletes one, or hands a variable to Python on a line that names one.
+
+- The full line from that session is still asked about, on purpose, because its loop ends in `sed "s|^|$f: |"`. A `sed` script can write a file and run a command, so a variable inside one can hide a write, as in `s='1w ~/.claude/settings.json'; sed -n "$s" /tmp/x`. The same line written with `grep -Hc`, which prints the same thing, is not asked about. Whether `sed` and `awk` handed a variable should stay on the asked list is a separate decision, and nothing about them changed in this release.
+
+- Three tests cover this. Seven lines that read with a loop, an `if`, a `while`, a `!` or a group are not asked about, and that test failed on 0.3.8. Eight lines that write from inside a loop or an `if` are still asked about. The full line with its `sed` is still asked about, and so is the `sed` line that hides a write.
+
 ## 0.3.8 (2026-10-19)
 
 - The command check no longer asks about lines that only read a file with a jq program, or any other quoted text, that holds square brackets. In research sessions in a client folder on 0.3.7, Claude read a saved tool result with `jq` and was asked for permission each time, with the sentence about the file where your assistant is told which safety checks to run. Nothing in those lines wrote anything, and the file they read did not matter: the same line reading a file in `/tmp` was asked about too.
