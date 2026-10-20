@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.3.8 (2026-10-19)
+
+- The command check no longer asks about lines that only read a file with a jq program, or any other quoted text, that holds square brackets. In research sessions in a client folder on 0.3.7, Claude read a saved tool result with `jq` and was asked for permission each time, with the sentence about the file where your assistant is told which safety checks to run. Nothing in those lines wrote anything, and the file they read did not matter: the same line reading a file in `/tmp` was asked about too.
+
+- The cause was that the check read the brackets in the jq program, such as `.[0:2200]`, as a pattern the shell fills in with file names, and tried to compare it with the settings files. The Python that comes with macOS cannot turn some bracket text into a pattern at all, because a range such as `6-1` runs backwards, and the failure stopped the whole check. A check that cannot finish asks rather than lets a line through, so the failure became the question.
+
+- Two changes fix this at the cause. First, the check now remembers which words were in quotes. The shell never fills in a pattern inside quotes, so a quoted word is read as a name and never as a pattern. The paths inside a quoted word are still read as patterns, because a script can fill in a pattern it is handed, as Python's `glob` does. Second, a pattern that cannot be turned into a comparison now stands for no file, which is also what the shell does with it, rather than stopping the check. A line the check cannot read at all, such as one with a quote that is never closed, is still asked about.
+
+- Nothing that was asked about before has stopped being asked about. A pattern the shell does fill in, such as `cp x ~/.claude/settings*.json`, is still asked about, and so is one with only part of the word in quotes, such as `~/.claude/"settings"*.json`, and a Python script that fills in `~/.claude/sett*.json` with `glob` and opens what it finds to write.
+
+- Seven tests cover this. The exact line from the research session is not asked about, through the check and through the real hook, and that test failed on 0.3.7. Other quoted words with backwards ranges are not asked about. A pattern that cannot be compiled stands for no file, and each word remembers whether the shell fills it in; each of these two fails when its own half of the fix is taken out. Patterns the shell fills in, and patterns a script fills in, are still asked about, and a line that cannot be read still asks.
+
 ## 0.3.7 (2026-10-15)
 
 - The command check no longer asks about lines that only read files kept inside the assistant folder in your home folder. On the fifteenth of October, research sessions in a client folder asked for permission about sixty times, even with permission prompts switched off, each time with the sentence about the file where your assistant is told which safety checks to run. Each of those lines moved into the folder where Claude Code saves a large tool result for the session to read back, under `~/.claude/projects`, and read the result with a short Python command. None of them wrote anything.

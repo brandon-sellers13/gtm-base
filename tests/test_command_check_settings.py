@@ -321,6 +321,76 @@ class TestTheOtherFoldersInsideTheAssistantFolder(Home):
             )
 
 
+# The line from a Gridwise research session (2026-10-19) that was asked about
+# in 0.3.7, word for word. It only reads, with jq, and the file it reads does
+# not matter: the brackets in the jq program were read as a pattern, and the
+# pattern could not be compiled.
+THE_JQ_READ = r"""jq -r '.messages[] | select(.date >= "2026-10-14") | "=== \(.date) \(.sender)\n\((.plaintext_body // .snippet // "") | tostring | .[0:2200])\nATTACH: \([.attachments[]?.filename?] | map(tostring) | join(", "))"' /tmp/a"""
+
+
+class TestQuotedWordsAndBrokenPatterns(Home):
+    """0.3.8. A word in quotes is never filled in by the shell, and a pattern
+    that cannot be compiled stands for no file, rather than stopping the check
+    so that it asks."""
+
+    def test_the_jq_read_from_the_research_session(self):
+        """Fails on 0.3.7, where this line was asked about."""
+        gridwise = os.path.join(self.home, "Gridwise")
+        os.makedirs(gridwise)
+        self.assertFalse(self.asks(THE_JQ_READ, gridwise))
+        self.assertFalse(gate._asks_about_settings(THE_JQ_READ, gridwise))
+        self.assertIsNone(self.hook(THE_JQ_READ, gridwise))
+
+    def test_other_quoted_words_with_brackets(self):
+        for command in (
+            "jq '.[0:2200]' /tmp/a",
+            "grep -E '[9-0]' /tmp/a",
+            'awk "/[z-a]/" /tmp/a',
+            "cp /tmp/x '/tmp/[6-1]'",
+            "echo x > '/tmp/[6-1].txt'",
+        ):
+            self.assertFalse(self.asks(command), command)
+
+    def test_each_word_remembers_whether_the_shell_fills_it_in(self):
+        for command, position, fills_in in (
+            ("jq '.[0:2200]' /tmp/a", 1, False),
+            ('ls "*.json"', 1, False),
+            ("ls \\*.json", 1, False),
+            ("ls *.json", 1, True),
+            ("cp x ~/.claude/'settings'*.json", 2, True),
+            ("cp x '~/.claude/settings*.json'", 2, False),
+        ):
+            word = settings_writes._tokens(command)[position]
+            self.assertEqual(fills_in, word.shell_fills_in, command)
+
+    def test_a_pattern_that_cannot_be_compiled_stands_for_no_file(self):
+        self.assertFalse(settings_writes._pattern_lands_on_one("/tmp/[6-1]"))
+        self.assertFalse(self.asks("cat /tmp/[6-1]"))
+        self.assertFalse(self.asks("echo x > /tmp/[6-1]"))
+
+    def test_a_pattern_the_shell_fills_in_is_still_asked_about(self):
+        for command in (
+            "cp x ~/.claude/settings*.json",
+            "cp x ~/.claude/sett?ngs.json",
+            "cp x ~/.claude/[s]ettings.json",
+            'cp x ~/.claude/"settings"*.json',
+            "echo x > ~/.claude/settings*",
+            "rm ~/.claude/plugins/*.json",
+        ):
+            self.assertTrue(self.asks(command), command)
+
+    def test_a_pattern_a_script_fills_in_itself_is_still_asked_about(self):
+        for command in (
+            "python3 -c \"import glob, os; [open(p, 'w') for p in "
+            "glob.glob(os.path.expanduser('~/.claude/sett*.json'))]\"",
+            "find ~/.claude -name 'settings*.json' -delete",
+        ):
+            self.assertTrue(self.asks(command), command)
+
+    def test_a_line_that_cannot_be_read_still_asks(self):
+        self.assertTrue(self.asks("cp /tmp/x ~/.claude/settings.json 'never closed"))
+
+
 class TestTheGateEntryPoint(Home):
     def test_a_check_that_cannot_finish_asks(self):
         real = settings_writes.writes_a_settings_file

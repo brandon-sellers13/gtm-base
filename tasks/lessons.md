@@ -100,3 +100,10 @@
   `~/.claude` as guarded asked about every interpreter run from `~/.claude/projects`, where Claude Code saves large
   tool results for subagents to read back, about sixty prompts in one session. Guard the exact folders, and catch
   a climb back out with `..` by resolving the path rather than by widening the folder.
+
+## 2026-10-19, 0.3.8
+- A fail-closed check turns every bug in itself into a false prompt. Catch the narrow, known failure where it happens
+  (here a pattern that cannot compile) and keep the catch-all for lines that genuinely cannot be read.
+- `shlex` in posix mode throws quoting away. Anything that decides what the shell expands has to keep that
+  information from before the split, or quoted program text gets read as shell syntax.
+

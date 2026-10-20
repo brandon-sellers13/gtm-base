@@ -1422,3 +1422,14 @@ Two reviews by subagents, one for correctness and one for security, run on the f
 - [x] Version 0.3.7 in both manifests, the library, the tests that pin it, and the atlas stamp; CHANGELOG 0.3.7.
 - [x] Full suite green (tests/run.sh, 2026-10-15: 2235 tests OK, then 161 in the linked-folder rerun OK).
 - [x] Pull request opened for Brandon.
+
+## 0.3.8: the command check asks about quoted jq programs with brackets (2026-10-19)
+
+- [x] Reproduced against the installed 0.3.7: `jq -r '... .[0:2200] ... [.attachments[]?.filename?] ...' /tmp/a` raised `re.error: bad character range 6-1` inside `fnmatch` on the macOS Python 3.9, and `gate._asks_about_settings` turns any exception into the question.
+- [x] Fix 1: `_tokens` holds quoted and backslashed `*`, `?` and `[` aside while `shlex` splits the line, so each word knows whether the shell fills it in. A quoted word as a whole is a name, never a pattern; the paths inside it are still patterns, for scripts that glob.
+- [x] Fix 2: `_pattern_lands_on_one` compiles the pattern once and treats a pattern that cannot compile as matching no file. Unreadable lines still ask.
+- [x] Tests in tests/test_command_check_settings.py (`TestQuotedWordsAndBrokenPatterns`). With the 0.3.7 module swapped in, four fail; with either half of the fix taken out, its own test fails.
+- [x] Version 0.3.8 in both manifests, the library, the tests that pin it, and the atlas stamp; CHANGELOG 0.3.8.
+- [x] Full suite green (tests/run.sh, 2026-10-19: 2242 tests OK, then 161 in the linked-folder rerun OK).
+- [x] Pull request opened for Brandon. Not installed or released.
+
