@@ -91,6 +91,10 @@ _RUN_SPLIT = re.compile(r"[\s()\[\]{},;:=<>|&+'\"]+")
 _UNRESOLVABLE = re.compile(r"[$`{}]")
 # What makes a path a pattern the shell fills in.
 _GLOB = re.compile(r"[*?\[]")
+# What stands, while a line is split into words, for a pattern character the
+# shell will not fill in because it is quoted or has a backslash before it.
+_QUOTED_GLOB = {"*": "\ue000", "?": "\ue001", "[": "\ue002"}
+_UNQUOTED_GLOB = {held: character for character, held in _QUOTED_GLOB.items()}
 _HOME_VARIABLE = re.compile(r"^(?:\$HOME|\$\{HOME\})(?=/|$)")
 # What stands where a command written inside another one was: something no
 # path can be worked out from (security review of 0.3.6).
@@ -206,11 +210,20 @@ def _lands_on_one(path: str) -> bool:
 
 
 def _pattern_lands_on_one(pattern: str) -> bool:
-    """Whether a pattern the shell fills in could fill in one of the files."""
+    """Whether a pattern the shell fills in could fill in one of the files.
+
+    A pattern that cannot be compiled, such as `[6-1]`, fills in no file. In
+    0.3.7 the failure to compile it stopped the whole check, and a check that
+    cannot finish asks, so a jq program read as a pattern was asked about.
+    """
     wanted = _folded(pattern.rstrip(os.sep))
+    try:
+        compiled = re.compile(fnmatch.translate(wanted))
+    except re.error:
+        return False
     for path in _guarded_paths():
         for side in (path, os.path.realpath(path)):
-            if fnmatch.fnmatchcase(_folded(side.rstrip(os.sep)), wanted):
+            if compiled.match(_folded(side.rstrip(os.sep))):
                 return True
     return False
 
@@ -276,20 +289,28 @@ def _inside_a_guarded_folder(path: Optional[str]) -> bool:
 
 
 def _names_one(text: str, where: _Where, pieces_name_the_folder: bool) -> bool:
-    """Whether one word of a command, or a path inside it, names one of the files."""
+    """Whether one word of a command, or a path inside it, names one of the files.
+
+    A word whose pattern characters were all quoted is not filled in by the
+    shell, so as a whole it is a name and never a pattern (0.3.8). The paths
+    inside it are still read as patterns, because a program can fill in a
+    pattern it is handed, as a script's `glob` does.
+    """
+    shell_fills_in = getattr(text, "shell_fills_in", True)
     everything = _inside_a_guarded_folder(where.path)
     climbs = _climbs_out(text, where.path)
     if not everything and not climbs and not _worth_reading(text):
         return False
     candidates = [text] + [run for run in _RUN_SPLIT.split(text) if run]
-    for candidate in candidates:
+    for position, candidate in enumerate(candidates):
+        a_pattern = (position > 0 or shell_fills_in) and bool(_GLOB.search(candidate))
         folded = _folded(candidate)
         could = ASSISTANT_DIR in folded or any(name in folded for name in GUARDED_NAMES)
         if everything and not candidate.startswith("-"):
             could = True
         if climbs and ".." in candidate:
             could = True
-        if not could and not _GLOB.search(candidate):
+        if not could and not a_pattern:
             continue
         if _folded(candidate).startswith("/" + ASSISTANT_DIR):
             # No real folder sits there. It is what a script's own words
@@ -313,7 +334,7 @@ def _names_one(text: str, where: _Where, pieces_name_the_folder: bool) -> bool:
                 continue
             expanded = os.path.join(where.path, expanded)
         expanded = os.path.normpath(expanded)
-        if _GLOB.search(expanded):
+        if a_pattern:
             if _pattern_lands_on_one(expanded):
                 return True
             continue
@@ -514,18 +535,58 @@ def _line_writes(command: str, where: _Where, depth: int) -> bool:
     return unseen_write and named_anywhere
 
 
+class _Word(str):
+    """One word of a part, and whether the shell fills it in as a pattern."""
+
+    shell_fills_in = True
+
+
+def _hold_quoted_globs(text: str) -> str:
+    """The text with every pattern character the shell leaves alone, because
+    it is quoted or has a backslash before it, swapped for a stand-in."""
+    if any(held in text for held in _UNQUOTED_GLOB):
+        return text
+    kept: List[str] = []
+    quote = ""
+    escaped = False
+    for character in text:
+        held = escaped or bool(quote) and character != quote
+        if escaped:
+            escaped = False
+        elif quote:
+            if character == quote:
+                quote = ""
+            elif character == "\\" and quote == '"':
+                escaped = True
+        elif character in ("'", '"'):
+            quote = character
+        elif character == "\\":
+            escaped = True
+        kept.append(_QUOTED_GLOB.get(character, character) if held else character)
+    return "".join(kept)
+
+
 def _tokens(text: str) -> Optional[List[str]]:
     """The words of one part, split at spaces and at the shell's own marks.
 
     A redirection written with no space before it (`echo x>file`) is still
     split off from the word it follows, which a split at spaces alone missed.
+    Each word remembers whether the shell fills it in as a pattern: a quoted
+    `[6-1]` in a jq program is text for jq, and the shell never reads it as
+    one (0.3.8).
     """
-    lexer = shlex.shlex(text, posix=True, punctuation_chars=True)
+    lexer = shlex.shlex(_hold_quoted_globs(text), posix=True, punctuation_chars=True)
     lexer.whitespace_split = True
     try:
-        return list(lexer)
+        held = list(lexer)
     except ValueError:
         return None
+    words: List[str] = []
+    for token in held:
+        word = _Word("".join(_UNQUOTED_GLOB.get(c, c) for c in token))
+        word.shell_fills_in = bool(_GLOB.search(token))
+        words.append(word)
+    return words
 
 
 def _shell_script(arguments: Sequence[str]) -> Optional[str]:
