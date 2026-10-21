@@ -61,7 +61,7 @@ import os
 import re
 import shlex
 import sys
-from typing import List, Optional, Sequence, Tuple
+from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 from . import constants, machine, marker, paths, scan, state, trust_surface
 from .errors import GitError
@@ -409,7 +409,10 @@ def split_segments(text: str) -> List[str]:
     """Split a command line into the simple commands it is made of.
 
     Quoted separators do not separate anything, so a semicolon inside a message
-    stays part of the message.
+    stays part of the message. Inside double quotes a backslash keeps the
+    character after it, so `"[^\\"&]"` is one quoted word (0.3.10). Until then
+    the `\\"` ended the quotes, the `&` split the line, and what was left held
+    a quote never closed.
     """
     segments: List[str] = []
     current: List[str] = []
@@ -418,6 +421,11 @@ def split_segments(text: str) -> List[str]:
     length = len(text)
     while index < length:
         character = text[index]
+        if quote == '"' and character == "\\" and index + 1 < length:
+            current.append(character)
+            current.append(text[index + 1])
+            index += 2
+            continue
         if quote:
             current.append(character)
             if character == quote:
@@ -2043,33 +2051,23 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     if reason:
         sys.stdout.write(deny_payload(client, reason) + "\n")
         return 0
-    if _asks_about_settings(command, cwd):
-        sys.stdout.write(ask_payload(client) + "\n")
+    _keep_a_copy_of_the_settings(payload)
     return 0
 
 
-def _asks_about_settings(command: str, cwd: str) -> bool:
-    """Whether a line writes a file that can switch the checks off (0.3.6).
+def _keep_a_copy_of_the_settings(payload: Dict[str, Any]) -> None:
+    """Keep a copy of the files that decide whether the checks run (0.4.0).
 
-    Step 10 of the Release A live check: a shell command rewrote the person's
-    settings and nothing was asked, because the question lived only on the
-    file tools. A check that cannot finish asks rather than lets it through.
+    From 0.3.6 to 0.3.10 this asked before any line that could write one of
+    them, and reading that from the words of a shell line never stopped
+    asking about lines that only read. Now the copy is compared after the
+    command runs, and only a change that weakened the checks is put back
+    (`settings_guard`). Nothing here ever stops a command: a copy that cannot
+    be kept means that one command is not checked afterwards.
     """
-    from . import settings_writes
+    from . import settings_guard
 
     try:
-        return settings_writes.writes_a_settings_file(command, cwd)
+        settings_guard.snapshot(payload)
     except Exception:
-        return True
-
-
-def ask_payload(client: str) -> str:
-    """The question the write check asks about the same files, word for word.
-
-    Claude Code shows the reason in its permission prompt. The write check
-    asks every client the same way, and so does this.
-    """
-    from . import write_hook
-
-    del client
-    return json.dumps(write_hook.question())
+        pass

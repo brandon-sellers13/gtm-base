@@ -135,7 +135,7 @@ class TestManifests(unittest.TestCase):
         )
 
         self.assertEqual("gtm-base", plugin["name"])
-        self.assertEqual("0.3.9", plugin["version"])
+        self.assertEqual("0.4.0", plugin["version"])
         self.assertEqual("Brandon Sellers", plugin["author"]["name"])
         self.assertEqual("MIT", plugin["license"])
         self.assertTrue(plugin["keywords"])
@@ -159,7 +159,23 @@ class TestManifests(unittest.TestCase):
         self.assertNotIn("hooks", plugin)
 
         hooks = read_json(HOOKS_PATH)
-        self.assertEqual({"PreToolUse", "SessionStart"}, set(hooks["hooks"].keys()))
+        self.assertEqual(
+            {"PreToolUse", "PostToolUse", "PostToolUseFailure", "SessionStart"},
+            set(hooks["hooks"].keys()),
+        )
+
+        # 0.4.0: one entry after each command, whether it succeeded or failed,
+        # compares the settings with the copy kept before it.
+        for event in ("PostToolUse", "PostToolUseFailure"):
+            after = hooks["hooks"][event]
+            self.assertEqual(1, len(after))
+            self.assertEqual("Bash", after[0]["matcher"])
+            self.assertEqual(1, len(after[0]["hooks"]))
+            declared_after = after[0]["hooks"][0]
+            self.assertEqual("command", declared_after["type"])
+            self.assertLessEqual(declared_after["timeout"], 20)
+            self.assertIn("${CLAUDE_PLUGIN_ROOT}", declared_after["command"])
+            self.assertTrue(declared_after["command"].endswith("/hooks/settings-guard.sh claude"))
 
         # Three entries before a tool runs. Unit 1.3 added the one on the
         # file-reading tool and the 2026-09-20 review added the one on the
@@ -373,7 +389,7 @@ class TestPlainLanguage(unittest.TestCase):
         with open(atlas, encoding="utf-8") as handle:
             text = handle.read()
         self.assertNotIn("(proposed)", text)
-        self.assertIn("plugin 0.3.9", text)
+        self.assertIn("plugin 0.4.0", text)
         self.assertIn("built in 0.2.6", text)
 
     def test_the_lint_itself_catches_what_it_should(self):
@@ -433,7 +449,7 @@ class TestFakeGh(unittest.TestCase):
 
 class TestConstants(unittest.TestCase):
     def test_constants_import_and_every_path_is_relative(self):
-        self.assertEqual("0.3.9", __import__("gtmbase").__version__)
+        self.assertEqual("0.4.0", __import__("gtmbase").__version__)
         for name in dir(constants):
             if name.startswith("_"):
                 continue

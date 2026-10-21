@@ -1443,3 +1443,29 @@ Two reviews by subagents, one for correctness and one for security, run on the f
 - [x] Full suite green (tests/run.sh, 2026-10-19: 2245 tests OK, then 161 in the linked-folder rerun OK).
 - [x] Pull request opened for Brandon. Not merged, installed or released.
 
+## 0.3.10: a double-quoted pattern with an escaped quote is asked about (2026-10-20)
+
+- [x] Reproduced on 0.3.9: `grep -oE "gridwise[a-z0-9.-]*\.(io|ca)[^\"& ]{0,200}" /tmp/x | sort -u` asked from any folder. `gate.split_segments` ignored backslashes inside double quotes, so `\"` closed the quotes, `&` split the line, and the second part had an unclosed quote (tokens None, so ask).
+- [x] Found while reproducing: the same flaw hid writes. After `\"'` the rest of the line read as single-quoted, so `grep -oE "[^\"'x]" /tmp/a | tee ~/.claude/settings.json` and `...; rm ~/.claude/settings.json` were not asked about on 0.3.9.
+- [x] Fix: `split_segments` keeps the character after a backslash inside double quotes. Single quotes unchanged (no escapes there). Shared with the git check.
+- [x] Tests in tests/test_command_check_settings.py (`TestABackslashInsideDoubleQuotes`). All three fail on 0.3.9.
+- [x] Version 0.3.10 in both manifests, the library, the tests that pin it, and the atlas stamp; CHANGELOG 0.3.10.
+- [x] Full suite green (tests/run.sh, 2026-10-20: 2248 tests OK, then 161 in the linked-folder rerun OK).
+- [x] Pull request opened for Brandon. Not merged, installed or released.
+
+## 0.4.0: check what a command changed instead of reading what it says (2026-10-20)
+
+Approved by Brandon ("ok try it") after 0.3.8 to 0.3.10 each fixed one parser case and replays still prompted on reads.
+
+- [x] Baseline replay: 457 real Bash commands since 2026-10-20 05:00 UTC from ~/.claude/projects. PR #7 (0.3.10): 19 settings asks, 2 push-gate refusals.
+- [x] Facts from the Claude Code docs (hooks, settings, plugins pages, read 2026-10-20): PostToolUse output (`decision`/`reason`, `systemMessage`, `additionalContext`); a failed command fires PostToolUseFailure; settings `env` reaches hook processes; plugin enable state needs /reload-plugins. Not documented: when `disableAllHooks` takes effect, and when Post fires for background commands.
+- [x] `settings_guard.py`: snapshot in PreToolUse (inside `gate.main`, after the refusal check, only when `tool_use_id` is present), compare in PostToolUse and PostToolUseFailure, judge by meaning per file kind, put back only GTM Base's keys (whole file only when deleted or unreadable), re-read before writing so concurrent edits survive, write through links.
+- [x] Removed the Bash "ask about settings" path and `settings_writes.py`. Write/Edit check and push gate untouched. Built on PR #7, whose splitter fix still matters for the push gate.
+- [x] Adversarial review (subagent): 8 bypasses fixed with tests (chmod 000, install path elsewhere in cache or through a link, scope swap, env HOME and CLAUDE_CONFIG_DIR, empty folder in place of the file, byte-order mark, CLAUDE_CONFIG_DIR folder unguarded). Documented, not fixable: a command written to defeat it on purpose, delayed writes, the person's own change during a running command.
+- [x] Tests: tests/test_settings_guard.py (38) and tests/fixtures/real-commands.json (42 scrubbed real commands). All 15 tamper tests fail with the guard switched off.
+- [x] Full local replay on 0.4.0: 0 asks, the same 2 push-gate refusals.
+- [x] Version 0.4.0 in both manifests, the library, the tests that pin it, and the atlas stamp; CHANGELOG 0.4.0.
+- [x] Full suite green (tests/run.sh, 2026-10-21: 2252 tests OK, then 161 in the linked-folder rerun OK).
+- [x] Pull request opened for Brandon. Not merged, installed or released.
+- [ ] Live check after install (Brandon): does `disableAllHooks` written by a command still let the PostToolUse hook run; does Post fire at launch or completion for `run_in_background`; does `decision: block` reach Claude.
+
