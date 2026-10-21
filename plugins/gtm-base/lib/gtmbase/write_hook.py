@@ -489,8 +489,10 @@ def _a_linked_folders_settings(named: str, real_file: str) -> bool:
 
 def asks_about(named: str, real_file: str) -> bool:
     """Whether a write here is one to ask about: a file that can switch the
-    checks off. The command check asks the same question of a shell line that
-    writes one of these (0.3.6), so the two checks share this answer.
+    checks off. A shell command that writes one of these is not asked about
+    before it runs: since 0.4.0 the check after each command compares them
+    with a copy kept before it and puts back only what weakened the checks
+    (`settings_guard`).
 
     The person's own settings and the plugin registry, anything under the
     folder the client keeps its plugins in, and a linked folder's settings.

@@ -61,7 +61,7 @@ import os
 import re
 import shlex
 import sys
-from typing import List, Optional, Sequence, Tuple
+from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 from . import constants, machine, marker, paths, scan, state, trust_surface
 from .errors import GitError
@@ -2051,33 +2051,23 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     if reason:
         sys.stdout.write(deny_payload(client, reason) + "\n")
         return 0
-    if _asks_about_settings(command, cwd):
-        sys.stdout.write(ask_payload(client) + "\n")
+    _keep_a_copy_of_the_settings(payload)
     return 0
 
 
-def _asks_about_settings(command: str, cwd: str) -> bool:
-    """Whether a line writes a file that can switch the checks off (0.3.6).
+def _keep_a_copy_of_the_settings(payload: Dict[str, Any]) -> None:
+    """Keep a copy of the files that decide whether the checks run (0.4.0).
 
-    Step 10 of the Release A live check: a shell command rewrote the person's
-    settings and nothing was asked, because the question lived only on the
-    file tools. A check that cannot finish asks rather than lets it through.
+    From 0.3.6 to 0.3.10 this asked before any line that could write one of
+    them, and reading that from the words of a shell line never stopped
+    asking about lines that only read. Now the copy is compared after the
+    command runs, and only a change that weakened the checks is put back
+    (`settings_guard`). Nothing here ever stops a command: a copy that cannot
+    be kept means that one command is not checked afterwards.
     """
-    from . import settings_writes
+    from . import settings_guard
 
     try:
-        return settings_writes.writes_a_settings_file(command, cwd)
+        settings_guard.snapshot(payload)
     except Exception:
-        return True
-
-
-def ask_payload(client: str) -> str:
-    """The question the write check asks about the same files, word for word.
-
-    Claude Code shows the reason in its permission prompt. The write check
-    asks every client the same way, and so does this.
-    """
-    from . import write_hook
-
-    del client
-    return json.dumps(write_hook.question())
+        pass

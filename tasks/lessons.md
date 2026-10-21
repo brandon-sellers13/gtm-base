@@ -119,3 +119,9 @@
   prompts and let real writes through, because a mis-split line fails in both directions.
 - When fixing a false positive in a security check, test the mirror image too. The same root cause hid two writes.
 
+## 2026-10-20, 0.4.0
+- When a security check keeps needing one parser fix per release, the check is asking the wrong question. Judge the
+  effect (what changed on disk) instead of the intent (what the text might do), and replay real traffic to prove it.
+- Restore by meaning, not by bytes: re-read the file at repair time and put back only the keys that matter, so a
+  concurrent legitimate edit is never clobbered.
+
