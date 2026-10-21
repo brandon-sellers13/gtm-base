@@ -113,3 +113,9 @@
 - When a real line trips two rules, fix the one that is a bug and name the one that is a policy. sed handed a
   variable can genuinely hide a write; loosening that is a decision, not a fix.
 
+## 2026-10-20, 0.3.10
+- Every quote scanner in a shell reader must follow the same rules: inside double quotes a backslash escapes the next
+  character, inside single quotes nothing does. One scanner that got it wrong (`split_segments`) both raised false
+  prompts and let real writes through, because a mis-split line fails in both directions.
+- When fixing a false positive in a security check, test the mirror image too. The same root cause hid two writes.
+

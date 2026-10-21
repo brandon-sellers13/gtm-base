@@ -409,7 +409,10 @@ def split_segments(text: str) -> List[str]:
     """Split a command line into the simple commands it is made of.
 
     Quoted separators do not separate anything, so a semicolon inside a message
-    stays part of the message.
+    stays part of the message. Inside double quotes a backslash keeps the
+    character after it, so `"[^\\"&]"` is one quoted word (0.3.10). Until then
+    the `\\"` ended the quotes, the `&` split the line, and what was left held
+    a quote never closed.
     """
     segments: List[str] = []
     current: List[str] = []
@@ -418,6 +421,11 @@ def split_segments(text: str) -> List[str]:
     length = len(text)
     while index < length:
         character = text[index]
+        if quote == '"' and character == "\\" and index + 1 < length:
+            current.append(character)
+            current.append(text[index + 1])
+            index += 2
+            continue
         if quote:
             current.append(character)
             if character == quote:

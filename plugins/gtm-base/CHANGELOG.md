@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.3.10 (2026-10-20)
+
+- The command check no longer asks about a line that reads with a pattern in double quotes holding an escaped quote mark. In research sessions in a client folder on 0.3.9, lines such as `grep -oE "gridwise[a-z0-9.-]*\.(io|ca)[^\"& ]{0,200}" /tmp/x | sort -u` were asked about, with the sentence about the file where your assistant is told which safety checks to run, from any folder. Nothing in them wrote anything.
+
+- The cause was in the step that splits a line into its separate commands, which both the command check and the git check use. Inside double quotes the shell reads `\"` as a quote mark that is part of the text, but that step read it as the end of the quotes. So the `&` after it split the line in two, and the second half held a quote that was never closed. A line the check cannot read is asked about, so the read became the question. That step now keeps the character after a backslash inside double quotes, the way the shell does. Inside single quotes a backslash is still an ordinary character, which is also how the shell reads it.
+
+- The same mistake could also hide a write, and this release closes that too. When a `'` came after the `\"`, the step read everything to the end of the line as one quoted piece, so a command after it was never split off. On 0.3.9, `grep -oE "[^\"'x]" /tmp/a | tee ~/.claude/settings.json` and the same read followed by `; rm ~/.claude/settings.json` were let through with nothing asked. Both are asked about now.
+
+- Three tests cover this, and each failed on 0.3.9. Four reads with an escaped quote in a double-quoted pattern are not asked about, from a client folder and from `/tmp`, and through the real hook. A line is split where the shell splits it, around `\"` and `\\` in double quotes and a backslash in single quotes. Six writes next to an escaped quote are still asked about, including `echo "a\"b" > ~/.claude/settings.json` and the two that 0.3.9 let through.
+
 ## 0.3.9 (2026-10-19)
 
 - The command check no longer asks about a line that reads one of the settings files and also runs a loop that only reads. On 0.3.8, a line that read the plugin registry with `grep` and then counted lines in the saved transcripts with `for f in ...; do grep -c ... "$f"; done` was asked about, with the sentence about the file where your assistant is told which safety checks to run. Nothing in it wrote anything.

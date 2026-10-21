@@ -457,6 +457,55 @@ class TestTheShellsOwnWords(Home):
             self.assertTrue(self.asks(command), command)
 
 
+class TestABackslashInsideDoubleQuotes(Home):
+    """0.3.10. Inside double quotes the shell reads `\\"` as a quote mark in
+    the text, not as the end of the quotes. The step that splits a line into
+    its commands ended the quotes there, so the rest of the pattern was read
+    as separate commands, one of them with a quote never closed, and a line
+    that cannot be read is asked about. Read the other way, a `'` after the
+    `\\"` opened quotes that ran to the end of the line, and the commands
+    after it were never split off."""
+
+    def test_a_read_with_an_escaped_quote_in_its_pattern(self):
+        """Fails on 0.3.9, where the first two were asked about."""
+        gridwise = os.path.join(self.home, "Gridwise")
+        os.makedirs(gridwise)
+        for command in (
+            r'''grep -oE "gridwise[a-z0-9.-]*\.(io|ca)[^\"& ]{0,200}" /tmp/x | sort -u''',
+            r'''cat /tmp/a | grep -oE "gridwise[a-z0-9.-]*\.(io|ca)[^\"'& <\\]{0,200}" | sort -u | head''',
+            r'''grep -c "a\"; b" /tmp/x''',
+            r'''echo "a\" & rm ~/.claude/settings.json; echo \""''',
+        ):
+            for cwd in (gridwise, "/tmp"):
+                self.assertFalse(self.asks(command, cwd), command)
+        self.assertIsNone(
+            self.hook(
+                r'''grep -oE "gridwise[a-z0-9.-]*\.(io|ca)[^\"& ]{0,200}" /tmp/x | sort -u''',
+                gridwise,
+            )
+        )
+
+    def test_the_line_is_split_where_the_shell_splits_it(self):
+        for command, segments in (
+            (r'''grep "[^\"& ]" /tmp/x | sort''', [r'''grep "[^\"& ]" /tmp/x''', "sort"]),
+            (r'''echo "a\\" ; ls''', [r'''echo "a\\"''', "ls"]),
+            (r'''echo 'a\' ; ls''', [r'''echo 'a\'''', "ls"]),
+        ):
+            self.assertEqual(segments, gate.split_segments(command), command)
+
+    def test_a_write_next_to_an_escaped_quote_is_still_asked_about(self):
+        """The first two fail on 0.3.9, where neither was asked about."""
+        for command in (
+            r'''grep -oE "[^\"'x]" /tmp/a | tee ~/.claude/settings.json''',
+            r'''grep -oE "[^\"'x]" /tmp/a; rm ~/.claude/settings.json''',
+            r'''echo "a\"b" > ~/.claude/settings.json''',
+            r'''echo "a\"" > ~/.claude/settings.json''',
+            r'''echo "a\\" > ~/.claude/settings.json''',
+            r'''grep -c "a\"" /tmp/x && cp /tmp/x ~/.claude/settings.json''',
+        ):
+            self.assertTrue(self.asks(command), command)
+
+
 class TestTheGateEntryPoint(Home):
     def test_a_check_that_cannot_finish_asks(self):
         real = settings_writes.writes_a_settings_file

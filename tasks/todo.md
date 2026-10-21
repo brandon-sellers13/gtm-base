@@ -1443,3 +1443,13 @@ Two reviews by subagents, one for correctness and one for security, run on the f
 - [x] Full suite green (tests/run.sh, 2026-10-19: 2245 tests OK, then 161 in the linked-folder rerun OK).
 - [x] Pull request opened for Brandon. Not merged, installed or released.
 
+## 0.3.10: a double-quoted pattern with an escaped quote is asked about (2026-10-20)
+
+- [x] Reproduced on 0.3.9: `grep -oE "gridwise[a-z0-9.-]*\.(io|ca)[^\"& ]{0,200}" /tmp/x | sort -u` asked from any folder. `gate.split_segments` ignored backslashes inside double quotes, so `\"` closed the quotes, `&` split the line, and the second part had an unclosed quote (tokens None, so ask).
+- [x] Found while reproducing: the same flaw hid writes. After `\"'` the rest of the line read as single-quoted, so `grep -oE "[^\"'x]" /tmp/a | tee ~/.claude/settings.json` and `...; rm ~/.claude/settings.json` were not asked about on 0.3.9.
+- [x] Fix: `split_segments` keeps the character after a backslash inside double quotes. Single quotes unchanged (no escapes there). Shared with the git check.
+- [x] Tests in tests/test_command_check_settings.py (`TestABackslashInsideDoubleQuotes`). All three fail on 0.3.9.
+- [x] Version 0.3.10 in both manifests, the library, the tests that pin it, and the atlas stamp; CHANGELOG 0.3.10.
+- [x] Full suite green (tests/run.sh, 2026-10-20: 2248 tests OK, then 161 in the linked-folder rerun OK).
+- [x] Pull request opened for Brandon. Not merged, installed or released.
+
