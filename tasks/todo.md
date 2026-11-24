@@ -1472,7 +1472,7 @@ Approved by Brandon ("ok try it") after 0.3.8 to 0.3.10 each fixed one parser ca
 
 ## 2026-11-24, the web app, version one (plan: docs/plans/2026-11-24-001-feat-web-app-plan.md)
 Brandon decided to build the web app now and productize from the start. No review per unit; the end-to-end run is the main check. Two security reviews in the whole build: before anyone but Brandon signs in, and before P1 and P2 are released. Waiting for Brandon's check-in on the plan and the four "For Brandon" questions before any code.
-- [ ] W1. Skeleton, sign in with GitHub, and the spike (can the GitHub App create a repository in a personal account; can a free organization give read-only access).
+- [x] W1. Skeleton, sign in with GitHub, and the spike (done 2026-11-24: live at https://gtm-base-app.netlify.app, commits 1729ade and 1b843e9) (can the GitHub App create a repository in a personal account; can a free organization give read-only access).
 - [ ] W2. Create a base from the template, or connect an existing one.
 - [ ] W3. Read the base by CLASS part, with owner, last confirmation and open changes.
 - [ ] W4. Proposals inbox: accept (owner only, records the confirmation) or discard.
