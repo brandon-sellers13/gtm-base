@@ -2,7 +2,7 @@
 
 import { redirect } from "next/navigation";
 import { GitHubError } from "@/lib/github";
-import { AcceptError, acceptProposal, discardProposal, ProposalNotFound } from "@/lib/proposals";
+import { AcceptError, acceptProposal, DiscardError, discardProposal, ProposalNotFound } from "@/lib/proposals";
 import { currentSession } from "@/lib/session";
 
 // Next checks that a server action comes from this site's own pages. Who may
@@ -29,6 +29,7 @@ export async function acceptAction(formData: FormData) {
       owner,
       repo,
       number,
+      shownHeadSha: String(formData.get("head") ?? ""),
       verifiedEmails: session.emails,
       name: session.name ?? session.login,
     });
@@ -49,9 +50,18 @@ export async function discardAction(formData: FormData) {
   const reason = String(formData.get("reason") ?? "").trim().slice(0, 500);
   let problem: string | null = null;
   try {
-    await discardProposal({ token: session.token, owner, repo, number, reason });
+    await discardProposal({
+      token: session.token,
+      owner,
+      repo,
+      number,
+      reason,
+      login: session.login,
+      verifiedEmails: session.emails,
+    });
   } catch (error) {
     if (error instanceof ProposalNotFound) problem = "gone";
+    else if (error instanceof DiscardError) problem = "not-allowed-discard";
     else if (error instanceof GitHubError && error.status === 401) redirect("/api/auth/expired");
     else problem = "failed";
   }

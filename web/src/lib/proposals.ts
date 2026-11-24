@@ -47,13 +47,16 @@ export type ProposalFile = {
   status: string;
   owners: string[]; // empty for records, or for a document that names no owner
   ownedDocument: boolean;
+  allowed: boolean; // an owned document or one of the plugin's records
 };
 
 export type Proposal = ProposalSummary & {
   htmlUrl: string;
   body: string; // markdown, with the marker line taken off
   files: ProposalFile[];
+  complete: boolean; // false when the proposal changes too many files to check
   baseRef: string;
+  headSha: string; // the version the person was shown
 };
 
 export class ProposalNotFound extends Error {}
@@ -108,23 +111,49 @@ async function getPull(token: string, owner: string, repo: string, number: numbe
   }
 }
 
+// Records a proposal may add alongside the documents it changes.
+const RECORD_PREFIXES = ["learning/changes/", "learning/corrections/"];
+const MAX_FILE_PAGES = 10; // 1,000 files; a bigger proposal is refused, never half-checked
+
 export async function getProposal(token: string, owner: string, repo: string, number: number): Promise<Proposal> {
   const pull = await getPull(token, owner, repo, number);
   const found = marker(pull.body);
   if (!found || pull.state !== "open") throw new ProposalNotFound();
 
-  const changed = await api<{ filename: string; status: string }[]>(
-    `/repos/${owner}/${repo}/pulls/${number}/files?per_page=100`,
+  const changed: { filename: string; status: string }[] = [];
+  let complete = false;
+  for (let page = 1; page <= MAX_FILE_PAGES; page++) {
+    const batch = await api<{ filename: string; status: string }[]>(
+      `/repos/${owner}/${repo}/pulls/${number}/files?per_page=100&page=${page}`,
+      { token },
+    );
+    changed.push(...batch);
+    if (batch.length < 100) {
+      complete = true;
+      break;
+    }
+  }
+
+  // Owners come from the base branch as it stands now, the same commit an
+  // accept is built on, never from the proposal's own version of a file.
+  const tip = await api<{ object: { sha: string } }>(
+    `/repos/${owner}/${repo}/git/ref/heads/${encodeURIComponent(pull.base.ref)}`,
     { token },
   );
+  const baseOwners = await readOwners(token, owner, repo, "context/map.md", tip.object.sha);
+
   const files = await Promise.all(
     changed.map(async (file) => {
       const ownedDocument = OWNED_PREFIXES.some((prefix) => file.filename.startsWith(prefix)) && file.filename.endsWith(".md");
-      // The plugin reads owners from the saved version; a brand-new document has
-      // none, so its proposed version is read instead.
-      const ref = file.status === "added" ? pull.head.sha : pull.base.sha;
-      const owners = ownedDocument ? await readOwners(token, owner, repo, file.filename, ref) : [];
-      return { path: file.filename, status: file.status, owners, ownedDocument };
+      const record = RECORD_PREFIXES.some((prefix) => file.filename.startsWith(prefix)) && file.filename.endsWith(".md");
+      // A brand-new document has no saved owner yet, so the base's owner (the map's)
+      // decides, whatever owner the proposal writes into it.
+      const owners = !ownedDocument
+        ? []
+        : file.status === "added"
+          ? baseOwners
+          : await readOwners(token, owner, repo, file.filename, tip.object.sha);
+      return { path: file.filename, status: file.status, owners, ownedDocument, allowed: ownedDocument || record };
     }),
   );
 
@@ -133,13 +162,26 @@ export async function getProposal(token: string, owner: string, repo: string, nu
     htmlUrl: pull.html_url,
     body: (pull.body ?? "").replace(MARKER, "").trim(),
     files,
+    complete,
     baseRef: pull.base.ref,
+    headSha: pull.head.sha,
   };
+}
+
+// Why this proposal cannot be accepted here at all, whoever asks. Only owned
+// documents and the plugin's records may come in through an accept: anything
+// else (settings, hooks, scripts, CLAUDE.md, other files) would run or apply on
+// every seat, which the plugin's own checks refuse in a base.
+export function blockedReason(proposal: Proposal): "too-large" | "other-files" | null {
+  if (!proposal.complete) return "too-large";
+  if (proposal.files.some((f) => !f.allowed)) return "other-files";
+  return null;
 }
 
 // The one email this person may accept with: a verified address of theirs that
 // owns every owned document the proposal touches. Null when there is none.
 export function acceptingEmail(proposal: Proposal, verifiedEmails: string[]): string | null {
+  if (blockedReason(proposal)) return null;
   const owned = proposal.files.filter((f) => f.ownedDocument);
   if (owned.length === 0 || owned.some((f) => f.owners.length === 0)) return null;
   const mine = verifiedEmails.map((e) => e.toLowerCase());
@@ -147,7 +189,9 @@ export function acceptingEmail(proposal: Proposal, verifiedEmails: string[]): st
 }
 
 export class AcceptError extends Error {
-  constructor(readonly code: "not-owner" | "not-mergeable" | "base-moved" | "failed") {
+  constructor(
+    readonly code: "not-owner" | "blocked" | "changed" | "checking" | "not-mergeable" | "base-moved" | "failed",
+  ) {
     super(code);
   }
 }
@@ -157,17 +201,28 @@ export async function acceptProposal(options: {
   owner: string;
   repo: string;
   number: number;
+  shownHeadSha: string;
   verifiedEmails: string[];
   name: string;
 }): Promise<void> {
-  const { token, owner, repo, number, verifiedEmails, name } = options;
+  const { token, owner, repo, number, shownHeadSha, verifiedEmails, name } = options;
   // Everything is worked out again here from GitHub, never from the page.
   const proposal = await getProposal(token, owner, repo, number);
+  if (blockedReason(proposal)) throw new AcceptError("blocked");
   const email = acceptingEmail(proposal, verifiedEmails);
   if (!email) throw new AcceptError("not-owner");
+  // The owner accepts what they were shown, never a newer version of it.
+  if (proposal.headSha !== shownHeadSha) throw new AcceptError("changed");
 
-  const pull = await getPull(token, owner, repo, number);
+  // GitHub works out whether it can merge a moment after a change; wait for it.
+  let pull = await getPull(token, owner, repo, number);
+  for (let attempt = 0; pull.mergeable === null && attempt < 4; attempt++) {
+    await new Promise((resolve) => setTimeout(resolve, 1000));
+    pull = await getPull(token, owner, repo, number);
+  }
+  if (pull.mergeable === null) throw new AcceptError("checking");
   if (pull.mergeable !== true || !pull.merge_commit_sha) throw new AcceptError("not-mergeable");
+  if (pull.head.sha !== shownHeadSha) throw new AcceptError("changed");
 
   const path = `/repos/${owner}/${repo}`;
   const branch = await api<{ object: { sha: string } }>(`${path}/git/ref/heads/${encodeURIComponent(pull.base.ref)}`, {
@@ -180,6 +235,8 @@ export async function acceptProposal(options: {
     { token },
   );
   if (trial.parents[0]?.sha !== branch.object.sha) throw new AcceptError("base-moved");
+  // And only if it merged the very version the owner was shown.
+  if (trial.parents[1]?.sha !== shownHeadSha) throw new AcceptError("changed");
 
   try {
     const now = new Date().toISOString();
@@ -211,9 +268,12 @@ export async function discardProposal(options: {
   repo: string;
   number: number;
   reason: string;
+  login: string;
+  verifiedEmails: string[];
 }): Promise<void> {
-  const { token, owner, repo, number, reason } = options;
-  await getProposal(token, owner, repo, number); // only open GTM Base proposals
+  const { token, owner, repo, number, reason, login, verifiedEmails } = options;
+  const proposal = await getProposal(token, owner, repo, number); // only open GTM Base proposals
+  if (!mayDiscard(proposal, login, verifiedEmails)) throw new DiscardError();
   const path = `/repos/${owner}/${repo}`;
   if (reason) {
     await api(`${path}/issues/${number}/comments`, {
@@ -223,4 +283,13 @@ export async function discardProposal(options: {
     });
   }
   await api(`${path}/pulls/${number}`, { token, method: "PATCH", body: JSON.stringify({ state: "closed" }) });
+}
+
+export class DiscardError extends Error {}
+
+// The person who proposed it, or an owner of a document it changes.
+export function mayDiscard(proposal: Proposal, login: string, verifiedEmails: string[]): boolean {
+  if (proposal.author.toLowerCase() === login.toLowerCase()) return true;
+  const mine = new Set(verifiedEmails.map((e) => e.toLowerCase()));
+  return proposal.files.some((f) => f.ownedDocument && f.owners.some((o) => mine.has(o)));
 }

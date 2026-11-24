@@ -4,7 +4,7 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { Header } from "@/components/Header";
 import { readForPage } from "@/lib/pageData";
-import { acceptingEmail, getProposal, ProposalNotFound } from "@/lib/proposals";
+import { acceptingEmail, blockedReason, getProposal, mayDiscard, ProposalNotFound } from "@/lib/proposals";
 import { docHref } from "@/lib/reader";
 import { currentSession } from "@/lib/session";
 import { acceptAction, discardAction } from "./actions";
@@ -14,6 +14,10 @@ const PROBLEMS: Record<string, string> = {
   "not-mergeable":
     "GitHub cannot merge this proposal as it stands, usually because the base changed in the same place. Ask for the change to be proposed again.",
   "base-moved": "The base changed a moment ago. Reload the page and accept again.",
+  changed: "This proposal changed after you opened it. Read it again below, then accept if it is still right.",
+  checking: "GitHub is still checking whether this proposal can be merged. Try again in a moment.",
+  blocked: "This proposal cannot be accepted here; see the note above the buttons.",
+  "not-allowed-discard": "Only the person who proposed this, or the owner of a document it changes, can discard it.",
   gone: "This proposal is no longer open.",
   failed: "GitHub did not finish that. Nothing was changed; please try again.",
 };
@@ -40,6 +44,8 @@ export default async function ProposalPage({
   if (!proposal) notFound();
 
   const email = acceptingEmail(proposal, session.emails);
+  const blocked = blockedReason(proposal);
+  const canDiscard = mayDiscard(proposal, session.login, session.emails);
   const owned = proposal.files.filter((f) => f.ownedDocument);
   const owners = [...new Set(owned.flatMap((f) => f.owners))];
   const hidden = (
@@ -47,6 +53,7 @@ export default async function ProposalPage({
       <input type="hidden" name="owner" value={owner} />
       <input type="hidden" name="repo" value={repo} />
       <input type="hidden" name="number" value={proposal.number} />
+      <input type="hidden" name="head" value={proposal.headSha} />
     </>
   );
 
@@ -88,7 +95,14 @@ export default async function ProposalPage({
               )}
               <span className="font-mono text-xs text-ink-quiet">
                 {file.status}
-                {file.ownedDocument && <> · owner {file.owners.length ? file.owners.join(", ") : "not stated"}</>}
+                {file.ownedDocument && (
+                  <>
+                    {" "}
+                    · {file.status === "added" ? "new, base owner" : "owner"}{" "}
+                    {file.owners.length ? file.owners.join(", ") : "not stated"}
+                  </>
+                )}
+                {!file.allowed && <span className="text-resolved"> · cannot come in through an accept</span>}
               </span>
             </li>
           ))}
@@ -99,7 +113,17 @@ export default async function ProposalPage({
         </article>
 
         <section className="mt-10 rounded-lg border border-line bg-surface p-4">
-          {email ? (
+          {blocked === "other-files" ? (
+            <p className="text-sm text-ink-mid">
+              This proposal changes files that are not base documents or records (marked above). Those can change how
+              GTM Base or Claude Code runs on every teammate&apos;s computer, so they cannot come in through an accept
+              here. Review it on GitHub instead.
+            </p>
+          ) : blocked === "too-large" ? (
+            <p className="text-sm text-ink-mid">
+              This proposal changes too many files to check here. Review it on GitHub instead.
+            </p>
+          ) : email ? (
             <>
               <p className="text-sm text-ink-mid">
                 You own {owned.length === 1 ? "the document" : "every document"} this proposal changes. Accepting puts
@@ -127,6 +151,7 @@ export default async function ProposalPage({
             </p>
           )}
 
+          {canDiscard && (
           <form action={discardAction} className="mt-6 border-t border-line pt-4">
             {hidden}
             <label className="block text-sm font-medium" htmlFor="reason">
@@ -140,6 +165,7 @@ export default async function ProposalPage({
             />
             <button className="mt-3 rounded-lg border border-line px-4 py-2 text-sm">Discard</button>
           </form>
+          )}
         </section>
       </main>
     </div>
