@@ -25,8 +25,8 @@ export async function listBases(token: string, installations: Installation[]): P
         `/user/installations/${installation.id}/repositories?per_page=${REPOS_PER_ACCOUNT}`,
         { token },
       );
-      const checked = await Promise.all(
-        body.repositories.map(async (repo) => ((await hasMap(token, repo)) ? repo : null)),
+      const checked = await inBatches(body.repositories, CHECKS_AT_ONCE, async (repo) =>
+        (await hasMap(token, repo)) ? repo : null,
       );
       return checked
         .filter((repo): repo is Repo => repo !== null)
@@ -42,14 +42,28 @@ export async function listBases(token: string, installations: Installation[]): P
   return perAccount.flat().sort((a, b) => `${a.owner}/${a.name}`.localeCompare(`${b.owner}/${b.name}`));
 }
 
+// A repository GitHub will not answer about (single sign-on, a rate limit) is left
+// out rather than failing the whole list. A refused token still ends the session.
 async function hasMap(token: string, repo: Repo): Promise<boolean> {
   try {
     await api(`/repos/${repo.owner.login}/${repo.name}/contents/${MAP_PATH}`, { token });
     return true;
   } catch (error) {
-    if (error instanceof GitHubError && error.status === 404) return false;
-    throw error;
+    if (error instanceof GitHubError && error.status === 401) throw error;
+    return false;
   }
+}
+
+// Checks run a few at a time, so an account with many repositories does not fire
+// a hundred requests at once.
+const CHECKS_AT_ONCE = 8;
+
+async function inBatches<T, R>(items: T[], size: number, work: (item: T) => Promise<R>): Promise<R[]> {
+  const results: R[] = [];
+  for (let i = 0; i < items.length; i += size) {
+    results.push(...(await Promise.all(items.slice(i, i + size).map(work))));
+  }
+  return results;
 }
 
 // --- Creating a base ---------------------------------------------------------
@@ -79,7 +93,7 @@ export function fillTemplate(email: string, login: string): { path: string; cont
 }
 
 export class CreateBaseError extends Error {
-  constructor(readonly code: "name-taken" | "no-permission" | "no-access" | "failed") {
+  constructor(readonly code: "name-taken" | "no-permission" | "no-access" | "created-empty" | "failed") {
     super(code);
   }
 }
@@ -118,7 +132,7 @@ export async function createBase(options: {
   // 2. The template, as one commit on top of GitHub's first commit.
   const path = `/repos/${repo.owner.login}/${repo.name}`;
   try {
-    const head = await api<{ object: { sha: string } }>(`${path}/git/ref/heads/${repo.default_branch}`, { token });
+    const head = await firstCommit(token, `${path}/git/ref/heads/${repo.default_branch}`);
     const parent = await api<{ tree: { sha: string } }>(`${path}/git/commits/${head.object.sha}`, { token });
     const tree = await api<{ sha: string }>(`${path}/git/trees`, {
       token,
@@ -148,13 +162,25 @@ export async function createBase(options: {
       body: JSON.stringify({ sha: commit.sha }),
     });
   } catch (error) {
-    // The repository exists but GTM Base could not write to it, usually because the
-    // installation only covers selected repositories and this one is not among them.
-    if (error instanceof GitHubError && (error.status === 403 || error.status === 404)) {
-      throw new CreateBaseError("no-access");
-    }
-    throw new CreateBaseError("failed");
+    // The repository exists but holds only GitHub's first commit. Say so, rather
+    // than leaving an empty repository the person does not know about.
+    if (error instanceof GitHubError && error.status === 403) throw new CreateBaseError("no-access");
+    throw new CreateBaseError("created-empty");
   }
 
   return { owner: repo.owner.login, name: repo.name, htmlUrl: repo.html_url };
+}
+
+// GitHub writes a new repository's first commit a moment after creating it, so
+// the branch can be missing (404) or the repository still empty (409) at first.
+async function firstCommit(token: string, refPath: string): Promise<{ object: { sha: string } }> {
+  for (let attempt = 0; ; attempt++) {
+    try {
+      return await api<{ object: { sha: string } }>(refPath, { token });
+    } catch (error) {
+      const notYet = error instanceof GitHubError && (error.status === 404 || error.status === 409);
+      if (!notYet || attempt >= 5) throw error;
+      await new Promise((resolve) => setTimeout(resolve, 1000));
+    }
+  }
 }

@@ -15,6 +15,8 @@ const PROBLEMS: Record<string, string> = {
     "GitHub did not let GTM Base create a repository there. The app needs the repository creation permission, and on an organization you need to be allowed to create repositories.",
   "no-access":
     "GitHub created the repository, but GTM Base cannot write to it yet. Give GTM Base access to it in the account's GitHub App settings, then the base can be filled in.",
+  "created-empty":
+    "GitHub created the repository but GTM Base could not fill it in, so it is empty. Delete it on GitHub, then create the base again with the same name.",
   failed: "GitHub did not finish creating the base. Nothing else was changed; please try again.",
 };
 
