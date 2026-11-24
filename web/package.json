@@ -6,7 +6,8 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "bundle-template": "node scripts/bundle-template.mjs"
   },
   "dependencies": {
     "jose": "^6.2.18",

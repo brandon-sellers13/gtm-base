@@ -1,0 +1,65 @@
+{
+  "source": {
+    "ref": "summarize-first",
+    "commit": "712601c61bd195ee975aacfd26da85acc1be34d3",
+    "folder": "plugins/gtm-base/templates/company-base/"
+  },
+  "files": [
+    {
+      "path": ".gitignore",
+      "content": "work/inbox/\nwork/proposals/\n\n# Files a computer makes on its own when a folder is opened. They are never\n# part of the base.\n.DS_Store\nThumbs.db\ndesktop.ini\nIcon[^ -~]\n"
+    },
+    {
+      "path": "CODEOWNERS",
+      "content": "# Files listed here need the owner's review before a change to them is accepted.\n# Replace @owner-handle with the account that owns this base.\n# Nothing under learning/changes or work/confirmations is listed, because those\n# folders are appended to by everyone on the team.\n\ncontext/** @owner-handle\nlearning/corrections/** @owner-handle\nlearning/lessons/** @owner-handle\naccess/** @owner-handle\nskills/** @owner-handle\nstandards/** @owner-handle\nplugins/** @owner-handle\n.claude/** @owner-handle\nCLAUDE.md @owner-handle\nAGENTS.md @owner-handle\n.gitignore @owner-handle\ngate-allowlist.txt @owner-handle\nCODEOWNERS @owner-handle\n"
+    },
+    {
+      "path": "README.md",
+      "content": "# Your company base\n\nThis folder is your company's marketing context in one place. It holds what your\nAI assistant needs to read before it can do real marketing work for you, and it\nholds the record of how that context stays current as the business moves.\n\n## What each folder holds\n\nThe folders follow the five parts of the CLASS framework, and one more holds\nthe approvals.\n\n**context** is what is true about the business, and everything the assistant\nreads for meaning. It holds one file for each subject: your goals, your\nproduct, your ideal customer profiles, your buyer personas, your positioning,\nyour messaging, your voice, your design, and your metric definitions. Each\ncustomer segment gets its own file in `context/icps`. `context/map.md` is the\nmap, which says where everything lives and carries two settings you can change.\n\n**learning** is how the base gets better. `learning/changes` holds one dated\nentry for each context change, which is anything that happened that makes a\ndocument here no longer true. `learning/corrections` holds what each approved\nfix changed, and why. `learning/lessons` is kept for lessons from results,\nwhich arrive later.\n\n**access** holds `stack.md`, which says where your material lives, which tools\nread it, and where finished work is saved. It never holds a password, a key,\nor a token.\n\n**skills** is kept empty for now. It will hold the written steps for each\nrecurring job once your team has settled who may approve a change to one.\n\n**standards** holds what good work looks like for each job, and what needs\napproval before it is used.\n\n**work** holds the approvals. `work/confirmations` holds the record of the\nowner saying that a file is still right. `work/inbox` is where you drop meeting\nnotes and transcripts for the assistant to read. `work/proposals` holds\nsuggested changes while they are being prepared.\n\n**CODEOWNERS** lists the files that need the owner's review before a change to\nthem is accepted. **gate-allowlist.txt** lists the exact pieces of text the\noutgoing-content check is allowed to let through.\n\n## Two things to know\n\nThe owner address in these files is a placeholder. When your base is created,\nthe setup step replaces it everywhere with your own work email address.\n\nEverything in this folder is shared with everyone you invite to the base, so\ntreat it as a document your whole team can read. The two exceptions are\n`work/inbox` and `work/proposals`, which stay on your own computer and are never\nshared.\n"
+    },
+    {
+      "path": "access/stack.md",
+      "content": "---\nkind: stack\nowner: owner@example.com\nsources: []\nstatus: draft\n---\n\n# Stack\n\nThis file tells the AI where the work comes from and where it goes. It names\nplaces and tools, and it never holds a password, a key, or a token.\n\n## Where the material lives\n\nFor each kind of material, where it lives and which connected tool reads it.\nFor example, sales calls in your call recorder, and deals in your CRM.\n\n## Where the work goes\n\nFor each kind of output, where it is saved. For example, email drafts in your\nemail tool, and ad drafts in your ad account.\n\n## What is missing\n\nAnything the AI cannot reach yet, so nobody assumes it can.\n"
+    },
+    {
+      "path": "context/icps.md",
+      "content": "---\nkind: icp\nowner: owner@example.com\nowner_handle: owner-handle\nlast_confirmed: 2026-01-01\nsources: []\nstatus: draft\n---\n\n# Ideal customer profile\n\n## Firmographics\n\nWho these companies are, in the terms you would use to build a list of them.\n\n## Felt needs\n\nThe problem they already know they have, in the words they use for it.\n\n## Use cases\n\nWhat they do with the product once they have it.\n\n## Current solutions\n\nWhat they use today, including doing nothing.\n"
+    },
+    {
+      "path": "context/icps/.gitkeep",
+      "content": ""
+    },
+    {
+      "path": "context/map.md",
+      "content": "---\nkind: map\nowner: owner@example.com\nsources: []\nstatus: draft\n---\n\n# Map\n\n## Settings\n\nconfirmation_threshold_days: 30\nnot_now_days: 7\n\n## Where things live\n\nThis base is laid out by the five parts of the CLASS framework. The `context`\nfolder holds what is true about the business, one file for each subject:\n`goals.md`, `product.md`, `icps.md`, `buyer-personas.md`, `positioning.md`,\n`messaging.md`, `voice.md`, `design.md`, and `metrics.md`, with one file for\neach customer segment in `context/icps`. The `learning` folder holds how the\nbase gets better, with one dated entry for each context change in\n`learning/changes` and what each approved fix changed in `learning/corrections`.\nThe `access` folder holds `stack.md`, which says where the work comes from and\nwhere it goes. The `skills` folder is kept empty for now, and the `standards`\nfolder holds what good work looks like for each job. The `work` folder holds\nthe approvals, with the owner's confirmations in `work/confirmations`.\n"
+    },
+    {
+      "path": "gate-allowlist.txt",
+      "content": "# Exact literals the outgoing-content scan is allowed to let through.\n# One literal per line. No patterns. Lines starting with # are ignored.\n# The base creation step replaces the address below with the owner's own.\nowner@example.com\n"
+    },
+    {
+      "path": "learning/changes/.gitkeep",
+      "content": ""
+    },
+    {
+      "path": "learning/corrections/.gitkeep",
+      "content": ""
+    },
+    {
+      "path": "learning/lessons/.gitkeep",
+      "content": ""
+    },
+    {
+      "path": "skills/.gitkeep",
+      "content": ""
+    },
+    {
+      "path": "standards/.gitkeep",
+      "content": ""
+    },
+    {
+      "path": "work/confirmations/.gitkeep",
+      "content": ""
+    }
+  ]
+}

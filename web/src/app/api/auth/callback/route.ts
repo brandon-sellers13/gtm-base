@@ -17,6 +17,10 @@ export async function GET(request: NextRequest) {
   const params = request.nextUrl.searchParams;
   const code = params.get("code");
   if (!code || !sameState(request.cookies.get("gtmb_oauth_state")?.value, params.get("state"))) {
+    // Installing or updating the app from GitHub's own pages returns here without
+    // our state. That is not a sign-in, so nobody is signed in by it; the person
+    // just goes home, where an existing session still works.
+    if (params.get("setup_action")) return NextResponse.redirect(home("installed"));
     return NextResponse.redirect(home("sign-in-expired"));
   }
 
@@ -40,7 +44,9 @@ export async function GET(request: NextRequest) {
         token,
         expiresAt: Date.now() + expiresInSeconds * 1000,
       });
-      response = NextResponse.redirect(home());
+      // A notice the page ignores: on Netlify, a redirect with no query of its own
+      // gets GitHub's code and state carried onto it.
+      response = NextResponse.redirect(home("signed-in"));
       response.cookies.set(SESSION_COOKIE, sealed, sessionCookieOptions);
     }
   } catch {
