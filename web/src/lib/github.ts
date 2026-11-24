@@ -13,7 +13,7 @@ export class GitHubError extends Error {
   }
 }
 
-async function api<T>(path: string, init: RequestInit & { token?: string } = {}): Promise<T> {
+export async function api<T>(path: string, init: RequestInit & { token?: string } = {}): Promise<T> {
   const headers = new Headers(init.headers);
   headers.set("Accept", "application/vnd.github+json");
   headers.set("X-GitHub-Api-Version", "2022-11-28");
