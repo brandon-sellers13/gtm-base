@@ -1,7 +1,7 @@
 import "server-only";
 import { cookies } from "next/headers";
 import { EncryptJWT, jwtDecrypt } from "jose";
-import { isDevelopment, sessionSecret } from "./config";
+import { allowedLogins, isDevelopment, sessionSecret } from "./config";
 
 // The session is an encrypted cookie. It holds the person's GitHub user token,
 // so it is encrypted (not only signed) and never readable from the browser.
@@ -32,6 +32,8 @@ export async function openSession(value: string | undefined): Promise<Session | 
     const { payload } = await jwtDecrypt(value, sessionSecret());
     const session = payload.s as Session | undefined;
     if (!session || session.expiresAt < Date.now()) return null;
+    // Checked on every request, so taking a login off the list ends its session at once.
+    if (!allowedLogins().has(session.login.toLowerCase())) return null;
     return session;
   } catch {
     return null;

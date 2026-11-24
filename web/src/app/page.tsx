@@ -1,13 +1,15 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { Wordmark } from "@/components/Mark";
 import { githubApp, isDevelopment } from "@/lib/config";
-import { type Installation, listInstallations } from "@/lib/github";
+import { GitHubError, type Installation, listInstallations } from "@/lib/github";
 import { currentSession } from "@/lib/session";
 
 const NOTICES: Record<string, string> = {
   "invite-only": "GTM Base is invite-only for now, and this GitHub account is not on the list yet.",
   "sign-in-expired": "That sign-in took too long or was started in another window. Please try again.",
   "sign-in-failed": "GitHub did not complete the sign-in. Please try again.",
+  "signed-out-by-github": "GitHub ended this sign-in. Please sign in again.",
 };
 
 export default async function Home({ searchParams }: { searchParams: Promise<{ notice?: string }> }) {
@@ -83,11 +85,15 @@ function SignedOut() {
 
 async function SignedIn({ token, name }: { token: string; name: string }) {
   let installations: Installation[] | null = null;
+  let tokenRefused = false;
   try {
     installations = await listInstallations(token);
-  } catch {
+  } catch (error) {
+    tokenRefused = error instanceof GitHubError && error.status === 401;
     installations = null;
   }
+  // Outside the try, because redirect() works by throwing.
+  if (tokenRefused) redirect("/api/auth/expired");
 
   return (
     <section>
