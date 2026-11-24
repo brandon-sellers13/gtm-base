@@ -36,6 +36,12 @@ export default async function BasePage({ params }: { params: Promise<{ owner: st
           </a>
         </p>
 
+        {base.truncated && (
+          <p className="mt-6 rounded-lg border border-line bg-notice px-4 py-3 text-sm">
+            This repository is too large for GitHub to list in one go, so some documents may be missing below.
+          </p>
+        )}
+
         {openChanges.length > 0 && (
           <section className="mt-10">
             <h2 className="font-mono text-xs font-bold uppercase tracking-wider text-ink-quiet">Open context changes</h2>

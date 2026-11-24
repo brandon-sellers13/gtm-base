@@ -49,6 +49,7 @@ export type BaseView = {
   branch: string;
   docs: Doc[];
   changes: Change[];
+  truncated: boolean; // GitHub could not list the whole repository at once
 };
 
 export class BaseNotFound extends Error {}
@@ -66,9 +67,19 @@ export function frontMatter(text: string): { fields: Record<string, string | str
   const match = text.match(/^---\r?\n([\s\S]*?)\r?\n---\r?\n?/);
   if (!match) return { fields: {}, body: text };
   const fields: Record<string, string | string[]> = {};
+  let lastKey: string | null = null;
   for (const line of match[1].split(/\r?\n/)) {
+    // A list written one "- item" per line, under a key with no value of its own.
+    const item = line.match(/^\s+-\s+(.*)$/);
+    if (item && lastKey && (fields[lastKey] === "" || Array.isArray(fields[lastKey]))) {
+      const list = Array.isArray(fields[lastKey]) ? (fields[lastKey] as string[]) : [];
+      list.push(item[1].trim().replace(/^["']|["']$/g, ""));
+      fields[lastKey] = list;
+      continue;
+    }
     const pair = line.match(/^([A-Za-z0-9_]+):\s*(.*)$/);
     if (!pair) continue;
+    lastKey = pair[1];
     const value = pair[2].trim();
     const list = value.match(/^\[(.*)\]$/);
     fields[pair[1]] = list
@@ -108,7 +119,9 @@ async function repoAndTree(token: string, owner: string, repo: string) {
   try {
     info = await api(`/repos/${owner}/${repo}`, { token });
   } catch (error) {
-    if (error instanceof GitHubError && (error.status === 404 || error.status === 403)) throw new BaseNotFound();
+    // Only 404 means "no such base for this person"; a 403 (a rate limit, single
+    // sign-on) is a real error and is shown as one.
+    if (error instanceof GitHubError && error.status === 404) throw new BaseNotFound();
     throw error;
   }
   const tree = await api<Tree>(
@@ -117,21 +130,27 @@ async function repoAndTree(token: string, owner: string, repo: string) {
   );
   const blobs = tree.tree.filter((entry) => entry.type === "blob");
   if (!blobs.some((entry) => entry.path === "context/map.md")) throw new BaseNotFound();
-  return { info, blobs };
+  return { info, blobs, truncated: tree.truncated };
 }
 
 export async function readBase(token: string, owner: string, repo: string): Promise<BaseView> {
   return (await load(token, owner, repo)).base;
 }
 
-async function load(token: string, owner: string, repo: string) {
-  const { info, blobs } = await repoAndTree(token, owner, repo);
+const confirmationsFileFor = (path: string) => `work/confirmations/${path.replace(/\//g, "--")}`;
+
+// `only` limits which file contents are downloaded to one document, its
+// confirmations file and the change entries; the base page downloads them all.
+async function load(token: string, owner: string, repo: string, only?: string) {
+  const { info, blobs, truncated } = await repoAndTree(token, owner, repo);
 
   const markdown = blobs.filter((b) => b.path.endsWith(".md") && !b.path.startsWith("work/confirmations/"));
   const confirmationFiles = blobs.filter((b) => b.path.startsWith("work/confirmations/") && !b.path.endsWith(".gitkeep"));
 
+  const wanted = (b: { path: string }) =>
+    !only || b.path === only || b.path === confirmationsFileFor(only) || b.path.startsWith("learning/changes/");
   const texts = new Map<string, string>();
-  await inBatches([...markdown, ...confirmationFiles], 8, async (b) => {
+  await inBatches([...markdown, ...confirmationFiles].filter(wanted), 8, async (b) => {
     texts.set(b.path, await readText(token, owner, repo, b.sha));
   });
 
@@ -183,7 +202,7 @@ async function load(token: string, owner: string, repo: string) {
     })
     .sort((a, b) => (a.path === "context/map.md" ? -1 : b.path === "context/map.md" ? 1 : a.path.localeCompare(b.path)));
 
-  const base: BaseView = { owner, repo, htmlUrl: info.html_url, branch: info.default_branch, docs, changes };
+  const base: BaseView = { owner, repo, htmlUrl: info.html_url, branch: info.default_branch, docs, changes, truncated };
   return { base, blobs, texts };
 }
 
@@ -193,7 +212,7 @@ export async function readDocument(
   repo: string,
   path: string,
 ): Promise<{ base: BaseView; doc: Doc; body: string; fields: Record<string, string | string[]> }> {
-  const { base, texts } = await load(token, owner, repo);
+  const { base, texts } = await load(token, owner, repo, path);
   // Only a path the tree actually holds; nothing built from the address alone.
   const doc = base.docs.find((d) => d.path === path) ?? null;
   const change = base.changes.find((c) => c.path === path) ?? null;

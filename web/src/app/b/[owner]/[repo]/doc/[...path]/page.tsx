@@ -15,7 +15,8 @@ export default async function DocumentPage({
   const session = await currentSession();
   if (!session) redirect("/");
   const { owner, repo, path } = await params;
-  const filePath = path.map(decodeURIComponent).join("/");
+  // Next has already decoded each segment; decoding again would break names with "%".
+  const filePath = path.join("/");
   const { base, doc, body, fields } = await readForPage(() => readDocument(session.token, owner, repo, filePath));
   const part = PARTS.find((p) => p.key === doc.part);
 
