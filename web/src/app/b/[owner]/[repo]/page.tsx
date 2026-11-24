@@ -2,6 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { Header } from "@/components/Header";
 import { readForPage } from "@/lib/pageData";
+import { listProposals } from "@/lib/proposals";
 import { type Doc, docHref, PARTS, readBase } from "@/lib/reader";
 import { currentSession } from "@/lib/session";
 
@@ -10,6 +11,7 @@ export default async function BasePage({ params }: { params: Promise<{ owner: st
   if (!session) redirect("/");
   const { owner, repo } = await params;
   const base = await readForPage(() => readBase(session.token, owner, repo));
+  const proposals = await readForPage(() => listProposals(session.token, owner, repo));
 
   const openChanges = base.changes.filter((c) => c.status === "open");
   const parts = [...PARTS, { key: "other", title: "Other documents", blurb: "" }];
@@ -30,6 +32,12 @@ export default async function BasePage({ params }: { params: Promise<{ owner: st
               · {openChanges.length} open context {openChanges.length === 1 ? "change" : "changes"}
             </>
           )}{" "}
+          ·{" "}
+          <Link href={`/b/${base.owner}/${base.repo}/proposals`} className="font-medium text-source underline-offset-4 hover:underline">
+            {proposals.length === 0
+              ? "No proposals waiting"
+              : `${proposals.length} ${proposals.length === 1 ? "proposal" : "proposals"} waiting`}
+          </Link>{" "}
           ·{" "}
           <a href={base.htmlUrl} className="underline-offset-4 hover:underline">
             Open on GitHub

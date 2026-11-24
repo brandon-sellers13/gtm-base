@@ -1475,7 +1475,7 @@ Brandon decided to build the web app now and productize from the start. No revie
 - [x] W1. Skeleton, sign in with GitHub, and the spike (done 2026-11-24: live at https://gtm-base-app.netlify.app, commits 1729ade and 1b843e9) (can the GitHub App create a repository in a personal account; can a free organization give read-only access).
 - [x] W2. Create a base from the template, or connect an existing one. (done 2026-11-24, PR #10)
 - [x] W3. Read the base by CLASS part, with owner, last confirmation and open changes. (done 2026-11-24)
-- [ ] W4. Proposals inbox: accept (owner only, records the confirmation) or discard.
+- [x] W4. Proposals inbox: accept (owner only, records the confirmation) or discard. (done 2026-11-24)
 - [ ] W5. Invite a teammate and give them the line to join from Claude Code.
 - [ ] W6. Changes that skipped approval: Keep or Undo.
 - [ ] P1. Back up a base to its repository (after Release B merges).
