@@ -1469,3 +1469,16 @@ Approved by Brandon ("ok try it") after 0.3.8 to 0.3.10 each fixed one parser ca
 - [x] Pull request opened for Brandon. Not merged, installed or released.
 - [ ] Live check after install (Brandon): does `disableAllHooks` written by a command still let the PostToolUse hook run; does Post fire at launch or completion for `run_in_background`; does `decision: block` reach Claude.
 
+
+## 2026-11-24, the web app, version one (plan: docs/plans/2026-11-24-001-feat-web-app-plan.md)
+Brandon decided to build the web app now and productize from the start. No review per unit; the end-to-end run is the main check. Two security reviews in the whole build: before anyone but Brandon signs in, and before P1 and P2 are released. Waiting for Brandon's check-in on the plan and the four "For Brandon" questions before any code.
+- [ ] W1. Skeleton, sign in with GitHub, and the spike (can the GitHub App create a repository in a personal account; can a free organization give read-only access).
+- [ ] W2. Create a base from the template, or connect an existing one.
+- [ ] W3. Read the base by CLASS part, with owner, last confirmation and open changes.
+- [ ] W4. Proposals inbox: accept (owner only, records the confirmation) or discard.
+- [ ] W5. Invite a teammate and give them the line to join from Claude Code.
+- [ ] W6. Changes that skipped approval: Keep or Undo.
+- [ ] P1. Back up a base to its repository (after Release B merges).
+- [ ] P2. Join a base from a link (after Release B merges).
+- [ ] P3. Shared base: record-change and the setup closing send proposals; no direct push to main from a seat (after Release B merges).
+- [ ] The end-to-end run with a second GitHub account.
