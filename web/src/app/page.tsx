@@ -124,7 +124,9 @@ async function SignedIn({ token, name, created }: { token: string; name: string;
             <li key={`${base.owner}/${base.name}`} className="flex items-center justify-between gap-3 px-4 py-3">
               <span>
                 <span className="text-ink-quiet">{base.owner} / </span>
-                <span className="font-medium">{base.name}</span>
+                <Link href={`/b/${base.owner}/${base.name}`} className="font-medium hover:underline">
+                  {base.name}
+                </Link>
                 {created === `${base.owner}/${base.name}` && (
                   <span className="ml-2 font-mono text-xs text-resolved">new</span>
                 )}
