@@ -3,10 +3,12 @@ import { randomBytes } from "node:crypto";
 import { readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 
-// Development only: merges new settings into web/.env.local, keeping every line
+// Development only: merges new settings into an env file, keeping every line
 // it does not replace. Values are written, never returned or logged.
 
-export const ENV_FILE = path.join(process.cwd(), ".env.local");
+export const LOCAL_ENV_FILE = path.join(process.cwd(), ".env.local");
+// Settings for the live address. Next never loads this file; scripts/send-live-settings.mjs sends it to Netlify.
+export const LIVE_ENV_FILE = path.join(process.cwd(), ".env.live");
 
 export function mergeEnv(existing: string, updates: Record<string, string>): string {
   const lines = existing === "" ? [] : existing.replace(/\n+$/, "").split("\n");
@@ -33,14 +35,14 @@ function quote(value: string): string {
   return `"${value.replace(/\r?\n/g, "\\n")}"`;
 }
 
-export async function writeEnv(updates: Record<string, string>): Promise<void> {
+export async function writeEnv(file: string, updates: Record<string, string>): Promise<void> {
   let existing = "";
   try {
-    existing = await readFile(ENV_FILE, "utf8");
+    existing = await readFile(file, "utf8");
   } catch {
     // No file yet.
   }
-  await writeFile(ENV_FILE, mergeEnv(existing, updates), { mode: 0o600 });
+  await writeFile(file, mergeEnv(existing, updates), { mode: 0o600 });
 }
 
 export const newSessionSecret = () => randomBytes(32).toString("base64");

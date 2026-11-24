@@ -31,9 +31,16 @@ export function githubApp(): GitHubAppConfig | null {
     slug,
     clientId,
     clientSecret,
-    // Stored on one line with escaped newlines, since env files cannot hold real ones.
-    privateKey: privateKey.replace(/\\n/g, "\n"),
+    privateKey: readPrivateKey(privateKey),
   };
+}
+
+// Locally the key is the PEM text with escaped newlines (env files hold one line).
+// On Netlify it is base64 of the PEM, because a value starting with dashes is read
+// by the Netlify command line as an option.
+function readPrivateKey(value: string): string {
+  if (value.includes("-----BEGIN")) return value.replace(/\\n/g, "\n");
+  return Buffer.from(value, "base64").toString("utf8");
 }
 
 export function sessionSecret(): Uint8Array {

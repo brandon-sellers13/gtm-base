@@ -3,3 +3,6 @@ __pycache__/
 .DS_Store
 gh-calls.jsonl
 .context/compound-engineering/
+
+# Local Netlify folder
+.netlify
