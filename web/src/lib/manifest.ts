@@ -8,9 +8,9 @@
 //
 // No webhook: version one reads GitHub when a page loads, and GitHub refuses a
 // webhook address it cannot reach (such as localhost) even when switched off.
-// Only repository permissions: GitHub refuses the account-level "Email addresses"
-// permission in a manifest, so W4 adds it in the app's settings. W2 adds
-// "Repository creation" and W5 adds what invites need.
+// GitHub refused "email_addresses" in a manifest; the app settings form names the
+// same permission "emails", which is what is asked for here. If GitHub refuses it
+// too, remove it and set "Email addresses: Read-only" in the app's settings.
 
 export function buildManifest(siteUrl: string, returnUrl: string, name: string) {
   return {
@@ -27,6 +27,8 @@ export function buildManifest(siteUrl: string, returnUrl: string, name: string) 
       metadata: "read",
       contents: "write",
       pull_requests: "write",
+      repository_creation: "write",
+      emails: "read",
     },
   };
 }
