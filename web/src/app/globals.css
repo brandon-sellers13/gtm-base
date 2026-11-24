@@ -1,0 +1,47 @@
+@import "tailwindcss";
+
+/* GTM Base tokens, from brandkit/approve-palette.json and the one-ink ramp. */
+:root {
+  --ground: #fafaf8;
+  --surface: #ffffff;
+  --line: #e8e6e1;
+  --ink: #1a1a1a;
+  --ink-mid: #4a4a4a;
+  --ink-quiet: #6a6a6a;
+  --signal-source: #3d63dd;
+  --signal-resolved: #7c3aed;
+  --notice: #f3f1ec;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --ground: #141414;
+    --surface: #1c1c1c;
+    --line: #2e2d2a;
+    --ink: #edebe6;
+    --ink-mid: #bdb9b1;
+    --ink-quiet: #8a8780;
+    --signal-source: #6f8ff0;
+    --signal-resolved: #a07bf5;
+    --notice: #23221f;
+  }
+}
+
+@theme inline {
+  --color-ground: var(--ground);
+  --color-surface: var(--surface);
+  --color-line: var(--line);
+  --color-ink: var(--ink);
+  --color-ink-mid: var(--ink-mid);
+  --color-ink-quiet: var(--ink-quiet);
+  --color-source: var(--signal-source);
+  --color-resolved: var(--signal-resolved);
+  --color-notice: var(--notice);
+  --font-sans: var(--font-dm-sans), "Helvetica Neue", Helvetica, Arial, sans-serif;
+  --font-mono: var(--font-jetbrains-mono), ui-monospace, monospace;
+}
+
+body {
+  background: var(--ground);
+  color: var(--ink);
+}
