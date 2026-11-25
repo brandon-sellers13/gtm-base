@@ -1658,6 +1658,9 @@ def run_digest_plan(options, out):
         return EXIT_REFUSED
     line(out, "groups", str(len(planned.groups)))
     line(out, "digests", str(len(planned.batches)))
+    if planned.over:
+        line(out, "over", "yes")
+        out.write(constants.DIGESTS_OVER + "\n")
     return EXIT_DONE
 
 

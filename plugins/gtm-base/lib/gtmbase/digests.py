@@ -8,10 +8,13 @@ request was written with whole segments left out from the end of the list.
 
 So when the notes do not fit, setup condenses the fewest groups it can,
 largest first: a group is the notes about one segment, or about the whole
-company. In a condensed group every customer note and every segment note
-still reaches the draft, as a short line setup writes itself, and the fact
-notes are condensed by the assistant into short lines that each cite the
-notes they rest on. Setup checks every line here before any draft reads it:
+company. In a condensed group the first few segment notes reach the draft
+in their own words, the customers reach it as one count, and the rest are
+condensed by the assistant into short lines that each cite the notes they
+rest on. A draft never names a customer, and setup writes the evidence for
+each segment and what the material leaves open from every note, so nothing
+is lost to the count (Unit 1.9d, after case two of 2026-11-24 named several
+thousand customers). Setup checks every line here before any draft reads it:
 what it cites, its status, its figures and customers, contact details, its
 length, and that every note the material leaves open is carried.
 
@@ -26,14 +29,25 @@ import json
 import re
 from typing import Dict, List, Optional, Sequence
 
-from . import citations, constants, notes as notes_module
+from . import citations, constants, names as names_module, notes as notes_module
 
 # A digest is planned at no more than this share of the facts it condenses,
 # so the plan condenses enough groups for the draft to fit.
 PLANNED_SHARE = 0.25
-# The least room one digest batch is ever given, so a group is never asked
-# for a digest too small to carry what the material leaves open.
+# The least room one digest batch is given when the draft has room for every
+# batch to have it, so a group is never asked for a digest too small to carry
+# what the material leaves open. When it has not, each batch has its share.
 ROOM_FLOOR = 2000
+# How many segment notes of a condensed group keep their own words, so the
+# draft knows what the material calls the segment (Unit 1.9d).
+SEGMENT_NOTES_KEPT = 3
+# What setup adds to each digest line a draft reads, beyond its words and
+# note numbers: "- ", " [", "]", " (", the longest status, ")", and the
+# line break after it.
+LINE_OVERHEAD = 9 + max(len(status) for status in notes_module.STATUSES)
+# The length a digest line is planned at, for the share of each room that
+# setup's additions take.
+AVERAGE_LINE = 150
 # The longest one digest line may be.
 LINE_MAX = 300
 # How many times one digest batch is checked before what held up is kept.
@@ -60,13 +74,8 @@ class DigestRefused(notes_module.NotesRefused):
 
 
 def _kept_line(note) -> str:
-    """A customer or segment note as setup writes it into a condensed group.
-
-    A segment note keeps its words, which are short and say what the segment
-    is. A customer note keeps its name and status and not its words, which
-    setup writes into the evidence for its segment beside the footnote.
-    """
-    return notes_module._note_line(note, note.kind != notes_module.KIND_CUSTOMER)
+    """A segment note as setup writes it into a condensed group, in its words."""
+    return notes_module._note_line(note, True)
 
 
 def _fact_line(note) -> str:
@@ -84,17 +93,64 @@ def _raw_block(name: str, members) -> str:
     return _title(name, False) + "\n" + "\n".join(_fact_line(item) for item in members)
 
 
+def _segment_notes(members) -> list:
+    return [item for item in members if item.kind == notes_module.KIND_SEGMENT]
+
+
+def _customers(members) -> list:
+    return [item for item in members if item.kind == notes_module.KIND_CUSTOMER]
+
+
 def _facts(members) -> list:
-    return [item for item in members if item.kind == notes_module.KIND_FACT]
+    """What a condensed group's digest condenses: its facts, and its segment
+    notes after the first few, in the order the notes came."""
+    extra = set(item.id for item in _segment_notes(members)[SEGMENT_NOTES_KEPT:])
+    return [
+        item for item in members
+        if item.kind == notes_module.KIND_FACT or item.id in extra
+    ]
 
 
 def _kept(members) -> list:
-    return [item for item in members if item.kind != notes_module.KIND_FACT]
+    """The notes a condensed group shows in their own words."""
+    return _segment_notes(members)[:SEGMENT_NOTES_KEPT]
+
+
+def _count_line(name: str, members) -> Optional[str]:
+    """The customers of a condensed group, as one count setup writes.
+
+    A draft never names a customer, and setup lists every one of them in the
+    document from its note, so the draft is told how many there are and how
+    many the material leaves unsettled, and nothing more.
+    """
+    customers = _customers(members)
+    if not customers:
+        return None
+    unsettled = sum(1 for item in customers if not item.settled)
+    said = names_module.how_many(len(customers), "customer", "customers")
+    about = "this segment" if name else notes_module.COMPANY_WIDE
+    line = "- The material names %s as evidence for %s" % (said, about)
+    if unsettled:
+        line += " (%s of them not settled)" % names_module.counted(unsettled)
+    if not name:
+        # A segment's own document does not list the customers of the whole
+        # company, so this count never says where they are listed (the
+        # correctness review of 2026-11-25, finding 2).
+        return line + ". A draft never names them."
+    return line + ". Setup lists each one in the document; a draft never names them."
+
+
+def _condensed_head(name: str, members) -> List[str]:
+    """The lines setup writes for a condensed group before its digest lines."""
+    lines = [_title(name, True)] + [_kept_line(item) for item in _kept(members)]
+    counted = _count_line(name, members)
+    if counted:
+        lines.append(counted)
+    return lines
 
 
 def _kept_size(name: str, members) -> int:
-    lines = [_title(name, True)] + [_kept_line(item) for item in _kept(members)]
-    return sum(len(line) + 1 for line in lines)
+    return sum(len(line) + 1 for line in _condensed_head(name, members))
 
 
 def _facts_size(members) -> int:
@@ -136,13 +192,19 @@ class DigestBatch(object):
 
 
 class DigestPlan(object):
-    """The groups condensed for this run, largest first, and their batches."""
+    """The groups condensed for this run, largest first, and their batches.
 
-    __slots__ = ("groups", "batches")
+    `over` says, before anything is condensed, that even the lines setup
+    writes for the condensed groups and the groups read whole are more than
+    one draft holds (Unit 1.9d).
+    """
 
-    def __init__(self, groups, batches):
+    __slots__ = ("groups", "batches", "over")
+
+    def __init__(self, groups, batches, over=False):
         self.groups = list(groups)
         self.batches = list(batches)
+        self.over = bool(over)
 
     @property
     def digest(self) -> str:
@@ -169,6 +231,12 @@ def plan(found, order: Sequence[str], fence, limit: int) -> DigestPlan:
     the facts they condense would fit. The room left is shared among the
     condensed groups by the size of their facts, and a group whose facts do
     not fit one request is condensed in batches that each do.
+
+    Each room is honest (Unit 1.9d): it is what is left after what setup
+    writes, after the note number of every open note a line must carry with
+    a line of its own, and after what setup adds to each line it reads. The
+    floor is given only when there is room for every batch to have it, and
+    when there is no room at all the plan says so and every room is nought.
     """
     groups = notes_module.group_notes(found, order)
     whole = fence("\n\n".join(_raw_block(name, members) for name, members in groups))
@@ -199,32 +267,75 @@ def plan(found, order: Sequence[str], fence, limit: int) -> DigestPlan:
         - sum(_kept_size(name, members) for name, members in chosen)
     )
     facts_total = sum(_facts_size(members) for _name, members in chosen) or 1
-    batches: List[DigestBatch] = []
+    over = room <= 0
+    parts_in_order: List[tuple] = []
     # Numbered in the order the draft reads the groups, so the numbers are
     # the same whichever group happened to be largest.
     in_order = [group for group in groups if group[0] in names]
     request_room = limit - len(fence(""))
     for name, members in in_order:
-        facts = _facts(members)
-        if not facts:
-            continue
-        share = max(room, 0) * _facts_size(members) / facts_total
         parts: List[list] = [[]]
         used = 0
-        for item in facts:
+        for item in _facts(members):
             size = len(_fact_line(item)) + 1
             if parts[-1] and used + size > request_room:
                 parts.append([])
                 used = 0
             parts[-1].append(item)
             used += size
-        size_of_group = _facts_size(members) or 1
-        for part in parts:
-            part_room = int(share * _facts_size(part) / size_of_group)
-            batches.append(
-                DigestBatch(len(batches) + 1, name, part, max(part_room, ROOM_FLOOR))
-            )
-    return DigestPlan([name for name, _members in chosen], batches)
+        parts_in_order.extend((name, part) for part in parts if part)
+    # The floor first, when every batch can have it, then the rest of the
+    # room by the size of the facts each batch condenses, so the rooms never
+    # add up to more than the draft has.
+    floor = ROOM_FLOOR if parts_in_order and len(parts_in_order) * ROOM_FLOOR <= room else 0
+    rest = max(room - floor * len(parts_in_order), 0)
+    batches: List[DigestBatch] = []
+    for name, part in parts_in_order:
+        share = floor + rest * _facts_size(part) / facts_total
+        batch = DigestBatch(len(batches) + 1, name, part, 0)
+        batch.room = 0 if over else _honest_room(batch, share)
+        batches.append(batch)
+    return DigestPlan([name for name, _members in chosen], batches, over)
+
+
+def _honest_room(batch: DigestBatch, share: float) -> int:
+    """The words one digest may use, out of its share of the draft's room.
+
+    Every note may be cited once, so its number comes out first, and every
+    open note may need a line of its own, so what setup adds to a line comes
+    out for each of them too. The words of the rest are scaled for what setup
+    adds to lines of the average length (the correctness review of
+    2026-11-25, finding 1). A room too small for one average line is no room:
+    setup carries that batch's open notes itself rather than asking for a
+    digest that cannot be written.
+    """
+    cited = sum(len(note_id) + 2 for note_id in batch.ids)
+    lines = LINE_OVERHEAD * len(batch.must_carry)
+    words = int((share - cited - lines) * AVERAGE_LINE / (AVERAGE_LINE + LINE_OVERHEAD))
+    return words if words >= AVERAGE_LINE else 0
+
+
+def lines_without_asking(batch: DigestBatch) -> Optional[List[dict]]:
+    """A digest with no room is never asked for: setup carries each open note
+    in the material's own words, and the draft says what it could not read."""
+    if batch.room > 0:
+        return None
+    return carried_by_setup(batch, batch.must_carry)
+
+
+def groups_needed(found, order, fence, limit: int, digest_plan: DigestPlan,
+                  company_first: bool = True) -> List[str]:
+    """The condensed groups one draft's notes need, in the plan's order.
+
+    None when the draft's notes fit as they are; otherwise the planned groups
+    it reads, so a draft waits only for the digests of what it reads (E3).
+    """
+    groups = notes_module.group_notes(found, order, company_first)
+    whole = fence("\n\n".join(_raw_block(name, members) for name, members in groups))
+    if len(whole) <= limit:
+        return []
+    present = set(name for name, _members in groups)
+    return [name for name in digest_plan.groups if name in present]
 
 
 # --- The request for one digest (D2) -----------------------------------------
@@ -438,7 +549,7 @@ def render(found, order, fence, limit: int, digest_plan: DigestPlan,
         out = []
         for name, members in groups:
             if name in condensed:
-                lines = [_title(name, True)] + [_kept_line(item) for item in _kept(members)]
+                lines = _condensed_head(name, members)
                 lines += [_digest_line(row) for row in rows_for[name]]
                 out.append("\n".join(lines))
             else:

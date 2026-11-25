@@ -898,6 +898,14 @@ Later reads (Astra 7, Fable M5). Approval establishes which document was adopted
 
 **Approach and units:** In `docs/plans/2026-11-24-002-feat-note-digests-plan.md`, approved by Brandon on 2026-11-24 with the recommended answers: settled facts may be folded away as long as every customer, segment and open note is carried; only the groups needed are condensed, largest first; and this is built, case three is rehearsed again, and then the three cases are scored.
 
+- [ ] **Unit 1.9d: Digests at scale, built because case two's notes did not fit even condensed**
+
+**Goal:** Drafts fit one request however large the material, with every segment and everything the material leaves open still read, and the customers of a condensed group counted for the draft and listed by setup in the document.
+
+**Why:** The scored re-run of 2026-11-24 stopped case two after its notes. Its 8,599 notes named 48 groups, and the customer and segment lines setup wrote for condensed groups (319,922 characters) were more than one request holds before any fact.
+
+**Approach and units:** In `docs/plans/2026-11-25-001-feat-digests-at-scale-plan.md`, approved by Brandon on 2026-11-25 with the recommended answers: customers in a condensed group as a count, three segment notes kept in their own words, and case two resumed from its kept notes with all three cases scored together.
+
 ### Later phases, not detailed here
 
 **What a base holds, the other two skills, and company skills.** Revision 1's Phases 2 to 4, moved word for word to `docs/plans/2026-09-19-002-roadmap-after-phase-1.md` with the review findings that apply to them. Each becomes its own plan after the outbound sequence has been used on real work, because that use will change what the inventory and the rubric files need to hold.

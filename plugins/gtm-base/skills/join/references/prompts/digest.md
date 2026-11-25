@@ -3,8 +3,8 @@
 You are condensing notes for {{company}}, digest {{batch}}. The notes below
 were taken from the material the person agreed to, and each one is already
 checked against its file. There are more notes than one draft can read, so
-the facts about this group are condensed into shorter lines before any draft
-reads them. You are not drafting anything, and you read nothing but these
+the facts about this group, and any further notes on what the segment is, are
+condensed into shorter lines before any draft reads them. You are not drafting anything, and you read nothing but these
 notes.
 
 ## The group

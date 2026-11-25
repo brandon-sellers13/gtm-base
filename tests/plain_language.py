@@ -875,6 +875,7 @@ PYTHON_SENTENCES = (
     ("constants", "PREVIEW_NOTES_FOLDED"),
     ("constants", "PREVIEW_NOTES_LEFT_OUT"),
     ("constants", "PREVIEW_NOTES_OVER"),
+    ("constants", "DIGESTS_OVER"),
     ("constants", "VERSION_NOT_USED_FINAL"),
     ("constants", "VERSION_NOT_USED_FINAL_OVER_NEWER"),
     ("constants", "VERSION_NOT_USED_NEWER"),

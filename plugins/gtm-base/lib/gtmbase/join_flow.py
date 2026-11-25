@@ -4126,17 +4126,22 @@ class NotesChecked(object):
 class Notebook(object):
     """Every checked note of a run, numbered, and what could not be noted."""
 
-    __slots__ = ("notes", "not_noted", "sources", "planned", "condensing", "condensed_lines")
+    __slots__ = (
+        "notes", "not_noted", "sources", "planned", "condensing", "condensed_lines", "digests_waiting",
+    )
 
     def __init__(self, notes, not_noted, planned):
         self.notes = list(notes)
         self.not_noted = list(not_noted)
         self.sources = list(planned.sources)
         self.planned = planned
-        # Which groups of notes are condensed for the drafts, and the checked
-        # lines of each, or None while any digest is still waiting (Unit 1.9c).
+        # Which groups of notes are condensed for the drafts, the checked
+        # lines of each group whose digests are all done (Unit 1.9c), and the
+        # groups still waiting for one, so a draft waits only for the groups
+        # it reads (Unit 1.9d).
         self.condensing = digests_module.DigestPlan([], [])
         self.condensed_lines = {}
+        self.digests_waiting = set()
 
     def note(self, note_id: str):
         for item in self.notes:
@@ -4261,7 +4266,7 @@ def notes_for_drafts(
     book.condensing = digests_module.plan(
         book.notes, _notes_order(run_id), _notes_fence, constants.DRAFT_SOURCES_MAX_CHARS
     )
-    book.condensed_lines = _condensed_lines(run_id, book.condensing)
+    book.condensed_lines, book.digests_waiting = _condensed_lines(run_id, book.condensing)
     return book
 
 
@@ -4348,15 +4353,34 @@ def _digest_counts(record, planned, batch) -> bool:
     )
 
 
+def _batch_lines(run_id: str, planned, batch):
+    """One digest's checked lines, or None while it is waiting.
+
+    A digest with no room is never asked for, so its lines are setup's own.
+    """
+    by_setup = digests_module.lines_without_asking(batch)
+    if by_setup is not None:
+        return by_setup
+    record = _read_digest_record(run_id, batch.number)
+    if not (_digest_counts(record, planned, batch) and record.get("done")):
+        return None
+    return list(record.get("rows", []))
+
+
 def _condensed_lines(run_id: str, planned):
-    """Every checked digest line by its group, or None while one is waiting."""
+    """The checked digest lines of every group whose digests are all done,
+    and the groups still waiting for one."""
     found = {}
+    waiting = set()
     for batch in planned.batches:
-        record = _read_digest_record(run_id, batch.number)
-        if not (_digest_counts(record, planned, batch) and record.get("done")):
-            return None
-        found.setdefault(batch.group, []).extend(record.get("rows", []))
-    return found
+        rows = _batch_lines(run_id, planned, batch)
+        if rows is None:
+            waiting.add(batch.group)
+            continue
+        found.setdefault(batch.group, []).extend(rows)
+    for group in waiting:
+        found.pop(group, None)
+    return found, waiting
 
 
 class DigestMade(object):
@@ -4480,8 +4504,7 @@ def digest_status(run_id: str, paste_files: Sequence[str] = (), today=None):
     planned = digest_plan(run_id, paste_files, today)
     found = []
     for batch in planned.batches:
-        record = _read_digest_record(run_id, batch.number)
-        done = _digest_counts(record, planned, batch) and record.get("done")
+        done = _batch_lines(run_id, planned, batch) is not None
         found.append((batch.number, "done" if done else "waiting"))
     return found
 
@@ -4573,7 +4596,17 @@ def notes_for_a_draft(
         # the list of files, as it did when drafts read the files.
         order = [settled.name]
     if book.condensing.groups:
-        if book.condensed_lines is None:
+        # A draft waits only for the digests of the groups it reads, and not
+        # at all when its notes fit as they are (Unit 1.9d).
+        needed = digests_module.groups_needed(
+            found,
+            order,
+            _notes_fence,
+            constants.DRAFT_SOURCES_MAX_CHARS,
+            book.condensing,
+            company_first=not own,
+        )
+        if any(group in book.digests_waiting for group in needed):
             raise notes_module.NotesRefused(
                 "a digest of the notes is still waiting",
                 digests_module.CODE_DIGESTS_WAITING,
@@ -5178,7 +5211,11 @@ def notes_digest(book) -> str:
     held = [item.row() for item in book.notes] + [list(item) for item in book.not_noted]
     condensing = getattr(book, "condensing", None)
     if condensing is not None and condensing.groups:
-        held.append([condensing.digest, getattr(book, "condensed_lines", None)])
+        # The plan, not the lines: a digest once kept is never changed while
+        # its plan holds, and a draft is made only once the digests it reads
+        # are kept, so another group's digest finishing later never makes a
+        # request out of date (Unit 1.9d).
+        held.append(condensing.digest)
     return hashlib.sha256(json.dumps(held, sort_keys=True).encode("utf-8")).hexdigest()
 
 

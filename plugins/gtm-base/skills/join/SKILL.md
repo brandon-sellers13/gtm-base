@@ -508,18 +508,25 @@ python3 scripts/join.py notes-check --run <run identifier> --batch <batch number
 
 This step will condense the facts in the largest groups of notes into
 shorter lines, each pointing to the notes it comes from, so every draft can read
-every customer, every segment, and everything the material leaves open. It
-runs once every batch of notes is done, and it asks the person nothing.
+every segment and everything the material leaves open, with the customers of a
+condensed group counted and listed by setup in the document. It runs once
+every batch of notes is done, and it asks the person nothing.
 
 ```
 python3 scripts/join.py digest-plan --run <run identifier>
+python3 scripts/join.py digest-status --run <run identifier>
 ```
 
-- It prints `groups=` and `digests=`. When `digests=0`, every note fits a
-  draft as it is: say nothing and go on to step 6.
+- When `digest-plan` prints `over=yes`, first say the sentence it printed
+  after it to the person, word for word: even condensed, the drafts cannot
+  read every note, and each draft's preview says so again.
+- It prints `groups=` and `digests=`. When `digests=0`, there is nothing to
+  condense: go on to step 6, saying nothing more.
+- `digest-status` prints each digest as `done` or `waiting`. A digest with no
+  room is done by setup already and is never written by a subagent.
 - Otherwise, say the line for it before the first one: Condensing your notes.
 
-For each digest number from 1 to the number it printed:
+For each digest `digest-status` printed as `waiting`:
 
 ```
 python3 scripts/join.py words-file --run <run identifier> --for company
@@ -545,9 +552,8 @@ python3 scripts/join.py digest-check --run <run identifier> --batch <digest numb
 - After the third try, setup keeps the lines that held up and carries every
   note the material leaves open itself, in the material's own words, and
   prints `carried-by-setup=`. Go on.
-- When a session stops part way, run
-  `python3 scripts/join.py digest-status --run <run identifier>`. It prints
-  each digest as `done` or `waiting`; write the waiting ones only.
+- When a session stops part way, run `digest-status` again and write the
+  waiting ones only.
 - `codes=digests-waiting` from any later step means a digest is still
   waiting.
 

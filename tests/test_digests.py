@@ -246,16 +246,20 @@ class TestWhatADraftReads(unittest.TestCase):
         self.assertEqual(sorted(i.id for i in found), sorted(got.ids))
         self.assertEqual([], got.codes)
 
-    def test_a_condensed_group_keeps_every_customer_and_segment_and_open_note(self):
+    def test_a_condensed_group_keeps_its_segment_and_open_notes_and_counts_its_customers(self):
         found = a_book()
         limit = 4000
         planned = digests.plan(found, ORDER, FENCE, limit)
         got = digests.render(found, ORDER, FENCE, limit, planned, self.lines(planned, found))
         self.assertIn("Harbour fleets", got.condensed)
         self.assertLessEqual(len(got.text), limit)
-        for kept in ("n60", "n61", "n62", "n90"):
+        for kept in ("n61", "n62", "n90"):
             self.assertIn(kept, got.ids)
-        self.assertIn("Gullwing Ferries", got.text)
+        # Unit 1.9d: a customer in a condensed group is counted, never named,
+        # and setup lists it in the document from its note.
+        self.assertNotIn("n60", got.ids)
+        self.assertNotIn("Gullwing Ferries", got.text)
+        self.assertIn("one customer", got.text)
         self.assertNotIn("bought the harbour feed in spring", got.text)
         self.assertIn("[n62]", got.text)
         self.assertGreater(got.folded, 0)
@@ -284,7 +288,7 @@ class TestWhatADraftReads(unittest.TestCase):
         got = digests.render(found, ORDER, FENCE, 2600, planned, lines)
         self.assertLessEqual(len(got.text), 2600)
         self.assertIn("[n62]", got.text)
-        self.assertIn("n60", got.ids)
+        self.assertIn("n61", got.ids)
         self.assertFalse(got.over)
 
     def test_whole_groups_with_customers_never_push_a_request_over(self):
@@ -304,7 +308,8 @@ class TestWhatADraftReads(unittest.TestCase):
         self.assertTrue(got.dropped)
 
     def test_a_request_that_cannot_fit_what_it_must_carry_says_so(self):
-        found = [note(100 + i, kind="customer", segment="Inland depots", customer="Depot %d" % i)
+        found = [note(100 + i, segment="Inland depots", status="open",
+                      quote="Whether depot %d pays for the yard feed is to be confirmed." % i)
                  for i in range(60)]
         got = digests.render(found, ORDER, FENCE, 1000, digests.DigestPlan(["Inland depots"], []), {})
         self.assertTrue(got.over)
@@ -343,9 +348,187 @@ class TestWhatADraftReads(unittest.TestCase):
         got = digests.render(found, ORDER, FENCE, 1500, planned, self.lines(planned, found))
         self.assertTrue(got.dropped)
         self.assertIn(notes.CODE_NOTES_CAPPED, got.codes)
-        for kept in ("n60", "n61", "n62"):
+        for kept in ("n61", "n62"):
             self.assertIn(kept, got.ids)
 
+
+# --- At scale: material many times one request (Unit 1.9d) -------------------
+
+
+def a_large_book(groups=12, segment_notes=6, customers=30, settled=20, open_=5):
+    """Many segments, each named many times in passing, with many customers."""
+    found = []
+    number = 1
+    for g in range(groups):
+        name = "Fleet kind %d" % g
+        for i in range(segment_notes):
+            found.append(note(number, kind="segment", segment=name,
+                              status="settled" if i < segment_notes - 1 else "open",
+                              quote="Fleet kind %d is described this way, mention %d of it." % (g, i)))
+            number += 1
+        for i in range(customers):
+            found.append(note(number, kind="customer", segment=name, customer="Buyer %d-%d" % (g, i),
+                              status="settled" if i % 3 else "open",
+                              quote="Buyer %d-%d took the fleet feed for a season." % (g, i)))
+            number += 1
+        for i in range(settled):
+            found.append(note(number, segment=name,
+                              quote="Fleet kind %d settled point %d, said at ordinary length here." % (g, i)))
+            number += 1
+        for i in range(open_):
+            found.append(note(number, segment=name, status="open",
+                              quote="Whether fleet kind %d wants option %d is to be confirmed." % (g, i)))
+            number += 1
+    return found
+
+
+LARGE_ORDER = ["Fleet kind %d" % g for g in range(12)]
+
+
+def fill_to_room(batch, average=150, per_line=1):
+    """A digest that uses its whole room: one short line per open note, then
+    settled lines of the average length the plan assumes, each citing
+    `per_line` settled notes, none cited twice."""
+    rows = [{"line": "Open point %s." % i, "notes": [i], "status": "open"} for i in batch.must_carry]
+    used = sum(len(row["line"]) for row in rows)
+    settled = [i for i in batch.ids if i not in batch.must_carry]
+    while settled and used + average <= batch.room:
+        cited, settled = settled[:per_line], settled[per_line:]
+        rows.append({"line": "s" * average, "notes": cited, "status": "settled"})
+        used += average
+    return rows
+
+
+class TestAtScale(unittest.TestCase):
+    def whole_size(self, found, order):
+        return len(FENCE("\n\n".join(
+            digests._raw_block(n, m) for n, m in notes.group_notes(found, order))))
+
+    def test_only_the_first_three_segment_notes_keep_their_words(self):
+        found = a_large_book()
+        planned = digests.plan(found, LARGE_ORDER, FENCE, self.whole_size(found, LARGE_ORDER) // 3)
+        name = planned.groups[0]
+        own = [item for item in found if item.segment == name and item.kind == "segment"]
+        condensed = set(i for b in planned.batches if b.group == name for i in b.ids)
+        self.assertEqual(set(), set(item.id for item in own[:3]) & condensed)
+        self.assertEqual(set(item.id for item in own[3:]), set(item.id for item in own[3:]) & condensed)
+        # The open segment note among the rest must be carried.
+        self.assertIn(own[-1].id, [i for b in planned.batches for i in b.must_carry])
+
+    def test_customers_in_a_condensed_group_are_planned_as_one_line(self):
+        found = a_large_book(customers=400)
+        name = "Fleet kind 0"
+        members = [item for item in found if item.segment == name]
+        self.assertLess(digests._kept_size(name, members), 1000)
+        customers = set(item.id for item in members if item.kind == "customer")
+        planned = digests.plan(found, LARGE_ORDER, FENCE, self.whole_size(found, LARGE_ORDER) // 4)
+        self.assertEqual(set(), customers & set(i for b in planned.batches for i in b.ids))
+
+    def test_the_count_line_says_how_many_customers_and_how_many_are_open(self):
+        found = a_large_book()
+        limit = self.whole_size(found, LARGE_ORDER) // 3
+        planned = digests.plan(found, LARGE_ORDER, FENCE, limit)
+        lines = dict((b.group, []) for b in planned.batches)
+        for b in planned.batches:
+            lines[b.group].extend(fill_to_room(b))
+        got = digests.render(found, LARGE_ORDER, FENCE, limit, planned, lines)
+        self.assertIn("30 customers", got.text)
+        self.assertIn("ten of them not settled", got.text)
+        kind = got.condensed[0].split()[-1]
+        self.assertNotIn("Buyer %s-1 " % kind, got.text)
+
+    def test_digests_that_use_their_whole_room_fit_the_draft(self):
+        # The rooms are planned after what setup writes, the note numbers and
+        # status of each line included, so digests that keep to their rooms
+        # never push a draft over the limit or cost it an open note.
+        found = a_large_book(groups=12, open_=12)
+        limit = self.whole_size(found, LARGE_ORDER) // 3
+        planned = digests.plan(found, LARGE_ORDER, FENCE, limit)
+        self.assertFalse(planned.over)
+        lines = {}
+        for b in planned.batches:
+            lines.setdefault(b.group, []).extend(fill_to_room(b))
+        got = digests.render(found, LARGE_ORDER, FENCE, limit, planned, lines)
+        self.assertLessEqual(len(got.text), limit)
+        self.assertFalse(got.over)
+        self.assertEqual([], got.dropped)
+        for b in planned.batches:
+            for i in b.must_carry:
+                self.assertIn(i, got.ids)
+
+    def test_digests_joining_settled_notes_never_push_facts_out(self):
+        # The correctness review of 2026-11-25, finding 1: the rooms left out
+        # the numbers of the settled notes a line cites and each line break.
+        found = [note(i, segment="") for i in range(1, 31)]
+        number = 100
+        for g in range(5):
+            for i in range(200):
+                found.append(note(number, segment="Fleet kind %d" % g))
+                number += 1
+            for i in range(5):
+                found.append(note(number, segment="Fleet kind %d" % g, status="open",
+                                  quote="Whether fleet kind %d wants option %d is to be confirmed." % (g, i)))
+                number += 1
+        order = ["Fleet kind %d" % g for g in range(5)]
+        planned = digests.plan(found, order, FENCE, 40000)
+        self.assertFalse(planned.over)
+        for per_line in (1, 5):
+            lines = {}
+            for b in planned.batches:
+                lines.setdefault(b.group, []).extend(fill_to_room(b, per_line=per_line))
+            got = digests.render(found, order, FENCE, 40000, planned, lines)
+            self.assertLessEqual(len(got.text), 40000)
+            self.assertEqual([], got.dropped, per_line)
+
+    def test_a_room_too_small_for_one_line_is_no_room(self):
+        found = a_large_book(groups=12, settled=4, open_=1)
+        for divisor in (3, 4, 5, 6, 8):
+            planned = digests.plan(found, LARGE_ORDER, FENCE, self.whole_size(found, LARGE_ORDER) // divisor)
+            for b in planned.batches:
+                self.assertTrue(b.room == 0 or b.room >= digests.AVERAGE_LINE, (divisor, b))
+
+    def test_the_company_count_never_says_a_document_lists_them(self):
+        # Finding 2: a segment's document does not list the customers of the
+        # whole company, so the count must not say it does.
+        members = [note(i, kind="customer", customer="Buyer %d" % i) for i in range(4)]
+        said = digests._count_line("", members)
+        self.assertIn("four customers", said)
+        self.assertNotIn("lists", said)
+        self.assertIn("lists", digests._count_line("Fleet kind 0", members))
+
+    def test_no_digest_is_given_a_floor_the_draft_has_no_room_for(self):
+        found = a_large_book(groups=12, settled=4, open_=1)
+        limit = self.whole_size(found, LARGE_ORDER) // 3
+        planned = digests.plan(found, LARGE_ORDER, FENCE, limit)
+        self.assertGreater(len(planned.batches) * digests.ROOM_FLOOR, limit)
+        self.assertLess(sum(b.room for b in planned.batches), limit)
+        self.assertLess(min(b.room for b in planned.batches), digests.ROOM_FLOOR)
+
+    def test_the_plan_says_up_front_when_what_setup_writes_does_not_fit(self):
+        found = a_large_book(groups=12, customers=2, settled=2, open_=1)
+        limit = 2500
+        planned = digests.plan(found, LARGE_ORDER, FENCE, limit)
+        self.assertTrue(planned.over)
+        self.assertEqual([0], sorted(set(b.room for b in planned.batches)))
+
+    def test_a_digest_with_no_room_is_carried_by_setup_without_asking(self):
+        batch = digests.DigestBatch(1, "Fleet kind 0", [
+            note(1, segment="Fleet kind 0"),
+            note(2, segment="Fleet kind 0", status="open", quote="Whether it renews is to be confirmed."),
+        ], 0)
+        rows = digests.lines_without_asking(batch)
+        self.assertEqual([["n2"]], [row["notes"] for row in rows])
+        self.assertIsNone(digests.lines_without_asking(
+            digests.DigestBatch(1, "Fleet kind 0", batch.notes, 100)))
+
+    def test_a_view_needs_only_the_condensed_groups_it_reads_and_none_when_it_fits(self):
+        found = a_large_book()
+        planned = digests.plan(found, LARGE_ORDER, FENCE, self.whole_size(found, LARGE_ORDER) // 8)
+        self.assertEqual(sorted(LARGE_ORDER), sorted(planned.groups))
+        one = [item for item in found if item.segment == "Fleet kind 4"]
+        self.assertEqual([], digests.groups_needed(one, ["Fleet kind 4"], FENCE, 10 ** 6, planned, False))
+        self.assertEqual(["Fleet kind 4"],
+                         digests.groups_needed(one, ["Fleet kind 4"], FENCE, 500, planned, False))
 
 # --- Through setup: a run whose notes do not fit one draft (D2 to D4) ---------
 
@@ -494,7 +677,8 @@ class TestDigestsThroughSetup(ThroughSetup):
         self.assertEqual([(1, "done"), (2, "done")], join_flow.digest_status(self.run_id, today=TODAY))
         taken = join_flow.notes_for_a_draft(self.run_id, "icp", today=TODAY)
         self.assertEqual(["Harbour fleets"], taken.rendered.condensed)
-        self.assertIn("Gullwing Ferries", taken.rendered.text)
+        self.assertNotIn("Gullwing Ferries", taken.rendered.text)
+        self.assertIn("one customer", taken.rendered.text)
         self.assertIn("[%s]" % self.open_id(), taken.rendered.text)
         self.assertLessEqual(len(taken.rendered.text), self.LIMIT)
         self.assertIn(self.open_id(), taken.rendered.ids)
@@ -554,6 +738,50 @@ class TestDigestsThroughSetup(ThroughSetup):
         self.digest_everything()
         self.take_notes(self.rows[1:])
         self.assertIn("waiting", [state for _n, state in join_flow.digest_status(self.run_id, today=TODAY)])
+
+
+class TestEachDraftWaitsForItsOwnView(ThroughSetup):
+    """Unit 1.9d, E3: a draft waits only for the digests of what it reads."""
+
+    def segment(self, name):
+        import types
+
+        return types.SimpleNamespace(name=name, source="", slug=name.lower().replace(" ", "-"))
+
+    def test_a_segment_draft_reading_no_condensed_group_does_not_wait(self):
+        taken = join_flow.notes_for_a_draft(
+            self.run_id, "segment", self.segment("Airfields"), today=TODAY)
+        self.assertEqual([], getattr(taken.rendered, "condensed", []))
+        self.assertIn("apron view", taken.rendered.text)
+
+    def test_a_segment_draft_reading_a_condensed_group_waits_for_it(self):
+        with self.assertRaises(notes.NotesRefused) as caught:
+            join_flow.notes_for_a_draft(
+                self.run_id, "segment", self.segment("Harbour fleets"), today=TODAY)
+        self.assertEqual(digests.CODE_DIGESTS_WAITING, caught.exception.code)
+
+    def test_a_request_made_before_other_digests_finish_still_counts(self):
+        before = join_flow.notes_digest(self.book())
+        self.digest_everything()
+        self.assertEqual(before, join_flow.notes_digest(self.book()))
+
+    def test_a_digest_with_no_room_never_waits(self):
+        from unittest import mock
+
+        original = digests.plan
+
+        def no_room(*arguments, **keywords):
+            planned = original(*arguments, **keywords)
+            for batch in planned.batches:
+                batch.room = 0
+            return planned
+
+        with mock.patch.object(digests, "plan", no_room):
+            self.assertEqual([(1, "done"), (2, "done")],
+                             join_flow.digest_status(self.run_id, today=TODAY))
+            taken = join_flow.notes_for_a_draft(self.run_id, "icp", today=TODAY)
+        self.assertIn("to be confirmed", taken.rendered.text)
+        self.assertIn(self.open_id(), taken.rendered.ids)
 
 
 class TestTheScriptAtTheShippedLimit(ThroughSetup):
@@ -629,10 +857,9 @@ class TestDigestsThroughTheScript(ThroughSetup):
             if line.strip().startswith("python3 scripts/join.py digest-")
         ]
         self.assertEqual(
-            ["digest-plan", "digest-assemble", "digest-check"],
+            ["digest-plan", "digest-status", "digest-assemble", "digest-check"],
             [line.split()[2] for line in lines],
         )
-        self.assertIn("python3 scripts/join.py digest-status --run <run identifier>", step)
         planned = join_flow.digest_plan(self.run_id, today=TODAY)
         state = {"<run identifier>": self.run_id}
         for batch in planned.batches:
@@ -653,6 +880,23 @@ class TestDigestsThroughTheScript(ThroughSetup):
                     state["<digest file>"] = self.value(finished, "digest")
         finished = self.script("digest-status", "--run", self.run_id)
         self.assertIn(b"waiting=0", finished.stdout)
+
+    def test_digest_plan_says_up_front_when_the_drafts_cannot_read_every_note(self):
+        import io
+        import types
+        from unittest import mock
+
+        sys.path.insert(0, os.path.dirname(SHIM))
+        try:
+            import join as join_script
+        finally:
+            sys.path.pop(0)
+        over = digests.DigestPlan(["Harbour fleets"], [], over=True)
+        out = io.StringIO()
+        with mock.patch.object(join_flow, "digest_plan", lambda *a, **k: over):
+            join_script.run_digest_plan(types.SimpleNamespace(run=self.run_id, paste_file=[]), out)
+        self.assertIn("over=yes", out.getvalue())
+        self.assertIn(constants.DIGESTS_OVER, out.getvalue())
 
     def test_a_draft_waiting_for_its_digest_says_so_through_the_script(self):
         finished = self.script("preview", "--step", "icp", "--run", self.run_id)

@@ -900,8 +900,15 @@ PREVIEW_WHY_LIMITED = (
 PREVIEW_NOTES_CONDENSED = (
     "Your notes are more than one draft can read at once, so the facts about "
     "%(groups)s were condensed first into shorter lines, each pointing to the "
-    "notes it comes from. Every customer, every segment, and everything your "
-    "material leaves open still goes into this draft."
+    "notes it comes from. Every segment and everything your material leaves "
+    "open still goes into this draft, and the customers there are counted in "
+    "it and listed by name in the document."
+)
+# Said once, before anything is condensed, when even the lines setup writes
+# for the condensed groups are more than one draft can read (Unit 1.9d).
+DIGESTS_OVER = (
+    "Your material is large enough that even condensed, the drafts cannot "
+    "read every note, so each draft will say which notes it leaves out."
 )
 PREVIEW_NOTES_FOLDED_ONE = (
     "The shorter lines leave out one fact your material states as settled, so "
