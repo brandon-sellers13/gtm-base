@@ -53,6 +53,10 @@ export type BaseView = {
 };
 
 export class BaseNotFound extends Error {}
+// A base with more files than this is not read here, so one oversized push
+// cannot make every page load use up the viewer's GitHub allowance.
+export const MAX_BASE_FILES = 400;
+export class BaseTooLarge extends Error {}
 
 export function docHref(owner: string, repo: string, path: string) {
   return `/b/${owner}/${repo}/doc/${path.split("/").map(encodeURIComponent).join("/")}`;
@@ -144,6 +148,7 @@ const confirmationsFileFor = (path: string) => `work/confirmations/${path.replac
 async function load(token: string, owner: string, repo: string, only?: string) {
   const { info, blobs, truncated } = await repoAndTree(token, owner, repo);
 
+  if (blobs.length > MAX_BASE_FILES) throw new BaseTooLarge();
   const markdown = blobs.filter((b) => b.path.endsWith(".md") && !b.path.startsWith("work/confirmations/"));
   const confirmationFiles = blobs.filter((b) => b.path.startsWith("work/confirmations/") && !b.path.endsWith(".gitkeep"));
 

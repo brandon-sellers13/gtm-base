@@ -10,6 +10,8 @@ import { newState, stateCookieOptions } from "@/lib/oauthState";
 // web/.env.live for sending to the host.
 export async function POST(request: NextRequest) {
   if (!isDevelopment()) return new NextResponse(null, { status: 404 });
+  // Only this app's own setup page may start this; a page on another site may not.
+  if (request.headers.get("origin") !== appUrl()) return new NextResponse(null, { status: 403 });
 
   const form = await request.formData();
   const live = form.get("target") === "live";

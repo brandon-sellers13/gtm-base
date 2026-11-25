@@ -7,7 +7,6 @@ export type GitHubAppConfig = {
   slug: string;
   clientId: string;
   clientSecret: string;
-  privateKey: string;
 };
 
 export function appUrl(): string {
@@ -24,23 +23,15 @@ export function githubApp(): GitHubAppConfig | null {
   const slug = process.env.GITHUB_APP_SLUG;
   const clientId = process.env.GITHUB_APP_CLIENT_ID;
   const clientSecret = process.env.GITHUB_APP_CLIENT_SECRET;
-  const privateKey = process.env.GITHUB_APP_PRIVATE_KEY;
-  if (!appId || !slug || !clientId || !clientSecret || !privateKey) return null;
+  // The app's private key is kept on this computer (GitHub shows it only once) but
+  // nothing in the app uses it, so the running app neither needs nor holds it.
+  if (!appId || !slug || !clientId || !clientSecret) return null;
   return {
     appId,
     slug,
     clientId,
     clientSecret,
-    privateKey: readPrivateKey(privateKey),
   };
-}
-
-// Locally the key is the PEM text with escaped newlines (env files hold one line).
-// On Netlify it is base64 of the PEM, because a value starting with dashes is read
-// by the Netlify command line as an option.
-function readPrivateKey(value: string): string {
-  if (value.includes("-----BEGIN")) return value.replace(/\\n/g, "\n");
-  return Buffer.from(value, "base64").toString("utf8");
 }
 
 export function sessionSecret(): Uint8Array {

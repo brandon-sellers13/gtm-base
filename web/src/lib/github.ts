@@ -23,7 +23,9 @@ export async function api<T>(path: string, init: RequestInit & { token?: string 
     // The body can echo request details, so only the status is kept.
     throw new GitHubError(`GitHub answered ${response.status} for ${path.split("?")[0]}`, response.status);
   }
-  return (await response.json()) as T;
+  // 204 No Content (an invitation cancelled, a collaborator already there) has no body.
+  const text = await response.text();
+  return (text ? JSON.parse(text) : null) as T;
 }
 
 export type GitHubUser = { login: string; name: string | null; avatar_url: string };

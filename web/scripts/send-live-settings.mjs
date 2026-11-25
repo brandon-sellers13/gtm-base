@@ -10,14 +10,14 @@
 import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 
-const SECRET = new Set(["GITHUB_APP_CLIENT_SECRET", "GITHUB_APP_PRIVATE_KEY", "SESSION_SECRET"]);
+// The app's private key stays on this computer: the running app never uses it.
+const SECRET = new Set(["GITHUB_APP_CLIENT_SECRET", "SESSION_SECRET"]);
 const ORDER = [
   "APP_URL",
   "GITHUB_APP_ID",
   "GITHUB_APP_SLUG",
   "GITHUB_APP_CLIENT_ID",
   "GITHUB_APP_CLIENT_SECRET",
-  "GITHUB_APP_PRIVATE_KEY",
   "SESSION_SECRET",
   "ALLOWED_GITHUB_LOGINS",
 ];
@@ -42,17 +42,11 @@ if (missing.length) {
   process.exit(1);
 }
 
-// The Netlify command line reads a value starting with dashes as an option, so the
-// private key (which starts "-----BEGIN") is sent as base64; the app decodes it.
-settings.set(
-  "GITHUB_APP_PRIVATE_KEY",
-  Buffer.from(settings.get("GITHUB_APP_PRIVATE_KEY").replace(/\\n/g, "\n"), "utf8").toString("base64"),
-);
-
 for (const key of ORDER) {
   const args = ["env:set", key, settings.get(key), "--force"];
-  // Secrets cannot be read back in Netlify and are not given to local development.
-  if (SECRET.has(key)) args.push("--secret", "--context", "production", "--context", "deploy-preview", "--context", "branch-deploy");
+  // Secrets cannot be read back in Netlify, and only the production site gets
+  // them: a preview or branch build never holds the live session secret.
+  if (SECRET.has(key)) args.push("--secret", "--context", "production");
   try {
     execFileSync("netlify", args, { stdio: ["ignore", "pipe", "pipe"], encoding: "utf8", timeout: 60000 });
     console.log(`set ${key}${SECRET.has(key) ? " (secret)" : ""}`);

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { allowedLogins, appUrl, githubApp } from "@/lib/config";
-import { exchangeCode, getUser, getVerifiedEmails } from "@/lib/github";
+import { exchangeCode, getUser, getVerifiedEmails, listInstallations } from "@/lib/github";
+import { reachesAllowedBase } from "@/lib/team";
 import { sameState } from "@/lib/oauthState";
 import { SESSION_COOKIE, sealSession, sessionCookieOptions } from "@/lib/session";
 
@@ -33,7 +34,10 @@ export async function GET(request: NextRequest) {
       `${appUrl()}/api/auth/callback`,
     );
     const user = await getUser(token);
-    if (!allowedLogins().has(user.login.toLowerCase())) {
+    const allowed = allowedLogins();
+    const listed = allowed.has(user.login.toLowerCase());
+    const team = !listed && (await reachesAllowedBase(token, await listInstallations(token), allowed));
+    if (!listed && !team) {
       response = NextResponse.redirect(home("invite-only"));
     } else {
       const sealed = await sealSession({
@@ -43,6 +47,7 @@ export async function GET(request: NextRequest) {
         emails: await getVerifiedEmails(token),
         token,
         expiresAt: Date.now() + expiresInSeconds * 1000,
+        ...(team ? { team: true } : {}),
       });
       // A notice the page ignores: on Netlify, a redirect with no query of its own
       // gets GitHub's code and state carried onto it.

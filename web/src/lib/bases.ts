@@ -18,9 +18,11 @@ type Repo = { name: string; owner: { login: string }; private: boolean; html_url
 const MAP_PATH = "context/map.md";
 const REPOS_PER_ACCOUNT = 100; // version one looks at the first hundred repositories per account
 
+const MAX_ACCOUNTS = 10; // accounts looked at per page load
+
 export async function listBases(token: string, installations: Installation[]): Promise<Base[]> {
   const perAccount = await Promise.all(
-    installations.map(async (installation) => {
+    installations.slice(0, MAX_ACCOUNTS).map(async (installation) => {
       const body = await api<{ repositories: Repo[] }>(
         `/user/installations/${installation.id}/repositories?per_page=${REPOS_PER_ACCOUNT}`,
         { token },

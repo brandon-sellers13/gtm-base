@@ -12,6 +12,8 @@ const NOTICES: Record<string, string> = {
   "sign-in-expired": "That sign-in took too long or was started in another window. Please try again.",
   "sign-in-failed": "GitHub did not complete the sign-in. Please try again.",
   "signed-out-by-github": "GitHub ended this sign-in. Please sign in again.",
+  "base-too-large": "That base holds more files than GTM Base reads here. Open it on GitHub instead.",
+  "team-only": "You are here as a teammate on someone else's base, so creating a base of your own is not open to you yet.",
   installed: "GTM Base is installed. If you are not signed in yet, sign in to see your accounts.",
   "base-created": "Your company base is created. Its repository is private, and you own every document in it.",
 };
@@ -43,7 +45,7 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ n
           <p className="mb-8 rounded-lg border border-line bg-notice px-4 py-3 text-sm">{NOTICES[notice]}</p>
         )}
 
-        {!app ? <NotConnected /> : !session ? <SignedOut /> : <SignedIn token={session.token} name={session.name ?? session.login} created={base} />}
+        {!app ? <NotConnected /> : !session ? <SignedOut /> : <SignedIn token={session.token} name={session.name ?? session.login} created={base} team={!!session.team} />}
       </main>
     </div>
   );
@@ -88,7 +90,17 @@ function SignedOut() {
   );
 }
 
-async function SignedIn({ token, name, created }: { token: string; name: string; created?: string }) {
+async function SignedIn({
+  token,
+  name,
+  created,
+  team,
+}: {
+  token: string;
+  name: string;
+  created?: string;
+  team: boolean;
+}) {
   let installations: Installation[] | null = null;
   let bases: Base[] | null = null;
   let tokenRefused = false;
@@ -107,9 +119,11 @@ async function SignedIn({ token, name, created }: { token: string; name: string;
 
       <div className="mt-10 flex items-baseline justify-between">
         <h2 className="font-mono text-xs font-bold uppercase tracking-wider text-ink-quiet">Your bases</h2>
-        <Link href="/new" className="text-sm font-medium text-source underline-offset-4 hover:underline">
-          Create a base
-        </Link>
+        {!team && (
+          <Link href="/new" className="text-sm font-medium text-source underline-offset-4 hover:underline">
+            Create a base
+          </Link>
+        )}
       </div>
       {bases === null ? (
         <p className="mt-3 text-sm text-ink-mid">GitHub did not answer just now. Reload the page to try again.</p>
@@ -168,9 +182,11 @@ async function SignedIn({ token, name, created }: { token: string; name: string;
           ))}
         </ul>
       )}
-      <a href="/api/auth/login?install=1" className="mt-5 inline-block text-sm font-medium text-source underline-offset-4 hover:underline">
-        Install GTM Base on another account
-      </a>
+      {!team && (
+        <a href="/api/auth/login?install=1" className="mt-5 inline-block text-sm font-medium text-source underline-offset-4 hover:underline">
+          Install GTM Base on another account
+        </a>
+      )}
     </section>
   );
 }
