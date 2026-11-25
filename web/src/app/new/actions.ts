@@ -13,6 +13,9 @@ const EMAIL = /^[^\s@<>"]+@[^\s@<>"]+\.[^\s@<>"]+$/;
 export async function createBaseAction(formData: FormData) {
   const session = await currentSession();
   if (!session) redirect("/");
+  // Someone let in only as a teammate on another person's base does not start
+  // bases of their own; the allowlist decides who starts using GTM Base.
+  if (session.team) redirect("/?notice=team-only");
 
   const installationId = Number(formData.get("installation"));
   const repoName = String(formData.get("repo") ?? "").trim();

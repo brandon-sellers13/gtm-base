@@ -108,9 +108,46 @@ export default async function ProposalPage({
           ))}
         </ul>
 
-        <article className="doc mt-10">
-          <ReactMarkdown remarkPlugins={[remarkGfm]}>{proposal.body}</ReactMarkdown>
+        <h2 className="mt-10 font-mono text-xs font-bold uppercase tracking-wider text-ink-quiet">What the proposal says</h2>
+        <article className="doc mt-3">
+          <ReactMarkdown remarkPlugins={[remarkGfm]} disallowedElements={["img"]} unwrapDisallowed>
+            {proposal.body}
+          </ReactMarkdown>
         </article>
+
+        {/* The description is written by the proposer; this is what would actually change. */}
+        <h2 className="mt-10 font-mono text-xs font-bold uppercase tracking-wider text-ink-quiet">
+          What would actually change
+        </h2>
+        {proposal.files
+          .filter((f) => f.status !== "renamed away" && f.status !== "copied from")
+          .map((file) => (
+            <div key={file.path} className="mt-3 overflow-hidden rounded-lg border border-line">
+              <p className="border-b border-line bg-surface px-3 py-2 font-mono text-xs">{file.path}</p>
+              {file.patch ? (
+                <pre className="overflow-x-auto bg-ground p-3 font-mono text-xs leading-5">
+                  {file.patch.split("\n").map((line, i) => (
+                    <span
+                      key={i}
+                      className={
+                        line.startsWith("+") ? "block text-source" : line.startsWith("-") ? "block text-resolved" : "block text-ink-quiet"
+                      }
+                    >
+                      {line || " "}
+                    </span>
+                  ))}
+                </pre>
+              ) : (
+                <p className="px-3 py-2 text-sm text-ink-quiet">
+                  GitHub does not show this change inline (too large or not text).{" "}
+                  <a href={`${proposal.htmlUrl}/files`} className="text-source hover:underline">
+                    Read it on GitHub
+                  </a>{" "}
+                  before accepting.
+                </p>
+              )}
+            </div>
+          ))}
 
         <section className="mt-10 rounded-lg border border-line bg-surface p-4">
           {blocked === "other-files" ? (

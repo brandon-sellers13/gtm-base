@@ -28,6 +28,9 @@ export function buildManifest(siteUrl: string, returnUrl: string, name: string) 
       contents: "write",
       pull_requests: "write",
       repository_creation: "write",
+      // Inviting a teammate to a base's repository needs this; it also covers
+      // repository settings, and the app's code only ever calls the invite endpoints.
+      administration: "write",
       emails: "read",
     },
   };

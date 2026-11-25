@@ -39,6 +39,10 @@ export default async function BasePage({ params }: { params: Promise<{ owner: st
               : `${proposals.length} ${proposals.length === 1 ? "proposal" : "proposals"} waiting`}
           </Link>{" "}
           ·{" "}
+          <Link href={`/b/${base.owner}/${base.repo}/team`} className="underline-offset-4 hover:underline">
+            Team
+          </Link>{" "}
+          ·{" "}
           <a href={base.htmlUrl} className="underline-offset-4 hover:underline">
             Open on GitHub
           </a>

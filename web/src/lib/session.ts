@@ -16,6 +16,7 @@ export type Session = {
   emails: string[]; // verified addresses only, used to match document owners
   token: string;
   expiresAt: number; // milliseconds since the epoch
+  team?: boolean; // let in at sign-in because they reach a base on an allowed account
 };
 
 export async function sealSession(session: Session): Promise<string> {
@@ -33,7 +34,9 @@ export async function openSession(value: string | undefined): Promise<Session | 
     const session = payload.s as Session | undefined;
     if (!session || session.expiresAt < Date.now()) return null;
     // Checked on every request, so taking a login off the list ends its session at once.
-    if (!allowedLogins().has(session.login.toLowerCase())) return null;
+    // A teammate let in at sign-in stays in for the session; if their access to
+    // the base is removed, GitHub itself stops showing it to them.
+    if (!session.team && !allowedLogins().has(session.login.toLowerCase())) return null;
     return session;
   } catch {
     return null;

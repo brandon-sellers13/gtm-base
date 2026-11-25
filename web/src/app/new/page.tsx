@@ -27,6 +27,7 @@ export default async function NewBase({
 }) {
   const session = await currentSession();
   if (!session) redirect("/");
+  if (session.team) redirect("/?notice=team-only");
   const { problem, repo } = await searchParams;
   const installations = await listInstallations(session.token);
   const usable = installations.filter(

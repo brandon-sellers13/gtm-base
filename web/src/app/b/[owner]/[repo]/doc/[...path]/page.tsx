@@ -88,7 +88,10 @@ export default async function DocumentPage({
 
         <article className="doc mt-10">
           {/* Raw HTML in a document is shown as text, never run: react-markdown escapes it by default. */}
-          <ReactMarkdown remarkPlugins={[remarkGfm]}>{body}</ReactMarkdown>
+          {/* Images are left out: one pointing elsewhere would tell its owner who read the document, and when. */}
+          <ReactMarkdown remarkPlugins={[remarkGfm]} disallowedElements={["img"]} unwrapDisallowed>
+            {body}
+          </ReactMarkdown>
         </article>
       </main>
     </div>

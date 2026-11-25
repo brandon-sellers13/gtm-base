@@ -48,6 +48,7 @@ export type ProposalFile = {
   owners: string[]; // empty for records, or for a document that names no owner
   ownedDocument: boolean;
   allowed: boolean; // an owned document or one of the plugin's records
+  patch: string | null; // the change itself, as GitHub shows it (null for very large files)
 };
 
 export type Proposal = ProposalSummary & {
@@ -113,17 +114,19 @@ async function getPull(token: string, owner: string, repo: string, number: numbe
 
 // Records a proposal may add alongside the documents it changes.
 const RECORD_PREFIXES = ["learning/changes/", "learning/corrections/"];
-const MAX_FILE_PAGES = 10; // 1,000 files; a bigger proposal is refused, never half-checked
+const MAX_FILE_PAGES = 3; // 300 files; a bigger proposal is refused, never half-checked
+const OWNER_READS_AT_ONCE = 8;
 
 export async function getProposal(token: string, owner: string, repo: string, number: number): Promise<Proposal> {
   const pull = await getPull(token, owner, repo, number);
   const found = marker(pull.body);
   if (!found || pull.state !== "open") throw new ProposalNotFound();
 
-  const changed: { filename: string; status: string }[] = [];
+  type Changed = { filename: string; status: string; previous_filename?: string; patch?: string };
+  const changed: Changed[] = [];
   let complete = false;
   for (let page = 1; page <= MAX_FILE_PAGES; page++) {
-    const batch = await api<{ filename: string; status: string }[]>(
+    const batch = await api<Changed[]>(
       `/repos/${owner}/${repo}/pulls/${number}/files?per_page=100&page=${page}`,
       { token },
     );
@@ -142,20 +145,48 @@ export async function getProposal(token: string, owner: string, repo: string, nu
   );
   const baseOwners = await readOwners(token, owner, repo, "context/map.md", tip.object.sha);
 
-  const files = await Promise.all(
-    changed.map(async (file) => {
-      const ownedDocument = OWNED_PREFIXES.some((prefix) => file.filename.startsWith(prefix)) && file.filename.endsWith(".md");
-      const record = RECORD_PREFIXES.some((prefix) => file.filename.startsWith(prefix)) && file.filename.endsWith(".md");
-      // A brand-new document has no saved owner yet, so the base's owner (the map's)
-      // decides, whatever owner the proposal writes into it.
-      const owners = !ownedDocument
-        ? []
-        : file.status === "added"
-          ? baseOwners
-          : await readOwners(token, owner, repo, file.filename, tip.object.sha);
-      return { path: file.filename, status: file.status, owners, ownedDocument, allowed: ownedDocument || record };
-    }),
-  );
+  const kindOf = (path: string) => ({
+    ownedDocument: OWNED_PREFIXES.some((prefix) => path.startsWith(prefix)) && path.endsWith(".md"),
+    record: RECORD_PREFIXES.some((prefix) => path.startsWith(prefix)) && path.endsWith(".md"),
+  });
+
+  // A rename or copy is checked at both ends: the file it came from must also be
+  // a document or record, and that document's owners must agree too, so a
+  // rename cannot carry someone else's document away unseen.
+  const entries = changed.flatMap((file) => {
+    const list = [{ path: file.filename, status: file.status, patch: file.patch ?? null, newFile: file.status === "added" || file.status === "copied" }];
+    if ((file.status === "renamed" || file.status === "copied") && file.previous_filename) {
+      list.push({ path: file.previous_filename, status: file.status === "renamed" ? "renamed away" : "copied from", patch: null, newFile: false });
+      list[0].newFile = true;
+    }
+    return list;
+  });
+
+  const files: ProposalFile[] = [];
+  for (let i = 0; i < entries.length; i += OWNER_READS_AT_ONCE) {
+    files.push(
+      ...(await Promise.all(
+        entries.slice(i, i + OWNER_READS_AT_ONCE).map(async (entry) => {
+          const { ownedDocument, record } = kindOf(entry.path);
+          // A brand-new document has no saved owner yet, so the base's owner (the
+          // map's) decides, whatever owner the proposal writes into it.
+          const owners = !ownedDocument
+            ? []
+            : entry.newFile
+              ? baseOwners
+              : await readOwners(token, owner, repo, entry.path, tip.object.sha);
+          return {
+            path: entry.path,
+            status: entry.status,
+            owners,
+            ownedDocument,
+            allowed: ownedDocument || record,
+            patch: entry.patch,
+          };
+        }),
+      )),
+    );
+  }
 
   return {
     ...summary(pull, found.proposalId),
