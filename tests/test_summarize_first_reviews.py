@@ -35,6 +35,16 @@ class TestFiguresKeepTheirUnits(unittest.TestCase):
         for line in ("Churn fell 14% [n1]", "It costs $40 per seat [n1]", "In Q3 churn fell [n1]"):
             self.assertEqual([], citations.check(line, readable, []), line)
 
+    def test_an_amount_written_with_a_capital_unit_stands_when_its_quote_has_it(self):
+        # Found in the scored re-run of 2026-11-25: "$900K" was read as "$900",
+        # which no quote holds bare, so a figure word for word in its note was refused.
+        readable = {"n1": fake("n1", "The pilot costs $900K a year, about $1.4M in all, 3X the old price")}
+        for line in ("The pilot costs $900K a year [n1]", "About $1.4M in all [n1]", "3X the old price [n1]"):
+            self.assertEqual([], citations.check(line, readable, []), line)
+        for line in ("The pilot costs $900M a year [n1]", "The pilot costs $900 a year [n1]"):
+            found = citations.check(line, readable, [])
+            self.assertIn(citations.CODE_FIGURE, [code for _b, code in found], line)
+
     def test_each_figure_must_sit_in_one_cited_quote(self):
         readable = {"n1": fake("n1", "Plan A is 12"), "n2": fake("n2", "Plan B is 0.5% off")}
         found = citations.check("Plan A is 12.5% off [n1, n2]", readable, [])

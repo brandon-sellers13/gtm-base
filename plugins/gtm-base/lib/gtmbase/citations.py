@@ -35,7 +35,8 @@ _MARKER_RE = re.compile(constants.YOUR_CALL_PATTERN, re.IGNORECASE)
 # A figure, whole: its currency sign, its digits, and the unit right after it.
 _FIGURE_RE = re.compile(
     r"(?<![\w.,])[$\u20ac\u00a3]?\s?\d(?:[\d,.]*\d)?"
-    r"(?:\s?(?:%|percent\b|per cent\b|k\b|m\b|bn\b|b\b|x\b|million\b|billion\b|thousand\b))?"
+    # The unit in any case, so "$900K" is read whole and never as a bare "$900".
+    r"(?i:\s?(?:%|percent\b|per cent\b|k\b|m\b|bn\b|b\b|x\b|million\b|billion\b|thousand\b))?"
 )
 # The endings that make a company's name formal, left off when it is matched.
 _NAME_ENDINGS = re.compile(
