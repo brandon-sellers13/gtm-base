@@ -259,6 +259,19 @@ class TestTheNotesPrompt(unittest.TestCase):
             self.assertIn("{{%s}}" % field, text)
         self.assertIn(constants.SOURCE_FENCE_SENTENCE, text)
 
+    def test_the_note_taker_is_told_every_rule_the_check_refuses_by(self):
+        # The case three rehearsal of 2026-11-24: both batches were refused on
+        # their first try for rules the request never stated (an address in a
+        # quote, a segment named outside its quote, a note credited to a
+        # segment its own heading does not name).
+        text = support.read(
+            os.path.join(SKILL_DIR, "references", "prompts", "notes.md")
+        )
+        self.assertIn("email address", text)
+        self.assertIn("phone number", text)
+        self.assertIn("must appear inside its quote", text)
+        self.assertIn("under a heading that names one of the segments above", text)
+
 
 if __name__ == "__main__":
     unittest.main()

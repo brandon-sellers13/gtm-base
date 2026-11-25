@@ -93,6 +93,9 @@ placeholder id with a real one.
   inside a home folder, and text that would be hidden from a reader.
 - `marker.py` records that a session has read the person's own documents, which
   is what stops anything leaving for the rest of that session.
+- `settings_guard.py` keeps a copy of the files that decide whether GTM Base's
+  checks run before each command, compares them after it, and puts back only a
+  change that switched the checks off or weakened them (0.4.0).
 - `install_git_hook.py` puts the same check in the folder git looks in, so a
   send from a plain terminal is read as well.
 - `stale.py` works out what is out of date, from values the caller hands in.

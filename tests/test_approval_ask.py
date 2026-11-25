@@ -986,9 +986,11 @@ class TestEachCommandReachesTheWriteItsTicketOpens(unittest.TestCase):
         self.fail("%s has no %s" % (path, function))
 
 
-class TestWithTheSettingsQuestion(unittest.TestCase):
-    """0.3.6 asks before a shell line writes the person's settings, and the
-    merge into Release B puts that question ahead of the approvals."""
+class TestWithTheSettingsGuard(unittest.TestCase):
+    """0.3.6 asked before a shell line wrote the person's settings, and Release
+    B put that question ahead of the approvals. 0.4.0 removed the question and
+    undoes a weakening change after the command instead, so a line that writes
+    the settings is decided like any other line."""
 
     def hook(self, command, cwd):
         finished = subprocess.run(
@@ -998,7 +1000,8 @@ class TestWithTheSettingsQuestion(unittest.TestCase):
             stderr=subprocess.PIPE,
             env=dict(os.environ, CLAUDE_PLUGIN_ROOT=PLUGIN),
         )
-        return json.loads(finished.stdout.decode("utf-8"))["hookSpecificOutput"]
+        text = finished.stdout.decode("utf-8").strip()
+        return json.loads(text)["hookSpecificOutput"] if text else {}
 
     def settings(self):
         claude = os.path.join(os.path.realpath(os.environ["HOME"]), ".claude")
@@ -1011,7 +1014,7 @@ class TestWithTheSettingsQuestion(unittest.TestCase):
             asked(self, "python3 %s --question q --answer yes" % CONFIRM)
             self.assertEqual(1, len(tickets()))
             output = self.hook("echo '{}' > ~/.claude/settings.json", sandbox.path)
-            self.assertEqual("ask", output["permissionDecision"])
+            self.assertNotEqual("ask", output.get("permissionDecision"))
             self.assertEqual([], tickets())
 
     def test_an_approval_that_also_writes_the_settings_gets_no_ticket(self):
@@ -1019,7 +1022,7 @@ class TestWithTheSettingsQuestion(unittest.TestCase):
             self.settings()
             command = "python3 %s --question q --answer yes > ~/.claude/settings.json" % CONFIRM
             output = self.hook(command, sandbox.path)
-            self.assertEqual("ask", output["permissionDecision"])
+            self.assertEqual("deny", output["permissionDecision"])
             self.assertNotIn("updatedInput", output)
             self.assertEqual([], tickets())
 

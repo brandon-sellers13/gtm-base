@@ -57,7 +57,9 @@ Every note carries a `quote`: the material's own words, copied exactly as they
 appear in that file, one stretch of text, no more than 300 characters. Setup
 checks every quote against the file, and a quote that is not in the file word
 for word is refused. A note's customer name and figure must appear inside its
-quote, exactly as written there.
+quote, exactly as written there. A quote never holds an email address,
+a phone number, or any other contact detail, and one that does is refused, so
+stop the quote before it or choose other words from the same place.
 
 ## What to write
 
@@ -76,7 +78,10 @@ nothing else. Each line is one JSON object with these fields:
 - `kind` is `segment`, `customer`, `fact`, or `nothing`.
 - `segment` is a name from the list above when the note is about one of them,
   the name the material uses for a segment that is not on the list, or empty
-  when the note is about the whole company.
+  when the note is about the whole company. A segment that is not on the list
+  must appear inside its quote, exactly as written there. A note taken from
+  under a heading that names one of the segments above carries that segment,
+  or is left empty, and never another one.
 - `customer` is the customer's name, for a customer note, and empty otherwise.
 - `figure` is a figure the quote holds, exactly as it is written there, or
   empty.

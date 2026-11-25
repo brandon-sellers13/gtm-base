@@ -2198,7 +2198,7 @@ class TestNarrowingOneDraftToWhatMatters(unittest.TestCase):
             )
 
             self.assertEqual(
-                ["acme-icp.md (2026-09-06)"], previewed.included_labels
+                ["acme-icp.md (%s)" % SOURCE_DATE], previewed.included_labels
             )
             self.assertEqual(1, previewed.total)
 
@@ -3797,7 +3797,7 @@ class TestTheSkillIsPlainAndSaysWhatWillHappen(unittest.TestCase):
 
         self.assertIn("contact lists left out;", atlas)
         self.assertIn("a sprawling folder is narrowed first", atlas)
-        self.assertIn("plugin 0.4.0", atlas)
+        self.assertIn("plugin 0.5.0", atlas)
 
     def test_the_atlas_draws_the_step_that_proposes_the_places(self):
         atlas = support.read(

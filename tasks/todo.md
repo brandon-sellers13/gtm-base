@@ -1750,7 +1750,88 @@ The fidelity replay failed on Brandon's scores of 2026-10-10 (8 rule passes, 7 f
 - [x] U5: the support check: an independent read of each paragraph beside only its cited words and the same segment's other notes; its answer must cover every paragraph; a flagged paragraph becomes a question.
 - [x] U6: setup writes Evidence by segment, Still open in the material, and Where this came from (footnotes with file, version date and the exact words); `sources:` rebuilt from the notes cited; the same bytes shown and saved; base readers, stale-check and propose-change read the new sections.
 - [x] U7: prompts, the join skill's steps 6 to 6c (subagents, resume, the loop limit), plain-language registration, CHANGELOG, atlas figure 7, plan Unit 1.9b.
-- [ ] Correctness and security reviews by subagents, each finding fixed with a failing test first; full suite green.
+- [x] Correctness and security reviews by subagents, each finding fixed with a failing test first; full suite green (712601c).
 - [ ] Astra's review once Codex resets (2026-10-14).
-- [ ] Counts-only rehearsal on the three corpora in sandboxes: refusals and loop limits counted, keys never opened, outputs never read against them.
+- [x] Counts-only rehearsal, case three only (lean plan, Brandon 2026-11-25), 2026-11-24: see the section below.
 - [ ] The scored re-run of all three cases, for Brandon to score.
+
+## 0.3.7: the command check asks about reads inside the assistant folder (2026-10-15)
+
+- [x] Reproduced: a line that moves into a session's tool-results folder under `~/.claude/projects` and reads a file with `python3 -c` was asked about whenever the script held braces or a pattern character, because `_inside_a_guarded_folder` counted every folder inside `~/.claude`.
+- [x] Fix: `_inside_a_guarded_folder` covers `~/.claude` itself, `~/.claude/plugins` and everything inside it, and a linked folder's `.claude` folder. A word with `..` run from anywhere inside `~/.claude` is still worked out in full, so climbing back to the plugins folder is still asked about.
+- [x] Tests in tests/test_command_check_settings.py (`TestTheOtherFoldersInsideTheAssistantFolder`). The read test failed with the 0.3.6 module swapped back in, and all four pass with the fix.
+- [x] Version 0.3.7 in both manifests, the library, the tests that pin it, and the atlas stamp; CHANGELOG 0.3.7.
+- [x] Full suite green (tests/run.sh, 2026-10-15: 2235 tests OK, then 161 in the linked-folder rerun OK).
+- [x] Pull request opened for Brandon.
+
+## 0.3.8: the command check asks about quoted jq programs with brackets (2026-10-19)
+
+- [x] Reproduced against the installed 0.3.7: `jq -r '... .[0:2200] ... [.attachments[]?.filename?] ...' /tmp/a` raised `re.error: bad character range 6-1` inside `fnmatch` on the macOS Python 3.9, and `gate._asks_about_settings` turns any exception into the question.
+- [x] Fix 1: `_tokens` holds quoted and backslashed `*`, `?` and `[` aside while `shlex` splits the line, so each word knows whether the shell fills it in. A quoted word as a whole is a name, never a pattern; the paths inside it are still patterns, for scripts that glob.
+- [x] Fix 2: `_pattern_lands_on_one` compiles the pattern once and treats a pattern that cannot compile as matching no file. Unreadable lines still ask.
+- [x] Tests in tests/test_command_check_settings.py (`TestQuotedWordsAndBrokenPatterns`). With the 0.3.7 module swapped in, four fail; with either half of the fix taken out, its own test fails.
+- [x] Version 0.3.8 in both manifests, the library, the tests that pin it, and the atlas stamp; CHANGELOG 0.3.8.
+- [x] Full suite green (tests/run.sh, 2026-10-19: 2242 tests OK, then 161 in the linked-folder rerun OK).
+- [x] Pull request opened for Brandon. Not installed or released.
+
+## 0.3.9: a line that reads a settings file and runs a reading loop is asked about (2026-10-19)
+
+- [x] Reproduced on 0.3.8: `grep x ~/.claude/plugins/installed_plugins.json; for f in a; do grep -c x "$f"; done` asked. `do` was read as the program, an unknown program handed `$f` set `unseen_write`, and the guarded name in the first part set `named_anywhere`.
+- [x] Fix: `_line_writes` reads past `do`, `then`, `else`, `elif`, `if`, `while`, `until`, `!` and `{` to the real command, and treats `for`, `select` and `case` as running nothing (a command substitution in the list is still read on its own).
+- [x] Tests in tests/test_command_check_settings.py (`TestTheShellsOwnWords`). The read test fails with the 0.3.8 module swapped in.
+- [x] Not fixed, on purpose: the real line still asks because of `sed "s|^|$f: |"`. sed can write (`w`) and run commands (`e`) from its script, so a variable in it stays an unseen write. Decision for Brandon.
+- [x] Version 0.3.9 in both manifests, the library, the tests that pin it, and the atlas stamp; CHANGELOG 0.3.9.
+- [x] Full suite green (tests/run.sh, 2026-10-19: 2245 tests OK, then 161 in the linked-folder rerun OK).
+- [x] Pull request opened for Brandon. Not merged, installed or released.
+
+## 0.3.10: a double-quoted pattern with an escaped quote is asked about (2026-10-20)
+
+- [x] Reproduced on 0.3.9: `grep -oE "gridwise[a-z0-9.-]*\.(io|ca)[^\"& ]{0,200}" /tmp/x | sort -u` asked from any folder. `gate.split_segments` ignored backslashes inside double quotes, so `\"` closed the quotes, `&` split the line, and the second part had an unclosed quote (tokens None, so ask).
+- [x] Found while reproducing: the same flaw hid writes. After `\"'` the rest of the line read as single-quoted, so `grep -oE "[^\"'x]" /tmp/a | tee ~/.claude/settings.json` and `...; rm ~/.claude/settings.json` were not asked about on 0.3.9.
+- [x] Fix: `split_segments` keeps the character after a backslash inside double quotes. Single quotes unchanged (no escapes there). Shared with the git check.
+- [x] Tests in tests/test_command_check_settings.py (`TestABackslashInsideDoubleQuotes`). All three fail on 0.3.9.
+- [x] Version 0.3.10 in both manifests, the library, the tests that pin it, and the atlas stamp; CHANGELOG 0.3.10.
+- [x] Full suite green (tests/run.sh, 2026-10-20: 2248 tests OK, then 161 in the linked-folder rerun OK).
+- [x] Pull request opened for Brandon. Not merged, installed or released.
+
+## 0.4.0: check what a command changed instead of reading what it says (2026-10-20)
+
+Approved by Brandon ("ok try it") after 0.3.8 to 0.3.10 each fixed one parser case and replays still prompted on reads.
+
+- [x] Baseline replay: 457 real Bash commands since 2026-10-20 05:00 UTC from ~/.claude/projects. PR #7 (0.3.10): 19 settings asks, 2 push-gate refusals.
+- [x] Facts from the Claude Code docs (hooks, settings, plugins pages, read 2026-10-20): PostToolUse output (`decision`/`reason`, `systemMessage`, `additionalContext`); a failed command fires PostToolUseFailure; settings `env` reaches hook processes; plugin enable state needs /reload-plugins. Not documented: when `disableAllHooks` takes effect, and when Post fires for background commands.
+- [x] `settings_guard.py`: snapshot in PreToolUse (inside `gate.main`, after the refusal check, only when `tool_use_id` is present), compare in PostToolUse and PostToolUseFailure, judge by meaning per file kind, put back only GTM Base's keys (whole file only when deleted or unreadable), re-read before writing so concurrent edits survive, write through links.
+- [x] Removed the Bash "ask about settings" path and `settings_writes.py`. Write/Edit check and push gate untouched. Built on PR #7, whose splitter fix still matters for the push gate.
+- [x] Adversarial review (subagent): 8 bypasses fixed with tests (chmod 000, install path elsewhere in cache or through a link, scope swap, env HOME and CLAUDE_CONFIG_DIR, empty folder in place of the file, byte-order mark, CLAUDE_CONFIG_DIR folder unguarded). Documented, not fixable: a command written to defeat it on purpose, delayed writes, the person's own change during a running command.
+- [x] Tests: tests/test_settings_guard.py (38) and tests/fixtures/real-commands.json (42 scrubbed real commands). All 15 tamper tests fail with the guard switched off.
+- [x] Full local replay on 0.4.0: 0 asks, the same 2 push-gate refusals.
+- [x] Version 0.4.0 in both manifests, the library, the tests that pin it, and the atlas stamp; CHANGELOG 0.4.0.
+- [x] Full suite green (tests/run.sh, 2026-10-21: 2252 tests OK, then 161 in the linked-folder rerun OK).
+- [x] Pull request opened for Brandon. Not merged, installed or released.
+- [ ] Live check after install (Brandon): does `disableAllHooks` written by a command still let the PostToolUse hook run; does Post fire at launch or completion for `run_in_background`; does `decision: block` reach Claude.
+
+
+## 2026-11-24, the web app, version one (plan: docs/plans/2026-11-24-001-feat-web-app-plan.md)
+Brandon decided to build the web app now and productize from the start. No review per unit; the end-to-end run is the main check. Two security reviews in the whole build: before anyone but Brandon signs in, and before P1 and P2 are released. Waiting for Brandon's check-in on the plan and the four "For Brandon" questions before any code.
+- [x] W1. Skeleton, sign in with GitHub, and the spike (done 2026-11-24: live at https://gtm-base-app.netlify.app, commits 1729ade and 1b843e9) (can the GitHub App create a repository in a personal account; can a free organization give read-only access).
+- [x] W2. Create a base from the template, or connect an existing one. (done 2026-11-24, PR #10)
+- [x] W3. Read the base by CLASS part, with owner, last confirmation and open changes. (done 2026-11-24)
+- [x] W4. Proposals inbox: accept (owner only, records the confirmation) or discard. (done 2026-11-24)
+- [ ] W5. Invite a teammate and give them the line to join from Claude Code. (built and live 2026-11-25, PR #13; the real invite test waits for Simona's GitHub username and the Administration approval on the dev install)
+- [x] W6. Changes that skipped approval: Keep or Undo. (done 2026-11-25)
+- [ ] P1. Back up a base to its repository (after Release B merges).
+- [ ] P2. Join a base from a link (after Release B merges).
+- [ ] P3. Shared base: record-change and the setup closing send proposals; no direct push to main from a seat (after Release B merges).
+- [ ] The end-to-end run with a second GitHub account.
+
+### 2026-11-24, the Release B replay gate on the summarize-first build (branch claude/release-b-replay-40efb2)
+The lean plan Brandon approved on 2026-11-25: merge main, rehearse case three alone with counts only, measure usage, and ask before the scored run of all three cases. Client figures and names stay in the private replay folder; this list holds counts only.
+- [x] Merged origin/main (0.3.7 to 0.4.0 and the web app, W1 to W6). Release B ships as 0.5.0: version pins, the atlas stamp, and the layout version the move offer names (0.5). The command check keeps 0.4.0's copy-and-undo for settings and Release B's approval question; the two Release B tests of the 0.3.6 settings question now test 0.4.0's behaviour.
+- [x] A stale test fixed: narrowing a draft to one file expected the run's day as the file's date, but the fixture has given that file its own date since U6.
+- [x] The namer lint flagged a local dictionary in the notes code named `name_of`, the one name the lint trusts; renamed `settled_names` (pre-existing since U3 to U7).
+- [x] Main's replay of 457 real commands met Release B's rule that an approval script runs only from the running plugin's own folder: one command named the 0.3.8 install folder. The test now replays it against the plugin that runs, as it was run that day; the rule is unchanged.
+- [x] Rehearsal of case three at 40,000 characters in a sandbox, all seventeen files matching their frozen hashes: 2 note batches, 2 refusals (one per batch, first try), no loop limits, no file left not noted; both drafts ready on the first review; the support check turned 7 of 13 profile lines and 2 of 20 positioning lines into questions. Record in the private folder, `runs/2026-11-24-rehearsal/`.
+- [x] The note request now states the three rules the notes check refused by and never told the note taker (contact details in a quote, a segment named outside its quote, a note credited to a segment its own heading does not name); a test failed first.
+- [x] Brandon's decision (2026-11-24): every draft reads the notes, and at 40,000 characters both drafts left out 209 of 516 notes (whole segments among them), because the notes are as large as the files they come from (108%). The sections setup writes (evidence, still open, footnotes) use every note, so the loss is to the drafted prose. Brandon chose the digest; plan written at `docs/plans/2026-11-24-002-feat-note-digests-plan.md` (Unit 1.9c), waiting for his review and his three decisions.
+- [ ] Unit 1.9c, the digests (D1 to D6), on Brandon's approval of the plan.
+- [ ] The scored re-run of all three cases, on Brandon's yes.

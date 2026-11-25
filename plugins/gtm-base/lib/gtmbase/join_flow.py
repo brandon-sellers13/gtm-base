@@ -4244,9 +4244,9 @@ def _place_notes(run_id: str, found_sources, found) -> None:
     if inventory is None:
         return
     page_of = {}
-    name_of = {}
+    settled_names = {}
     for segment in inventory.segments:
-        name_of[segment.slug] = segment.name
+        settled_names[segment.slug] = segment.name
         if segment.source:
             page_of[os.path.realpath(segment.source)] = segment.name
     for item in found:
@@ -4260,8 +4260,8 @@ def _place_notes(run_id: str, found_sources, found) -> None:
             continue
         if item.segment:
             slug = segments.slug_for(item.segment)
-            if slug in name_of:
-                item.segment = name_of[slug]
+            if slug in settled_names:
+                item.segment = settled_names[slug]
 
 
 # The steps whose drafts read the notes rather than the files. A context

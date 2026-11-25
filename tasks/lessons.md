@@ -121,3 +121,34 @@
 - Test fixtures are written from scratch, with an invented company, invented sentences and invented figures, even
   when the client material is already public. The live check's driver figure reached two test files that way; a push
   scan that only searches for the replay's own keys will not find wording carried in from an earlier session.
+
+## 2026-10-15, 0.3.7
+- A guarded folder should be the folder that holds the guarded files, not the whole tree above them. Counting all of
+  `~/.claude` as guarded asked about every interpreter run from `~/.claude/projects`, where Claude Code saves large
+  tool results for subagents to read back, about sixty prompts in one session. Guard the exact folders, and catch
+  a climb back out with `..` by resolving the path rather than by widening the folder.
+
+## 2026-10-19, 0.3.8
+- A fail-closed check turns every bug in itself into a false prompt. Catch the narrow, known failure where it happens
+  (here a pattern that cannot compile) and keep the catch-all for lines that genuinely cannot be read.
+- `shlex` in posix mode throws quoting away. Anything that decides what the shell expands has to keep that
+  information from before the split, or quoted program text gets read as shell syntax.
+
+## 2026-10-19, 0.3.9
+- A command reader has to know the shell's own words. `do`, `then`, `if`, `!` and `{` stand in front of a command;
+  reading them as program names turns every loop over a variable into an "unknown program handed a variable".
+- When a real line trips two rules, fix the one that is a bug and name the one that is a policy. sed handed a
+  variable can genuinely hide a write; loosening that is a decision, not a fix.
+
+## 2026-10-20, 0.3.10
+- Every quote scanner in a shell reader must follow the same rules: inside double quotes a backslash escapes the next
+  character, inside single quotes nothing does. One scanner that got it wrong (`split_segments`) both raised false
+  prompts and let real writes through, because a mis-split line fails in both directions.
+- When fixing a false positive in a security check, test the mirror image too. The same root cause hid two writes.
+
+## 2026-10-20, 0.4.0
+- When a security check keeps needing one parser fix per release, the check is asking the wrong question. Judge the
+  effect (what changed on disk) instead of the intent (what the text might do), and replay real traffic to prove it.
+- Restore by meaning, not by bytes: re-read the file at repair time and put back only the keys that matter, so a
+  concurrent legitimate edit is never clobbered.
+
