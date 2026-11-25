@@ -895,6 +895,31 @@ PREVIEW_WHY_LIMITED = (
     "much at once, so the files that matter least for this document are left "
     "out whole rather than read in part."
 )
+# Said before a draft written from the notes when some of them were condensed
+# first, because there were more than one draft can read at once (Unit 1.9c).
+PREVIEW_NOTES_CONDENSED = (
+    "Your notes are more than one draft can read at once, so the facts about "
+    "%(groups)s were condensed first into shorter lines, each pointing to the "
+    "notes it comes from. Every customer, every segment, and everything your "
+    "material leaves open still goes into this draft."
+)
+PREVIEW_NOTES_FOLDED_ONE = (
+    "The shorter lines leave out one fact your material states as settled, so "
+    "this draft does not read it."
+)
+PREVIEW_NOTES_FOLDED = (
+    "The shorter lines leave out %(folded)s facts your material states as "
+    "settled, so this draft does not read them."
+)
+PREVIEW_NOTES_OVER = (
+    "Even condensed, the customers, segments and open points in your notes "
+    "are more than one draft can read at once, so this draft may not read all "
+    "of them."
+)
+PREVIEW_NOTES_LEFT_OUT = (
+    "Even so, not every note fitted, so this draft does not read some of the "
+    "notes about %(groups)s."
+)
 # Said for each version of a document a draft does not use.
 VERSION_NOT_USED_FINAL = (
     "%(older)s was not used, because %(winner)s is named as the final version "

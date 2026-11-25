@@ -62,6 +62,7 @@ from gtmbase import (  # noqa: E402
     citations,
     constants,
     create_base,
+    digests,
     drafting,
     folder_identity,
     join_flow,
@@ -150,6 +151,24 @@ NOT_THESE_NOTES = (
 NOTES_AGAIN = (
     "Some of these notes do not hold up against their files, so they were not "
     "kept. Write the notes for this batch again from the same request, fixing "
+    "the lines named."
+)
+NO_SUCH_DIGEST = (
+    "That digest is not one this setup has, so nothing was prepared. Run the "
+    "digest plan again and use a number it gives."
+)
+DIGESTS_WAITING = (
+    "The shorter lines of the notes are not finished yet, so nothing was "
+    "drafted. Run digest-status to see which are still waiting, and write them "
+    "first."
+)
+NOT_THIS_DIGEST = (
+    "That is not the file setup named for that digest, so nothing was "
+    "checked. Write the digest to the file digest-assemble printed."
+)
+DIGEST_AGAIN = (
+    "Some of these lines do not hold up against their notes, so they were not "
+    "kept. Write the lines for this digest again from the same request, fixing "
     "the lines named."
 )
 NO_SOURCES_LEFT = (
@@ -361,6 +380,9 @@ def build_parser():
     )
     parser.add_argument(
         "--notes", help="the file notes-assemble named for one batch's notes"
+    )
+    parser.add_argument(
+        "--digest", help="the file digest-assemble named for one digest"
     )
     parser.add_argument(
         "--answer-support",
@@ -1303,6 +1325,7 @@ def say_how_much(out, previewed):
         )
     if previewed.dropped_labels:
         out.write(constants.PREVIEW_WHY_LIMITED + "\n")
+    say_condensed(out, previewed)
     say_versions(out, previewed.superseded)
     # Only a plain yes is asked, and only before it has been narrowed: a
     # draft the person narrowed has had its question answered.
@@ -1311,6 +1334,32 @@ def say_how_much(out, previewed):
             out.write(constants.PREVIEW_NARROW_ASK_SOME + "\n")
         else:
             out.write(constants.PREVIEW_NARROW_ASK_ALL + "\n")
+
+
+def say_condensed(out, previewed):
+    """Say which notes were condensed or left out for this draft, if any.
+
+    Before the digests (Unit 1.9c) a draft whose notes did not fit lost some
+    of them from the end of the list and the preview said nothing about it.
+    """
+    def named(groups):
+        said = [plain_value(name) if name else notes.COMPANY_WIDE for name in groups]
+        if len(said) < 2:
+            return "".join(said)
+        return ", ".join(said[:-1]) + " and " + said[-1]
+
+    if previewed.condensed:
+        out.write(constants.PREVIEW_NOTES_CONDENSED % {"groups": named(previewed.condensed)} + "\n")
+        if previewed.folded == 1:
+            out.write(constants.PREVIEW_NOTES_FOLDED_ONE + "\n")
+        elif previewed.folded:
+            out.write(
+                constants.PREVIEW_NOTES_FOLDED % {"folded": names.counted(previewed.folded)} + "\n"
+            )
+    if previewed.notes_left_out:
+        out.write(constants.PREVIEW_NOTES_LEFT_OUT % {"groups": named(previewed.notes_left_out)} + "\n")
+    if digests.CODE_NOTES_OVER in previewed.codes:
+        out.write(constants.PREVIEW_NOTES_OVER + "\n")
 
 
 def narrowing(options, out):
@@ -1592,6 +1641,96 @@ def run_notes_status(options, out):
         return EXIT_REFUSED
     for number, state in found:
         out.write("batch=%d %s\n" % (number, state))
+    line(out, "waiting", str(sum(1 for _n, state in found if state != "done")))
+    return EXIT_DONE
+
+
+def run_digest_plan(options, out):
+    """How many digests the notes need before any draft, or none."""
+    run_id = need(options, "run", out)
+    if not run_id:
+        return EXIT_ERROR
+    try:
+        planned = join_flow.digest_plan(run_id, paste_files=options.paste_file)
+    except ConsentError as refusal:
+        if not a_reading_refusal(refusal, out):
+            raise
+        return EXIT_REFUSED
+    line(out, "groups", str(len(planned.groups)))
+    line(out, "digests", str(len(planned.batches)))
+    return EXIT_DONE
+
+
+def run_digest_assemble(options, out):
+    """The request for one digest, and the file the digest goes in."""
+    run_id = need(options, "run", out)
+    batch = need(options, "batch", out)
+    company = need(options, "company", out)
+    if not run_id or not batch or not company:
+        return EXIT_ERROR
+    try:
+        made = join_flow.digest_assemble(
+            run_id, batch, company, paste_files=options.paste_file
+        )
+    except ConsentError as refusal:
+        if not a_reading_refusal(refusal, out):
+            raise
+        return EXIT_REFUSED
+    except digests.DigestRefused as refusal:
+        line(out, "codes", refusal.code)
+        out.write(NO_SUCH_DIGEST + "\n")
+        return EXIT_REFUSED
+    line(out, "prompt", made.prompt)
+    line(out, "digest", made.answer)
+    line(out, "batch", "%d of %d" % (made.batch.number, made.total))
+    return EXIT_DONE
+
+
+def run_digest_check(options, out):
+    """Check one digest against its notes, and keep it once it holds."""
+    run_id = need(options, "run", out)
+    batch = need(options, "batch", out)
+    named = need(options, "digest", out)
+    if not run_id or not batch or not named:
+        return EXIT_ERROR
+    try:
+        checked = join_flow.digest_check(
+            run_id, batch, named, paste_files=options.paste_file
+        )
+    except ConsentError as refusal:
+        if not a_reading_refusal(refusal, out):
+            raise
+        return EXIT_REFUSED
+    except digests.DigestRefused as refusal:
+        line(out, "codes", refusal.code)
+        out.write((NO_SUCH_DIGEST if refusal.code == digests.CODE_NO_SUCH_DIGEST else NOT_THIS_DIGEST) + "\n")
+        return EXIT_REFUSED
+    line(out, "accepted", "yes" if checked.accepted else "no")
+    line(out, "lines", str(checked.count))
+    line(out, "attempt", "%d of %d" % (checked.attempt, digests.ATTEMPTS))
+    for problem in checked.problems:
+        line(out, "problem", problem)
+    if checked.by_setup:
+        line(out, "carried-by-setup", str(checked.by_setup))
+    if not checked.accepted:
+        out.write(DIGEST_AGAIN + "\n")
+        return EXIT_REFUSED
+    return EXIT_DONE
+
+
+def run_digest_status(options, out):
+    """Which digests are done, so a run that stopped picks up again."""
+    run_id = need(options, "run", out)
+    if not run_id:
+        return EXIT_ERROR
+    try:
+        found = join_flow.digest_status(run_id, paste_files=options.paste_file)
+    except ConsentError as refusal:
+        if not a_reading_refusal(refusal, out):
+            raise
+        return EXIT_REFUSED
+    for number, state in found:
+        out.write("digest=%d %s\n" % (number, state))
     line(out, "waiting", str(sum(1 for _n, state in found if state != "done")))
     return EXIT_DONE
 
@@ -2339,6 +2478,10 @@ MODES = {
     "notes-assemble": run_notes_assemble,
     "notes-check": run_notes_check,
     "notes-status": run_notes_status,
+    "digest-plan": run_digest_plan,
+    "digest-assemble": run_digest_assemble,
+    "digest-check": run_digest_check,
+    "digest-status": run_digest_status,
     "support-assemble": run_support_assemble,
     "support-check": run_support_check,
     "review": run_review,
@@ -2419,7 +2562,13 @@ def main(argv=None):
     except notes.NotesRefused as refusal:
         printed.write("codes=%s\n" % safe_value(refusal.code))
         printed.write(
-            (NOTES_WAITING if refusal.code == notes.CODE_NOTES_WAITING else NOTES_NOT_READY)
+            (
+                NOTES_WAITING
+                if refusal.code == notes.CODE_NOTES_WAITING
+                else DIGESTS_WAITING
+                if refusal.code == digests.CODE_DIGESTS_WAITING
+                else NOTES_NOT_READY
+            )
             + "\n"
         )
         return EXIT_REFUSED

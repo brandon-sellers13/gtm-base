@@ -55,3 +55,40 @@ class _HoldWhenLoaded(importlib.abc.MetaPathFinder):
 
 if os.environ.get("GTM_BASE_TESTS_HOLD_APPROVAL") == "1":
     sys.meta_path.insert(0, _HoldWhenLoaded())
+
+
+class _LimitWhenLoaded(importlib.abc.MetaPathFinder):
+    """The reading limit a test set, put in place as the constants load.
+
+    tests/test_digests.py runs the digest commands through the script at a
+    limit low enough that the notes need condensing, the way the fidelity
+    replay lowers it in a copy of the plugin. Nothing in the plugin reads
+    the variable.
+    """
+
+    def __init__(self, chars):
+        self.chars = chars
+
+    def find_spec(self, name, path, target=None):
+        if name != "gtmbase.constants":
+            return None
+        sys.meta_path.remove(self)
+        try:
+            spec = importlib.util.find_spec(name)
+        finally:
+            sys.meta_path.insert(0, self)
+        if spec is None or spec.loader is None:
+            return spec
+        load = spec.loader.exec_module
+        chars = self.chars
+
+        def exec_module(module):
+            load(module)
+            module.DRAFT_SOURCES_MAX_CHARS = chars
+
+        spec.loader.exec_module = exec_module
+        return spec
+
+
+if os.environ.get("GTM_BASE_TESTS_READING_LIMIT", "").isdigit():
+    sys.meta_path.insert(0, _LimitWhenLoaded(int(os.environ["GTM_BASE_TESTS_READING_LIMIT"])))

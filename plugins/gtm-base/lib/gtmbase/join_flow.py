@@ -45,6 +45,7 @@ from . import (
     confirm,
     constants,
     create_base,
+    digests as digests_module,
     drafting,
     extract,
     formats,
@@ -315,6 +316,9 @@ class Previewed(object):
         "superseded",
         "choice",
         "narrowed",
+        "condensed",
+        "folded",
+        "notes_left_out",
     )
 
     def __init__(
@@ -330,6 +334,13 @@ class Previewed(object):
         choice=None,
         narrowed=False,
     ):
+        # The groups of notes this draft reads condensed, how many settled
+        # facts the shorter lines leave out, and the groups whose notes did
+        # not all fit even so (Unit 1.9c). Set by the preview of a draft
+        # written from the notes, and empty for every other.
+        self.condensed = []
+        self.folded = 0
+        self.notes_left_out = []
         self.step = step
         self.included_labels = list(included_labels)
         self.dropped_labels = list(dropped_labels)
@@ -3817,7 +3828,7 @@ def preview_step(
         codes = list(taken.rendered.codes)
         if not taken.notes:
             codes.append(drafting.CODE_NO_SOURCES)
-        return Previewed(
+        previewed = Previewed(
             step,
             taken.labels,
             [],
@@ -3829,6 +3840,15 @@ def preview_step(
             choice=consent_choice(run_id),
             narrowed=bool(only or only_folder or only_index),
         )
+        previewed.condensed = list(getattr(taken.rendered, "condensed", []))
+        previewed.folded = int(getattr(taken.rendered, "folded", 0))
+        gone = set(taken.rendered.dropped)
+        previewed.notes_left_out = [
+            name
+            for name, members in notes_module.group_notes(taken.notes, _notes_order(run_id))
+            if any(item.id in gone for item in members)
+        ]
+        return previewed
     read, chosen, superseded = _sources_for_a_draft(
         run_id, paste_files, day, only, only_folder, only_index, settled
     )
@@ -3900,6 +3920,10 @@ def assemble_step(
         # remembers which notes it held, and a fresh request starts the count
         # of refused reviews again.
         _remember(run_id, "requests", _file_stem(step, settled), notes_digest(taken.book))
+        # The notes this very request showed, which are the notes review and
+        # the support check let the draft cite, narrowed or not (the
+        # correctness review of 2026-11-24, finding 4).
+        _remember(run_id, "request-ids", _file_stem(step, settled), list(taken.rendered.ids))
         _remember(run_id, "review-attempts", _file_stem(step, settled), 0)
         return Assembled(
             path,
@@ -4102,13 +4126,17 @@ class NotesChecked(object):
 class Notebook(object):
     """Every checked note of a run, numbered, and what could not be noted."""
 
-    __slots__ = ("notes", "not_noted", "sources", "planned")
+    __slots__ = ("notes", "not_noted", "sources", "planned", "condensing", "condensed_lines")
 
     def __init__(self, notes, not_noted, planned):
         self.notes = list(notes)
         self.not_noted = list(not_noted)
         self.sources = list(planned.sources)
         self.planned = planned
+        # Which groups of notes are condensed for the drafts, and the checked
+        # lines of each, or None while any digest is still waiting (Unit 1.9c).
+        self.condensing = digests_module.DigestPlan([], [])
+        self.condensed_lines = {}
 
     def note(self, note_id: str):
         for item in self.notes:
@@ -4229,7 +4257,22 @@ def notes_for_drafts(
         for source, code in record.get("not_noted", []):
             not_noted.append((int(source), str(code)))
     _place_notes(run_id, planned.sources, found)
-    return Notebook(found, not_noted, planned)
+    book = Notebook(found, not_noted, planned)
+    book.condensing = digests_module.plan(
+        book.notes, _notes_order(run_id), _notes_fence, constants.DRAFT_SOURCES_MAX_CHARS
+    )
+    book.condensed_lines = _condensed_lines(run_id, book.condensing)
+    return book
+
+
+def _notes_order(run_id: str) -> List[str]:
+    """The settled segments, in the order the person settled them."""
+    inventory = load_inventory(run_id)
+    return [segment.name for segment in inventory.segments] if inventory else []
+
+
+def _notes_fence(text: str) -> str:
+    return drafting.said_as_data("the notes", text)
 
 
 def _place_notes(run_id: str, found_sources, found) -> None:
@@ -4262,6 +4305,185 @@ def _place_notes(run_id: str, found_sources, found) -> None:
             slug = segments.slug_for(item.segment)
             if slug in settled_names:
                 item.segment = settled_names[slug]
+
+
+# --- Digests of the notes, when they do not fit one draft (Unit 1.9c) ---------
+
+DIGEST_STEP = "digest"
+DIGEST_PROMPT_FILE = "digest.md"
+
+
+def digest_plan(run_id: str, paste_files: Sequence[str] = (), today=None):
+    """The groups of notes condensed for the drafts, and each digest batch."""
+    return notes_for_drafts(run_id, _with_held_pastes(run_id, paste_files), today).condensing
+
+
+def digest_file(run_id: str, number) -> str:
+    """Where the assistant writes one digest."""
+    return os.path.join(drafts_dir(run_id), "digest-%d.md" % int(number))
+
+
+def _digest_record(run_id: str, number) -> str:
+    folder = ensure_dir(os.path.join(scratch_dir(run_id), "digests"))
+    return os.path.join(folder, "batch-%d.json" % int(number))
+
+
+def _read_digest_record(run_id: str, number):
+    text = read_text(_digest_record(run_id, number))
+    if text is None:
+        return None
+    try:
+        record = json.loads(text)
+    except ValueError:
+        return None
+    return record if isinstance(record, dict) else None
+
+
+def _digest_counts(record, planned, batch) -> bool:
+    """Whether a kept digest is for this very batch of this very plan."""
+    return bool(
+        record
+        and record.get("plan") == planned.digest
+        and record.get("batch") == batch.digest
+    )
+
+
+def _condensed_lines(run_id: str, planned):
+    """Every checked digest line by its group, or None while one is waiting."""
+    found = {}
+    for batch in planned.batches:
+        record = _read_digest_record(run_id, batch.number)
+        if not (_digest_counts(record, planned, batch) and record.get("done")):
+            return None
+        found.setdefault(batch.group, []).extend(record.get("rows", []))
+    return found
+
+
+class DigestMade(object):
+    """The request for one digest, and the file the digest is written to."""
+
+    __slots__ = ("prompt", "answer", "batch", "total")
+
+    def __init__(self, prompt, answer, batch, total):
+        self.prompt = prompt
+        self.answer = answer
+        self.batch = batch
+        self.total = total
+
+
+def digest_assemble(
+    run_id: str,
+    number,
+    company: str,
+    paste_files: Sequence[str] = (),
+    today=None,
+    plugin_root: Optional[str] = None,
+) -> DigestMade:
+    """Build the request for one digest and write it into the run's own folder."""
+    planned = digest_plan(run_id, paste_files, today)
+    batch = planned.batch(number)
+    root = plugin_root or drafting.plugin_root_default()
+    template = read_text(os.path.join(root, drafting.PROMPTS_DIR, DIGEST_PROMPT_FILE))
+    if template is None:
+        raise DraftError(DIGEST_STEP, "no-prompt-file")
+    checked = drafting._checked_company(DIGEST_STEP, company)
+    _remember(run_id, "company", "name", checked)
+    try:
+        group = drafting.said_as_data(
+            "the group", "The notes about %s." % (batch.group or notes_module.COMPANY_WIDE)
+        )
+    except SourceRejected:
+        raise DraftError(DIGEST_STEP, "unusable-name")
+    text = digests_module.assemble(
+        template, batch, checked, group, len(planned.batches), _notes_fence
+    )
+    path = os.path.join(scratch_dir(run_id), "digest-%d-prompt.md" % batch.number)
+    atomic_write_text(path, text, inside=paths.seat_home())
+    return DigestMade(path, digest_file(run_id, batch.number), batch, len(planned.batches))
+
+
+class DigestChecked(object):
+    """What came of checking one digest: kept or not, and what was wrong."""
+
+    __slots__ = ("accepted", "problems", "count", "attempt", "by_setup")
+
+    def __init__(self, accepted, problems, count, attempt, by_setup):
+        self.accepted = accepted
+        self.problems = list(problems)
+        self.count = count
+        self.attempt = attempt
+        self.by_setup = by_setup
+
+
+def digest_check(
+    run_id: str,
+    number,
+    answer_path: str,
+    paste_files: Sequence[str] = (),
+    today=None,
+) -> DigestChecked:
+    """Check one digest against the notes it condenses, and keep it once it holds.
+
+    Only the file setup named for this digest is read. After the third
+    refusal, the lines that held up are kept, and every note the material
+    leaves open that no line carried is carried by setup itself, in the
+    material's own words, so nothing open is lost to a loop.
+    """
+    book = notes_for_drafts(run_id, _with_held_pastes(run_id, paste_files), today)
+    planned = book.condensing
+    batch = planned.batch(number)
+    named = digest_file(run_id, batch.number)
+    if os.path.realpath(str(answer_path or "")) != os.path.realpath(named):
+        raise digests_module.DigestRefused(
+            "this is not the digest setup named", digests_module.CODE_NOT_THE_DIGEST_FILE
+        )
+    company = _recalled(run_id, "company", "name") or ""
+    customers = citations.customer_names(book.notes, company, _settled_names(run_id))
+    checked = digests_module.check(read_text(named) or "", batch, review.screen, customers)
+    earlier = _read_digest_record(run_id, batch.number)
+    if _digest_counts(earlier, planned, batch) and earlier.get("done"):
+        # A digest already kept stays kept: checking it again would throw
+        # its lines away (the correctness review of 2026-11-24, finding 5).
+        return DigestChecked(True, [], len(earlier.get("rows", [])), int(earlier.get("attempts", 1)), 0)
+    attempt = 1
+    if _digest_counts(earlier, planned, batch) and not earlier.get("done"):
+        attempt = int(earlier.get("attempts", 0)) + 1
+    accepted = not checked.problems or attempt >= digests_module.ATTEMPTS
+    rows = list(checked.rows)
+    by_setup = []
+    if accepted and checked.uncarried:
+        by_setup = digests_module.carried_by_setup(batch, checked.uncarried)
+        rows.extend(by_setup)
+    record = {
+        "plan": planned.digest,
+        "batch": batch.digest,
+        "attempts": attempt,
+        "done": accepted,
+        "rows": rows if accepted else [],
+    }
+    atomic_write_text(
+        _digest_record(run_id, batch.number),
+        json.dumps(record, sort_keys=True) + "\n",
+        inside=paths.seat_home(),
+    )
+    return DigestChecked(
+        accepted,
+        [] if accepted else checked.problems,
+        len(rows) if accepted else len(checked.rows),
+        attempt,
+        len(by_setup),
+    )
+
+
+def digest_status(run_id: str, paste_files: Sequence[str] = (), today=None):
+    """Each digest of this run, by number, and whether it is done."""
+    planned = digest_plan(run_id, paste_files, today)
+    found = []
+    for batch in planned.batches:
+        record = _read_digest_record(run_id, batch.number)
+        done = _digest_counts(record, planned, batch) and record.get("done")
+        found.append((batch.number, "done" if done else "waiting"))
+    return found
 
 
 # The steps whose drafts read the notes rather than the files. A context
@@ -4350,13 +4572,29 @@ def notes_for_a_draft(
         # A segment's draft reads its own notes first, and its own page leads
         # the list of files, as it did when drafts read the files.
         order = [settled.name]
-    rendered = notes_module.render_for_draft(
-        found,
-        order,
-        lambda text: drafting.said_as_data("the notes", text),
-        constants.DRAFT_SOURCES_MAX_CHARS,
-        company_first=not own,
-    )
+    if book.condensing.groups:
+        if book.condensed_lines is None:
+            raise notes_module.NotesRefused(
+                "a digest of the notes is still waiting",
+                digests_module.CODE_DIGESTS_WAITING,
+            )
+        rendered = digests_module.render(
+            found,
+            order,
+            _notes_fence,
+            constants.DRAFT_SOURCES_MAX_CHARS,
+            book.condensing,
+            book.condensed_lines,
+            company_first=not own,
+        )
+    else:
+        rendered = notes_module.render_for_draft(
+            found,
+            order,
+            _notes_fence,
+            constants.DRAFT_SOURCES_MAX_CHARS,
+            company_first=not own,
+        )
     numbers = [number for number in range(1, len(book.sources) + 1) if number in allowed]
     page = os.path.realpath(settled.source) if own and getattr(settled, "source", "") else None
     if page:
@@ -4765,8 +5003,8 @@ def support_assemble(
         step, run_id, segment, base_root=base_root, runner=runner
     )
     taken = notes_for_a_draft(run_id, step, settled)
-    shown = set(taken.rendered.ids)
-    readable = dict((item.id, item) for item in taken.notes if item.id in shown)
+    shown = _shown_by_the_request(run_id, step, settled, taken)
+    readable = dict((item.id, item) for item in taken.book.notes if item.id in shown)
     body = reviewed.draft.body
     root = plugin_root or drafting.plugin_root_default()
     template = read_text(os.path.join(root, drafting.PROMPTS_DIR, SUPPORT_PROMPT_FILE))
@@ -4938,6 +5176,9 @@ CODE_NOTES_CHANGED = "notes-changed-since-the-request"
 def notes_digest(book) -> str:
     """One digest of every note and every file not noted, in their order."""
     held = [item.row() for item in book.notes] + [list(item) for item in book.not_noted]
+    condensing = getattr(book, "condensing", None)
+    if condensing is not None and condensing.groups:
+        held.append([condensing.digest, getattr(book, "condensed_lines", None)])
     return hashlib.sha256(json.dumps(held, sort_keys=True).encode("utf-8")).hexdigest()
 
 
@@ -4971,11 +5212,22 @@ def _inside_the_pastes(run_id: str, path: str) -> bool:
     return os.path.realpath(path).startswith(folder + os.sep)
 
 
+def request_ids(run_id: str, step: str, settled=None):
+    """The notes the last request for this draft showed, or None if none was made."""
+    held = _recalled(run_id, "request-ids", _file_stem(step, settled))
+    return list(held) if isinstance(held, list) else None
+
+
+def _shown_by_the_request(run_id: str, step: str, settled, taken) -> set:
+    held = request_ids(run_id, step, settled)
+    return set(held) if held is not None else set(taken.rendered.ids)
+
+
 def _citation_problems(run_id: str, step: str, settled, draft) -> list:
     """What the citation checks find in one draft, against the notes it read."""
     taken = notes_for_a_draft(run_id, step, settled)
-    shown = set(taken.rendered.ids)
-    readable = dict((item.id, item) for item in taken.notes if item.id in shown)
+    shown = _shown_by_the_request(run_id, step, settled, taken)
+    readable = dict((item.id, item) for item in taken.book.notes if item.id in shown)
     names = _settled_names(run_id)
     company = _recalled(run_id, "company", "name") or ""
     customers = citations.customer_names(taken.book.notes, company, names)

@@ -812,6 +812,8 @@ class TestTheSkillsAsTheyAreWritten(unittest.TestCase):
         # The summarize-first stage: one batch of notes, the file its notes go
         # in, and the file the support check's answer goes in.
         "<batch number>": lambda self, state, command: "1",
+        "<digest number>": lambda self, state, command: "1",
+        "<digest file>": lambda self, state, command: state.get("digest_file"),
         "<notes file>": lambda self, state, command: state.get("notes_file"),
         "<support answer file>": lambda self, state, command: state.get("support_answer"),
         "<the path it printed>": _the_path_it_printed,
@@ -1024,6 +1026,10 @@ class TestTheSkillsAsTheyAreWritten(unittest.TestCase):
                 state[name] = value
         if mode == "notes-assemble":
             state["notes_file"] = self.value_of(printed, "notes")
+        if mode == "digest-plan":
+            state["digests"] = self.value_of(printed, "digests")
+        if mode == "digest-assemble":
+            state["digest_file"] = self.value_of(printed, "digest")
         if mode == "support-assemble":
             state["support_answer"] = self.value_of(printed, "answer")
             state["support_lines"] = self.value_of(printed, "lines")
@@ -1326,6 +1332,15 @@ class TestTheSkillsAsTheyAreWritten(unittest.TestCase):
                     )
                 mode = words[1] if len(words) > 1 and not words[1].startswith("-") else ""
                 if not self._taken_this_pass(words, command, index):
+                    continue
+                if mode in ("digest-assemble", "digest-check") and state.get("digests") == "0":
+                    # The skill says to go on to step 6 when the digest plan
+                    # prints digests=0, which it does for this walk's few
+                    # notes, so the walk follows it. These two lines, as the
+                    # skill writes them, are run through the script at a limit
+                    # where they are needed by tests/test_digests.py
+                    # (TestTheSkillsDigestLines).
+                    ran.append(line_number)
                     continue
                 # One pass runs the command as it is printed, and each of the
                 # others adds one of the things a sentence says to add to it.

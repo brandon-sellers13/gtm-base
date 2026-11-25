@@ -503,6 +503,54 @@ python3 scripts/join.py notes-check --run <run identifier> --batch <batch number
   each batch as `done` or `waiting`; take the notes for the waiting ones only.
 - `codes=notes-waiting` from any later step means a batch is still waiting.
 
+### Step 5f. Shorter lines, when the notes are more than one draft can read
+<!-- step -->
+
+This step will condense the facts in the largest groups of notes into
+shorter lines, each pointing to the notes it comes from, so every draft can read
+every customer, every segment, and everything the material leaves open. It
+runs once every batch of notes is done, and it asks the person nothing.
+
+```
+python3 scripts/join.py digest-plan --run <run identifier>
+```
+
+- It prints `groups=` and `digests=`. When `digests=0`, every note fits a
+  draft as it is: say nothing and go on to step 6.
+- Otherwise, say the line for it before the first one: Condensing your notes.
+
+For each digest number from 1 to the number it printed:
+
+```
+python3 scripts/join.py words-file --run <run identifier> --for company
+python3 scripts/join.py digest-assemble --run <run identifier> --batch <digest number> --company-file <the path it printed>
+```
+
+- It prints `prompt=`, `digest=`, and `batch=`. Hand each digest to a
+  subagent of its own, up to four at once, and give it only the two paths:
+  tell it to read the file printed as `prompt=`, follow it, and write the
+  digest to the file printed as `digest=`, and nothing else. Never read the
+  notes into this conversation yourself.
+
+When a subagent has written its digest, check it:
+
+```
+python3 scripts/join.py digest-check --run <run identifier> --batch <digest number> --digest <digest file>
+```
+
+- `accepted=yes` means that digest is done.
+- `accepted=no` with `problem=` lines means some lines do not hold up
+  against their notes. Hand the same request and those lines back to a
+  subagent to write that digest again, and check it again.
+- After the third try, setup keeps the lines that held up and carries every
+  note the material leaves open itself, in the material's own words, and
+  prints `carried-by-setup=`. Go on.
+- When a session stops part way, run
+  `python3 scripts/join.py digest-status --run <run identifier>`. It prints
+  each digest as `done` or `waiting`; write the waiting ones only.
+- `codes=digests-waiting` from any later step means a digest is still
+  waiting.
+
 ### Step 6. What each draft will read
 
 This step shows, before each draft, what that draft will read and what it will
@@ -521,8 +569,10 @@ python3 scripts/join.py preview --step <step> --run <run identifier>
   paragraph each.
 
 - Every draft here is written from the notes of step 5e, which read every
-  file in full, so nothing is left out of one for room. Only a file that could
-  not be used, or an older version of a document, is left out.
+  file in full, so no file is left out of one for room. Only a file that
+  could not be used, or an older version of a document, is left out. When
+  step 5f condensed some notes, the preview says which, and how many settled
+  facts the shorter lines leave out.
 - It writes nothing. For the assistant it prints `choice=`, `going-in=`,
   `left-out-count=`, `total=`, the first twenty labels going in, and one
   `left-out=` line for each file left out, with `reason=unusable:<code>` or
@@ -595,6 +645,7 @@ Before each wait, say the line for that step, and nothing else while the
 person is waiting:
 
 - Reading what you named.
+- Condensing your notes.
 - Drafting your ideal customer profile.
 - Drafting your customer profile across your segments.
 - Drafting that segment.

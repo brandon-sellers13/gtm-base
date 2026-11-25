@@ -194,6 +194,7 @@ _BANNED = [(word, _banned_pattern(word)) for word in constants.DRAFT_BANNED_WORD
 
 PROGRESS = {
     "reading": "Reading what you named.",
+    "condensing": "Condensing your notes.",
     STEP_ICP: "Drafting your ideal customer profile.",
     STEP_CHANGE: "Drafting the context change.",
     STEP_POSITIONING: "Drafting your positioning.",
