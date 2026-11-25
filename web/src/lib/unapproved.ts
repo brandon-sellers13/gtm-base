@@ -1,19 +1,22 @@
 import "server-only";
 import { api, GitHubError } from "./github";
-import { validRepo } from "./reader";
-import { isBaseOwner } from "./team";
+import { frontMatter, validRepo } from "./reader";
+import { baseOwnerEmails } from "./team";
 
 // Changes that reached a base without an approval. On GitHub's free plan
 // anyone with push access can commit straight to the main branch; this finds
 // those commits so the base's owner can keep or undo each one.
 //
 // A commit on the main line (first parents only) is fine when it is:
-// - the merge of an accepted GTM Base proposal (GitHub records the accept
-//   commit as the pull request's merge commit);
+// - the merge of a GTM Base proposal (GitHub records the accept commit as the
+//   pull request's merge commit) authored with an owner's email, which is the
+//   plugin's own rule; a teammate merging their own proposal on GitHub is listed;
 // - part of the base's history from before it was shared (committed before
 //   the repository existed, or in its first two minutes, which covers GitHub's
 //   first commit and the app's template commit);
-// - bookkeeping only: owners' confirmation lines, or this review's own record;
+// - confirmation lines only, written by the owner of the document they confirm;
+// - a keep or undo: a commit updating the review record, written by the base's
+//   owner as the base stood just before it;
 // - already answered (kept or undone) in that record.
 // Everything else is listed. This catches mistakes; it is not a lock, because
 // a teammate with push access could also write the record. The real lock is
@@ -23,7 +26,7 @@ export const REVIEW_FILE = "work/reviewed-changes.md";
 const REVIEW_HEADER =
   "# Changes that reached the base without an approval, and what the owner decided.\n" +
   "# One line per decision, added at the end and never edited.\n";
-const BOOKKEEPING = (path: string) => path.startsWith("work/confirmations/") || path === REVIEW_FILE;
+const BOOKKEEPING = (path: string) => path.startsWith("work/confirmations/");
 const MARKER = /^gtm-base proposal stg-[0-9a-f]+ entry \S+ source \S+\s*$/m;
 const LOOK_BACK = 50; // newest commits on the main line that are looked at
 const SHARED_GRACE_MS = 2 * 60 * 1000;
@@ -40,7 +43,7 @@ export type Unapproved = {
 type ListedCommit = {
   sha: string;
   parents: { sha: string }[];
-  commit: { message: string; author: { name: string; date: string }; committer: { date: string } };
+  commit: { message: string; author: { name: string; email: string; date: string }; committer: { date: string } };
 };
 type FullCommit = ListedCommit & {
   files?: { filename: string; status: string; sha: string | null; previous_filename?: string }[];
@@ -77,6 +80,50 @@ function answered(text: string): Set<string> {
   return shas;
 }
 
+async function ownersAt(token: string, owner: string, repo: string, path: string, ref: string): Promise<string[]> {
+  try {
+    const file = await api<{ content: string }>(
+      `/repos/${owner}/${repo}/contents/${path.split("/").map(encodeURIComponent).join("/")}?ref=${encodeURIComponent(ref)}`,
+      { token },
+    );
+    const value = frontMatter(Buffer.from(file.content, "base64").toString("utf8")).fields.owner;
+    return (Array.isArray(value) ? value : value ? [value] : []).map((e) => e.toLowerCase());
+  } catch (error) {
+    if (error instanceof GitHubError && error.status === 404) return [];
+    throw error;
+  }
+}
+
+const OWNED = (path: string) =>
+  ["context/", "access/", "standards/", "skills/"].some((p) => path.startsWith(p)) && path.endsWith(".md");
+
+// Whether this commit's author owns what it touches, read as the base stood just
+// before it: every owned document it changes (a new one: the map's owner), and
+// for confirmation lines, the document each confirms.
+async function authoredByOwner(token: string, owner: string, repo: string, c: FullCommit): Promise<boolean> {
+  const email = c.commit.author.email.toLowerCase();
+  const before = c.parents[0]?.sha;
+  if (!before) return false;
+  const mapOwners = await ownersAt(token, owner, repo, "context/map.md", before);
+  for (const file of c.files ?? []) {
+    let owners: string[] | null = null;
+    if (file.filename.startsWith("work/confirmations/")) {
+      const confirmed = file.filename.slice("work/confirmations/".length).replace(/--/g, "/");
+      owners = await ownersAt(token, owner, repo, confirmed, before);
+    } else if (OWNED(file.filename)) {
+      owners = file.status === "added" ? mapOwners : await ownersAt(token, owner, repo, file.filename, before);
+    }
+    if (owners !== null && !owners.includes(email)) return false;
+  }
+  return true;
+}
+
+async function authoredByBaseOwner(token: string, owner: string, repo: string, c: FullCommit): Promise<boolean> {
+  const before = c.parents[0]?.sha;
+  if (!before) return false;
+  return (await ownersAt(token, owner, repo, "context/map.md", before)).includes(c.commit.author.email.toLowerCase());
+}
+
 export async function listUnapproved(token: string, owner: string, repo: string) {
   if (!validRepo(owner, repo)) return { branch: "main", items: [] as Unapproved[] };
   const info = await api<{ default_branch: string; created_at: string }>(`/repos/${owner}/${repo}`, { token });
@@ -100,16 +147,34 @@ export async function listUnapproved(token: string, owner: string, repo: string)
   // Walk the main line from the tip, first parents only.
   const bySha = new Map(listed.map((c) => [c.sha, c]));
   const mainLine: ListedCommit[] = [];
-  for (let c = listed[0]; c && mainLine.length < LOOK_BACK; c = bySha.get(c.parents[0]?.sha ?? "")!) mainLine.push(c);
+  let c: ListedCommit | undefined = listed[0];
+  while (c && mainLine.length < LOOK_BACK) {
+    mainLine.push(c);
+    const parent: string | undefined = c.parents[0]?.sha;
+    if (!parent) break;
+    // A first parent beyond the fetched page (after a merge that brought in many
+    // commits) is fetched on its own, so the walk does not stop early.
+    c = bySha.get(parent) ?? (await api<ListedCommit>(`/repos/${owner}/${repo}/commits/${parent}`, { token }));
+  }
 
-  const candidates = mainLine.filter(
-    (c) => !accepted.has(c.sha) && !done.has(c.sha) && Date.parse(c.commit.committer.date) > sharedFrom,
-  );
-  const full = await inBatches(candidates, 8, (c) => api<FullCommit>(`/repos/${owner}/${repo}/commits/${c.sha}`, { token }));
+  const candidates = mainLine.filter((m) => !done.has(m.sha) && Date.parse(m.commit.committer.date) > sharedFrom);
+  const full = await inBatches(candidates, 8, (m) => api<FullCommit>(`/repos/${owner}/${repo}/commits/${m.sha}`, { token }));
 
-  const items = full
-    .filter((c) => (c.files ?? []).length > 0 && !(c.files ?? []).every((f) => BOOKKEEPING(f.filename)))
-    .map((c) => ({
+  const flagged: FullCommit[] = [];
+  for (const commit of full) {
+    const files = commit.files ?? [];
+    if (files.length === 0) continue;
+    const proposalMerge = accepted.has(commit.sha);
+    const bookkeeping = files.every((f) => BOOKKEEPING(f.filename));
+    // A keep or an undo: it updates the review record and the base's owner wrote it.
+    const reviewAction = files.some((f) => f.filename === REVIEW_FILE);
+    if (reviewAction && (await authoredByBaseOwner(token, owner, repo, commit))) continue;
+    // An accepted proposal or bookkeeping counts only when an owner wrote it.
+    if ((proposalMerge || bookkeeping) && (await authoredByOwner(token, owner, repo, commit))) continue;
+    flagged.push(commit);
+  }
+
+  const items = flagged.map((c) => ({
       sha: c.sha,
       message: c.commit.message.split("\n")[0],
       author: c.commit.author.name,
@@ -143,6 +208,7 @@ async function commitOnTop(
   tipSha: string,
   tree: { path: string; mode: string; type: string; sha?: string | null; content?: string }[],
   message: string,
+  author: { name: string; email: string },
 ): Promise<string> {
   const path = `/repos/${owner}/${repo}`;
   const tip = await api<{ tree: { sha: string } }>(`${path}/git/commits/${tipSha}`, { token });
@@ -154,7 +220,14 @@ async function commitOnTop(
   const commit = await api<{ sha: string }>(`${path}/git/commits`, {
     token,
     method: "POST",
-    body: JSON.stringify({ message, tree: newTree.sha, parents: [tipSha] }),
+    body: JSON.stringify({
+      message,
+      tree: newTree.sha,
+      parents: [tipSha],
+      // Signed with the owner's own address, so the record holds up under the
+      // same rule as everything else: bookkeeping counts when an owner wrote it.
+      author: { ...author, date: new Date().toISOString() },
+    }),
   });
   try {
     // Not forced: if the branch moved in the meantime, nothing lands.
@@ -172,7 +245,9 @@ async function commitOnTop(
 
 async function prepare(token: string, owner: string, repo: string, sha: string, emails: string[]) {
   if (!/^[0-9a-f]{40}$/.test(sha)) throw new ReviewError("not-listed");
-  if (!(await isBaseOwner(token, owner, repo, emails))) throw new ReviewError("not-owner");
+  const owners = await baseOwnerEmails(token, owner, repo);
+  const email = emails.map((e) => e.toLowerCase()).find((e) => owners.includes(e));
+  if (!email) throw new ReviewError("not-owner");
   const { branch, items } = await listUnapproved(token, owner, repo);
   const item = items.find((i) => i.sha === sha);
   if (!item) throw new ReviewError("not-listed");
@@ -180,12 +255,12 @@ async function prepare(token: string, owner: string, repo: string, sha: string, 
     token,
   });
   const review = await readReviewFile(token, owner, repo, tip.object.sha);
-  return { branch, item, tipSha: tip.object.sha, reviewText: review.text || REVIEW_HEADER };
+  return { branch, item, tipSha: tip.object.sha, reviewText: review.text || REVIEW_HEADER, email };
 }
 
 export async function keepChange(options: { token: string; owner: string; repo: string; sha: string; login: string; emails: string[] }) {
   const { token, owner, repo, sha, login, emails } = options;
-  const { branch, item, tipSha, reviewText } = await prepare(token, owner, repo, sha, emails);
+  const { branch, item, tipSha, reviewText, email } = await prepare(token, owner, repo, sha, emails);
   await commitOnTop(
     token,
     owner,
@@ -194,32 +269,30 @@ export async function keepChange(options: { token: string; owner: string; repo: 
     tipSha,
     [{ path: REVIEW_FILE, mode: "100644", type: "blob", content: reviewText + reviewLine({ sha, answer: "kept", by: login }) }],
     `Keep a change that skipped approval: ${item.message.slice(0, 60)}\n\nKept in GTM Base by ${login}.`,
+    { name: login, email },
   );
 }
 
 export async function undoChange(options: { token: string; owner: string; repo: string; sha: string; login: string; emails: string[] }) {
   const { token, owner, repo, sha, login, emails } = options;
-  const { branch, item, tipSha, reviewText } = await prepare(token, owner, repo, sha, emails);
+  const { branch, item, tipSha, reviewText, email } = await prepare(token, owner, repo, sha, emails);
   if (!item.undoable) throw new ReviewError("not-undoable");
   const path = `/repos/${owner}/${repo}`;
 
   const commit = await api<FullCommit>(`${path}/commits/${sha}`, { token });
   const parent = commit.parents[0].sha;
-  const blobAt = async (filePath: string, ref: string): Promise<{ sha: string; mode: string } | null> => {
-    const dir = filePath.includes("/") ? filePath.slice(0, filePath.lastIndexOf("/")) : "";
-    const name = filePath.slice(filePath.lastIndexOf("/") + 1);
-    try {
-      const listing = await api<{ name: string; sha: string; type: string }[]>(
-        `${path}/contents/${dir.split("/").map(encodeURIComponent).join("/")}?ref=${encodeURIComponent(ref)}`,
-        { token },
-      );
-      const entry = Array.isArray(listing) ? listing.find((e) => e.name === name && e.type === "file") : null;
-      return entry ? { sha: entry.sha, mode: "100644" } : null;
-    } catch (error) {
-      if (error instanceof GitHubError && error.status === 404) return null;
-      throw error;
-    }
+  // Both trees are read whole, so each file's exact content and mode are known.
+  const treeOf = async (ref: string) => {
+    const c = await api<{ tree: { sha: string } }>(`${path}/git/commits/${ref}`, { token });
+    const t = await api<{ tree: { path: string; mode: string; type: string; sha: string }[]; truncated: boolean }>(
+      `${path}/git/trees/${c.tree.sha}?recursive=1`,
+      { token },
+    );
+    if (t.truncated) throw new ReviewError("not-undoable");
+    return new Map(t.tree.filter((e) => e.type === "blob").map((e) => [e.path, { sha: e.sha, mode: e.mode }]));
   };
+  const [nowTree, beforeTree] = await Promise.all([treeOf(tipSha), treeOf(parent)]);
+  const blobAt = async (filePath: string, ref: string) => (ref === tipSha ? nowTree : beforeTree).get(filePath) ?? null;
 
   const tree: { path: string; mode: string; type: string; sha: string | null }[] = [];
   for (const file of commit.files ?? []) {
@@ -228,37 +301,25 @@ export async function undoChange(options: { token: string; owner: string; repo: 
     const leftAs = file.status === "removed" ? null : file.sha;
     if ((now?.sha ?? null) !== leftAs) throw new ReviewError("changed-since");
     const before = await blobAt(file.filename, parent);
-    tree.push({ path: file.filename, mode: "100644", type: "blob", sha: before?.sha ?? null });
+    tree.push({ path: file.filename, mode: before?.mode ?? now?.mode ?? "100644", type: "blob", sha: before?.sha ?? null });
     if (file.status === "renamed" && file.previous_filename) {
       const old = await blobAt(file.previous_filename, parent);
-      if (old) tree.push({ path: file.previous_filename, mode: "100644", type: "blob", sha: old.sha });
+      if (old) tree.push({ path: file.previous_filename, mode: old.mode, type: "blob", sha: old.sha });
     }
   }
-  // The undo lands first, then a record-only commit naming both the change and
-  // its undo, so neither is listed again.
-  const undoSha = await commitOnTop(
-    token,
-    owner,
-    repo,
-    branch,
-    tipSha,
-    tree,
-    `Undo a change that skipped approval: ${item.message.slice(0, 60)}\n\nUndone in GTM Base by ${login}. Reverts ${sha}.`,
-  );
+  // The undo and its record are one commit, signed by the owner; it counts as the
+  // owner's own review action, judged by who owned the base just before it.
   await commitOnTop(
     token,
     owner,
     repo,
     branch,
-    undoSha,
+    tipSha,
     [
-      {
-        path: REVIEW_FILE,
-        mode: "100644",
-        type: "blob",
-        content: reviewText + reviewLine({ sha, answer: "undone", by: login, undo: undoSha }),
-      },
+      ...tree,
+      { path: REVIEW_FILE, mode: "100644", type: "blob", content: reviewText + reviewLine({ sha, answer: "undone", by: login }) },
     ],
-    `Record the undo of ${sha.slice(0, 7)}`,
+    `Undo a change that skipped approval: ${item.message.slice(0, 60)}\n\nUndone in GTM Base by ${login}. Reverts ${sha}.`,
+    { name: login, email },
   );
 }
