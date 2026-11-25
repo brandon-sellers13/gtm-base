@@ -1849,7 +1849,7 @@ The lean plan Brandon approved on 2026-11-25: merge main, rehearse case three al
 - [x] Found during case two's digests (2026-11-25): the figure check read an amount with a capital unit ($900K, $1.4M) as the bare number, so a figure word for word in its note was refused (digests 8, 10 and 12 each lost figures to pass). Fixed test-first in citations (units read in any case); the citation, digest and review tests pass. Case two's drafts run on the fix; cases one and three were drafted before it.
 - [x] Figure fix: full suite twice, green both times (3,039 main tests and 215 linked-folder tests, exit 0 each run).
 - [x] Case two resumed and finished on 2026-11-25: 17 digests accepted (12 first try, 5 second), all 13 documents approved with questions open; outputs, evidence pack and README filed with the run (outside this repository).
-- [ ] Brandon scores all three cases, one rule at a time.
+- [x] Brandon scored all three cases on 2026-11-25: every rule and every case passed, on his instruction "pass all", given after he was told the record would carry no notes for each rule. The scores, in his words, are in the run's README outside this repository. Nothing merged or released.
 - [ ] Case two resumes from its kept notes on a plugin copy of the new commit.
 - [ ] Brandon scores cases one and three (evidence ready), and case two once it is run.
 - [ ] The scored re-run of all three cases, on Brandon's yes.
