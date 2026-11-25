@@ -206,6 +206,18 @@ class TestTheCheck(unittest.TestCase):
         )
         self.assertIn("over-its-room", got.problems)
 
+    def test_the_room_counts_the_words_the_request_asks_for(self):
+        # The second rehearsal of 2026-11-24: digests whose words fitted the
+        # room the request gave were refused because the check counted each
+        # line with its note numbers and status as well.
+        line = "x" * 80
+        rows = [{"line": line, "notes": ["n1", "n2", "n3"], "status": "open"}] * 2
+        self.batch.room = 2 * len(line)
+        got = self.check(*rows)
+        self.assertNotIn("over-its-room", got.problems)
+        self.batch.room = 2 * len(line) - 1
+        self.assertIn("over-its-room", self.check(*rows).problems)
+
     def test_after_the_last_try_setup_carries_every_open_note_in_its_own_words(self):
         rows = digests.carried_by_setup(self.batch, ["n2"])
         self.assertEqual(1, len(rows))

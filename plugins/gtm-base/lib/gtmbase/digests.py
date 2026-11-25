@@ -291,7 +291,10 @@ def check(text: str, batch: DigestBatch, screen, customers: Sequence[str]) -> Di
     carried = set(note_id for row in rows for note_id in row["notes"])
     uncarried = [note_id for note_id in batch.must_carry if note_id not in carried]
     problems.extend("%s:%s" % ("open-note-not-carried", note_id) for note_id in uncarried)
-    used = sum(len(_digest_line(row)) + 1 for row in rows)
+    # The words the request asks to fit its room, as it says them. The note
+    # numbers and status setup adds to each line are its own to fit, and the
+    # last resort in render keeps a draft inside the limit whatever they add.
+    used = sum(len(row["line"]) for row in rows)
     if used > batch.room:
         problems.append("over-its-room")
     return DigestChecked(rows, problems, uncarried)
