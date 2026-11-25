@@ -1476,8 +1476,8 @@ Brandon decided to build the web app now and productize from the start. No revie
 - [x] W2. Create a base from the template, or connect an existing one. (done 2026-11-24, PR #10)
 - [x] W3. Read the base by CLASS part, with owner, last confirmation and open changes. (done 2026-11-24)
 - [x] W4. Proposals inbox: accept (owner only, records the confirmation) or discard. (done 2026-11-24)
-- [ ] W5. Invite a teammate and give them the line to join from Claude Code.
-- [ ] W6. Changes that skipped approval: Keep or Undo.
+- [ ] W5. Invite a teammate and give them the line to join from Claude Code. (built and live 2026-11-25, PR #13; the real invite test waits for Simona's GitHub username and the Administration approval on the dev install)
+- [x] W6. Changes that skipped approval: Keep or Undo. (done 2026-11-25)
 - [ ] P1. Back up a base to its repository (after Release B merges).
 - [ ] P2. Join a base from a link (after Release B merges).
 - [ ] P3. Shared base: record-change and the setup closing send proposals; no direct push to main from a seat (after Release B merges).

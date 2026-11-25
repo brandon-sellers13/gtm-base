@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { Header } from "@/components/Header";
 import { readForPage } from "@/lib/pageData";
 import { listProposals } from "@/lib/proposals";
+import { listUnapproved } from "@/lib/unapproved";
 import { type Doc, docHref, PARTS, readBase } from "@/lib/reader";
 import { currentSession } from "@/lib/session";
 
@@ -12,6 +13,7 @@ export default async function BasePage({ params }: { params: Promise<{ owner: st
   const { owner, repo } = await params;
   const base = await readForPage(() => readBase(session.token, owner, repo));
   const proposals = await readForPage(() => listProposals(session.token, owner, repo));
+  const { items: unapproved } = await readForPage(() => listUnapproved(session.token, owner, repo));
 
   const openChanges = base.changes.filter((c) => c.status === "open");
   const parts = [...PARTS, { key: "other", title: "Other documents", blurb: "" }];
@@ -47,6 +49,16 @@ export default async function BasePage({ params }: { params: Promise<{ owner: st
             Open on GitHub
           </a>
         </p>
+
+        {unapproved.length > 0 && (
+          <p className="mt-6 rounded-lg border border-line bg-notice px-4 py-3 text-sm">
+            {unapproved.length === 1 ? "One change" : `${unapproved.length} changes`} went into this base without an
+            approval.{" "}
+            <Link href={`/b/${base.owner}/${base.repo}/unapproved`} className="font-medium underline-offset-4 hover:underline">
+              Keep or undo {unapproved.length === 1 ? "it" : "them"}
+            </Link>
+          </p>
+        )}
 
         {base.truncated && (
           <p className="mt-6 rounded-lg border border-line bg-notice px-4 py-3 text-sm">
