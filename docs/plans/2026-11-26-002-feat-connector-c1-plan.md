@@ -182,6 +182,24 @@ The test site needs two bases the test login can reach; `gtm-base-test` is one, 
 
 The review after the build covers at least: the consent page (framing, cross-site posting, what the product name can claim); the return address list, especially the loopback rule; PKCE, single-use codes and refresh reuse; the audience check and the `resource` value; what the sealed tokens hold and the key handling; the invite rule on every call; the bindings (race, key choice, what a refusal reveals); what a document read through the connector could make a conversation do (C2 and C3 widen this); and that nothing sensitive is logged. Nobody but Brandon connects to the live site before it passes.
 
+### The review's result (2026-11-26)
+
+One pass, on PR #18, read every connector file and traced each sealed value and each check. It found no high or medium vulnerability; eighteen candidates were traced and rejected (listed in the review's report and summarized in `tasks/todo.md`). One risk remains, and it belongs to OAuth sign-in itself rather than to this code.
+
+### Known risk: a forwarded sign-in link
+
+**What could happen.** Someone starts adding GTM Base as a connector in their own Claude or ChatGPT account. Their product sends them to GTM Base's sign-in address, which carries their product's own one-time value (`state`) and its PKCE challenge. Instead of finishing it themselves, they send that link to a GTM Base user, for example dressed up as "connect GTM Base here". If the user is already signed in to GitHub and has approved GTM BaseLive before, GitHub lets them through without a click, and the only step left is GTM Base's consent page. If the user clicks Allow, the sign-in code goes back to the product's own return address with the attacker's `state`.
+
+**Why it may or may not work.** Whether the attacker's account then receives a working connection to the victim's bases depends on Claude's and ChatGPT's servers, not on GTM Base. If their return address checks that the `state` belongs to the person whose browser arrives with it, the forwarded sign-in fails there. If it accepts any `state` it issued, the attacker's account is connected as the victim and can read every base the victim's GitHub account reaches, until the victim revokes GTM BaseLive in GitHub or the secret is changed. This cannot be checked from this code. It can be tested with two accounts (see `tasks/todo.md`).
+
+**What defends against it today.** The consent page is shown every time, never remembered. It names the product as it named itself, the place the sign-in goes back to (from a fixed list), and the GitHub account, and it says to choose Cancel if the person did not just add GTM Base themselves. Only Claude's, ChatGPT's and loopback return addresses can register, so the code can never be sent to an address the attacker controls.
+
+**Options if the test shows the products accept a forwarded sign-in,** in order of preference:
+
+1. Ask GitHub to show its account picker on every connector sign-in (`prompt=select_account` on GitHub's authorize address), so a forwarded link stops at a GitHub screen the person did not expect. Inferred from GitHub's documentation, not yet checked with a GitHub App.
+2. Make the consent page harder to click through: name the date and time the sign-in was started and require the person to type or confirm something specific to their own setup.
+3. Accept the risk for the invite-only stage, where every user is known to Brandon, and say so in the setup guide (C5).
+
 ## What Brandon must do
 
 1. ~~Answer the decisions below.~~ Done 2026-11-26.
