@@ -186,8 +186,9 @@ def _settings_text() -> str:
 def _copy_template(source: str, destination: str, email: str) -> None:
     """Copy the template in, putting the owner's own address where it belongs.
 
-    The placeholder address is replaced in the files under `context` and in the
-    list of text the outgoing check lets through. Every other file is copied as
+    The placeholder address is replaced in the files under `context`, in the
+    source map under `access`, and in the list of text the outgoing check lets
+    through. Every other file is copied as
     it is, and the empty folders keep their marker files so they survive.
     """
     for folder, _subfolders, filenames in os.walk(source):
@@ -214,7 +215,9 @@ def _copy_template(source: str, destination: str, email: str) -> None:
             if text is None:
                 shutil.copyfile(source_file, target_file)
                 continue
-            if repo_relative.startswith(constants.CONTEXT_DIR + "/"):
+            if repo_relative.startswith(
+                (constants.CONTEXT_DIR + "/", constants.ACCESS_DIR + "/")
+            ):
                 text = text.replace(
                     "owner: " + constants.OWNER_PLACEHOLDER_EMAIL, "owner: " + email
                 )

@@ -86,7 +86,7 @@ class TestTheCapturedDecisionReadsBackTheWayItWasWritten(unittest.TestCase):
             self.assertIn(name, draft.fields, name)
         self.assertEqual("change", draft.fields["kind"])
         self.assertEqual("2026-08-04", draft.fields["happened_on"])
-        self.assertEqual(["context/strategy/icp.md"], draft.fields["affects"])
+        self.assertEqual(["context/icps.md"], draft.fields["affects"])
         self.assertEqual("open", draft.fields["status"])
 
     def test_the_answer_says_the_date_out_loud_before_the_fence(self):
@@ -394,6 +394,74 @@ class TestEachStepReadsWhatItWantsFirst(unittest.TestCase):
         self.assertEqual(240000, constants.DRAFT_SOURCES_MAX_CHARS)
 
 
+class TestTemplatesAndReadMesGoLast(unittest.TestCase):
+    """Unit 1.6, P26: a template and a read-me are the first things the cap drops.
+
+    The third real run spent room on templates while a finished document sat
+    past the cap. A template carries the shape of a document and nothing of
+    the business, so it goes last whatever its name says it is about.
+    """
+
+    def test_a_template_and_a_readme_rank_last_for_every_step(self):
+        template = source("icp-template.md", "# Ideal customer profile\n")
+        readme = source("README.md", "# About this folder\n")
+        heading = source("brief.md", "# Launch brief template\n\nFill this in.\n")
+        profile = source("icp.md", "# Ideal customer profile\n")
+        other = source("office.md", "# Office move\n")
+
+        for step in (drafting.STEP_ICP, drafting.STEP_POSITIONING, drafting.STEP_CHANGE):
+            ordered = drafting.order_sources(
+                step, [template, readme, heading, profile, other]
+            )
+            self.assertEqual(
+                ["icp-template.md", "README.md", "brief.md"],
+                [item.label for item in ordered][-3:],
+                step,
+            )
+
+    def test_the_cap_drops_the_template_and_the_readme_first(self):
+        body = "Something the company wrote down.\n" * 8
+        named = [
+            source("README.md", body),
+            source("icp-template.md", body),
+            source("icp.md", body),
+            source("segments.md", body),
+        ]
+        one = len(sources.fence(named[0]))
+
+        with SmallCap(one * 2 + 10):
+            assembly = drafting.assemble(
+                drafting.STEP_ICP,
+                named,
+                "Acme",
+                TODAY.isoformat(),
+                EMAIL,
+                plugin_root=support.PLUGIN_DIR,
+            )
+
+        self.assertEqual(["icp.md", "segments.md"], labels_of(assembly))
+        self.assertEqual(
+            ["README.md", "icp-template.md"],
+            [label.split(" (")[0] for label in assembly.dropped_labels],
+        )
+
+    def test_a_file_that_only_mentions_a_readme_is_not_one(self):
+        notes = source("notes.md", "# How we onboard\n\nSee the readme.\n")
+
+        self.assertFalse(drafting.is_template_or_readme(notes))
+
+    def test_a_finished_document_that_mentions_a_template_is_not_one(self):
+        """Finding 5 of the unit's correctness review: whole words, short titles."""
+        for label, text in (
+            ("positioning.md", "# Positioning, built on the April Dunford template\n"),
+            ("email-templates-results.md", "# What our emails did\n"),
+            ("notes.md", "# We contemplate a second segment\n"),
+        ):
+            self.assertFalse(
+                drafting.is_template_or_readme(source(label, text)), label
+            )
+
+
 class TestTheCompanyNameIsCheckedBeforeItReachesARequest(unittest.TestCase):
     """join-08: the name went into the request exactly as it was typed.
 
@@ -567,6 +635,86 @@ class TestEveryRefusalNamesItsStepAndOneThing(unittest.TestCase):
             "A spreadsheet nobody updates [your call: is it still a spreadsheet?]",
         )
         drafting.parse(drafting.STEP_ICP, allowed)
+
+    def test_a_file_named_like_a_placeholder_may_be_cited_as_a_source(self):
+        # The replay of 2026-10-10, case two: every draft that correctly named
+        # a file called todo.md among its sources was refused, and could only
+        # pass by leaving that file out. The sources line names the person's
+        # files, so the words in it are theirs and are not checked.
+        import re as _re
+
+        text = captured("icp.md")
+        cited = _re.sub(
+            r"^sources: \[(.*)\]$",
+            lambda m: "sources: [%s, tasks/todo.md (2026-09-17), notes-tbd.md (2026-09-18)]" % m.group(1),
+            text,
+            count=1,
+            flags=_re.M,
+        )
+        self.assertIn("todo.md", cited)
+        drafting.parse(drafting.STEP_ICP, cited)
+        # The same words in the document itself are still refused.
+        self.assertEqual(
+            "icp:placeholder",
+            refusal(self, drafting.STEP_ICP, cited.replace("## Use cases\n", "## Use cases\n\nTODO\n", 1)),
+        )
+
+    def test_the_sources_line_still_checks_what_is_not_a_file_name(self):
+        # The correctness review of the replay fixes: only an item shaped like
+        # a file's name is the person's own words; anything else on the line
+        # is still checked.
+        import re as _re
+
+        text = captured("icp.md")
+        for unfilled, code in (
+            ("TBD", "icp:placeholder"),
+            ("insert the sources here", "icp:placeholder"),
+            ("notes.md, seamless notes", "icp:banned-word:seamless"),
+        ):
+            changed = _re.sub(r"^sources: \[.*\]$", "sources: [%s]" % unfilled, text, count=1, flags=_re.M)
+            self.assertEqual(code, refusal(self, drafting.STEP_ICP, changed), unfilled)
+
+    def test_a_sources_list_one_item_per_line_may_cite_todo(self):
+        import re as _re
+
+        text = captured("icp.md")
+        listed = _re.sub(
+            r"^sources: \[.*\]$",
+            "sources:\n  - acme-icp.md (2026-08-14)\n  - tasks/todo.md (2026-09-17)",
+            text, count=1, flags=_re.M,
+        )
+        drafting.parse(drafting.STEP_ICP, listed)
+
+    def test_text_that_only_ends_like_a_file_is_still_checked(self):
+        # The confirm pass on the replay fixes, finding C2: only an ending the
+        # plugin reads or lists counts as a file's name.
+        import re as _re
+
+        text = captured("icp.md")
+        for unfilled in ("TBD pending interviews e.g", "todo see v2.1"):
+            changed = _re.sub(r"^sources: \[.*\]$", "sources: [%s]" % unfilled, text, count=1, flags=_re.M)
+            self.assertEqual("icp:placeholder", refusal(self, drafting.STEP_ICP, changed), unfilled)
+
+    def test_every_way_of_writing_the_sources_may_cite_todo(self):
+        # The confirm pass on the replay fixes, finding C3: each form the
+        # settings block accepts.
+        import re as _re
+
+        text = captured("icp.md")
+        for written in (
+            'sources: ["tasks/todo.md (2026-09-17)", acme-icp.md]',
+            "sources:\n  - 'tasks/todo.md'",
+            "sources:\n- tasks/todo.md (2026-09-17)",
+            "sources : [tasks/todo.md]",
+        ):
+            changed = _re.sub(r"^sources: \[.*\]$", lambda _m: written, text, count=1, flags=_re.M)
+            self.assertIn("todo.md", changed)
+            drafting.parse(drafting.STEP_ICP, changed)
+
+    def test_a_change_entry_may_cite_todo_as_its_source(self):
+        text = captured("change-entry.md").replace("source: pricing-notes.txt", "source: tasks/todo.md (2026-09-17)")
+        self.assertIn("todo.md", text)
+        drafting.parse(drafting.STEP_CHANGE, text)
 
     def test_a_section_the_profile_always_carries_may_not_be_empty(self):
         self.assertEqual(

@@ -31,13 +31,16 @@ import re
 from typing import List, Optional, Tuple
 
 from . import (
+    approval,
     base_reader,
+    callmarkers,
     changes,
     compose_proposal,
     constants,
     duplicate_check,
     formats,
     ids,
+    layout,
     names,
     paths,
     stale,
@@ -77,6 +80,13 @@ CODE_CHANGES_CAN_MOVE = "context-changes-can-move"
 CODE_EVERY_SEAT_FIRST = changes.CODE_EVERY_SEAT_FIRST
 # One context change is written down twice and the copies disagree.
 CODE_WRITTEN_TWICE = "one-change-written-twice"
+
+# An answer to a question a draft left open could not be prepared.
+CODE_QUESTION_GONE = "question-not-there"
+CODE_QUESTION_ABOVE_EVERY_PART = "question-above-every-part"
+CODE_ANSWER_NEEDED = "answer-needed"
+CODE_NOT_A_DOCUMENT = "not-a-document"
+CODE_PART_ANSWER_WAITING = "another-answer-waiting-for-that-part"
 
 # What the run writes for the hook to pick up later.
 REVIEW_BY_FILE = "review_by_items.json"
@@ -130,9 +140,9 @@ COULD_NOT_UPDATE = (
 )
 BROUGHT_UP_TO_DATE = "Your base was brought up to date with the shared copy first."
 UNPROCESSED = (
-    "There are %d items waiting to be read in your inbox, so nothing was "
-    "prepared. Everything that is out of date is still listed below, and the "
-    "changes can be prepared once those items have been read."
+    "Your inbox holds %s waiting to be read, so nothing was prepared. "
+    "Everything that is out of date is still listed below, and the changes "
+    "can be prepared once everything in it has been read."
 )
 NOTHING_FLAGGED = "Nothing in your base is out of date today."
 DRY_RUN_NOTE = "This was a look only, so nothing was written."
@@ -141,31 +151,31 @@ DRY_RUN_NOTE = "This was a look only, so nothing was written."
 # earlier wording said "is from", which reads as the day it happened.
 LEDGER_BEHIND = (
     "The last context change in your base was written down on %s, which is "
-    "more than %d days ago. If nothing about the business has changed since "
-    "then, say so and GTM Base will stop mentioning it for %d days."
+    "more than %s ago. If nothing about the business has changed since "
+    "then, say so and GTM Base will stop mentioning it for %s."
 )
 LEDGER_BEHIND_EMPTY = (
     "Your base has no context change recorded yet. If there is nothing to write "
-    "down, say so and GTM Base will stop mentioning it for %d days."
+    "down, say so and GTM Base will stop mentioning it for %s."
 )
 LEDGER_BEHIND_DISMISSED = (
     "GTM Base will not mention the quiet record of context changes again until "
     "%s."
 )
 REVIEW_BY = (
-    "Context change %s came up for review on %s, which was %d days ago."
+    "Context change %s came up for review on %s, which was %s ago."
 )
 MALFORMED = (
-    "%d things in your base could not be read, so they were left alone."
+    "%s things in your base could not be read, so they were left alone."
 )
 MALFORMED_ONE = (
-    "1 thing in your base could not be read, so it was left alone."
+    "One thing in your base could not be read, so it was left alone."
 )
 # Said whenever one context change is written down twice and the two copies
-# do not agree. It names the change and both files, because the answer is the
-# person's to give and they cannot give it without knowing where to look.
+# do not agree. It names the change by its identifier, which is how both copies
+# can be found, and never either file by its name (Unit 1.8).
 WRITTEN_TWICE = (
-    "The context change %s is written down twice, in %s, and the two do not "
+    "The context change %s is written down twice, and the two copies do not "
     "say the same thing. GTM Base is not choosing between them. Decide which "
     "one is right and take the other one away."
 )
@@ -175,8 +185,12 @@ CANNOT_VOUCH = (
     "Until those two agree, GTM Base cannot vouch for %s."
 )
 DROPPED = (
-    "%d file names in your context changes point outside the base, so they "
+    "%s file names in your context changes point outside the base, so they "
     "were skipped."
+)
+DROPPED_ONE = (
+    "One file name in your context changes points outside the base, so it was "
+    "skipped."
 )
 
 # The first-run findings, in the order the first run looks for them.
@@ -216,10 +230,21 @@ FINDING_BASELINE_UNCONFIRMED = (
     "confirmation from its owner, so GTM Base will ask about it the next time "
     "you review your base."
 )
+# Said at the closing when a document still holds a question the draft left
+# for the person (Unit 1.7b). The question itself is not repeated, because it
+# came out of the file; the review shows it, held apart as data.
+FINDING_OPEN_QUESTION_ONE = (
+    "%s still has a question in it that only you can answer, so it is not "
+    "finished yet. Ask for a review of your base to answer it."
+)
+FINDING_OPEN_QUESTIONS = (
+    "%s still has %s questions in it that only you can answer, so it is not "
+    "finished yet. Ask for a review of your base to answer them."
+)
 FINDING_DOCUMENT_OLDER = (
-    "The material behind %s is dated %s, and context change %s happened on %s, "
-    "so that document is older than the change it is meant to reflect. It is "
-    "worth a read."
+    "The material behind %s is dated %s, and %s happened on %s, so that "
+    "document is older than the change it is meant to reflect. It is worth a "
+    "read."
 )
 # Said when a document has not caught up with a context change. It says only
 # what is true in every state that reaches it: the document is behind, and the
@@ -313,9 +338,46 @@ REVIEW_ITEM_WAITING_THERE = (
     "%s. %s has a prepared change waiting for somebody to review it."
 )
 REVIEW_INBOX_WAITING = (
-    "There are %d items waiting to be read in your inbox, so nothing can be "
-    "answered yet. Read those first and ask for the review again."
+    "Your inbox holds %s waiting to be read, so nothing can be answered yet. "
+    "Read everything in it first and ask for the review again."
 )
+# One question a draft left open, listed in the review with the question itself
+# shown under it, held apart as data (Unit 1.7b, requirement P27).
+REVIEW_ITEM_QUESTION = (
+    "%s. %s has a question in it that only you can answer."
+)
+REVIEW_ITEM_QUESTION_PREPARED = (
+    "%s. %s has a question in it that only you can answer, and your answer is "
+    "prepared and waiting for you to approve it."
+)
+# What answering one of those questions says back.
+ANSWER_PREPARED = (
+    "GTM Base prepared a change to %s from your answer, and nothing in it has "
+    "changed yet."
+)
+ANSWER_ALREADY_PREPARED = (
+    "Your answer to that question is already prepared and waiting for you to "
+    "approve it, so nothing new was prepared."
+)
+ANOTHER_ANSWER_WAITING = (
+    "An answer to another question in the same part of that document is "
+    "already waiting for you to approve it, so nothing new was prepared. "
+    "Approve or drop that one first, then answer this."
+)
+QUESTION_GONE = (
+    "That question is not in %s any more, so nothing was prepared. Ask for a "
+    "review of your base to see the questions still open."
+)
+QUESTION_ABOVE_EVERY_PART = (
+    "That question sits above the first heading in %s, where a prepared change "
+    "cannot reach it, so nothing was prepared. Answer it by editing the "
+    "document yourself."
+)
+ANSWER_NEEDED = (
+    "There was no answer to prepare anything from. Say what the answer is and "
+    "GTM Base will prepare the change."
+)
+NOT_A_DOCUMENT = "That is not a document in your base, so nothing was prepared."
 REVIEW_SPEAKING_AGAIN = (
     "You asked GTM Base to stay quiet until you asked for a review. This is "
     "that review, so it will speak up again from now on."
@@ -364,9 +426,32 @@ class ReviewLine(object):
     happens to a prepared change is approving it and not answering a question.
     """
 
-    __slots__ = ("number", "path", "kind", "trigger", "entry_id", "question_id", "sentence")
+    __slots__ = (
+        "number",
+        "path",
+        "kind",
+        "trigger",
+        "entry_id",
+        "question_id",
+        "sentence",
+        "open_question",
+        "question_text",
+        "prepared",
+    )
 
-    def __init__(self, number, path, kind, trigger, entry_id, question_id, sentence):
+    def __init__(
+        self,
+        number,
+        path,
+        kind,
+        trigger,
+        entry_id,
+        question_id,
+        sentence,
+        open_question=None,
+        question_text=None,
+        prepared=None,
+    ):
         self.number = number
         self.path = path
         self.kind = kind
@@ -374,6 +459,13 @@ class ReviewLine(object):
         self.entry_id = entry_id
         self.question_id = question_id
         self.sentence = sentence
+        # For a question a draft left open: which one it is in the document,
+        # counting from one, the question as the file asks it, which is data
+        # and is only ever shown held apart, and the prepared answer waiting
+        # for the owner's yes, when there is one.
+        self.open_question = open_question
+        self.question_text = question_text
+        self.prepared = prepared
 
     def __repr__(self) -> str:
         return "ReviewLine(number=%r, kind=%r, path=%r)" % (
@@ -472,11 +564,11 @@ def _heading_named_by(entry_text: str, file_text: str) -> Optional[str]:
 
 def _entry_citation(entry, entry_file: str) -> str:
     """The one sentence that says which context change this came from."""
-    name = (entry_file or "").rsplit("/", 1)[-1]
-    return "Context change %s, written down in %s, and it happened on %s." % (
-        entry.id,
-        name or "the record of context changes",
-        entry.decided_on,
+    # Where it is written down is said the same way every time, because the
+    # file's own name is never read out (Unit 1.8).
+    return (
+        "Context change %s, written down in the record of context changes, and "
+        "it happened on %s." % (entry.id, entry.decided_on)
     )
 
 
@@ -555,9 +647,8 @@ def _list_awaiting_local_approval(result, base_root: str, git) -> None:
 def _corrections_citing(base_root: str) -> List["formats.CorrectionsFile"]:
     """Every accepted record the base holds, as far as it can be read."""
     found = []
-    folder = os.path.join(base_root, constants.CORRECTIONS_DIR)
-    for path in sorted(glob.glob(os.path.join(folder, "*.md"))):
-        text = read_text(path)
+    for relative in base_reader.correction_files(base_root):
+        text = read_text(os.path.join(base_root, relative.replace("/", os.sep)))
         if text is None:
             continue
         try:
@@ -639,7 +730,8 @@ def build_file_proposal(
     text = read_text(os.path.join(base_root, path))
     if text is None:
         raise ValidationError(
-            "GTM Base could not read %s, so it prepared nothing for it." % path,
+            "GTM Base could not read %s, so it prepared nothing for it."
+            % names.document_name(path),
             code=CODE_MISSING_FILE,
         )
     heading = _heading_named_by(entry.body, text)
@@ -651,7 +743,10 @@ def build_file_proposal(
         operation = "add"
         before = ""
     if not before:
-        before = "This part of %s does not say anything about that change yet." % path
+        before = (
+            "This part of %s does not say anything about that change yet."
+            % names.document_name(path)
+        )
     drafted = draft_text_for(entry)
 
     body = formats.render_pr_body(
@@ -661,7 +756,7 @@ def build_file_proposal(
             "why": (
                 "This context change was written down and %s was never brought in "
                 "line with it. The words below are a first draft for the owner "
-                "to correct or replace." % path
+                "to correct or replace." % names.document_name(path)
             ),
             "evidence": "%s\n\n%s" % (_entry_citation(entry, entry_file), _quote(entry.body)),
             "confidence": DRAFT_CONFIDENCE,
@@ -714,7 +809,7 @@ def build_affected_files_proposal(
             "before": "Context change %s does not say which files it affects."
             % entry.id,
             "after": "Context change %s is marked as affecting %s."
-            % (entry.id, ", ".join(candidates)),
+            % (entry.id, names.documents_named(candidates)),
             "why": (
                 "Whoever wrote this context change down left the list of files it "
                 "affects blank, so GTM Base worked out which files it most "
@@ -882,7 +977,7 @@ def _baseline_sentence(report, finding) -> str:
     items = report.baseline_items()
     unnamed = [item for item in items if item.confirmed_on is None]
     if unnamed or len(items) != 2:
-        path = finding.path or (items[0].path if items else constants.REQUIRED_CONTEXT_FILES[0])
+        path = finding.path or (items[0].path if items else report.required_files[0])
         return FINDING_BASELINE_UNCONFIRMED % names.document_name(path)
     first, second = items[0], items[1]
     one_name = names.document_name(first.path)
@@ -921,7 +1016,14 @@ def finding_sentence(report, finding) -> str:
     a context change is ever told that nothing is out of date.
     """
     if finding.code == stale.FINDING_REQUIRED_FILE_MISSING:
-        return FINDING_REQUIRED_FILE % finding.path
+        return FINDING_REQUIRED_FILE % names.document_name(finding.path)
+    if finding.code == stale.FINDING_OPEN_QUESTION:
+        info = report.files.get(finding.path)
+        many = len(getattr(info, "open_questions", ()) or ())
+        name = names.document_name(finding.path)
+        if many > 1:
+            return FINDING_OPEN_QUESTIONS % (name, names.counted(many))
+        return FINDING_OPEN_QUESTION_ONE % name
     if finding.code == stale.FINDING_BASELINE_NO_CHANGES:
         return _baseline_sentence(report, finding)
     if finding.code == stale.FINDING_CHANGE_WRITTEN_TWICE:
@@ -934,10 +1036,12 @@ def finding_sentence(report, finding) -> str:
             if item.path == finding.path and item.entry_id == finding.entry_id:
                 decided = item.decided_on
                 break
+        # The document by its name and the change by its first line, never a
+        # path or an identifier (Unit 1.8).
         return FINDING_DOCUMENT_OLDER % (
-            finding.path,
+            names.document_name(finding.path),
             finding.date,
-            finding.entry_id,
+            _the_change_quoted(report, finding.entry_id),
             decided,
         )
     if finding.code == stale.FINDING_CHANGE_WAITING:
@@ -950,6 +1054,17 @@ def finding_sentence(report, finding) -> str:
         finding.date,
         _the_change_called(report, finding.entry_id),
     )
+
+
+def _the_change_quoted(report, entry_id) -> str:
+    """One context change by its first line, in quotation marks, for a sentence
+    that says the day it happened on its own."""
+    for entry in getattr(report, "entries", None) or []:
+        if getattr(entry, "id", None) == entry_id:
+            line = names.change_name(getattr(entry, "body", ""))
+            if line and line != names.CHANGE_WITHOUT_A_LINE:
+                return 'the context change "%s"' % line
+    return "a context change"
 
 
 def _the_change_called(report, entry_id) -> str:
@@ -1012,6 +1127,11 @@ def run(
     # option on the command line is: a session holding the older instructions
     # asks by that name, and refusing it loses the answer just given.
     dismiss_quiet_record = dismiss_quiet_record or dismiss_ledger_behind
+    if dismiss_quiet_record and not dry_run:
+        # Putting the reminder off decides for the person that they hear
+        # less, so it is asked first, before anything else in the run
+        # (Astra's review of Release B, finding 6).
+        approval.require("stale_check.dismiss_quiet_record")
     today = now or state.today()
     if isinstance(today, datetime.datetime):
         today = today.date()
@@ -1045,7 +1165,7 @@ def run(
     if waiting:
         result.drafting_refused = True
         result.codes.append(CODE_UNPROCESSED)
-        result.sentences.append(UNPROCESSED % len(waiting))
+        result.sentences.append(UNPROCESSED % _items(len(waiting)))
 
     inputs = base_reader.read_base(
         base_root, base_id, runner=git, today=today, record_dropped=not dry_run
@@ -1060,6 +1180,9 @@ def run(
         seat=inputs.seat,
         owner_email=None,
     )
+    # The two required documents where they really are on this base, which
+    # on a base laid out before Unit 1.5b is at their older paths.
+    report.required_files = layout.required_paths(base_root)
     result.report = report
     # Every document with a change waiting on an answer, which is checked
     # before any all-clear (finding G5). It is read here, where the folder is,
@@ -1157,8 +1280,13 @@ def _review(
 
     waiting_to_be_read = state.unprocessed_rows(base_id)
     email = base_reader.repo_email(base_root, git)
-    lines = _review_documents(
-        result, report, inputs, base_root, base_id, email, today, dry_run
+    # The questions a draft left open come first, because nothing else about
+    # the documents holding them can be settled until they are answered.
+    lines = _review_open_questions(report, base_root, base_id, email, today)
+    lines.extend(
+        _review_documents(
+            result, report, inputs, base_root, base_id, email, today, dry_run
+        )
     )
     _review_prepared_changes(result, report, base_root, git, lines)
 
@@ -1190,7 +1318,9 @@ def _review(
     if waiting_to_be_read:
         # Every question below would be refused while these are unread, so it
         # is said once at the top rather than found out one answer at a time.
-        result.sentences.append(REVIEW_INBOX_WAITING % len(waiting_to_be_read))
+        result.sentences.append(
+            REVIEW_INBOX_WAITING % _items(len(waiting_to_be_read))
+        )
     if not session_id:
         result.sentences.append(REVIEW_NO_SESSION)
     for line in lines:
@@ -1289,6 +1419,10 @@ def _review_documents(
         if report.suppressions and flag.path in report.suppressions:
             if state.is_suppressed(base_id, flag.path, today):
                 continue
+        if flag.trigger != stale.TRIGGER_LEDGER and info.has_open_question:
+            # Nobody is asked whether a document is still right while it asks
+            # a question nobody answered; that question is listed instead.
+            continue
         try:
             path = paths.canonical_context_path(base_root, flag.path)
         except (PathError, ValidationError):
@@ -1316,6 +1450,245 @@ def _review_documents(
     return lines
 
 
+def _review_open_questions(report, base_root, base_id, email, today) -> List["ReviewLine"]:
+    """One line for each question a draft left open, document by document.
+
+    One this seat's address owns, and never the map. The question itself rides
+    on the line as data, for the script to show held apart, and it is never put
+    into the sentence a person is read.
+    """
+    lines: List[ReviewLine] = []
+    for path in report.open_question_paths():
+        info = report.files.get(path)
+        if email is not None and email not in (info.owners or []):
+            continue
+        # A document set aside for now is still asked its open questions,
+        # because the closing sends the person to the review to answer them
+        # and a review that then hid them would contradict it (finding 5 of
+        # the unit's correctness review). Setting a question about a change
+        # aside is not setting these aside.
+        try:
+            path = paths.canonical_context_path(base_root, path)
+        except (PathError, ValidationError):
+            continue
+        text = read_text(os.path.join(base_root, path.replace("/", os.sep))) or ""
+        for mark in callmarkers.find(text):
+            prepared = None
+            staging = _answer_staging_for(path, mark, "-", text)
+            if staging is not None and _staging_exists(base_root, staging.staging_id):
+                prepared = staging_path_for(base_root, staging.staging_id)
+            form = REVIEW_ITEM_QUESTION_PREPARED if prepared else REVIEW_ITEM_QUESTION
+            lines.append(
+                ReviewLine(
+                    None,
+                    path,
+                    "question",
+                    None,
+                    None,
+                    None,
+                    form % ("%s", names.document_name(path)),
+                    open_question=mark.token,
+                    question_text=mark.question,
+                    prepared=prepared,
+                )
+            )
+    return lines
+
+
+def _part_text(text: str, mark) -> str:
+    """What the part holding one question says right now."""
+    lines = str(text or "").split("\n")
+    index = compose_proposal.find_heading(
+        lines,
+        mark.heading or "",
+        compose_proposal.frontmatter_end(lines),
+        mark.occurrence or 1,
+    )
+    if index < 0:
+        return ""
+    return "\n".join(lines[index : compose_proposal.section_end(lines, index)])
+
+
+def _answer_staging_id(path: str, mark, text: str) -> str:
+    """The name of the prepared answer to one open question.
+
+    It is worked out from the document, the part the question sits in, what
+    that part says now, and the question, so answering the same question twice
+    finds the change already prepared, and a question that comes back after
+    its part was rewritten is a new question to answer rather than one taken
+    for answered for ever (finding 1 of the unit's correctness review).
+    """
+    seed = "\n".join(
+        [
+            path,
+            str(mark.heading),
+            str(mark.occurrence),
+            mark.question,
+            ids.content_hash(_part_text(text, mark)),
+        ]
+    )
+    return ids.staging_id(
+        "your-call-" + ids.content_hash(seed)[:16], path, "ledger", 0
+    )
+
+
+def _answer_waiting_for_the_part(base_root: str, path: str, mark):
+    """The prepared answer already waiting for this part, if there is one.
+
+    Each answer rewrites the whole part it is in, so two answers waiting for
+    one part would each be written against the part as it was, and approving
+    the second would put the first question back. So one part takes one
+    answer at a time (finding 1 of the unit's correctness review).
+    """
+    pending = os.path.join(base_root, constants.PROPOSALS_PENDING_DIR)
+    for staged in sorted(glob.glob(os.path.join(pending, "*.md"))):
+        try:
+            staging = compose_proposal.load_staging(staged)
+        except Exception:
+            continue
+        if not callmarkers.markers_in(getattr(staging, "excerpt", "") or ""):
+            continue
+        for edit in staging.edits or []:
+            if (
+                edit.path == path
+                and edit.heading == mark.heading
+                and int(getattr(edit, "occurrence", 1) or 1) == int(mark.occurrence or 1)
+            ):
+                return staged
+    return None
+
+
+def _answer_staging_for(path: str, mark, answer: str, text: str = ""):
+    """The prepared change that writes one answer into its part of the document.
+
+    It holds GTM Base's first draft note, like every prepared change does, so
+    nothing can approve it until the real wording of that part, with the
+    question answered, is written in with the one command that takes the note
+    off. The question itself is kept as the excerpt, which is how that command
+    refuses wording that still asks it. None when the question sits above
+    every part a prepared change can reach.
+    """
+    if not mark.heading:
+        return None
+    staging_id = _answer_staging_id(path, mark, text)
+    drafted = PLACEHOLDER_SHAPE % "the question marked in this part is answered"
+    words = " ".join(str(answer or "").split())[: constants.MAX_EXCERPT_CHARS]
+    body = formats.render_pr_body(
+        {
+            "before": "This part of %s asks a question nobody has answered yet."
+            % names.document_name(path),
+            "after": "This part says what the owner answered.",
+            "why": (
+                "A draft left this question for the owner, and the owner has "
+                "now answered it. The words below are a first draft for them "
+                "to correct or replace."
+            ),
+            "evidence": "The owner answered the question marked in this part: %s"
+            % words,
+            "confidence": DRAFT_CONFIDENCE,
+            "rule_changed": "None",
+            "marker": marker_line(staging_id, None, None),
+        }
+    )
+    staging = formats.ProposalStaging(
+        staging_id=staging_id,
+        origin="ledger",
+        intake_path="ledger",
+        target_paths=[path],
+        sequence=0,
+        rule_change=False,
+        confidence=DRAFT_CONFIDENCE,
+        third_party=False,
+        pr_body=body,
+        source_id=None,
+        decision_block=None,
+        edits=[
+            formats.Edit(
+                path, mark.heading, "replace", drafted + "\n", mark.occurrence
+            )
+        ],
+        excerpt=mark.marker[: constants.MAX_EXCERPT_CHARS],
+        first_draft=True,
+    )
+    return staging.validate()
+
+
+class Answered(object):
+    """What answering one open question led to, and the sentence to say."""
+
+    __slots__ = ("prepared", "sentence", "staging_path", "codes")
+
+    def __init__(self, prepared, sentence, staging_path=None, codes=None):
+        self.prepared = bool(prepared)
+        self.sentence = sentence
+        self.staging_path = staging_path
+        self.codes = list(codes or [])
+
+    def __repr__(self) -> str:
+        return "Answered(prepared=%r, codes=%r)" % (self.prepared, self.codes)
+
+
+def answer_a_question(
+    base_root: str, base_id: str, path: str, token, answer: str
+) -> Answered:
+    """Prepare the change that settles one open question, from the owner's answer.
+
+    Settling a question is a prepared change the owner approves, exactly like
+    every other change to a document, and never a step that writes over a file
+    (requirement P27). Nothing in the document changes here. The owner's
+    answer is screened the way a no is, so a phone number or a key they typed
+    by mistake is refused rather than written into the base.
+    """
+    try:
+        relative = paths.canonical_context_path(
+            base_root, layout.where_it_lives(base_root, path)
+        )
+    except (PathError, ValidationError):
+        return Answered(False, NOT_A_DOCUMENT, codes=[CODE_NOT_A_DOCUMENT])
+    document = names.document_name(relative)
+    words = " ".join(str(answer or "").split())
+    if not words:
+        return Answered(False, ANSWER_NEEDED, codes=[CODE_ANSWER_NEEDED])
+    from . import scan
+
+    allowlist, _code = scan.load_allowlist(base_root)
+    hits = scan.scan_text(words, allowlist, "what you said")
+    if hits:
+        return Answered(
+            False,
+            hits[0].sentence(),
+            codes=[hit.pattern_class for hit in hits],
+        )
+    text = read_text(os.path.join(base_root, relative.replace("/", os.sep))) or ""
+    # The review names each question by a token that does not move when an
+    # earlier question is answered (finding 2 of the unit's correctness
+    # review), so an answer is never written against another question.
+    mark = callmarkers.by_token(text, token)
+    if mark is None:
+        return Answered(
+            False, QUESTION_GONE % document, codes=[CODE_QUESTION_GONE]
+        )
+    staging = _answer_staging_for(relative, mark, words, text)
+    if staging is None:
+        return Answered(
+            False,
+            QUESTION_ABOVE_EVERY_PART % document,
+            codes=[CODE_QUESTION_ABOVE_EVERY_PART],
+        )
+    waiting = _answer_waiting_for_the_part(base_root, relative, mark)
+    if waiting is not None:
+        same = os.path.basename(waiting) == staging.staging_id + ".md"
+        return Answered(
+            False,
+            ANSWER_ALREADY_PREPARED if same else ANOTHER_ANSWER_WAITING,
+            staging_path=waiting,
+            codes=[CODE_ALREADY_STAGED if same else CODE_PART_ANSWER_WAITING],
+        )
+    written = save_staging(base_root, staging)
+    state.note_first_draft(base_id, staging.staging_id)
+    return Answered(True, ANSWER_PREPARED % document, staging_path=written)
+
+
 def _review_prepared_changes(result, report, base_root, git, lines) -> None:
     """Every prepared change, folded into its document's line or added after.
 
@@ -1331,6 +1704,15 @@ def _review_prepared_changes(result, report, base_root, git, lines) -> None:
         else _prepared_elsewhere(base_root)
     )
     for staging_id, targets in waiting:
+        # A prepared answer to an open question is already on that question's
+        # own line, so it is not listed a second time as a change.
+        if any(
+            line.kind == "question"
+            and line.prepared
+            and os.path.basename(line.prepared) == staging_id + ".md"
+            for line in lines
+        ):
+            continue
         for path in targets:
             folded = False
             for line in lines:
@@ -1404,7 +1786,8 @@ def _list_without_preparing(result, report) -> None:
     """Say what a context change has moved past without preparing anything for it."""
     for entry_id, path in _ledger_flags(report):
         result.sentences.append(
-            "%s is out of date against context change %s." % (path, entry_id)
+            "Context change %s has moved past %s."
+            % (entry_id, names.document_name(path))
         )
 
 
@@ -1413,23 +1796,35 @@ def _list_waiting_on_the_owner(result, report) -> None:
     for flag in report.file_flags:
         if flag.trigger == stale.TRIGGER_LEDGER:
             continue
+        info = report.files.get(flag.path)
+        if getattr(info, "has_open_question", False):
+            # It is not waiting on anybody to say it is right. It is waiting
+            # on a question to be answered, which the review asks.
+            continue
         if flag.newest_confirmation is None:
             result.sentences.append(
-                "Nobody has ever said %s is still right." % flag.path
+                "Nobody has ever confirmed %s." % names.document_name(flag.path)
             )
         else:
             accepted = report.merge_confirmations.get(flag.path)
             if accepted is not None and accepted.date == flag.newest_confirmation:
                 result.sentences.append(
-                    "%s was last said to be right on %s, when its owner accepted "
-                    "the change that rewrote it, which is longer ago than this "
-                    "base allows." % (flag.path, accepted.date.isoformat())
+                    "The last confirmation of %s was on %s, when its owner "
+                    "accepted the change that rewrote it, which is longer ago than "
+                    "this base allows."
+                    % (
+                        names.document_name(flag.path),
+                        accepted.date.isoformat(),
+                    )
                 )
             else:
                 result.sentences.append(
-                    "%s was last said to be right on %s, which is longer ago than "
-                    "this base allows."
-                    % (flag.path, flag.newest_confirmation.isoformat())
+                    "The last confirmation of %s was on %s, which is longer ago "
+                    "than this base allows."
+                    % (
+                        names.document_name(flag.path),
+                        flag.newest_confirmation.isoformat(),
+                    )
                 )
 
 
@@ -1554,14 +1949,14 @@ def _write_one(
     )
     if kind == "affected-files":
         result.sentences.append(
-            "Context change %s named no files, so GTM Base prepared a list of the %d "
-            "files it looks like it touches, for you to approve."
-            % (entry_id, len(target_paths))
+            "Context change %s named no files, so GTM Base prepared a list of the %s "
+            "it looks like it touches, for you to approve."
+            % (entry_id, names.how_many(len(target_paths), "file", "files"))
         )
     else:
         result.sentences.append(
-            "%s is out of date against context change %s, and an edit for it is "
-            "prepared as %s." % (target_paths[0], entry_id, staging.staging_id)
+            "Context change %s has moved past %s, and an edit for it is "
+            "prepared." % (entry_id, names.document_name(target_paths[0]))
         )
 
 
@@ -1580,10 +1975,12 @@ def _offer_the_update(result, base_root, base_id, today, git) -> None:
     """
     offer = changes.what_to_offer(base_root, base_id, today=today, git=git)
     if offer == changes.OFFER_NOW:
-        result.sentences.append(changes.OFFER)
+        result.sentences.append(changes.offer_sentence(base_root))
         result.codes.append(CODE_CHANGES_CAN_MOVE)
     elif offer == changes.OFFER_EVERY_SEAT_FIRST:
-        result.sentences.append(changes.EVERY_SEAT_FIRST)
+        result.sentences.append(
+            changes.offer_sentence(base_root, every_seat_first=True)
+        )
         result.codes.append(CODE_EVERY_SEAT_FIRST)
 
 
@@ -1597,12 +1994,12 @@ def _say_what_is_written_twice(result, report) -> None:
     """
     for conflict in report.conflicts:
         result.sentences.append(
-            WRITTEN_TWICE % (conflict.entry_id, " and ".join(conflict.paths))
+            WRITTEN_TWICE % conflict.entry_id
         )
         if conflict.affects:
             result.sentences.append(
                 CANNOT_VOUCH
-                % ", ".join(names.document_name(path) for path in conflict.affects)
+                % names.documents_named(conflict.affects)
             )
         result.codes.append(CODE_WRITTEN_TWICE)
 
@@ -1630,14 +2027,28 @@ def _quiet_record_ask(result, report, base_id, session_id, dry_run) -> None:
         # to write down what they already wrote.
         if report.conflicts:
             return
-        result.sentences.append(LEDGER_BEHIND_EMPTY % window)
+        result.sentences.append(LEDGER_BEHIND_EMPTY % _days(window))
     else:
         result.sentences.append(
             LEDGER_BEHIND
-            % (behind.newest_entry_date.isoformat(), behind.window_days, window)
+            % (
+                behind.newest_entry_date.isoformat(),
+                _days(behind.window_days),
+                _days(window),
+            )
         )
     if session_id and not dry_run:
         state.update_seat(base_id, quiet_record_said_in_session=session_id)
+
+
+def _days(number: int) -> str:
+    """A number of days, in words and in the singular for one."""
+    return names.how_many(int(number), "day", "days")
+
+
+def _items(number: int) -> str:
+    """A number of items waiting in the inbox, the way a person says it."""
+    return names.how_many(int(number), "item", "items")
 
 
 def _report_the_rest(result, report, base_id, today, dry_run) -> None:
@@ -1652,7 +2063,7 @@ def _report_the_rest(result, report, base_id, today, dry_run) -> None:
                     item.review_by.isoformat()
                     if hasattr(item.review_by, "isoformat")
                     else str(item.review_by),
-                    item.days_overdue,
+                    _days(item.days_overdue),
                 )
             )
         if not dry_run:
@@ -1664,10 +2075,14 @@ def _report_the_rest(result, report, base_id, today, dry_run) -> None:
         result.sentences.append(
             MALFORMED_ONE
             if len(report.malformed) == 1
-            else MALFORMED % len(report.malformed)
+            else MALFORMED % names.counted(len(report.malformed)).capitalize()
         )
     if report.dropped:
-        result.sentences.append(DROPPED % len(report.dropped))
+        result.sentences.append(
+            DROPPED_ONE
+            if len(report.dropped) == 1
+            else DROPPED % names.counted(len(report.dropped)).capitalize()
+        )
 
     if (
         result.mode == "normal"

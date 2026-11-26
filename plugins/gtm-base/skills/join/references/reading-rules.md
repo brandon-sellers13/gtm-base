@@ -15,20 +15,33 @@ person says yes, adds a folder, or drops one.
 
 What the finding step reads is every file's name and the first heading line of
 every document, and nothing else. The first heading line is the first line
-starting with a hash mark, looked for no further than forty lines in and kept
-no longer than two hundred characters. A file of rows says nothing but its own
-name, because a heading row is a row of data. No file is opened past that, so a
-document that says something about itself halfway down says it to nobody. Tell
-the person that before the yes, in the sentence the skill gives you, because it
-is the honest answer to what has already been looked at.
+starting with a hash mark, looked for no further than forty lines in, and in
+no more than the first 4096 bytes of the file, and kept no longer than
+two hundred characters. A file of rows says nothing but its own name, because a
+heading row is a row of data. No file is opened past that, so a document that
+says something about itself halfway down says it to nobody. Tell the person
+that before the yes, in the sentence the skill gives you, because it is the
+honest answer to what has already been looked at.
 
 A place is a folder at the top of the one they named, or the files lying loose
 at the top, holding at least one file whose name or heading says what kind of
-marketing document it is. A place is left out as thin, with a note, when those
-files are both fewer than a quarter of what it holds and fewer than three,
-which is what keeps a folder of somebody's code out of the proposal when one
-file in it happens to be called a plan. A folder left out that way can still be
-added by name.
+marketing document it is. Plans and metrics count only in a place that also
+holds a customer profile, a persona, or a positioning file, because a deploy
+plan in a folder of engineering notes is not marketing; a place holding nothing
+else is left out with the note `plans-alone`. A place is also left out as thin,
+with a note, when its marketing files are both fewer than a quarter of what it
+holds and fewer than three. A folder left out either way can still be added by
+name. Each place says what it mostly holds, worked out from the paths of its
+files alone.
+
+Files of one kind in one folder whose names differ only by a version word, a
+version number, or a copy number, such as `positioning.md` and
+`positioning.final.md`, are versions of one document. Notes named by their
+dates are a series and not versions. The finding step groups versions by name
+and nothing else. Only after the yes are their words compared: a draft reads
+one version, the one whose name says final, else one not marked old, backup,
+draft, or copy, else the higher version number, else the newest, and the
+preview says which versions it left out and whether they say different things.
 
 ## Show the list first, and freeze it on the yes
 
@@ -81,14 +94,21 @@ is unaffected.
 A list of more than forty files spread across more than three folders comes back
 carrying `narrow-first`, and the yes may not be taken over it. Show the person
 how many files there are and how many folders they sit in, name each folder with
-its count, and ask which of those folders hold their customer profiles, their
-positioning, their messaging, or their plans. Then list those folders on their
-own and ask for the yes over that shorter list.
+its count and what it mostly holds, and ask which of those folders hold their
+customer profiles, their positioning, their messaging, or their plans. Then list
+those folders on their own and ask for the yes over that shorter list.
 
 The reason is the one the second yes exists for. A list of a hundred and fifty
 files offered for a single yes is a list nobody reads, and a yes nobody read is
 not consent. The folders the person chose are written down alongside the list
 they agreed to.
+
+The question is asked at most once, and only after a plain yes to what GTM Base
+proposed. Folders the person named themselves, as the places to use, as folders
+to add, or in answer to this question, are an explicit choice, and an explicit
+choice is confirmed with a plain count rather than narrowed again, however many
+files it holds. The yes records which of the two it was, and a list shown after
+the yes needs a yes of its own before anything on it is read.
 
 ## One bounded read per source
 

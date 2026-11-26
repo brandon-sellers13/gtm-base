@@ -29,12 +29,14 @@ both later, and nothing asks you for them until the moment you want to back up
 or invite.
 
 Before you invite a second person, everybody who will open that base has to be
-on the current version of GTM Base. A base set up before the word for what it
-tracks was settled stores its context changes the older way, and GTM Base
-offers once to update them. Somebody running an older version reads an updated
-base as though it held nothing, so it would tell them nothing in their base is
-out of date at a moment when things really are. Updating everybody first costs
-nothing and avoids that entirely.
+on the current version of GTM Base. A base set up by an earlier version is laid
+out the older way, and when you ask GTM Base to review your base it offers once
+to move it to the current layout, which is described under "What your base
+holds" below. That one move takes the base all the way, whichever earlier
+version set it up. Somebody running an older version reads a moved base as
+though it held nothing, so it would tell them nothing in their base is out of
+date at a moment when things really are. Updating everybody first costs nothing
+and avoids that entirely.
 
 On a base nobody else can reach, GTM Base simply offers. On a base that has a
 copy other people could reach, it does not offer at all: it tells you the
@@ -43,11 +45,14 @@ version. Either way nothing is touched until you say so, and if you say not
 now it stops asking for a month.
 
 You can see exactly where you stand before deciding anything. Ask for a check
-of the update and GTM Base says what it would do, which of your context
-changes it would touch, and whether it would offer it at all. That reads your
-base and writes nothing, so it is safe to run whenever you like. If anything
-in your base would stop the update, it names the file rather than the problem
-in general, so you know where to look.
+of the move and GTM Base says what it would do and how many of your documents,
+context changes, and records it would move, and when it would not offer the
+move, it says why. That reads your base and writes nothing, so it is safe to
+run whenever you like. If anything in your base would stop the move, it names the file rather
+than the problem in general, so you know where to look. The move never
+overwrites anything: if a second copy of a document already sits where the
+move would put it, and the two say different things, it stops and asks you
+which one is right.
 
 If an update ever stops partway, nothing is lost and nothing is left in a
 state only GTM Base understands. It either finishes where it stopped or puts
@@ -86,6 +91,62 @@ is it. You say yes, or you name a folder to add, or you name one to drop. Only
 then are you shown the list of files and asked whether they may be read. Before
 any of that, to find those places, GTM Base looks at the name of each file and
 the first heading inside each document, and at nothing else.
+
+If you say the base is for one part of the company, such as one product line,
+or if your material plainly covers more than one part, you are asked once
+which part the base is for, and you drop the places that are about another
+part. Your customer profile records the answer once you approve it. If the
+list you agree to holds several documents that each describe one group of
+customers, you then say for each one whether to use the finished document,
+draft that segment fresh, or leave it out for now, before anything is drafted.
+With more than one segment, your customer profile is drafted across all of
+them, one short paragraph each, and every segment you said to draft gets a
+document of its own at full depth, which you read whole and approve like any
+other. A segment you left out is named in the profile as still to come.
+
+A finished document you said to use is taken into your base as it stands
+rather than drafted again, and your original is never changed or moved. You
+are told what was taken out of it, such as settings at its top or a comment
+nobody reading it would see, you see its first lines, and the whole cleaned
+document is kept where you can read it in full before you answer. Nothing is
+saved until you say yes to it, and your yes is to exactly what you were
+shown. A document holding an email address, a phone number, or something
+shaped like a key, one whose headings a later change could not find, or one
+covering more than the part of the company your base is for is not taken in,
+and you are offered a draft of that segment instead. If you take that offer
+and the draft is not finished before the end of setup, the segment is kept to
+draft later like any other.
+
+If a session stops while your finished documents are being taken in, even in
+the middle of saving one of them, nothing is lost and nothing is saved twice.
+Your list of segments and your answers are kept on this computer, outside your
+base, where the end of setup does not clear them, and the next session tells
+you once that taking them in stopped. Say "finish setting up my base" and
+every document you already said yes to is saved without being asked about
+again, unless its original changed since, in which case you see it again
+first. You are then shown only the documents you had not answered for yet. A
+file already sitting where a document would go is never written over, and you
+are told which document that was.
+
+A segment you chose to have drafted that was not drafted before the end of
+setup is kept too, as its name and your answer, and never as your material or
+a draft. The next session offers to finish it. Because reading your files
+needs your yes, and that yes ended with setup, you are shown the files its
+draft would read, at first only the document you named for it, and asked
+again. You can add a folder or drop a file first. If that document is gone,
+or you named none, you are told so and asked to name the folder that holds
+its material or leave the segment out, because nothing is drafted from
+nothing. The draft is shown whole and approved exactly as in setup, and a
+segment you leave out is never offered again. When your customer profile
+already names a segment you leave out, a change saying it is left out is
+prepared for you to approve in your next review; the profile is never
+rewritten without your yes.
+
+A draft sometimes leaves a question only you can answer, marked in it where it
+comes up. You are told how many there are before you read it, and you can
+answer them there or approve the draft with them left open. A document with a
+question still open in it is not counted as confirmed until you answer it, and
+your next review of your base asks each one.
 
 Answer in plain words in your next message. Say yes to set a base up, say that
 you have an invitation link if a teammate already made a base and sent you a
@@ -128,7 +189,8 @@ through the folder you named before you are shown any list of files, and
 proposes the places inside it that look like your marketing material, with a
 count of what it found in each one, and asks you whether that is it. You say
 yes, add a folder, or drop one, and the list you are then asked about covers
-only those places. That finding step looks at the name of each file and the
+only those places. If you name the folders yourself, you are shown a count of
+the files in them to confirm, and you are never asked to narrow them again. That finding step looks at the name of each file and the
 first heading inside each document, and at nothing else. It works this way
 because a list of a hundred and fifty files offered for one yes is a list
 nobody can really read, and working out which folder holds what is not a job to
@@ -138,7 +200,12 @@ offered for reading and cannot be named back in, because that is other people's
 personal information rather than a document about your business. Before
 each of the two drafts you are shown what that draft will read and what it
 will leave out, and you can narrow it to the files or the folder that matter for
-that one document, which is worth doing when the folder you named is large. It
+that one document, which is worth doing when the folder you named is large. You
+are asked whether to narrow it only when you said yes to the places GTM Base
+proposed rather than naming your own. When a draft cannot read everything, you
+are told why. When two files are versions of one document, the draft reads the
+one whose name says final, or else the newer one, and you are told which one it
+left out and whether the two say different things. It
 then drafts two things for you, which are your ideal customer profile and your
 positioning. You read each
 draft as a whole document and either approve it, edit it, or skip it. Nothing is
@@ -168,6 +235,20 @@ that finding is three short lines: what you confirmed and when, that nothing is
 recorded yet to check either document against, and when the base will ask you
 about them again. Once you have recorded something that changed, the finding
 tells you instead whether a document is now behind it.
+
+## What your base holds
+
+Your base is laid out by the five parts of the CLASS framework, so anyone who
+knows the framework can open it and find each part by the name of its folder.
+
+| Folder | What it holds |
+|---|---|
+| `context` | What is true about the business, one file for each subject: your goals, your product, your ideal customer profiles, your buyer personas, your positioning, your messaging, your voice, your design, and your metric definitions. Each customer segment gets its own file in `context/icps`. Setting a base up writes the first two of those, the ideal customer profile and the positioning, and the rest arrive later when you ask for them. |
+| `learning` | How the base gets better: one dated entry for each context change, and a record of what each approved fix changed and why. A third folder is kept for lessons from results, which arrive later. |
+| `access` | The source map, which says where your material lives, which tools read it, and where finished work is saved. It never holds a password, a key, or a token. |
+| `skills` | Kept empty for now. Until your team has settled who may approve a change to a skill, GTM Base refuses any file put there, however it arrives. |
+| `standards` | What good work looks like for each job, and what needs approval before it is used. |
+| `work` | The approvals: your confirmations that a document is still right, the notes you drop in for the assistant to read, and the changes being prepared for you. |
 
 ## Where the base lives
 
@@ -269,6 +350,13 @@ without being read. A tool that writes to GitHub directly through its web
 interface or its programming interface never touches your computer at all, so
 neither layer of the check ever sees it. Use the terminal or Claude Code for
 anything you want checked.
+
+The first time a base is backed up, you will be asked to look over what is
+about to leave your computer. That look was planned for a base holding two or
+three documents, and a base that took in a dozen finished segment pages holds
+far more than anybody can read through in one sitting. So that first look is
+being redesigned for a base with many files before backing up arrives, and
+backing up does not ship until it is.
 
 ## Removing someone's access
 

@@ -748,15 +748,18 @@ class TestHowItIsDeclared(unittest.TestCase):
         entries = declared["hooks"]["PreToolUse"]
         matchers = [entry.get("matcher") for entry in entries]
         self.assertIn("Read", matchers)
-        self.assertIn("Bash", matchers)
+        # Unit 1.7e widened the command check to the other tools that run a
+        # command; what it runs and how is unchanged.
+        commands = "Bash|Monitor|PowerShell"
+        self.assertIn(commands, matchers)
 
         # The check that reads every command is exactly as it was. Hooks for
         # one event run in parallel, so adding one beside it changes nothing
         # about when it runs or what it answers.
-        bash = entries[matchers.index("Bash")]
+        bash = entries[matchers.index(commands)]
         self.assertEqual(
             {
-                "matcher": "Bash",
+                "matcher": commands,
                 "hooks": [
                     {
                         "type": "command",

@@ -16,8 +16,8 @@ OWNER = "owner@example.com"
 OTHER_OWNER = "second@example.com"
 STRANGER = "stranger@example.com"
 
-ICP = "context/strategy/icp.md"
-POSITIONING = "context/strategy/positioning.md"
+ICP = "context/icps.md"
+POSITIONING = "context/positioning.md"
 PRICING = "context/plan/pricing.md"
 
 STG = "stg-" + "a" * 16
@@ -75,7 +75,15 @@ def make_record(path, date, author=OWNER, trigger="threshold", entry=None, run=N
     )
 
 
-def make_file(path, owners=(OWNER,), exists=True, sources_date=None, status="draft", kind=""):
+def make_file(
+    path,
+    owners=(OWNER,),
+    exists=True,
+    sources_date=None,
+    status="draft",
+    kind="",
+    open_questions=(),
+):
     return stale.ContextFileInfo(
         path=path,
         owners=list(owners),
@@ -83,6 +91,7 @@ def make_file(path, owners=(OWNER,), exists=True, sources_date=None, status="dra
         sources_date=sources_date,
         status=status,
         kind=kind,
+        open_questions=open_questions,
     )
 
 
@@ -871,7 +880,9 @@ class TestReviewItems(unittest.TestCase):
 class TestFirstRunFinding(unittest.TestCase):
     SEPTEMBER = datetime.date(2026, 9, 5)
 
-    def _report(self, positioning_status="draft", sources_date="2026-08-10"):
+    def _report(
+        self, positioning_status="draft", sources_date="2026-08-10", questions=()
+    ):
         entry = make_entry(
             decided_on="2026-09-01",
             written_on="2026-09-01",
@@ -883,7 +894,12 @@ class TestFirstRunFinding(unittest.TestCase):
         return run(
             files=[
                 make_file(ICP, sources_date=sources_date, kind="icp"),
-                make_file(POSITIONING, status=positioning_status, kind="positioning"),
+                make_file(
+                    POSITIONING,
+                    status=positioning_status,
+                    kind="positioning",
+                    open_questions=questions,
+                ),
             ],
             ledger=[make_input(entry)],
             confirmations=[
@@ -893,23 +909,27 @@ class TestFirstRunFinding(unittest.TestCase):
             today=self.SEPTEMBER,
         )
 
-    def test_the_unanswered_marker_slot_is_there_and_is_still_empty(self):
-        """The second place in the order belongs to Unit 1.7 and nothing else.
+    def test_the_unanswered_marker_fills_the_second_place(self):
+        """Unit 1.7b fills the slot Unit 1.2 left for the unanswered marker.
 
-        The slot is asserted here rather than left to be discovered, because
-        the closing rules promise five findings in one order and this module
-        has to run that order from the day the baseline lands. Empty means the
-        computation cannot reach it: it is handed values and never a file body,
-        so no marker can be seen here yet.
+        It comes after a document the person did not write, and before a
+        document older than the change it should reflect, which is the order
+        the closing rules promise.
         """
         source = inspect.getsource(stale.StaleReport.first_run_finding)
-        slot = source.index("# The unanswered-marker slot.")
+        slot = source.index("FINDING_OPEN_QUESTION")
         self.assertLess(source.index("FINDING_REQUIRED_FILE_MISSING"), slot)
         self.assertLess(slot, source.index("self.review_items"))
-        self.assertEqual(
-            [],
-            [name for name in dir(stale) if name.startswith("FINDING_") and "MARKER" in name],
-        )
+
+        finding = self._report(questions=("is it twenty or fifty?",)).first_run_finding()
+        self.assertEqual(stale.FINDING_OPEN_QUESTION, finding.code)
+        self.assertEqual(POSITIONING, finding.path)
+
+    def test_a_skipped_file_still_comes_before_an_open_question(self):
+        finding = self._report(
+            positioning_status="skipped", questions=("which one?",)
+        ).first_run_finding()
+        self.assertEqual(stale.FINDING_REQUIRED_FILE_MISSING, finding.code)
 
     def test_a_skipped_required_file_wins(self):
         finding = self._report(positioning_status="skipped").first_run_finding()
@@ -1076,7 +1096,7 @@ class TestTheMapIsLeftOutByItsKind(unittest.TestCase):
         report = self._report(kind="notes")
 
         self.assertEqual(
-            [self.MAP, ICP], sorted(set(flag.path for flag in report.file_flags))
+            sorted([self.MAP, ICP]), sorted(set(flag.path for flag in report.file_flags))
         )
 
 

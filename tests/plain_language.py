@@ -249,6 +249,31 @@ def find_short_form_first(text):
     return text.count("\n", 0, short.start()) + 1
 
 
+# --- The paths the move to the CLASS layout left behind (Unit 1.5b) ---------
+
+# A base is laid out by the five CLASS parts, and a person is never told to
+# look in a folder the current layout does not have. Each pattern is one older
+# path. The records folder is only older on its own: `learning/corrections`
+# is the current one, and "corrections" as a plain word is not a path.
+_OLD_PATH_PATTERNS = (
+    re.compile(r"(?<![\w/.-])context/(?:strategy|plan|metrics|notes)\b"),
+    re.compile(r"(?<![\w/.-])work/(?:changes|decisions)\b"),
+    re.compile(r"(?<![\w/.-])corrections/"),
+    re.compile(r"`corrections`"),
+)
+
+
+def find_old_paths(text):
+    """Return (path, line_number) for every older path a person would read."""
+    found = []
+    for line_number, line in enumerate(str(text or "").splitlines(), start=1):
+        for pattern in _OLD_PATH_PATTERNS:
+            match = pattern.search(line)
+            if match:
+                found.append((match.group(0), line_number))
+    return found
+
+
 # --- The markers a document uses to say what a piece of it is ----------------
 
 # A section nobody named "Step something" opts itself in with this line.
@@ -650,7 +675,12 @@ PYTHON_SENTENCES = (
     ("approve_local", "DROPPED"),
     ("approve_local", "ASK"),
     ("approve_local", "WHITESPACE_ONLY"),
-    ("changes", "OFFER"),
+    ("approve_local", "NOTHING_DIFFERENT"),
+    ("changes", "OFFER_ONE"),
+    ("changes", "OFFER_MANY"),
+    ("changes", "EVERY_SEAT_FIRST_ONE"),
+    ("changes", "EVERY_SEAT_FIRST_MANY"),
+    ("changes", "NOT_OFFERED_PUT_OFF"),
     ("changes", "MIGRATED"),
     ("changes", "NOTHING_TO_MOVE"),
     ("changes", "UNREADABLE_ENTRY"),
@@ -667,9 +697,6 @@ PYTHON_SENTENCES = (
     ("changes", "CANNOT_PUT_BACK"),
     ("changes", "COULD_NOT_SAVE_LEFT_HALF_DONE"),
     ("changes", "PUT_OFF"),
-    ("changes", "OFFER_STATE_NOW"),
-    ("changes", "OFFER_STATE_EVERY_SEAT_FIRST"),
-    ("changes", "OFFER_STATE_NONE"),
     ("confirm", "WRITTEN_TWICE"),
     ("confirm", "CHANGE_NOT_IN_THE_BASE"),
     ("confirm", "CHANGE_IS_NOT_ABOUT_IT"),
@@ -679,6 +706,7 @@ PYTHON_SENTENCES = (
     ("confirm", "UNSAVED_EDITS_HERE_NAMED"),
     ("confirm", "NOT_ON_THE_MAIN_LINE"),
     ("stale_check", "MALFORMED_ONE"),
+    ("stale_check", "DROPPED_ONE"),
     ("stale_check", "CHANGE_ABOUT_A_MISSING_DOCUMENT"),
     ("compose_proposal", "NO_PARTS_AT_ALL"),
     ("compose_proposal", "OUTSIDE_EVERY_PART"),
@@ -728,7 +756,6 @@ PYTHON_SENTENCES = (
     ("constants", "SURVEY_SENTENCE"),
     ("constants", "SURVEY_ONE_PLACE_SENTENCE"),
     ("constants", "SURVEY_NOTHING_SENTENCE"),
-    ("constants", "DRAFT_TOO_MUCH_MATERIAL"),
     ("constants", "SHARING_NOTICE"),
     ("constants", "BACKUP_NOT_IN_THIS_RELEASE"),
     ("constants", "INVITE_NOT_IN_THIS_RELEASE"),
@@ -737,6 +764,10 @@ PYTHON_SENTENCES = (
     ("formats", "ABOUT_SENTENCE"),
     ("formats", "KEEP_THE_CHANGE_HINT"),
     ("formats", "NAME_WITH_A_SPACE"),
+    ("citations", "NOT_COVERED"),
+    ("citations", "NO_EVIDENCE"),
+    ("citations", "NOTHING_OPEN"),
+    ("citations", "NOT_NOTED"),
     ("join_flow", "NOTE_NOT_WRITTEN"),
     ("join_flow", "NEEDS_THE_BASE"),
     ("join_flow", "WHY_FROM_THE_CLOSING"),
@@ -825,9 +856,210 @@ PYTHON_SENTENCES = (
     ("stale_check", "REVIEW_ITEM_WAITING_THERE"),
     ("stale_check", "REVIEW_INBOX_WAITING"),
     ("stale_check", "REVIEW_SPEAKING_AGAIN"),
+    ("changes", "DOCUMENT_TAKEN"),
+    ("changes", "LAYOUT_RECORD_WHAT_CHANGED"),
+    ("changes", "LAYOUT_RECORD_WHY"),
+    ("changes", "MAP_WHERE_TODAY"),
+    ("write_hook", "SKILLS_REFUSED"),
+    ("write_hook", "STACK_REFUSED"),
+    # Unit 1.6: the count after an explicit choice, the preview's count and
+    # the reason a draft reads a limited amount, the versions of a document,
+    # and the narrowing question asked only after a plain yes.
+    ("constants", "EXPLICIT_COUNT_SENTENCE"),
+    ("constants", "PREVIEW_READS_ALL"),
+    ("constants", "PREVIEW_READS_THE_ONE"),
+    ("constants", "PREVIEW_READS_SOME"),
+    ("constants", "PREVIEW_WHY_LIMITED"),
+    ("constants", "PREVIEW_NOTES_CONDENSED"),
+    ("constants", "PREVIEW_NOTES_FOLDED_ONE"),
+    ("constants", "PREVIEW_NOTES_FOLDED"),
+    ("constants", "PREVIEW_NOTES_LEFT_OUT"),
+    ("constants", "PREVIEW_NOTES_OVER"),
+    ("constants", "DIGESTS_OVER"),
+    ("constants", "VERSION_NOT_USED_FINAL"),
+    ("constants", "VERSION_NOT_USED_FINAL_OVER_NEWER"),
+    ("constants", "VERSION_NOT_USED_NEWER"),
+    ("constants", "VERSION_NOT_USED_SAME_DAY"),
+    ("constants", "VERSION_NOT_USED_SET_ASIDE"),
+    ("constants", "VERSION_NOT_USED_LATER_NUMBER"),
+    ("constants", "PREVIEW_READS_ALL_CHOSEN"),
+    ("constants", "PREVIEW_READS_THE_ONE_CHOSEN"),
+    ("constants", "PREVIEW_READS_SOME_CHOSEN"),
+    ("constants", "VERSION_CONFLICT"),
+    ("constants", "PREVIEW_NARROW_ASK_ALL"),
+    ("constants", "PREVIEW_NARROW_ASK_SOME"),
+    # Unit 1.7a: what the base is for, said back once it is held, and the
+    # inventory of segments, its question, its read-back, and its refusals.
+    ("constants", "SCOPE_SPLITS_SENTENCE"),
+    ("constants", "SCOPE_HELD_SENTENCE"),
+    ("constants", "SCOPE_WHOLE_SENTENCE"),
+    ("segments", "FOUND_SENTENCE"),
+    ("segments", "ASK_SENTENCE"),
+    ("segments", "WILL_ADOPT"),
+    ("segments", "WILL_DRAFT"),
+    ("segments", "WILL_LEAVE_OUT"),
+    ("segments", "SAVED_SENTENCE"),
+    ("segments", "ONE_SEGMENT_SENTENCE"),
+    ("segments", "SAME_NAME"),
+    ("segments", "NO_USABLE_NAME"),
+    ("segments", "RESERVED_NAME"),
+    ("segments", "SAME_DOCUMENT"),
+    ("segments", "NAME_UNUSABLE"),
+    ("segments", "TOO_MANY"),
+    ("segments", "NONE_NAMED"),
+    # Unit 1.7b: the umbrella's words for a segment left out, a segment file
+    # that would collide, the questions a draft leaves open, the review line
+    # for each, answering one, and the refusals while one is open.
+    ("constants", "UMBRELLA_PENDING_SENTENCE"),
+    ("constants", "UMBRELLA_LEFT_OUT_SENTENCE"),
+    ("join_flow", "UMBRELLA_CHANGE_WAITING"),
+    ("join_flow", "UMBRELLA_CHANGE_WHY"),
+    ("segments", "FILE_TAKEN"),
+    ("segments", "FOLDER_NOT_ORDINARY"),
+    ("join_flow", "DRAFT_HAS_ONE_QUESTION"),
+    ("join_flow", "DRAFT_HAS_QUESTIONS"),
+    ("confirm", "QUESTION_STILL_OPEN"),
+    ("compose_proposal", "STILL_ASKS"),
+    ("stale_check", "FINDING_OPEN_QUESTION_ONE"),
+    ("stale_check", "FINDING_OPEN_QUESTIONS"),
+    ("stale_check", "REVIEW_ITEM_QUESTION"),
+    ("stale_check", "REVIEW_ITEM_QUESTION_PREPARED"),
+    ("stale_check", "ANSWER_PREPARED"),
+    ("stale_check", "ANSWER_ALREADY_PREPARED"),
+    ("stale_check", "ANOTHER_ANSWER_WAITING"),
+    ("stale_check", "QUESTION_GONE"),
+    ("stale_check", "QUESTION_ABOVE_EVERY_PART"),
+    ("stale_check", "ANSWER_NEEDED"),
+    ("stale_check", "NOT_A_DOCUMENT"),
+    # Unit 1.7c: taking a finished page into the base, what the person is
+    # shown about it, the one ask, and each refusal with its offer to draft.
+    ("adopt", "SHOW_OPENING"),
+    ("adopt", "SETTINGS_SET_ASIDE"),
+    ("adopt", "NOTHING_TAKEN_OUT"),
+    ("adopt", "OPENING_SAID"),
+    ("adopt", "WHOLE_FILE"),
+    ("adopt", "ONE_QUESTION"),
+    ("adopt", "QUESTIONS"),
+    ("adopt", "ASK"),
+    ("adopt", "ASK_WITH_QUESTIONS"),
+    ("adopt", "TAKEN_IN"),
+    ("adopt", "DRAFT_INSTEAD"),
+    ("adopt", "NOT_MARKDOWN"),
+    ("adopt", "UNREADABLE"),
+    ("adopt", "MALFORMED_SETTINGS"),
+    ("adopt", "FENCE_MARKER"),
+    ("adopt", "SCREENED"),
+    ("adopt", "DUPLICATE_HEADING"),
+    ("adopt", "HEADING_IN_CODE"),
+    ("adopt", "UNDERLINED_HEADING"),
+    ("adopt", "NO_PARTS"),
+    ("adopt", "QUESTION_UNREACHABLE"),
+    ("adopt", "QUESTION_SPLIT"),
+    ("adopt", "WIDER_THAN_SCOPE"),
+    ("adopt", "NOT_TO_ADOPT"),
+    ("adopt", "BASE_NOT_READY"),
+    ("adopt", "NOT_SHOWN"),
+    ("adopt", "CHANGED"),
+    ("adopt", "QUESTIONS_NOT_LEFT_OPEN"),
+    ("adopt", "UNSAVED_EDITS"),
+    ("adopt", "NOT_ON_THE_MAIN_LINE"),
+    # Unit 1.7d: finishing an import that stopped, a page left out, the
+    # closing's line about pages still to come, and a save that cannot be
+    # read or a page something was put in place of.
+    ("join_flow", "LEFT_OUT_SAID"),
+    ("join_flow", "RESUME_NOTHING"),
+    ("join_flow", "RESUME_UNREADABLE"),
+    ("join_flow", "RESUME_RUN_HAS_ITS_OWN"),
+    ("join_flow", "RESUME_FINISHED_ONE"),
+    ("join_flow", "RESUME_FINISHED"),
+    ("join_flow", "RESUME_CHANGED"),
+    ("join_flow", "RESUME_TAKEN"),
+    ("join_flow", "RESUME_TO_SHOW_ONE"),
+    ("join_flow", "RESUME_TO_SHOW"),
+    ("join_flow", "RESUME_DONE"),
+    ("join_flow", "CLOSING_IMPORT_UNFINISHED"),
+    ("join_flow", "SAVE_UNCERTAIN"),
+    ("join_flow", "PAGE_REPLACED"),
+    ("join_flow", "RESUME_EDITED"),
+    ("join_flow", "RESUME_CANNOT_READ"),
+    ("join_flow", "RESUME_RECHECKED"),
+    ("join_flow", "CLEANED_AGAIN_SAID"),
+    ("join_flow", "KEPT_ASIDE"),
+    ("join_flow", "NO_LOCK"),
+    ("join_flow", "LOCKS_NOT_PRIVATE"),
+    ("join_flow", "RESUME_STOPPED"),
+    ("join_flow", "PAGE_EDITED_SAID"),
+    ("join_flow", "ALREADY_SAVED"),
+    ("join_flow", "IMPORT_PENDING"),
+    ("join_flow", "LOCKED"),
+    ("join_flow", "WRITE_FAILED"),
+    # Brandon's call 29: a segment settled to be drafted and not drafted
+    # before the closing, finished by a later session after a fresh yes.
+    ("join_flow", "CLOSING_DRAFTS_UNFINISHED"),
+    ("join_flow", "RESUME_DRAFT_SAVED_ONE"),
+    ("join_flow", "RESUME_DRAFT_SAVED"),
+    ("join_flow", "RESUME_DRAFT_AGAIN"),
+    ("join_flow", "RESUME_TO_DRAFT_ONE"),
+    ("join_flow", "RESUME_TO_DRAFT"),
+    ("join_flow", "RESUME_ALL_SETTLED"),
+    ("join_flow", "DRAFT_LIST_OFFER"),
+    ("join_flow", "DRAFT_MATERIAL_GONE"),
+    ("join_flow", "DRAFT_NOTHING_ON_THE_LIST"),
+    ("join_flow", "DRAFT_NOT_TO_FINISH"),
+    ("join_flow", "DRAFT_RUN_TAKEN"),
+    ("join_flow", "DRAFT_IN_PROGRESS"),
+    ("join_flow", "DRAFT_NO_SUCH_NUMBER"),
+    ("join_flow", "DRAFT_FOLDER_MISSING"),
+    ("join_flow", "DRAFT_LIST_CHANGED"),
+    ("join_flow", "DRAFT_NO_LIST"),
+    ("join_flow", "DRAFT_NOT_AGREED"),
+    ("join_flow", "DRAFT_LEFT_OUT"),
+    # The live-check follow-up unit (calls 33, 34 and 49): the one question a
+    # hand edit asks, the one yes a fix to wording only asks, and the two
+    # refusals a corrected fact can meet.
+    ("hand_edit", "WHY_WE_ASK"),
+    ("hand_edit", "LONG_ASK"),
+    ("hand_edit", "SHORT_ASK"),
+    ("approve_local", "WORDING_ASK"),
+    ("compose_proposal", "FACT_NOT_REPLACING"),
+    ("compose_proposal", "NOT_A_DOCUMENT_HERE"),
     # 0.3.3: recording a context change at any time.
     ("join_flow", "NOT_OWNED_FLAGGED_ONE"),
     ("join_flow", "NOT_OWNED_FLAGGED_MANY"),
+    # Unit 1.7e: what Claude Code's own question says, and the refusals.
+    ("moment", "NAMES_NOTE"),
+    ("approval", "ASK_OPENING"),
+    ("approval", "ASK_CLOSING"),
+    ("approval", "SAYS_APPROVE_CHANGE"),
+    ("approval", "SAYS_DROP_CHANGE"),
+    ("approval", "SAYS_STILL_RIGHT"),
+    ("approval", "SAYS_NO_LONGER_RIGHT"),
+    ("approval", "SAYS_PUT_OFF"),
+    ("approval", "SAYS_FIX_FIRST"),
+    ("approval", "SAYS_ALREADY_SAYS"),
+    ("approval", "SAYS_NOT_CAUGHT_UP"),
+    ("approval", "SAYS_LEFT_FLAGGED"),
+    ("approval", "SAYS_SAVE_DRAFT"),
+    ("approval", "SAYS_ADOPT_PAGE"),
+    ("approval", "SAYS_LEAVE_PAGE_OUT"),
+    ("approval", "SAYS_LEAVE_SEGMENT_OUT"),
+    ("approval", "SAYS_RECORD_CHANGE"),
+    ("approval", "SAYS_MOVE"),
+    ("approval", "SAYS_MOVE_LATER"),
+    ("approval", "SAYS_QUIET_MONTH"),
+    ("approval", "SAYS_QUIET_UNTIL_ASKED"),
+    ("approval", "NOT_ASKED"),
+    ("approval", "ONE_LINE"),
+    ("approval", "TWO_THINGS"),
+    ("approval", "UNREADABLE"),
+    ("approval", "SAYS_SKIP"),
+    ("approval", "SAYS_SKIP_CLOSING"),
+    ("approval", "SAYS_CLOSE_NOTE"),
+    ("approval", "SAYS_WEEKLY_LINE_OFF"),
+    ("approval", "SAYS_REMINDER_LATER"),
+    ("approval", "NOT_OURS"),
+    ("approval", "CANNOT_ASK"),
+    ("approval", "COULD_NOT_PREPARE"),
     ("record_change", "EXPLAIN"),
     ("record_change", "ASK"),
     ("record_change", "ASK_SHORT"),
@@ -862,6 +1094,7 @@ PYTHON_SENTENCES = (
     ("record_change", "RUNS_A_PROGRAM"),
     ("record_change", "NOT_ALL_TAKEN_BACK"),
     ("record_change", "BUSY"),
+    ("record_change", "SAVING_ELSEWHERE"),
 )
 
 # Constants that read like a sentence but that no person ever reads. Each one
@@ -913,87 +1146,15 @@ class Exemption(object):
 # The names of the four checks, used by the exemption list and by the tests.
 CHECK_NAMES = ("purpose", "one-request", "prose", "four-lines")
 
-# Unit 1.1b changes no sentence anybody reads. Every text that fails one of the
-# four checks today is listed here with the reason it fails and the unit that
-# owns the rewrite. Each of those units clears its own entries as it rewrites
-# its own step, and Unit 1.8 empties whatever is left.
-_JOIN_SKILL = "plugins/gtm-base/skills/join/SKILL.md"
+# Unit 1.1b changed no sentence anybody reads. Every text that failed one of
+# the four checks was listed here with the reason it failed and the unit that
+# owned the rewrite, and each of those units cleared its own entries as it
+# rewrote its own step. Unit 1.8 rewrote the last five, the first four steps of
+# setting up a base, which no behavior unit owned, so the list is empty. A
+# later text that cannot meet a check goes back on it only with a reason that
+# will still be true once that text is finished, and never with "later".
 
-EXEMPTIONS = (
-    Exemption(
-        _JOIN_SKILL,
-        "purpose",
-        "Step 1. Say what setting up a base does",
-        "The step opens by telling the assistant what to say, before it says "
-        "what the step is for. No behavior unit of Phase 1 owns this step.",
-        "1.8",
-    ),
-    Exemption(
-        _JOIN_SKILL,
-        "purpose",
-        "Step 2. The sharing notice",
-        "The step opens with an order to say the notice, before it says what "
-        "the notice is for. No behavior unit of Phase 1 owns this step.",
-        "1.8",
-    ),
-    Exemption(
-        _JOIN_SKILL,
-        "purpose",
-        "Step 3. The one opening question",
-        "The step opens with an order to ask the question, before it says "
-        "what the question is for. No behavior unit of Phase 1 owns this step.",
-        "1.8",
-    ),
-    Exemption(
-        _JOIN_SKILL,
-        "purpose",
-        "Step 4. The company name, and where the base will go",
-        "The step opens with an order to ask for the company name. No "
-        "behavior unit of Phase 1 owns this step.",
-        "1.8",
-    ),
-    Exemption(
-        _JOIN_SKILL,
-        "prose",
-        "Step 4. The company name, and where the base will go",
-        "The step runs six plain prose lines before anything a person can "
-        "read at a glance. No behavior unit of Phase 1 owns this step.",
-        "1.8",
-    ),
-    Exemption(
-        _JOIN_SKILL,
-        "purpose",
-        "Step 5. What will be read, and the yes that fixes the list",
-        "The consent step opens with an order to run the survey. Unit 1.6 "
-        "rewrites this step under ruling 1 of the acceptance matrix.",
-        "1.6",
-    ),
-    Exemption(
-        _JOIN_SKILL,
-        "prose",
-        "Step 5. What will be read, and the yes that fixes the list",
-        "The consent paragraph runs to seven sentences before the question "
-        "arrives. Ruling 1 of the acceptance matrix cuts it to three short "
-        "lines and the question, in Unit 1.6.",
-        "1.6",
-    ),
-    Exemption(
-        _JOIN_SKILL,
-        "purpose",
-        "Step 6. The two drafts, one at a time",
-        "The drafting step opens with an order rather than with what the "
-        "step is for. Unit 1.6 rewrites this step under ruling 2.",
-        "1.6",
-    ),
-    Exemption(
-        _JOIN_SKILL,
-        "prose",
-        "Step 6. The two drafts, one at a time",
-        "The step carries several prose runs over the cap, including the "
-        "per-draft narrowing ask ruling 2 removes. Unit 1.6 owns it.",
-        "1.6",
-    ),
-)
+EXEMPTIONS = ()
 
 
 def exemption_problems(entry):
@@ -1092,6 +1253,471 @@ def library_sentence_constants(lib_dir):
             for target in targets:
                 found.append((module, target, node.lineno))
     return found
+
+
+# --- No sentence is filled from a file name (Unit 1.8) ------------------------
+
+# A file name is whatever somebody typed, and a sentence a person reads is
+# handed to the assistant to say word for word. A name short and tidy enough
+# to pass any shape check can still read as an instruction, which the review
+# of 0.3.2 and its confirmation both found. So no registered sentence may be
+# filled from a file name: a document the product knows is called by its fixed
+# name, and a segment or any other file is counted. This check reads the code
+# that fills each sentence, which is the only place the rule can be held.
+
+# The words the code uses for a value that is, or came out of, a file name or
+# a folder name. A context change's identifier is not one of them: the ones a
+# sentence says are read from inside the change and checked against the one
+# shape GTM Base gives them, which can carry nothing else, and in the few
+# refusals that still say one it is the only thing that tells two copies of a
+# change apart.
+FILE_NAME_WORDS = frozenset(
+    (
+        "path",
+        "paths",
+        "relative",
+        "relative_context",
+        "destination",
+        "moved",
+        "file",
+        "files",
+        "filename",
+        "file_name",
+        "stem",
+        "slug",
+        "candidate",
+        "target",
+        "affects",
+        "root",
+        "roots",
+        "old_root",
+        "folder",
+    )
+)
+
+# `source` is left out on purpose: in a context change it is the person's own
+# words for where the change came from, which are theirs to read back.
+
+
+def _names_a_file(identifier):
+    """True when a name in the code says it holds a file name or a path.
+
+    A name counts when it is one of the words above, or is made of words
+    joined by underscores and ends in one of them, so `entry_file` and
+    `target_paths` count and `file_flags` does not. A lookup named for its
+    key, such as `by_slug`, does not count.
+    """
+    if str(identifier).startswith("by_"):
+        # A lookup keyed by a file name, such as `by_slug`, holds something
+        # else as its values, and what is looked up is what is said.
+        return False
+    last = str(identifier).rsplit("_", 1)[-1]
+    # A plural is the same word, so `candidates` and `targets` count.
+    return last in FILE_NAME_WORDS or (
+        last.endswith("s") and last[:-1] in FILE_NAME_WORDS
+    )
+
+
+# Calls trusted only when made through the one module that defines them,
+# because another module has a function of the same name that does hand a
+# path back (`location.describe` says where a base would go).
+SAFE_QUALIFIED_CALLS = frozenset((("trust_surface", "describe"),))
+
+# Calls that read a name out of a path.
+FILE_NAME_READERS = frozenset(
+    ("basename", "splitext", "relpath", "abspath", "realpath", "dirname")
+)
+
+# The functions that turn a path into what a person calls it without reading
+# the file name, each tested for it by name, and the few that turn one into
+# something that is not a name at all: a date, a count, the reasons a check
+# gave, the addresses of a document's owners, or what a file holds rather than
+# what it is called. What they are given is not read. Any other function given
+# a path is taken to hand the path back.
+SAFE_CALLS = frozenset(
+    (
+        "words_from",
+        "read_words",
+        "isoformat",
+        "_as_of",
+        "_happened_on",
+        "owners_of",
+        "document_name",
+        "documents_named",
+        "plain_name",
+        "where",
+        "where_sentence",
+        "_named",
+        "_all_named",
+        "_named_moves",
+        "_what_moves",
+        "safe_name",
+        "change_name",
+        "_the_change_called",
+        "how_many",
+        "counted",
+        # The namer a step of recording a change is handed, which is only
+        # ever `names.document_name`, `record_change.safe_name`, or what
+        # `record_change.names_for` returns; test_segment_names checks every
+        # namer the plugin hands over is one of those (Brandon's call 59).
+        "name_of",
+    )
+)
+
+# The few sentences that name a folder on this computer on purpose, each with
+# the reason that will still be true once its text is finished. A folder the
+# person has to go to, or has to recognise as their own before anything is
+# read, can only be told to them by its location.
+FILE_NAME_FILL_EXEMPTIONS = (
+    (
+        "sources",
+        "SURVEY_SENTENCE",
+        "Names the folders of the person's own material, which they must "
+        "recognise before a single file in them is read.",
+    ),
+    (
+        "sources",
+        "SURVEY_ONE_PLACE_SENTENCE",
+        "Names the one folder of the person's own material, which they must "
+        "recognise before a single file in it is read.",
+    ),
+    (
+        "sources",
+        "SURVEY_NOTHING_SENTENCE",
+        "Names the folder the person just named themselves, to say nothing "
+        "in it looked like marketing material.",
+    ),
+    (
+        "session_start",
+        "COPY_FOUND",
+        "Names where on this computer the base already joined is, which is "
+        "the one fact the person needs to tell the two copies apart.",
+    ),
+    (
+        "session_start",
+        "LINK_CONFLICT",
+        "Names where on this computer the two bases are, because the person "
+        "has to choose which one lets go and only the locations tell them.",
+    ),
+    (
+        "location",
+        "Your base will go in a new folder at",
+        "Says where on this computer the base would be made, which the person "
+        "is asked to agree to before anything is created there.",
+    ),
+)
+
+
+def _callee(node):
+    """The name a call is made by, whether it is written plainly or dotted."""
+    func = node.func
+    if isinstance(func, ast.Name):
+        return func.id
+    if isinstance(func, ast.Attribute):
+        return func.attr
+    return None
+
+
+def _bindings(target, value):
+    """Every (name, value) an assignment binds.
+
+    A tuple of names given a tuple written out beside it is taken apart
+    element by element. A tuple of names unpacked from anything else binds
+    nothing here: which part went where cannot be read, and a name that says
+    it holds a path is caught by its own name wherever it is used.
+    """
+    if isinstance(target, ast.Name):
+        return [(target.id, value)]
+    if isinstance(target, (ast.Tuple, ast.List)) and isinstance(
+        value, (ast.Tuple, ast.List)
+    ):
+        if len(target.elts) != len(value.elts):
+            return []
+        found = []
+        for one, other in zip(target.elts, value.elts):
+            found.extend(_bindings(one, other))
+        return found
+    return []
+
+
+# Methods that put a value into a list or a set, which is an assignment in
+# all but name.
+_ADDERS = ("append", "extend", "add", "insert")
+
+
+def _assignments(function):
+    """Every assignment in one function, as name to the values given.
+
+    A tuple written out on both sides is taken apart, and a value added to
+    a list or a set with `append`, `extend`, `add` or `insert` counts as
+    given to it.
+    """
+    found = {}
+    for node in ast.walk(function):
+        if isinstance(node, ast.Assign):
+            for target in node.targets:
+                for name, value in _bindings(target, node.value):
+                    found.setdefault(name, []).append(value)
+        elif isinstance(node, (ast.For, ast.comprehension)):
+            for name, value in _bindings(node.target, node.iter):
+                found.setdefault(name, []).append(value)
+        elif isinstance(node, (ast.AnnAssign, ast.AugAssign)):
+            if node.value is not None:
+                for name, value in _bindings(node.target, node.value):
+                    found.setdefault(name, []).append(value)
+        elif (
+            isinstance(node, ast.Call)
+            and isinstance(node.func, ast.Attribute)
+            and node.func.attr in _ADDERS
+            and isinstance(node.func.value, ast.Name)
+        ):
+            found.setdefault(node.func.value.id, []).extend(node.args)
+    return found
+
+
+def _reads_a_file_name(node, assigned, seen=()):
+    """True when this expression carries a file name into a sentence."""
+    if isinstance(node, ast.Call):
+        name = _callee(node)
+        if name in SAFE_CALLS:
+            return False
+        func = node.func
+        if (
+            isinstance(func, ast.Attribute)
+            and isinstance(func.value, ast.Name)
+            and (func.value.id, func.attr) in SAFE_QUALIFIED_CALLS
+        ):
+            return False
+        if name in FILE_NAME_READERS:
+            return True
+        # A method is read through what it is called on, so `path.lower()`
+        # still carries the path, and so do its arguments.
+        parts = list(node.args) + [keyword.value for keyword in node.keywords]
+        if isinstance(node.func, ast.Attribute):
+            parts.append(node.func.value)
+        return any(_reads_a_file_name(part, assigned, seen) for part in parts)
+    if isinstance(node, ast.Subscript):
+        # What is looked up is what is said, never the key it is found by.
+        return _reads_a_file_name(node.value, assigned, seen)
+    if isinstance(node, ast.Compare):
+        # A comparison is true or false, never a name.
+        return False
+    if isinstance(node, ast.IfExp):
+        # Only what either side gives is said, never what chose between them.
+        return _reads_a_file_name(
+            node.body, assigned, seen
+        ) or _reads_a_file_name(node.orelse, assigned, seen)
+    if isinstance(node, (ast.GeneratorExp, ast.ListComp, ast.SetComp)):
+        # What a comprehension carries into the sentence is what it yields.
+        # Its loop variable is read through the assignments, like any other.
+        return _reads_a_file_name(node.elt, assigned, seen)
+    if isinstance(node, ast.Name):
+        if not isinstance(node.ctx, ast.Load):
+            return False
+        if _names_a_file(node.id):
+            return True
+        if node.id in assigned and node.id not in seen:
+            return any(
+                _reads_a_file_name(value, assigned, seen + (node.id,))
+                for value in assigned[node.id]
+            )
+        return False
+    if isinstance(node, ast.Attribute):
+        # A field is judged by its own name: `finding.path` is a path, and a
+        # segment's `name` is the name the person gave, from the inventory.
+        return _names_a_file(node.attr)
+    for child in ast.iter_child_nodes(node):
+        if isinstance(child, (ast.Lambda, ast.FunctionDef)):
+            continue
+        if _reads_a_file_name(child, assigned, seen):
+            return True
+    return False
+
+
+def _added_pieces(node):
+    """The pieces of a chain of `+`, in order."""
+    if isinstance(node, ast.BinOp) and isinstance(node.op, ast.Add):
+        return _added_pieces(node.left) + _added_pieces(node.right)
+    return [node]
+
+
+def _text_with_holes(pieces):
+    """The words a sentence built from pieces reads as, a hole for each value.
+
+    Returns None when a piece is neither a string nor a value that fills one.
+    """
+    words = []
+    for piece in pieces:
+        if isinstance(piece, ast.Constant):
+            if not isinstance(piece.value, str):
+                return None
+            words.append(piece.value)
+        elif isinstance(piece, ast.FormattedValue):
+            words.append("%s")
+        else:
+            words.append("%s")
+    return "".join(words)
+
+
+def _templates(template, assigned):
+    """What a template may be: itself, both sides of an `if`, or what a local
+    name was given."""
+    if isinstance(template, ast.IfExp):
+        return _templates(template.body, assigned) + _templates(
+            template.orelse, assigned
+        )
+    found = [template]
+    if isinstance(template, ast.Name):
+        for value in assigned.get(template.id, []):
+            if isinstance(value, (ast.Name, ast.Attribute, ast.Constant)):
+                found.append(value)
+    return found
+
+
+def _fills(node, assigned=None):
+    """Every (sentence, values, inline) a node fills: the sentence, the values
+    it is filled with, and whether it is written right there rather than
+    kept as a constant."""
+    assigned = assigned or {}
+    if isinstance(node, ast.JoinedStr):
+        text = _text_with_holes(node.values)
+        if text and _is_sentence_shaped(text):
+            values = [
+                piece.value
+                for piece in node.values
+                if isinstance(piece, ast.FormattedValue)
+            ]
+            return [(text, values, True)]
+        return []
+    if (
+        isinstance(node, ast.BinOp)
+        and isinstance(node.op, ast.Add)
+        and not isinstance(getattr(node, "_parent", None), ast.BinOp)
+    ):
+        pieces = _added_pieces(node)
+        strings = [
+            piece
+            for piece in pieces
+            if isinstance(piece, ast.Constant) and isinstance(piece.value, str)
+        ]
+        text = _text_with_holes(pieces) if strings else None
+        if text and _is_sentence_shaped(text):
+            values = [piece for piece in pieces if piece not in strings]
+            return [(text, values, True)]
+        return []
+    found = []
+    for template, values in _one_fill(node):
+        for each in _templates(template, assigned):
+            key, inline = _template_key(each)
+            if key is not None:
+                found.append((key, values, inline))
+    return found
+
+
+def _template_key(template):
+    if isinstance(template, ast.Name):
+        return template.id, False
+    if isinstance(template, ast.Attribute):
+        return template.attr, False
+    if (
+        isinstance(template, ast.Constant)
+        and isinstance(template.value, str)
+        and _is_sentence_shaped(template.value)
+    ):
+        # A sentence written where it is filled, rather than kept as a named
+        # constant, is read by a person just the same.
+        return template.value, True
+    return None, False
+
+
+def _one_fill(node):
+    """The template a `%` or a `.format` fills, and the values it is given."""
+    if isinstance(node, ast.BinOp) and isinstance(node.op, ast.Mod):
+        template = node.left
+        right = node.right
+        if isinstance(right, ast.Tuple):
+            values = list(right.elts)
+        elif isinstance(right, ast.Dict):
+            values = list(right.values)
+        else:
+            values = [right]
+    elif (
+        isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Attribute)
+        and node.func.attr == "format"
+    ):
+        template = node.func.value
+        values = list(node.args) + [keyword.value for keyword in node.keywords]
+    else:
+        return []
+    return [(template, values)]
+
+
+def _is_excused(module, template, exemptions):
+    """True when the exemptions name this fill with a reason."""
+    for owner, opening, _reason in exemptions:
+        if owner != module:
+            continue
+        if template == opening or (
+            len(opening.split()) > 3 and str(template).startswith(opening)
+        ):
+            return True
+    return False
+
+
+def find_file_name_fills(source, registered, module="", exemptions=None):
+    """Return (line, sentence) for each sentence a person reads filled from a file name.
+
+    `registered` is the set of constant names that are sentences a person
+    reads, and a sentence-shaped string filled where it is written counts as
+    well. A fill is excused only when FILE_NAME_FILL_EXEMPTIONS names that
+    module and that sentence, by its constant or its opening words, with its
+    reason. `exemptions` replaces that list, which is how a test proves each
+    exemption on it is still needed.
+
+    The sentence may be filled with `%`, with `.format`, as an f-string, or
+    by joining strings with `+`, and it may be a constant, a sentence written
+    in place, either side of an `if`, or a local name given one of those.
+    """
+    if exemptions is None:
+        exemptions = FILE_NAME_FILL_EXEMPTIONS
+    tree = ast.parse(source)
+    for parent in ast.walk(tree):
+        for child in ast.iter_child_nodes(parent):
+            child._parent = parent
+    scopes = [tree] + [
+        node
+        for node in ast.walk(tree)
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
+    ]
+    found = {}
+    for scope in scopes:
+        assigned = _assignments(scope) if scope is not tree else {}
+        for node in ast.walk(scope):
+            for constant, values, inline in _fills(node, assigned):
+                if not inline and constant not in registered:
+                    continue
+                if _is_excused(module, constant, exemptions):
+                    continue
+                if any(_reads_a_file_name(value, assigned) for value in values):
+                    found.setdefault(
+                        node.lineno, constant if not inline else constant[:60]
+                    )
+    return sorted(found.items())
+
+
+def plugin_python_files():
+    """Every Python file of the plugin: the library and each skill's scripts."""
+    here = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    plugin = os.path.join(here, "plugins", "gtm-base")
+    found = []
+    for folder in ("lib", "skills", "hooks"):
+        for base, dirs, files in os.walk(os.path.join(plugin, folder)):
+            dirs[:] = [name for name in dirs if name != "__pycache__"]
+            for name in sorted(files):
+                if name.endswith(".py"):
+                    found.append(os.path.join(base, name))
+    return sorted(found)
 
 
 # --- What a test calls -------------------------------------------------------

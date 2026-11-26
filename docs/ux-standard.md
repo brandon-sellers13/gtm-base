@@ -61,11 +61,13 @@ that were already banned:
 | Banned | Why | Say instead |
 |---|---|---|
 | `decision`, `decisions` | Too narrow for what the base tracks, and the live setup run needed three explanations of it before it was understood. Most of what makes a document wrong is not something anybody decided. | context change, and then change |
-| `ledger`, `ledgers` | A bookkeeping word for a folder of dated notes. Nobody outside this code ever called it that. | the record of context changes, or name the folder, `work/changes` |
+| `ledger`, `ledgers` | A bookkeeping word for a folder of dated notes. Nobody outside this code ever called it that. | the record of context changes, or name the folder, `learning/changes` |
 
 The check has three deliberate exceptions, each of them a name somebody else
 owns rather than ours. The folder path `work/decisions`, which a base set up
-before the rename really holds and a person may have to look in. The settings
+before the rename really holds; since Unit 1.5b no text a person reads names
+it, and the exception stays only so the word check does not fire on the code
+and records that still must. The settings
 block at the top of a file, and any settings block shown inside an example,
 where values such as `origin` and `mode` come from fixed vocabularies recorded
 in every base that already exists and cannot be spelled differently now. And
@@ -83,8 +85,16 @@ words in this file that you have not saved" sends them to the file. Every
 refusal that knows which file it means says which file it means.
 
 An offer names no path. A person is offered a thing that happens to their
-base, not a folder it happens to. "Your context changes are stored the old
-way" is the offer; the folder it moves them into is GTM Base's business.
+base, not a folder it happens to. "Your base is laid out the older way" is the
+offer; the folders it moves things into are GTM Base's business.
+
+No text a person reads names a path the current layout does not have (Unit
+1.5b). The older paths are `context/strategy`, `context/plan`,
+`context/metrics`, `context/notes`, `work/changes`, `work/decisions`, and the
+top-level `corrections` folder. A base laid out the older way is read exactly
+as before and offered one move, so a person never has to know where anything
+used to live. `find_old_paths` in `tests/plain_language.py` checks the
+registered sentences, the skills, the templates, and the join guide for them.
 
 ## The short wrapper and the complete artifact
 
@@ -107,11 +117,27 @@ wrapper, and there was never a real conflict between them.
 ## Human names
 
 A document is called what a person calls it, never what the file system calls
-it. "Your customer profile", never `context/strategy/icp.md`. A change is
+it. "Your customer profile", never `context/icps.md`. A change is
 called by its first line and the day it happened, never by its identifier.
 `plugins/gtm-base/lib/gtmbase/names.py` is the one place that does this, so a
 name cannot drift between one step and the next. Paths and identifiers stay in
 the machine-readable lines, which nobody reads aloud.
+
+No sentence a person reads is ever filled from a file name, because a file
+name is whatever somebody typed and a tidy one can still read as an
+instruction. A document the product knows by its path has its fixed name. A
+segment is "one of your segments", any other document is "one of your
+documents", and several are counted, as in "your customer profile, two of your
+segments". Where the person's own name for a segment is needed during setup,
+it comes from the list of segments they settled, which GTM Base keeps. After
+setup it comes from the customer profile, which names each segment under a
+heading of its own that setup checked against that list: recording a context
+change calls a segment `your segment "Fintech lenders"`, but only inside text
+held apart as data, only when the heading is plain words and the only one
+that makes that segment's file name, and never from the file name itself
+(Brandon's call 59). Every other sentence still counts segments.
+`find_file_name_fills` in `tests/plain_language.py` fails on any sentence
+filled from a file name (Unit 1.8).
 
 ## CLASS: the framework every step ties back to
 

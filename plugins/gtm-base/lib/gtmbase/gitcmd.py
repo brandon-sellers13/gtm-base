@@ -167,11 +167,26 @@ def needs_a_driver_check(args: Sequence[str]) -> bool:
     return True
 
 
+# The settings the reads below run with. They are reads only, so no hook runs,
+# but reading what is lined up to be saved asks the file monitor a base can
+# name, which is a program of the base's own (found while merging 0.3.3 into
+# Release B: a person whose own settings name any filter, as installing a
+# large-file tool does, had the monitor run before every save).
+PLAIN_SETTINGS = (("core.fsmonitor", "false"),)
+
+
 def _plain(git_path: str, args: Sequence[str], cwd: Optional[str], env: dict) -> str:
-    """One read of the base's settings, run without any of the checks above."""
+    """One read of the base's settings, run without any of the checks above.
+
+    Nothing it runs may start a program the base names, so the file monitor
+    is switched off here as it is for every command the runner runs.
+    """
+    prefix: List[str] = []
+    for name, value in PLAIN_SETTINGS:
+        prefix += ["-c", "%s=%s" % (name, value)]
     try:
         finished = subprocess.run(
-            [git_path] + list(args),
+            [git_path] + prefix + list(args),
             cwd=cwd,
             env=env,
             stdin=subprocess.DEVNULL,

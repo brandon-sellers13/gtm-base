@@ -22,6 +22,7 @@ import support
 
 from gtmbase import (
     approve_local,
+    changes,
     report,
     compose_proposal,
     confirm,
@@ -641,8 +642,15 @@ class TestTheReview(unittest.TestCase):
             # is where that is said: requirement P17 moved it out of the run
             # that prepares changes and into the review, so a review listing
             # nothing still mentions it once.
+            # This base is laid out the way the one real base was before Unit
+            # 1.5b, so after saying nothing is due the review offers, once,
+            # to move it to the current layout.
             self.assertEqual(
-                [stale_check.REVIEW_NOTHING, stale_check.LEDGER_BEHIND_EMPTY % 30],
+                [
+                    stale_check.REVIEW_NOTHING,
+                    stale_check.LEDGER_BEHIND_EMPTY % "30 days",
+                    changes.offer_sentence(base.root),
+                ],
                 result.lines(),
             )
             self.assertEqual([], result.review)
@@ -1128,7 +1136,10 @@ class TestTheUnitReview(unittest.TestCase):
 
             block = base.check().block()
 
-            self.assertIn(names.DOCUMENT_WITHOUT_A_PLAIN_NAME, block)
+            # Unit 1.8: several documents are named together now, the known
+            # ones by name and the rest counted, so this one is "one other
+            # document" beside the customer profile.
+            self.assertIn("your customer profile, %s" % names.ONE_OTHER_DOCUMENT, block)
             self.assertNotIn("skip the question", block)
 
     def test_s1_a_hostile_source_is_capped_like_every_other_value(self):

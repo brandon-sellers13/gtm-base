@@ -10,29 +10,46 @@ runner every git call goes through (`gitcmd.hook_free` and
 plugin makes runs with a planted hook of every kind in the base, and not one
 of them runs. A send keeps its hooks, because the plugin's own safeguard
 before anything leaves the computer is one.
+
+Release B's save paths are covered the same way: the move to the CLASS layout
+and its recovery, taking a finished page in and finishing an import that
+stopped, a segment drafted in a later session, leaving one out and approving
+the umbrella change that prepares, keeping a document edited by hand, and
+every save setting a base up makes, from its first save to the closing note.
 """
 
 import os
 import stat
 import unittest
+from unittest import mock
 
 import support
+import test_adoption as adoption
 import test_approve_local as approving
 import test_changes_migration as migration
 import test_confirm as confirming
+import test_import_recovery as recovery
+import test_live_check_follow_up as follow_up
 import test_moment_of_use as moment_tests
 import test_record_change as recording
+import test_segments_left_to_draft as later
 import test_session_start as starting
 import test_stale_check as checking
 
 from gtmbase import (
     approve_local,
     changes,
+    compose_proposal,
     confirm,
+    constants,
     drafting,
     gitcmd,
+    hand_edit,
+    join_flow,
+    paths,
     record_change,
     review,
+    segments,
     stale_check,
 )
 from gtmbase.gitcmd import GitRunner
@@ -53,9 +70,8 @@ HOOKS = (
 )
 
 
-def plant(root, marker, folder=None):
-    """A hook of every kind in one base, each writing its name when it runs."""
-    hooks = folder or os.path.join(root, ".git", "hooks")
+def _hooks_and_monitor(hooks, marker):
+    """Every hook in one folder, and a file monitor, each writing its name."""
     os.makedirs(hooks, exist_ok=True)
     for name in HOOKS:
         path = os.path.join(hooks, name)
@@ -65,12 +81,56 @@ def plant(root, marker, folder=None):
     monitor = os.path.join(os.path.dirname(marker), "monitor")
     support.write(monitor, "#!/bin/sh\necho fsmonitor >> '%s'\nexit 1\n" % marker)
     os.chmod(monitor, 0o755)
+    return monitor
+
+
+def plant(root, marker, folder=None):
+    """A hook of every kind in one base, each writing its name when it runs."""
+    hooks = folder or os.path.join(root, ".git", "hooks")
+    monitor = _hooks_and_monitor(hooks, marker)
     support.git(["config", "--local", "core.fsmonitor", monitor], cwd=root)
+    return marker
+
+
+def plant_in_the_persons_settings(sandbox, marker):
+    """The same hooks and monitor, named by the person's own git settings.
+
+    A base that does not exist yet has no folder to plant a hook in, and the
+    person's own settings reach every base they make, including the first
+    save of a new one.
+    """
+    hooks = os.path.join(sandbox.path, "everywhere-hooks")
+    monitor = _hooks_and_monitor(hooks, marker)
+    support.git(["config", "--global", "core.hooksPath", hooks], cwd=sandbox.path)
+    support.git(["config", "--global", "core.fsmonitor", monitor], cwd=sandbox.path)
     return marker
 
 
 def ran(marker):
     return support.read(marker).split() if os.path.exists(marker) else []
+
+
+# Reading back what a save left, with nothing the base names running, so the
+# proof that a save happened never adds a line to the marker of its own.
+QUIET = ["-c", "core.hooksPath=" + os.devnull, "-c", "core.fsmonitor=false"]
+
+
+def at_head(root, relative):
+    """What the newest saved work holds at one path, or None."""
+    finished = support.git(QUIET + ["show", "HEAD:" + relative], cwd=root, check=False)
+    if finished.returncode != 0:
+        return None
+    return finished.stdout.decode("utf-8")
+
+
+def unsaved_in(root):
+    finished = support.git(QUIET + ["status", "--porcelain"], cwd=root)
+    return finished.stdout.decode("utf-8").strip()
+
+
+def spying(module, name):
+    """Record the calls to one library function while it still does its work."""
+    return mock.patch.object(module, name, wraps=getattr(module, name))
 
 
 class TestTheHelper(unittest.TestCase):
@@ -196,13 +256,325 @@ class TestEverySaveRunsNoHook(unittest.TestCase):
             self.assertEqual([], ran(marker))
 
 
+OLDER_PROFILE = "context/strategy/icp.md"
+CLASS_PROFILE = "context/icps.md"
+
+
 class TestTheMoveRunsNoHook(migration.MigrationCase):
+    def plant(self):
+        return plant(self.root, os.path.join(self.sandbox.path, "ran"))
+
+    def stop(self, **where):
+        """Stop the move at one moment, before any hook is planted."""
+        stopping = migration._StopAfter(**where)
+        with self.assertRaises(migration._Stopped):
+            changes.migrate(self.root, self.base_id, today=migration.TODAY, git=stopping)
+        self.assertTrue(os.path.exists(self.note_path()))
+
+    def note_path(self):
+        return os.path.join(paths.seat_dir(self.base_id), changes.JOURNAL_FILE)
+
+    def assert_on_the_class_layout(self):
+        self.assertIsNotNone(at_head(self.root, CLASS_PROFILE))
+        self.assertIsNone(at_head(self.root, OLDER_PROFILE))
+        self.assertFalse(os.path.exists(self.note_path()))
+
     def test_moving_the_context_changes(self):
         self.old_layout()
-        marker = plant(self.root, os.path.join(self.sandbox.path, "ran"))
+        marker = self.plant()
         result = changes.migrate(self.root, self.base_id, today=migration.TODAY)
         self.assertEqual(changes.STATUS_MIGRATED, result.status, result.sentence)
         self.assertEqual([], ran(marker))
+        self.assert_on_the_class_layout()
+
+    def test_finishing_a_move_that_stopped_after_its_first_save(self):
+        self.old_layout()
+        self.stop(stop_after_subject=changes.MOVE_SUBJECT)
+        marker = self.plant()
+        result = changes.resume(self.root, self.base_id, today=migration.TODAY)
+        self.assertEqual(changes.STATUS_RESUMED, result.status, result.sentence)
+        self.assertEqual([], ran(marker))
+        self.assert_on_the_class_layout()
+
+    def test_putting_back_a_move_that_stopped_before_its_first_save(self):
+        self.old_layout()
+        self.stop(stop_before_subject=changes.MOVE_SUBJECT)
+        marker = self.plant()
+        with spying(changes, "_put_back") as put_back:
+            result = changes.migrate(self.root, self.base_id, today=migration.TODAY)
+        self.assertTrue(put_back.called)
+        self.assertEqual(changes.STATUS_MIGRATED, result.status, result.sentence)
+        self.assertEqual([], ran(marker))
+        self.assert_on_the_class_layout()
+
+    def test_giving_up_on_a_move_that_stopped(self):
+        self.old_layout()
+        self.stop(stop_before_subject=changes.MOVE_SUBJECT)
+        marker = self.plant()
+        result = changes.abandon(self.root, self.base_id, today=migration.TODAY)
+        self.assertEqual(changes.STATUS_UNDONE, result.status, result.sentence)
+        self.assertEqual([], ran(marker))
+        self.assertFalse(os.path.exists(self.note_path()))
+        self.assertTrue(os.path.isfile(os.path.join(self.root, OLDER_PROFILE)))
+        self.assertFalse(os.path.exists(os.path.join(self.root, CLASS_PROFILE)))
+        self.assertEqual("", unsaved_in(self.root))
+
+
+FIRST = "Fintech lenders"
+
+
+class TestTakingFinishedPagesInRunsNoHook(unittest.TestCase):
+    """Unit 1.7c and 1.7d: a finished page taken in, and an import finished."""
+
+    def setUp(self):
+        self.sandbox = support.Sandbox()
+        self.sandbox.__enter__()
+        self.addCleanup(self.sandbox.__exit__, None, None, None)
+        self.company = adoption.Company(
+            [(name, adoption.clean_page(name), "icp-%s.md" % segments.slug_for(name))
+             for name in (FIRST, "Regional banks")]
+        )
+        self.relative = self.company.destination(FIRST)
+
+    def plant(self):
+        return plant(self.company.root, os.path.join(self.sandbox.path, "ran"))
+
+    def stop_after_staging(self):
+        shown = recovery.show(self.company.run, self.company, FIRST)
+        with recovery.StopAfter(review, "_stage_bytes", lambda *a, **k: True) as stop:
+            with self.assertRaises(recovery.Stopped):
+                recovery.approve(self.company.run, self.company, FIRST, shown.digest)
+        self.assertTrue(stop.fired)
+
+    def finish_it(self):
+        resumed = join_flow.resume_import(
+            join_flow.new_run(recovery.TODAY),
+            self.company.root,
+            recovery.SESSION_TWO,
+            runner=GitRunner(),
+            now=recovery.NOW,
+        )
+        self.assertEqual([FIRST], [segment.name for segment in resumed.finished])
+
+    def assert_saved_with_its_line(self):
+        self.assertEqual(self.company.read(self.relative), at_head(self.company.root, self.relative))
+        line = at_head(self.company.root, confirm.confirmations_path_for(self.relative))
+        self.assertIsNotNone(line)
+        self.assertIn(self.company.run, line)
+        self.assertEqual("", unsaved_in(self.company.root))
+
+    def test_taking_a_finished_page_in(self):
+        shown = recovery.show(self.company.run, self.company, FIRST)
+        marker = self.plant()
+        with spying(review, "approve_adopted") as approving_it:
+            result = recovery.approve(
+                self.company.run, self.company, FIRST, shown.digest, runner=GitRunner()
+            )
+        self.assertTrue(approving_it.called)
+        self.assertEqual(self.relative, result.path)
+        self.assertEqual([], ran(marker))
+        self.assert_saved_with_its_line()
+
+    def test_finishing_an_import_that_stopped_after_the_write(self):
+        self.stop_after_staging()
+        marker = self.plant()
+        with spying(review, "finish_adopted") as finishing:
+            self.finish_it()
+        self.assertTrue(finishing.called)
+        self.assertEqual([], ran(marker))
+        self.assert_saved_with_its_line()
+
+    def test_finishing_an_import_saved_without_its_line(self):
+        self.stop_after_staging()
+        # Another window saves what was staged: the page, and no line.
+        support.git(["commit", "-q", "-m", "saved in another window"], cwd=self.company.root)
+        self.assertIsNone(
+            at_head(self.company.root, confirm.confirmations_path_for(self.relative))
+        )
+        marker = self.plant()
+        with spying(review, "confirm_saved") as confirming_it:
+            self.finish_it()
+        self.assertTrue(confirming_it.called)
+        self.assertEqual([], ran(marker))
+        self.assert_saved_with_its_line()
+
+    def test_finishing_an_import_whose_page_went_before_its_save(self):
+        self.stop_after_staging()
+        # The page is staged and then gone from its name, so what the import
+        # staged is taken back first and the page is written again.
+        os.remove(os.path.join(self.company.root, self.relative))
+        marker = self.plant()
+        with spying(review, "put_back_unwritten") as putting_back:
+            with spying(review, "approve_adopted") as approving_it:
+                self.finish_it()
+        self.assertTrue(putting_back.called)
+        self.assertTrue(approving_it.called)
+        self.assertEqual([], ran(marker))
+        self.assert_saved_with_its_line()
+
+
+class TestSegmentsFinishedLaterRunNoHook(later.Case):
+    """Brandon's calls 29 and 36: a segment drafted, or left out, later."""
+
+    def closed(self):
+        company = later.a_company()
+        later.set_up_and_close(company)
+        run_id, _shown = later.listed(company, later.LATER)
+        join_flow.draft_freeze(run_id, later.SESSION_TWO, today=later.TODAY)
+        support.take_notes(run_id, today=later.TODAY)
+        return company, run_id
+
+    def test_a_segment_drafted_and_approved_in_a_later_session(self):
+        company, run_id = self.closed()
+        join_flow.assemble_step(
+            drafting.STEP_SEGMENT, run_id, "Acme", later.EMAIL, today=later.TODAY,
+            segment=later.slug(later.LATER),
+        )
+        marker = plant(company.root, os.path.join(self.sandbox.path, "ran"))
+        with spying(review, "approve_adopted") as approving_it:
+            result = later.approve(run_id, company, later.LATER, runner=GitRunner())
+        self.assertTrue(approving_it.called)
+        relative = company.destination(later.LATER)
+        self.assertEqual(relative, result.path)
+        self.assertEqual([], ran(marker))
+        self.assertEqual(company.read(relative), at_head(company.root, relative))
+        self.assertEqual("", unsaved_in(company.root))
+
+    def test_leaving_one_out_and_approving_the_umbrella_change_here(self):
+        company, run_id = self.closed()
+        with recovery.StopAfter(review, "_create_new") as stop:
+            with self.assertRaises(recovery.Stopped):
+                later.approve(run_id, company, later.LATER)
+        self.assertTrue(stop.fired)
+        marker = plant(company.root, os.path.join(self.sandbox.path, "ran"))
+        runner = GitRunner()
+        with spying(review, "take_back_unsaved") as taking_back:
+            said = join_flow.draft_leave_out(
+                later.slug(later.LATER), company.root, runner=runner
+            )
+        self.assertTrue(taking_back.called)
+        self.assertIn(join_flow.UMBRELLA_CHANGE_WAITING % {"name": later.LATER}, said)
+        self.assertIsNone(company.read(company.destination(later.LATER)))
+        staged = follow_up.pending_changes(company.root)[0]
+        shown = approve_local.show(staged, company.root, company.base_id, runner=runner)
+        self.assertEqual(approve_local.STATUS_SHOWN, shown.status, shown.reasons)
+        applied = approve_local.approve(
+            staged, company.root, company.base_id, shown.shown_hash, runner=runner
+        )
+        self.assertEqual(approve_local.STATUS_APPLIED, applied.status, applied.reasons)
+        self.assertEqual([], ran(marker))
+        umbrella = at_head(company.root, later.UMBRELLA)
+        self.assertIn(
+            constants.UMBRELLA_LEFT_OUT_SENTENCE,
+            umbrella[umbrella.index("### %s" % later.LATER):],
+        )
+        self.assertEqual("", unsaved_in(company.root))
+
+
+class TestKeepingAHandEditRunsNoHook(unittest.TestCase):
+    """Calls 33, 34 and 49: a document edited by hand, kept three ways."""
+
+    def keep(self, sandbox, change, answer, **kind):
+        root, base_id = follow_up.a_base(sandbox)
+        change(root)
+        marker = plant(root, os.path.join(sandbox.path, "ran"))
+        runner = GitRunner()
+        staged = compose_proposal.stage_local_edit(
+            root, base_id, answer, runner=runner, now=follow_up.TODAY, **kind
+        )
+        with spying(approve_local, "_walk_a_hand_edit") as walking:
+            shown = approve_local.show(
+                staged, root, base_id, runner=runner, now=follow_up.TODAY
+            )
+            self.assertEqual(approve_local.STATUS_SHOWN, shown.status, shown.reasons)
+            applied = approve_local.approve(
+                staged, root, base_id, shown.shown_hash, runner=runner, now=follow_up.NOW
+            )
+        self.assertTrue(walking.called)
+        self.assertEqual(approve_local.STATUS_APPLIED, applied.status, applied.reasons)
+        self.assertEqual([], ran(marker))
+        self.assertEqual(
+            support.read(os.path.join(root, follow_up.ICP)), at_head(root, follow_up.ICP)
+        )
+        self.assertEqual("", unsaved_in(root))
+        return root
+
+    def changes_saved(self, root):
+        folder = os.path.join(root, constants.CHANGES_DIR)
+        return [
+            name
+            for name in (os.listdir(folder) if os.path.isdir(folder) else [])
+            if name.endswith(".md")
+            and at_head(root, "%s/%s" % (constants.CHANGES_DIR, name)) is not None
+        ]
+
+    def test_keeping_a_wording_only_fix(self):
+        with support.Sandbox() as sandbox:
+            root = self.keep(
+                sandbox, follow_up.fix_the_comma, None, kind=hand_edit.KIND_WORDING
+            )
+            self.assertIn("Buyers who try it buy it.", at_head(root, follow_up.ICP))
+            self.assertEqual([], self.changes_saved(root))
+
+    def test_keeping_a_corrected_fact_that_records_a_context_change(self):
+        with support.Sandbox() as sandbox:
+            root = self.keep(
+                sandbox,
+                follow_up.correct_the_fact,
+                follow_up.FACT_ANSWER,
+                kind=hand_edit.KIND_FACT,
+                what_changed=follow_up.FACT_LINE,
+                also_affects=[follow_up.POSITIONING],
+            )
+            self.assertIn("over 12k bakeries", at_head(root, follow_up.ICP))
+            self.assertEqual(1, len(self.changes_saved(root)))
+
+    def test_keeping_a_change_to_the_business(self):
+        with support.Sandbox() as sandbox:
+            root = self.keep(
+                sandbox,
+                lambda root: follow_up.edit(
+                    root, "Buyers who try it, buy it.", "We now sell to retail firms."
+                ),
+                "We started selling to retail firms this month, after two pilots closed.",
+                kind=hand_edit.KIND_BUSINESS,
+                what_changed="We now sell the marketing use case to retail firms.",
+            )
+            self.assertIn("We now sell to retail firms.", at_head(root, follow_up.ICP))
+            self.assertEqual(1, len(self.changes_saved(root)))
+
+
+class TestSettingUpABaseRunsNoHook(unittest.TestCase):
+    """Every save setup makes, from the base's first save to the closing note."""
+
+    def test_setting_up_a_base_from_its_first_save_to_the_closing_note(self):
+        with support.Sandbox() as sandbox:
+            company = later.a_company(build=False)
+            marker = plant_in_the_persons_settings(
+                sandbox, os.path.join(sandbox.path, "ran")
+            )
+            company.build()
+            company.adopt(later.TAKEN_IN)
+            later.approve(company.run, company, later.DRAFTED)
+            closed = join_flow.close_run(
+                company.root,
+                company.run,
+                got_in_the_way="The material was spread across three folders.",
+                now=later.TODAY,
+                plugin_root=support.PLUGIN_DIR,
+                runner=GitRunner(),
+            )
+            self.assertEqual([], ran(marker))
+            self.assertEqual([], closed.note_codes)
+            for relative in (
+                later.UMBRELLA,
+                drafting.POSITIONING_PATH,
+                company.destination(later.TAKEN_IN),
+                company.destination(later.DRAFTED),
+                closed.note_path,
+            ):
+                self.assertIsNotNone(at_head(company.root, relative), relative)
+            self.assertEqual("", unsaved_in(company.root))
 
 
 class TestTheSessionStartUpdateRunsNoHook(
@@ -445,6 +817,30 @@ class TestAFilterTheBaseNamesIsRefused(unittest.TestCase):
             )
             self.assertEqual([], gitcmd.executable_drivers(root))
             self.assertTrue(GitRunner().run(["status", "--porcelain"], cwd=root).ok)
+
+    def test_the_look_for_a_filter_starts_no_monitor_the_base_names(self):
+        """Found while merging 0.3.3 into Release B.
+
+        The look for a filter reads what is lined up to be saved, and that
+        read asked the base's file monitor, before every save and every look
+        at what is unsaved, for anybody whose own settings name any filter at
+        all, as installing a large-file tool does.
+        """
+        with support.Sandbox() as sandbox:
+            root, _base_id = approving.local_base(sandbox)
+            marker = plant(root, os.path.join(sandbox.path, "ran"))
+            support.git(
+                ["config", "--global", "filter.lfs.clean", "git-lfs clean -- %f"],
+                cwd=sandbox.path,
+            )
+            self.assertTrue(GitRunner().run(["status", "--porcelain"], cwd=root).ok)
+            support.write(os.path.join(root, "context", "new.md"), "words\n")
+            self.assertTrue(GitRunner().run(["add", "--", "context/new.md"], cwd=root).ok)
+            self.assertTrue(
+                GitRunner().run(["commit", "-q", "-m", "new"], cwd=root).ok
+            )
+            self.assertEqual("words\n", at_head(root, "context/new.md"))
+            self.assertEqual([], ran(marker))
 
 
 if __name__ == "__main__":

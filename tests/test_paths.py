@@ -567,7 +567,7 @@ class TestAWriteStaysWhereItBelongs(unittest.TestCase):
     def test_a_write_inside_the_folder_is_allowed(self):
         from gtmbase import fsutil
 
-        # A seat folder of its own, because a write may take its folder's lock
+        # A seat folder of its own, because a write takes its folder's lock
         # in the seat folder, and a test never writes into the real one.
         with TempHome(), TempDir() as folder:
             root = os.path.join(folder, "base")

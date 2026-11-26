@@ -20,6 +20,7 @@ import test_moment_of_use as moment_tests
 import test_record_change as recording
 
 from gtmbase import locks, record_change
+from gtmbase.errors import PathError
 
 
 class TestItLoadsWithoutFcntl(unittest.TestCase):
@@ -148,6 +149,120 @@ class TestTheQuestionsUnderTheLockFile(recording.LocalCase):
                         moment_tests.ICP, "not-now",
                     )
         self.assertEqual(record_change.BUSY, str(refused.exception))
+
+
+class TestOneLockingSystem(unittest.TestCase):
+    """Release B carries 0.3.3: Unit 1.7d's locks and 0.3.3's are one module.
+
+    Every lock file lives in the seat folder's own checked folder of locks,
+    the operating system's lock is used where there is one, and a lock file
+    only where there is not. A writer's shared hold on a folder and a sweep's
+    exclusive one are the same lock file, and where shared holds cannot be
+    seen, a sweep never takes a folder.
+    """
+
+    def setUp(self):
+        self.sandbox = support.Sandbox()
+        self.sandbox.__enter__()
+        self.addCleanup(self.sandbox.__exit__, None, None, None)
+        self.folder = os.path.join(self.sandbox.path, "somewhere")
+        os.makedirs(self.folder)
+
+    def test_every_lock_file_lives_in_the_one_private_folder(self):
+        from gtmbase import fsutil, join_flow
+
+        home = locks.lock_home()
+        self.assertEqual(home, fsutil._lock_home())
+        self.assertEqual(home, os.path.dirname(locks.folder_lock_path(self.folder)))
+        self.assertEqual(home, os.path.dirname(locks.file_lock_path(self.folder)))
+        self.assertEqual(0o700, os.stat(home).st_mode & 0o777)
+        self.assertIs(fsutil.FolderLock, locks.FolderLock)
+        self.assertIs(fsutil.HeldLock, locks.HeldLock)
+        self.assertIs(join_flow.HeldLock, locks.HeldLock)
+        self.assertNotEqual(
+            locks.folder_lock_path(self.folder), locks.file_lock_path(self.folder)
+        )
+
+    def test_a_sweep_takes_a_folder_only_when_no_writer_holds_it(self):
+        with locks.FolderLock(self.folder) as writing:
+            self.assertTrue(writing.held)
+            with locks.FolderLock(self.folder) as another_writer:
+                self.assertTrue(another_writer.held)
+            with locks.FolderLock(self.folder, exclusive=True) as sweeping:
+                self.assertFalse(sweeping.held)
+        with locks.FolderLock(self.folder, exclusive=True) as sweeping:
+            self.assertTrue(sweeping.held)
+
+    def test_without_the_systems_lock_a_writer_writes_and_a_sweep_takes_nothing(self):
+        with mock.patch.object(locks, "IMPLEMENTATION", locks.FileLock):
+            with locks.FolderLock(self.folder) as writing:
+                self.assertTrue(writing.held)
+            with locks.FolderLock(self.folder, exclusive=True) as sweeping:
+                self.assertFalse(sweeping.held)
+            # A lock on one small file still keeps a second holder out.
+            with locks.HeldLock(os.path.join(self.folder, "record.json")):
+                with self.assertRaises(PathError):
+                    with locks.HeldLock(
+                        os.path.join(self.folder, "record.json"), wait_seconds=0.2
+                    ):
+                        pass
+
+    def test_a_held_file_lock_is_never_removed(self):
+        guarded = os.path.join(self.folder, "record.json")
+        with locks.HeldLock(guarded):
+            pass
+        self.assertTrue(os.path.exists(locks.file_lock_path(guarded)))
+
+    def test_reentrant_only_for_the_thread_that_holds_it(self):
+        import threading
+
+        guarded = os.path.join(self.folder, "record.json")
+        outcome = []
+        with locks.HeldLock(guarded, reentrant=True):
+            with locks.HeldLock(guarded, reentrant=True, wait_seconds=0.2):
+                outcome.append("same thread let through")
+
+            def elsewhere():
+                try:
+                    with locks.HeldLock(guarded, reentrant=True, wait_seconds=0.2):
+                        outcome.append("other thread let through")
+                except PathError:
+                    outcome.append("other thread waited")
+
+            worker = threading.Thread(target=elsewhere)
+            worker.start()
+            worker.join(10)
+        self.assertEqual(["same thread let through", "other thread waited"], outcome)
+
+    def test_a_lock_folder_somebody_else_can_write_refuses_every_lock(self):
+        home = locks.lock_home()
+        os.chmod(home, 0o777)
+        try:
+            with self.assertRaises(PathError) as caught:
+                with locks.HeldLock(os.path.join(self.folder, "record.json")):
+                    pass
+            self.assertEqual(locks.CODE_LOCKS_NOT_PRIVATE, caught.exception.code)
+            from gtmbase import ids
+
+            from gtmbase import join_flow
+
+            # The questions about a context change, and the base's writing
+            # lock, are refused the same way, each with its one sentence.
+            base_id = ids.base_id_random()
+            with self.assertRaises(record_change.Refused) as refused:
+                with record_change._locked(base_id):
+                    pass
+            self.assertEqual(join_flow.LOCKS_NOT_PRIVATE, str(refused.exception))
+            with self.assertRaises(record_change.Refused) as refused:
+                with record_change._writing(base_id):
+                    pass
+            self.assertEqual(join_flow.LOCKS_NOT_PRIVATE, str(refused.exception))
+            with self.assertRaises(Exception) as caught:
+                with join_flow.writing(base_id):
+                    pass
+            self.assertEqual(locks.CODE_LOCKS_NOT_PRIVATE, caught.exception.code)
+        finally:
+            os.chmod(home, 0o700)
 
 
 if __name__ == "__main__":

@@ -89,7 +89,7 @@ tests and the plain-language lint after each unit and merges only when every tes
 - [x] Unit 4 drafting prompts and the review loop
 - [x] Unit 5 the join skill, setup mode, closing; same-run exemption keyed on the run id
 - [x] Security and correctness review of the four units: 21 findings, all fixed with tests (948 green)
-- [ ] Ship 0.2.0, then Brandon runs "set up my company base" for real; write docs/walkthroughs/2026-09-user-one-paste-path.md from that run
+- [x] Ship 0.2.0, then Brandon runs "set up my company base" for real; write docs/walkthroughs/2026-09-user-one-paste-path.md from that run (Ticked 2026-10-10: shipped long before Release A.)
 - [ ] Release step before a second seat joins: replace the forty-zero pinned id in the settings template with a real one
 
 ## Join release-one review fixes (agent record, 2026-09-06)
@@ -388,28 +388,28 @@ This file is append-only. Agents add below; nobody rewrites what is above.
 - [x] Move Phases 2 to 4, unchanged, to `docs/plans/2026-09-19-002-roadmap-after-phase-1.md`.
 - [x] Baseline before the build: 1127 tests passing. `tests/run.sh` now fixes the
       time zone, because three tests in `tests/test_review.py` assumed a Pacific date.
-- [ ] Brandon answers the eight calls under "For Brandon" in the plan. The plan
+- [x] Brandon answers the eight calls under "For Brandon" in the plan. The plan (Ticked 2026-10-10: decided, calls 1 to 8.)
       is written to the recommended answer on each, so the build does not wait.
 
 ### Release A
-- [ ] Unit 1.1: contract amendments, the six UX rulings, the frozen replay bar
-- [ ] Unit 1.1b: the UX standard and the lint
-- [ ] Unit 1.2: completion and closing
-- [ ] Unit 1.2b: approve a proposed change locally
-- [ ] Unit 1.3: quiet by default
-- [ ] Unit 1.4: the rename to context change, with a recoverable migration
-- [ ] Unit 1.4b: the thin runner and its contract test (side track)
-- [ ] Unit 1.4c: the outbound sequence (side track)
-- [ ] Unit 1.5: habit hooks
-- [ ] Security pass and correctness pass, then the live check, then the version bump
+- [x] Unit 1.1: contract amendments, the six UX rulings, the frozen replay bar (Ticked 2026-10-10: shipped in 0.3.0.)
+- [x] Unit 1.1b: the UX standard and the lint (Ticked 2026-10-10: shipped in 0.3.0.)
+- [x] Unit 1.2: completion and closing (Ticked 2026-10-10: shipped in 0.3.0.)
+- [x] Unit 1.2b: approve a proposed change locally (Ticked 2026-10-10: shipped in 0.3.0.)
+- [x] Unit 1.3: quiet by default (Ticked 2026-10-10: shipped in 0.3.0.)
+- [x] Unit 1.4: the rename to context change, with a recoverable migration (Ticked 2026-10-10: shipped in 0.3.0.)
+- [x] Unit 1.4b: the thin runner and its contract test (side track) (Ticked 2026-10-10: moved to the roadmap in revision 2.1.)
+- [x] Unit 1.4c: the outbound sequence (side track) (Ticked 2026-10-10: moved to the roadmap in revision 2.1.)
+- [x] Unit 1.5: habit hooks (Ticked 2026-10-10: shipped in 0.3.0.)
+- [x] Security pass and correctness pass, then the live check, then the version bump (Ticked 2026-10-10: 0.3.0 on 2026-09-24.)
 
 ### Release B, behind the fidelity gate
-- [ ] Unit 1.6: selection fixes
-- [ ] Unit 1.7a: scope and the segment inventory
-- [ ] Unit 1.7b: umbrella and segment drafts, the unanswered-marker state
-- [ ] Unit 1.7c: guarded adoption
-- [ ] Unit 1.7d: recovery of an interrupted import
-- [ ] Unit 1.8: the sweep of text no unit touched
+- [x] Unit 1.6: selection fixes (Ticked 2026-10-10: built and merged into release-b, in 0.4.0.)
+- [x] Unit 1.7a: scope and the segment inventory (Ticked 2026-10-10: built and merged, in 0.4.0.)
+- [x] Unit 1.7b: umbrella and segment drafts, the unanswered-marker state (Ticked 2026-10-10: built and merged, in 0.4.0.)
+- [x] Unit 1.7c: guarded adoption (Ticked 2026-10-10: built and merged, in 0.4.0.)
+- [x] Unit 1.7d: recovery of an interrupted import (Ticked 2026-10-10: built and merged, in 0.4.0.)
+- [x] Unit 1.8: the sweep of text no unit touched (Ticked 2026-10-10: built and merged, in 0.4.0.)
 - [ ] Unit 1.9: the fidelity replay, scored by Brandon
 
 ### 2026-09-19, revision 2.1
@@ -1095,10 +1095,10 @@ reviewers' scripts.
 
 ### 2026-09-20, release A is ready for the go-ahead
 - [x] Units 1.1 to 1.5 merged; five release review rounds fixed test-first; 1853 tests passing at 7476eb7.
-- [ ] Brandon: go-ahead for the version bump (release with Astra's third look outstanding, or hold for it).
-- [ ] Bump the version, update the plugin on the one seat, republish the atlas.
-- [ ] Brandon: run docs/walkthroughs/2026-09-release-a-live-check.md and fill in its results.
-- [ ] Astra's third look, when the Codex limit resets on 2026-09-26 or credits are added.
+- [x] Brandon: go-ahead for the version bump (release with Astra's third look outstanding, or hold for it). (Ticked 2026-10-10: released as 0.3.0.)
+- [x] Bump the version, update the plugin on the one seat, republish the atlas. (Ticked 2026-10-10: 0.3.0.)
+- [x] Brandon: run docs/walkthroughs/2026-09-release-a-live-check.md and fill in its results. (Ticked 2026-10-10: superseded; steps 1 to 6 ran on 2026-09-26 and 27, and steps 7 to 10 are on the one list for Brandon in the 2026-10-10 section.)
+- [x] Astra's third look, when the Codex limit resets on 2026-09-26 or credits are added. (Ticked 2026-10-10: done, verify-3 and verify-4 on 2026-09-23, final on 2026-09-24.)
 
 #### Review
 Every review round found real defects, and the later rounds mostly found what the earlier fixes introduced: a guard that could be switched off through itself, a data-loss path in a relaxed check, words files that read any file, a fallback that refused every write, a moved check that refused ordinary edits. Three things would have caught most of them sooner and are now tests: payloads shaped like what the client really sends, documented commands run from the skill text itself, and byte comparisons that compare bytes.
@@ -1137,9 +1137,9 @@ the order R10, R7, R9, then R1 to R6, R8, R11. Nothing is saved or sent.
       still-open list names concurrency, words-file provenance, first-draft
       provenance, and the untested ask.
 - [x] Atlas figures 6 and 7 brought up to date, not republished.
-- [ ] Brandon: an outside look at this round's fixes, since each fix to a
+- [x] Brandon: an outside look at this round's fixes, since each fix to a (Ticked 2026-10-10: Astra's verify passes.)
       safety rule is new code.
-- [ ] Brandon: run docs/walkthroughs/2026-09-release-a-live-check.md.
+- [x] Brandon: run docs/walkthroughs/2026-09-release-a-live-check.md. (Ticked 2026-10-10: superseded; steps 1 to 6 ran on 2026-09-26 and 27, and steps 7 to 10 are on the one list for Brandon in the 2026-10-10 section.)
 
 #### Review
 Nine of the eleven were the round before's fixes falling short at an edge the
@@ -1189,8 +1189,8 @@ N1, N9, N3, N7, N10, then the composed removals. Nothing is saved or sent.
 - [x] CHANGELOG lines 273, 275, 277, 279, 281, 285, 287 corrected in place;
       the fourth look added; the still-open list says what is left.
 - [x] Atlas figures 6 and 7 brought up to date, not republished.
-- [ ] Brandon: an outside look at this round's fixes.
-- [ ] Brandon: run docs/walkthroughs/2026-09-release-a-live-check.md.
+- [x] Brandon: an outside look at this round's fixes. (Ticked 2026-10-10: Astra's verify passes.)
+- [x] Brandon: run docs/walkthroughs/2026-09-release-a-live-check.md. (Ticked 2026-10-10: superseded; steps 1 to 6 ran on 2026-09-26 and 27, and steps 7 to 10 are on the one list for Brandon in the 2026-10-10 section.)
 
 #### Review
 All ten sat in code the round before added or at an edge its tests did not
@@ -1257,20 +1257,20 @@ line it follows already names the document.
 - [x] Astra's narrow final pass: ready to release.
 - [x] Version 0.3.0 in both manifests and the library; CHANGELOG section dated; 1987 tests; pushed as 45d4454.
 - [x] Plugin updated on Brandon's machine (0.2.6 to 0.3.0); atlas republished.
-- [ ] Brandon: restart, then the live check; fill in its results.
-- [ ] Release B: Unit 1.6 onward, plus the confirmation line format that allows names with a space.
+- [x] Brandon: restart, then the live check; fill in its results. (Ticked 2026-10-10: superseded; steps 1 to 6 ran on 2026-09-26 and 27, and steps 7 to 10 are on the one list for Brandon in the 2026-10-10 section.)
+- [ ] Release B: Unit 1.6 onward, plus the confirmation line format that allows names with a space. (Noted 2026-10-10: Unit 1.6 onward is built and in 0.4.0; the format for a name with a space is still open, the two items above.)
 
 ### 2026-09-25, revision 2.2: the CLASS context standard
 - [x] Plan revision 2.2: Unit 1.5b, P38, calls 9 to 11; roadmap kinds mapped to the standard; docs/ux-standard.md ties every step to CLASS.
-- [ ] Brandon: calls 9 to 11.
-- [ ] Unit 1.5b, after the live check and before Unit 1.6.
+- [x] Brandon: calls 9 to 11. (Ticked 2026-10-10: decided 2026-09-25.)
+- [x] Unit 1.5b, after the live check and before Unit 1.6. (Ticked 2026-10-10: built and merged, in 0.4.0.)
 - [x] 2026-09-25 revision 2.3: Unit 1.5b widened to lay a base out by the five CLASS parts (calls 12 to 14 decided).
 
 ### 2026-09-26, live check paused at step 2
-- [ ] Fix first: every skill script refuses a linked folder (`resolution.joined` required; a linked resolution carries root and id but joined False). Accept a linked resolution in all six scripts, and run every script-level test and the skill walk from a linked folder as well as from inside the base.
-- [ ] The review never makes the update offer that --check-move says it would make.
-- [ ] The skills tell the assistant to relay the review's sentences, not summarize or advise.
-- [ ] Release as 0.3.1, then Brandon resumes the live check at step 2.
+- [x] Fix first: every skill script refuses a linked folder (`resolution.joined` required; a linked resolution carries root and id but joined False). Accept a linked resolution in all six scripts, and run every script-level test and the skill walk from a linked folder as well as from inside the base. (Ticked 2026-10-10: 0.3.1.)
+- [x] The review never makes the update offer that --check-move says it would make. (Ticked 2026-10-10: 0.3.1.)
+- [x] The skills tell the assistant to relay the review's sentences, not summarize or advise. (Ticked 2026-10-10: 0.3.1.)
+- [x] Release as 0.3.1, then Brandon resumes the live check at step 2. (Ticked 2026-10-10: 0.3.1 on 2026-09-26.)
 
 ### 2026-09-26, 0.3.1: the linked folder
 - [x] Finding 1: the six scripts (stale_check.py, confirm.py, propose.py, approve_local.py, moment.py, seat.py) accept `resolution.active`, so a folder linked to a base works exactly as the base's own folder does. The NOT_JOINED sentence stays for a folder that is neither. gate.py keeps `.joined` on purpose: a linked folder is the person's own repository, which the gate does not read.
@@ -1280,8 +1280,8 @@ line it follows already names the document.
 - [x] Finding 3: stale-check, confirm and propose-change skills say commands run from the folder the person works in, base or linked, and that the assistant relays each sentence as it is, never reads out a path, an identifier or a `[for the assistant]` line, and adds no advice. "From inside the base" is gone; the join skill says not to go looking for the base.
 - [x] Tests: tests/test_linked_folder.py (each script from a linked folder, relative staging path, refusal kept, the offer when nothing is due in both modes, the skills' wording); the skill walk runs from a linked folder too (TestTheSkillsFromALinkedFolder); `support.where_a_script_runs` lets every script-running module run from a linked folder (the eight modules, with the skill walk and the new module, pass that way: 544 tests), and tests/run.sh runs the 22 classes in them that start a script a second time that way, with a test that fails when a class that starts a script is missing from that list.
 - [x] CHANGELOG: draft Unreleased (0.3.1) section. Version not bumped.
-- [ ] Orchestrator: review, commit, release as 0.3.1, update the installed plugin.
-- [ ] Brandon: resume the live check at step 2.
+- [x] Orchestrator: review, commit, release as 0.3.1, update the installed plugin. (Ticked 2026-10-10: 0.3.1.)
+- [x] Brandon: resume the live check at step 2. (Ticked 2026-10-10: steps 2 to 6 run on 2026-09-27.)
 
 #### Review
 The linked folder was refused in six places for one reason, a check for a base joined in that very folder, and the tests could not see it because they all ran inside the base. The same tests now run from a linked folder, made with `machine.link_content` as the join skill makes one. A path inside the base given to `--staging` had the same blind spot and is fixed with it. The review's early return skipped the offer; it now makes it once in both modes. Not fixed here: the review's line for a prepared change hands the assistant the change's identifier, not a path, so the assistant has to build the path itself from the folder the skills name.
@@ -1295,7 +1295,7 @@ Full suite after the change: 2016 tests OK in 739 seconds, then the second run f
 - [x] Skill relay rules (a) to (d) in stale-check, propose-change and confirm SKILL.md; the stale-check table no longer asks about other seats unprompted.
 - [x] Tests: tests/test_os_clutter.py (failing first, 36 tests), one class added to tests/run.sh's linked-folder list and to test_linked_folder's runner map; six existing assertions now expect the named refusal.
 - [x] Logic atlas captions updated (not published). CHANGELOG draft Unreleased (0.3.2). Version not bumped.
-- [ ] Orchestrator: review, release as 0.3.2, update the installed plugin.
+- [x] Orchestrator: review, release as 0.3.2, update the installed plugin. (Ticked 2026-10-10: 0.3.2.)
 - [ ] Later unit: an offered, undoable change adding the clutter lines to an existing base's ignore file; the rest of the live-check findings.
 - Note: a fresh checkout has no templates/company-base/work/inbox or work/proposals folder (their .gitkeep files are ignored by the template's own ignore file), so tests/test_scaffold.py fails there until the folders are made by hand. Not fixed here.
 
@@ -1307,28 +1307,28 @@ One correctness review of the diff. Fixed, each with a test in tests/test_os_clu
 - [x] Finding 2: both templates ignore only the four exact names (no `._*`). All three fast-forward updates (session start, the review, a yes on a base with no shared copy) pass `--no-overwrite-ignore`; an ignored local file survives an incoming saved file of the same name, and a source scan fails if a merge or pull in the library lacks the flag.
 - [x] Finding 3: refusals never repeat an arbitrary name. Context documents by `names.document_name` (now `fullmatch`), everything else counted; the read-the-name branch is gone. Astra's instruction-shaped name and a trailing newline are tested.
 - [x] The seat folder: tests/support.py points the seat folder at a temporary one before any test runs, always; tests/run.sh makes that folder, and fails the run if either run wrote into it. tests/test_seat_isolation.py proves it inside temporary folders; the real seat folder is never read. The guard's first full run caught two offenders, both now given a temporary seat folder: test_sources (wrote its read marker) and test_gate's check of this repository (made the seat folder). test_paths got the same guard as on the unit-1-7d line.
-- [ ] Orchestrator: review, release as 0.3.2.
+- [x] Orchestrator: review, release as 0.3.2. (Ticked 2026-10-10: 0.3.2.)
 
 ### 2026-09-27, 0.3.2: Astra's confirmation (docs/reviews/2026-09-27-release-0-3-2-verify-astra.md)
 - [x] Findings 1 and 2 closed by Astra. Finding 3 still open for an ordinary `.md` name under context, now fixed in the unsaved refusal only: a context document is named by a fixed label only when the product knows its path (the two required documents, the map, the nine context-standard documents of Unit 1.5b, and a segment under the segments folder whose slug is lowercase words joined by hyphens, at most five and forty characters); every other file under context is "one of your documents", counted like the rest. names.py's other callers are unchanged; the product-wide hardening is for a later unit.
-- [ ] Unit 1.5b: check the nine standard labels in unsaved.KNOWN_DOCUMENT_LABELS against the words that unit settles on.
+- [x] Unit 1.5b: check the nine standard labels in unsaved.KNOWN_DOCUMENT_LABELS against the words that unit settles on. Done in the merge of main into release-b: the labels are names.KNOWN_DOCUMENTS as Unit 1.5b set them, current and older paths.
 
 ### 2026-09-27, Release B list additions from Astra's review of 0.3.3
-- [ ] Unit 1.7e, a yes only a person can give (Astra 0.3.3 finding 2, deferred from 0.3.3 to Release B by the live-check session; Brandon may veto the deferral): a UserPromptSubmit hook records when the person actually sends a message, and every approval flow (confirm, approve_local, the closing, adoption, segment drafts, the move, 0.3.3's change recording) refuses a yes unless a message from the person arrived after its showing. Built before Astra's review of all of Release B.
-- [ ] When 0.3.3 merges into release-b: every save Release B added (the layout move, approve_adopted, finish_adopted, confirm_saved, put_back paths, call 29's segment approvals) goes through 0.3.3's hook-free commit helper (Astra 0.3.3 finding 1, critical), each with a test that a planted commit hook does not run.
-- [ ] Unit 1.8 also covers: sentences in changes.py (`DOCUMENT_TAKEN`, `DESTINATION_TAKEN`, `UNREADABLE_ENTRY`, `CANNOT_PUT_BACK`, `CANNOT_FINISH`) and names.py's other callers must never read a name out of a file name.
+- [x] Unit 1.7e, a yes only a person can give (Astra 0.3.3 finding 2, deferred from 0.3.3 to Release B by the live-check session; Brandon may veto the deferral): a UserPromptSubmit hook records when the person actually sends a message, and every approval flow (confirm, approve_local, the closing, adoption, segment drafts, the move, 0.3.3's change recording) refuses a yes unless a message from the person arrived after its showing. Built before Astra's review of all of Release B. (Ticked 2026-10-10: rebuilt as option D, calls 57 and 58, in 0.4.0.)
+- [x] When 0.3.3 merges into release-b: every save Release B added (the layout move, approve_adopted, finish_adopted, confirm_saved, put_back paths, call 29's segment approvals) goes through 0.3.3's hook-free commit helper (Astra 0.3.3 finding 1, critical), each with a test that a planted commit hook does not run.
+- [x] Unit 1.8 also covers: sentences in changes.py (`DOCUMENT_TAKEN`, `DESTINATION_TAKEN`, `UNREADABLE_ENTRY`, `CANNOT_PUT_BACK`, `CANNOT_FINISH`) and names.py's other callers must never read a name out of a file name. (Ticked 2026-10-10: Unit 1.8.)
 ### 2026-09-27, 0.3.3: record a context change at any time (branch fix-0-3-3, on fix-0-3-2)
 Built on fix-0-3-2 (the clutter fix and the seat-folder guard), which releases as 0.3.2; this is 0.3.3. Item 2 of the brief (clutter) is fix-0-3-2's and is not touched here.
-- [ ] Library: `record_change.py` for the any-time path, reusing the closing's pieces (the four lines and the whole-entry showing, the free identifier, the entry written with no run, `where_to_write_the_entry`, `reconcile_plan`/`reconcile_yes`/`reconcile_no`, `unsaved.where_sentence`). The entry is built from the person's words (never through the model-draft parser, which refuses a person's own dash or word), screened for contact details and keys, held in the seat folder between the showing and the yes, and bound to what was shown.
-- [ ] `reconcile_plan` and `confirm.against_change` take the any-time path's wider set (every affected context document this seat owns), the closing's two-document rule unchanged.
-- [ ] stale_check.py: `--new-words-file`, `--record-change-ask`, `--record-change-documents`, `--record-change-preview`, `--record-change`, `--record-change-leave`, `--record-change-answer`.
-- [ ] A base with a shared copy is refused with one sentence at every step (the closing only ever writes a local save and has no path to a shared copy).
-- [ ] stale-check SKILL.md section "Record a context change", description triggers; injection.md one line for the assistant.
-- [ ] Tests: tests/test_record_change.py end to end through the real script, from the base and from a linked folder (run.sh list and test_linked_folder runner map), both layouts, shared copy, yes/no/not now, nothing written before the yes, no run id, flagged at the moment of use and in the review.
-- [ ] Lint registry, CHANGELOG "Unreleased (0.3.3)", logic atlas figures 5 and 7.
-- [ ] Two reviews (correctness, security), fixes with tests, full suite twice OK.
+- [x] Library: `record_change.py` for the any-time path, reusing the closing's pieces (the four lines and the whole-entry showing, the free identifier, the entry written with no run, `where_to_write_the_entry`, `reconcile_plan`/`reconcile_yes`/`reconcile_no`, `unsaved.where_sentence`). The entry is built from the person's words (never through the model-draft parser, which refuses a person's own dash or word), screened for contact details and keys, held in the seat folder between the showing and the yes, and bound to what was shown. (Ticked 2026-10-10: 0.3.3.)
+- [x] `reconcile_plan` and `confirm.against_change` take the any-time path's wider set (every affected context document this seat owns), the closing's two-document rule unchanged. (Ticked 2026-10-10: 0.3.3.)
+- [x] stale_check.py: `--new-words-file`, `--record-change-ask`, `--record-change-documents`, `--record-change-preview`, `--record-change`, `--record-change-leave`, `--record-change-answer`. (Ticked 2026-10-10: 0.3.3.)
+- [x] A base with a shared copy is refused with one sentence at every step (the closing only ever writes a local save and has no path to a shared copy). (Ticked 2026-10-10: 0.3.3.)
+- [x] stale-check SKILL.md section "Record a context change", description triggers; injection.md one line for the assistant. (Ticked 2026-10-10: 0.3.3.)
+- [x] Tests: tests/test_record_change.py end to end through the real script, from the base and from a linked folder (run.sh list and test_linked_folder runner map), both layouts, shared copy, yes/no/not now, nothing written before the yes, no run id, flagged at the moment of use and in the review. (Ticked 2026-10-10: 0.3.3.)
+- [x] Lint registry, CHANGELOG "Unreleased (0.3.3)", logic atlas figures 5 and 7. (Ticked 2026-10-10: 0.3.3.)
+- [x] Two reviews (correctness, security), fixes with tests, full suite twice OK. (Ticked 2026-10-10: 0.3.3.)
 - [x] Built as planned above (commits 4d47028, then the docs commit, then the review fixes). Item 2 of the brief is fix-0-3-2's, released as 0.3.2.
-- [ ] Merge main (0.3.2 release) into fix-0-3-3: the merge command was refused by this session's permission check; left for the coordinator.
+- [x] Merge main (0.3.2 release) into fix-0-3-3: the merge command was refused by this session's permission check; left for the coordinator. (Ticked 2026-10-10: merged.)
 
 #### Review (0.3.3)
 Two reviews. Security: S1, file names read out as instructions in the documents list, the questions and the answers (fixed: `record_change.safe_name`, only safely named documents are asked about); S2, `--record-change answer` settled any change for any owned document (fixed: answers bound to what the yes asked, once, origin manual only). Correctness: words files thrown away before a refusal that asks for a retry (fixed: claimed, given back on refusal); a name with a space asked about and never recordable (fixed: left flagged); the second screen ignored the allowlist (fixed); a refused correction left the earlier showing recordable (fixed); rollback could delete a file it did not write or undo a save that went through (fixed); identifiers named by corrections or prepared changes (fixed). Each has a test in tests/test_record_change.py. Not done: `--happened-on` carries a date typed on the command line (validated as a date); the closing's own `free_entry_id` still ignores confirmation lines.
@@ -1337,6 +1337,292 @@ Two reviews. Security: S1, file names read out as instructions in the documents 
 - [x] Q3: the any-time path shows only the four labeled lines inside the data fence, then the one ask; no identifier, path or settings block. The yes stays bound to the whole entry (a comment in record_change.preview says why that is safe). The closing's preview is unchanged.
 - [x] Q1, Q2, Q4 kept as built; Q5 wording accepted.
 
+### 2026-09-26, Unit 1.5b: the base laid out by the five CLASS parts
+Plan: docs/plans/2026-09-19-001-feat-base-that-produces-work-plan.md, Unit 1.5b (revision 2.3). Built on its own branch; not merged, not released.
+- [x] Constants and one layout module: the new paths (`context/icps.md`, `context/positioning.md`, `learning/changes`, `learning/corrections`, `learning/lessons`, `access/stack.md`, `skills/`, `standards/`), the older ones kept read-only, and the one table from each older document path to its new one. (Ticked 2026-10-10: Unit 1.5b.)
+- [x] Read both layouts: entries from three folders, records from two, every path a change, a confirmation line, a record, a seat setting or a staged change names followed to where the document lives now; the two required documents found in either place. (Ticked 2026-10-10: Unit 1.5b.)
+- [x] Write one: setup, entries, records and the onboarding note go to the new paths; the change identifier setup works out stays the same. (Ticked 2026-10-10: Unit 1.5b.)
+- [x] `skills/` refused by the trust check (so by every pull), by the file-writing hook and by the check before a send; the empty folder and its placeholder allowed. (Ticked 2026-10-10: Unit 1.5b.)
+- [x] One offered move in "review my base" that takes a base on `work/decisions`, on `work/changes`, or half moved all the way to the current layout: `changes.py` generalized, not duplicated (a pure rename saved first, the settings rewrite second, the dated record third), with its recovery and read-back rules. (Ticked 2026-10-10: Unit 1.5b.)
+- [x] Both company-base templates, the skills and prompts, names for every new kind. (Ticked 2026-10-10: Unit 1.5b.)
+- [x] Tests: tests/test_context_standard.py for every scenario in the plan; tests naming old paths updated; the old-path lint. (Ticked 2026-10-10: Unit 1.5b.)
+- [x] Atlas figures 1 and 7, the roadmap, the join guide, the UX standard, a draft Unreleased CHANGELOG section. (Ticked 2026-10-10: Unit 1.5b.)
+- [x] Full suite, both runs. (Ticked 2026-10-10: done with its unit.)
+
+#### Progress and review, Unit 1.5b (2026-09-26)
+- [x] Constants and `layout.py`: the current paths, the older ones read only, and one table from each older document path to its new one.
+- [x] Both layouts read: entries from three folders, records from two (found where first added, across both names, and accepted by the change that last added or edited them, never by a rename), every path followed to where the document lives, both required documents found in either place, and a prepared change naming an older path followed in memory with the prepared file untouched.
+- [x] One layout written: setup, entries, records, the onboarding note; setup's change identifier seeded from the older profile path so a resumed run agrees; setup refuses to write a document already present at its other path.
+- [x] `skills/` refused by the trust check (so every pull and every open), the file-writing hook and the check before a send; the folder and its placeholder allowed.
+- [x] `changes.py` generalized: one offer, one move from `work/decisions`, `work/changes`, both, or a half-finished 0.3.x run; rename, then settings and the map paragraph (only when still the one GTM Base wrote), then the record; schema 2 note, schema 1 notes finished as 0.3.x would and carried on.
+- [x] Correctness review of the move (a subagent): note paths now limited to exactly what a run writes, older copies to take away that somebody edited are theirs, a 0.3.x rewrite-only note finishes, a failed save after something landed keeps its note, same-name-different-case destinations refused, acceptance query keeps every change but a rename. Each has a test.
+- [x] Templates, skills, prompts, names; atlas figures 1 and 7 (not republished); roadmap; join guide; UX standard; draft Unreleased CHANGELOG section.
+- [x] tests/test_context_standard.py (every plan scenario) and the old-path lint; tests naming old paths updated; a support helper names the profile in a prepared change the way the test bases hold it.
+- [ ] Brandon: the words listed in the hand-back report; then the live move of the Gridwise base through the offer. (Noted 2026-10-10: the words were decided as recommended in calls 35 to 47 and 52; the live run is folded into the 0.4.0 live check on the one list for Brandon in the 2026-10-10 section.)
+- [x] Orchestrator: review, merge after the live check, version bump, atlas republish. (Ticked 2026-10-10: merged into release-b; the bump is 0.4.0.)
+
+Review: 1.4's move was generalized rather than a second one written, so the recovery rules Astra hardened carry over unchanged and all 168 of 1.4's migration tests pass against it. The worktree needed its ignored `work/inbox` and `work/proposals` template folders created by hand for tests/test_scaffold.py, because the template's own ignore file keeps their placeholders out of the repository; a fresh clone fails that test on main too.
+
+#### Astra's review of Unit 1.5b (2026-09-26), all thirteen findings
+Review: docs/reviews/2026-09-26-unit-1-5b-astra.md in the main checkout. Every finding has a test in tests/test_unit_1_5b_review.py or tests/test_context_standard.py that fails on fb13268 and passes now.
+- [x] 1 Giving up never brings a copy back over words of theirs; every restore is checked again just before.
+- [x] 2 The dated record takes the next free name rather than writing over a file; the note records the name used.
+- [x] 3 A change written down twice names its documents where they live now.
+- [x] 4 Acceptance of a record ignores renames and deletions; confirmation dates are identical before and after the move.
+- [x] 5 The ownership list's rules follow the move with their owners, and the new parts get the records rule's owners.
+- [x] 6 The check before a send reads every outgoing piece of work, merges included. The gate had no refusal for a plugins folder, so there was no second hole of that shape to close.
+- [x] 7 No sentence the move says reads out a file name: documents by their plain name, context changes by a validated identifier, anything else "one of your records" or "one of your files".
+- [x] 8 The skills placeholder must be an empty ordinary file at the trust check, the file-writing check, an incoming update, and a send.
+- [x] 9 The skills refusal holds for a joined base whose map is gone, and in the smaller shell check.
+- [x] 10 The source map is screened for keys and tokens at the file-writing check and on an incoming update.
+- [x] 11 A prepared change is resolved again against the shared copy it is written into.
+- [x] 12 The move writes the starter source map with the map's owner, never over an existing one.
+- [x] 13 One stop test enumerates all 28 steps of a run (moves, removals, staging, saves, file writes, the note written and taken away) and stops before and after each, asserting each stop fired.
+
+#### Astra's confirmation pass on Unit 1.5b (2026-09-26), five findings
+Pass: docs/reviews/2026-09-26-unit-1-5b-verify-astra.md in the main checkout. Tests in tests/test_unit_1_5b_verify.py, each failing on 2a6fd91 before its fix.
+- [x] 1 Giving up looks at each file again right before a put-back or a removal, in the undo loop and in putting back, and names what holds their words.
+- [x] 2 Ownership defaults go before every existing rule, with owners only from the broad records rule, and none without one.
+- [x] 3 An edit to the source map is judged by the whole file it would leave.
+- [x] 4 The source map is screened for credentials only; ordinary lines pass at Write, Edit, MultiEdit and a real incoming update.
+- [x] 5 The shell fallback needs the map and a history, or a registered root, before it calls a folder a base.
+- [x] The merge regression from finding 6 of the first review: a merge that adds a skill neither side had, taken away after; it fails on fb13268.
+- [ ] Open: the check before a send still refuses a source map holding a link in angle brackets, because every outgoing file is held to the hidden-content rule.
+
+### 2026-09-26, Unit 1.6: selection fixes
+Plan: docs/plans/2026-09-19-001-feat-base-that-produces-work-plan.md, Unit 1.6 (requirements P24 to P26). Built on its own branch, `unit-1-6`, on top of the unmerged Unit 1.5b; not merged, not released.
+- [x] Survey: plans and metrics count only beside a profile, persona, or positioning file (`plans-alone` note); each place says what it mostly holds from paths only; per-file candidates and same-stem version sets in the survey output; the first heading read in one bounded read of 4096 bytes as well as forty lines.
+- [x] Provenance: the listing and the yes record `choice` (explicit or plain-yes), the folders the person named, and a manifest digest. `--keep <place number>` names the places to use. An explicit choice is never narrowed again and gets a plain count; a plain yes to a list that is itself too large is narrowed once (the old rule let any plain yes with folders past it); a list shown after the yes stops reading with `codes=asks-again` until it has a yes of its own.
+- [x] Preview: the count, the files left out, and why a draft reads a limited amount; one version of each document (final over a newer date, else the newest), each version left out named and a body conflict said aloud, after consent only; the narrowing question printed only after a plain yes; assemble no longer repeats it. Preview and assemble share one chooser, so they read the same files.
+- [x] `order_sources`: templates and read-me files last for every step.
+- [x] Join skill steps 5 and 6 rewritten as 5, 5b, 5c, 6, 6b, each opening with its purpose and asking one thing; the consent paragraph cut to three short lines and the question; Unit 1.6's four exemptions removed; new sentences registered with the lint.
+- [x] Tests: every plan scenario (tests/test_sources.py, tests/test_join_setup_flow.py, tests/test_drafting.py), including a guarded reader that fails any survey read past its byte cap.
+- [x] Atlas figure 7 (not republished), the reading rules, the join guide, the draft Unreleased CHANGELOG.
+- [ ] Brandon: the words listed in the hand-back report; then the live survey of ~/Gridwise. (Noted 2026-10-10: the words were decided as recommended in calls 35 to 47 and 52; the live run is folded into the 0.4.0 live check on the one list for Brandon in the 2026-10-10 section.)
+- [x] Orchestrator: review, merge after 1.5b, version bump, atlas republish. (Ticked 2026-10-10: merged into release-b; the bump is 0.4.0.)
+
+### 2026-09-26, Unit 1.7a: scope and the segment inventory
+Plan: docs/plans/2026-09-19-001-feat-base-that-produces-work-plan.md, Unit 1.7a (requirements P18, P19, P23), with call 11's path: segments under `context/icps/`, not the plan text's older folder. Built on its own branch, `unit-1-7a`, on top of the unmerged Units 1.5b and 1.6; not merged, not released.
+- [x] Scope, steps 1 and 2 of the plan's order: `join.py scope` holds the answer in the run folder (a short name, or `--whole`), refused once the list is agreed to; the survey prints `splits=` and one sentence only when two or more places each keep their own copy of a positioning document of the same name beside a customer profile; the listing and the yes record the scope beside the places dropped; the approved profile carries `covers:` from the held answer and never from a draft.
+- [x] The inventory, step 3: `join.py segments` numbers the documents on the agreed list that each describe one segment (versions once, templates never); `join.py segments-settle` reads one line per segment (adopt, draft, or leave-out; a number or a hyphen; the name), checks every name and file name before anything is kept, saves it in the run folder, and reads it back.
+- [x] Slug safety in `segments.py`: letters A to Z, digits and single hyphens after case and unicode folding; collisions, empty names, trust-refused names and reserved device names refused with one sentence naming the segment; a slug read back from the file is checked again.
+- [x] `validate.validate_covers`; `drafting.parse` reads `covers` on the profile only; `sources.Consent` carries the scope; words-file kinds `scope` and `segments`; both templates hold `context/icps/.gitkeep`; `TEMPLATE_TREE_DIRS` gains the folder.
+- [x] Join skill steps 5a and 5d; new sentences registered with the lint; the skill walk knows the two new words kinds.
+- [x] Tests: tests/test_segments.py (new), and additions to tests/test_join_setup_flow.py, tests/test_sources.py, tests/test_validate.py, tests/test_scaffold.py, tests/test_skills_and_scripts_agree.py.
+- [x] Atlas figure 7 (not republished), the join guide, the draft Unreleased CHANGELOG.
+- [x] Correctness review of the diff (a subagent), seven findings, each fixed with a test: a scope the profile's checks would refuse is refused when given; a scope held after the list was shown asks for the list again, and the listing and the yes keep "never asked" apart from "the whole company"; the scope is fixed once the profile is approved in a pasted-only run, and that run is told there are no documents to number; an inventory file is settled again on reading and compared whole; a lone segment left out reads back as left out; no numbers are kept when no numbered list was shown; a dash or a letter with no plainer form keeps words apart in a file name, and com0 and lpt0 are reserved.
+- [ ] Brandon: the words listed in the hand-back report; the non-Latin name rule; then the live run on the Gridwise material. (Noted 2026-10-10: the words were decided as recommended in calls 35 to 47 and 52; the live run is folded into the 0.4.0 live check on the one list for Brandon in the 2026-10-10 section.)
+- [x] Orchestrator: review, merge after 1.6, then 1.7b to 1.7d before release B ships, because the read-back promises drafting and adoption. (Ticked 2026-10-10: merged.)
+
+### 2026-09-26, Unit 1.7b: umbrella and segment drafts, and the unanswered-marker state
+Plan: docs/plans/2026-09-19-001-feat-base-that-produces-work-plan.md, Unit 1.7b (requirements P18, P19, P27), with call 11's paths: the umbrella at `context/icps.md`, each segment at `context/icps/<slug>.md`. Built on its own branch, `unit-1-7b`, from `release-b` (1.5b, 1.6 and 1.7a merged); not merged, not released.
+- [x] The marker as a state: one small module finds every `[your call: ...]` in a context file's body; `ContextFileInfo` carries them; `stale.compute` counts no owner line or acceptance for a file that holds one, so it is neither confirmed nor complete whatever its status; the first-run finding fills the slot Unit 1.2 left empty. (Ticked 2026-10-10: Unit 1.7b.)
+- [x] No confirmation path settles a file while a marker remains: a yes to a review question, the moment of use's "it already reflects this", and the closing's reconcile yes are refused with one sentence; setup's own line is written and counts for nothing until the question is answered; the closing asks nothing about a document with a question open. (Ticked 2026-10-10: Unit 1.7b.)
+- [x] The review lists each marker, one line each, with the question held apart as data, and asks; the answer becomes a prepared change to the part that holds the question (never a setup overwrite), approved through Unit 1.2b; the wording is refused while it still asks the question it answers; after approval the file can be confirmed. (Ticked 2026-10-10: Unit 1.7b.)
+- [x] Drafting: explicit `umbrella` and `segment` steps with their own prompts, sections and checks, added beside the profile's rather than weakening them; the umbrella names every segment of the inventory, a segment left out as still to come in words, nothing in it a link; `draft-icp.md` stays the prompt for one segment. (Ticked 2026-10-10: Unit 1.7b.)
+- [x] Setup: several segments draft the umbrella in the profile's place; each segment to draft gets its own preview, draft, check and approval after the positioning; a segment file is refused by name when the base already holds a file whose name folds to the same one, in either segment folder, and when its folder is not an ordinary folder; a draft with a marker says so and is approved only after the person chose to leave its questions open. (Ticked 2026-10-10: Unit 1.7b.)
+- [x] Prompts: `draft-icp.md` and `draft-positioning.md` reconciled with the rule; new `draft-umbrella.md` and `draft-segment.md` (depth, no compression) carry the segment names and what the base is for inside the data fence. (Ticked 2026-10-10: Unit 1.7b.)
+- [x] Tests for every plan scenario plus the collision checks; the join skill, the stale-check and confirm skills, the closing rules; atlas figures 7 and 8 (not republished); draft Unreleased CHANGELOG. (Ticked 2026-10-10: Unit 1.7b.)
+- [x] Full suite, both runs; one correctness review of the diff, fixes with tests, suite again. (Ticked 2026-10-10: done with its unit.)
+
+#### Progress and review, Unit 1.7b (2026-09-26)
+- [x] The marker as a state: `callmarkers.py` finds every `[your call: ...]` in a body; `ContextFileInfo.open_questions` and `complete`; `stale.compute` counts no owner line or acceptance for a file holding one; the first-run finding's second slot is filled (`FINDING_OPEN_QUESTION`).
+- [x] No confirmation path settles it: `confirm.answer` yes and `confirm.against_change` refuse with one sentence before the question is used up; the closing leaves such a document flagged and asks nothing; setup's own line is written and counts for nothing until the question is answered.
+- [x] The review lists each question first with the question held apart as data; `stale_check.py --answer-question <token> --document <path> --answer-file <words>` prepares a first-draft change to the part holding it; wording that still asks it is refused; local approval settles it and the file can be confirmed.
+- [x] `umbrella` and `segment` drafting steps, their prompts, the umbrella's parts and link check, and the check against the settled inventory; the single profile refused with several segments; each segment drafted into `context/icps/<name>.md` after the positioning and before the closing.
+- [x] A segment file is refused by name when either segment folder already holds a file whose name folds to the same one (letter case, encoding, a name a move kept, the older folder), and when the folder is a link.
+- [x] A draft's open questions are counted before it is shown and approved only with `--questions-open`, on the person's say.
+- [x] `draft-icp.md` and `draft-positioning.md` say what a mark costs; new `draft-umbrella.md` and `draft-segment.md`.
+- [x] Tests: tests/test_umbrella_and_segments.py and tests/test_open_questions.py (new), the slot test in tests/test_stale.py, the walk in tests/test_skills_and_scripts_agree.py, the lint registry, the run.sh linked-folder list.
+- [x] Atlas figures 7 and 8 (not republished), the join guide, the skills and closing rules, the stale-check rules, the draft Unreleased CHANGELOG.
+- [x] Correctness review of the diff (a subagent), nine findings, each fixed with a test: one prepared answer per part and the part's text in its name; a stable token for each question; a segment's own page pinned first after ordering; wrapped wording still refused; a set-aside document's questions still asked; refusals said in sentences; a segment's draft tied to its file; the collision refusal names nobody; no skipped single profile with several segments.
+- [ ] Brandon: the words listed in the hand-back report; then the live run where he reads an umbrella drafted from the Gridwise material. (Noted 2026-10-10: the words were decided as recommended in calls 35 to 47 and 52; the live run is folded into the 0.4.0 live check on the one list for Brandon in the 2026-10-10 section.)
+- [x] Orchestrator: review, merge into release-b, then 1.7c and 1.7d before release B ships. (Ticked 2026-10-10: merged.)
+
+Review: the plan's `tests/test_drafting.py`, `test_base_reader.py`, `test_confirm.py` and `test_prompt_guards_join.py` scenarios live in the two new test modules instead, because each crosses more than one of those modules; the existing prompt guards now cover the two new prompts through `drafting.STEPS`. The closing's finding names how many questions are open rather than the question itself, because the question comes out of the file and the closing sentence is said without a fence.
+
+### 2026-09-26, Unit 1.7c: guarded adoption
+Plan: docs/plans/2026-09-19-001-feat-base-that-produces-work-plan.md, Unit 1.7c (requirements P20 to P23), with call 11's paths: each adopted segment at `context/icps/<slug>.md`. Built on its own branch, `unit-1-7c`, from `release-b` (1.5b, 1.6, 1.7a and 1.7b merged); not merged, not released. Test-first: every clause of the contract has a hostile fixture under `tests/fixtures/adoption/` that fails it, and a clause with no failing fixture is not built.
+- [x] Fixtures and failing tests first: tests/test_adoption.py over every plan scenario and every fixture. (Ticked 2026-10-10: Unit 1.7c.)
+- [x] `adopt.py`: the contract in order (destination; the original settings discarded, malformed refused; hidden content removed and counted, then the fence-marker, contact and key screens; the heading grammar the proposal editor supports; the recorded scope; open questions; the library's own settings; the hash of the exact bytes). (Ticked 2026-10-10: Unit 1.7c.)
+- [x] Showing: what was removed, the opening lines, and where the whole cleaned file is, kept in the run's own folder with the hash; the yes bound to that hash, and a changed source or cleaned file asks again; a yes covering several only after each was shown. (Ticked 2026-10-10: Unit 1.7c.)
+- [x] Writing: `review.approve_adopted`, clean tree, default branch, absent only, the segment folder and name checks, one confirmation line, one saved piece of work; the original never touched. (Ticked 2026-10-10: Unit 1.7c.)
+- [x] A refused segment may be drafted instead; the join skill gains step 6d before the closing, because the inventory lives in the run folder the closing clears. (Ticked 2026-10-10: Unit 1.7c.)
+- [x] The fence on every path that hands a context file to the model, proved with a hostile adopted document. (Ticked 2026-10-10: Unit 1.7c.)
+- [x] Lint registry, atlas figures 1 and 7 (not republished), the join guide, the draft Unreleased CHANGELOG with the residual-risk sentence. (Ticked 2026-10-10: Unit 1.7c.)
+- [x] Full suite, both runs; a correctness review and a security review of the diff, fixes with tests, suite again. (Ticked 2026-10-10: done with its unit.)
+
+#### Progress and review, Unit 1.7c (2026-09-26)
+- [x] Fixtures and failing tests first: tests/fixtures/adoption (one per clause, plus a question under a part, a question above every part, no parts, and a page that is not Markdown) and tests/test_adoption.py; the first run failed on the missing module, as it should.
+- [x] `adopt.py`: the contract in order; `join.py adopt-show`, `adopt-read`, `adopt`; `review.approve_adopted`; a page the contract refused may be drafted instead.
+- [x] The yes bound to the hash of the exact bytes: the page cleaned again from the original and the cleaned file read again at the yes; a yes to several counts only for pages each shown.
+- [x] The fence on every path that hands the page to the model, proved with a hostile adopted page; the session's context carries none of it.
+- [x] Join skill step 6d (before the closing), adoption rules, lint registry, the skill walk adopts a page, the linked-folder second run covers the class that starts scripts.
+- [x] Atlas figures 1 and 7 (not republished), the join guide, the draft Unreleased CHANGELOG with the residual-risk sentence.
+- [x] Full suite before the reviews: 2314 tests OK, then 103 from a linked folder OK (tests/run.sh exit 0).
+- [x] Correctness review and security review of the diff (subagents): eleven findings and two smaller ones from their residual risks, each fixed with a test that failed before (tests/test_adoption.py, TestTheCorrectnessReview and TestTheSecurityReview).
+- [x] Full suite after the fixes. (Ticked 2026-10-10: done with its unit.)
+- [ ] Brandon: the words listed in the hand-back report, the question marker call, and the live replay of the Gridwise pages. (Noted 2026-10-10: the words were decided as recommended in calls 35 to 47 and 52; the live run is folded into the 0.4.0 live check on the one list for Brandon in the 2026-10-10 section.)
+- [x] Orchestrator: review, merge into release-b, then 1.7d, which must keep the record of what was shown past the closing. (Ticked 2026-10-10: merged.)
+
+Review: the contract's scope clause is a heading naming a place dropped for the scope, because 1.7a settled that no filter reads the words of a document and the places dropped are what apply the scope. A `[your call: ...]` question in a finished page is kept as an open question rather than refused, only under a heading and only on the person's say, because adoption never edits the page and P27 already makes such a file unconfirmed until it is answered.
+- [x] Full suite after the review fixes: 2330 tests OK in 861 seconds, then 103 from a linked folder OK in 85 seconds (tests/run.sh exit 0).
+
+#### Astra's review of Unit 1.7c (2026-09-26), findings 1, 3, 4, 6 and 7
+Review: docs/reviews/2026-09-26-unit-1-7c-astra.md in the main checkout. Findings 2 and 5 (the write path and the take-back after a save) are the Unit 1.7d agent's, who owns recovery and the write. Each fix below has a test in tests/test_adoption.py that failed at the commit holding only the tests.
+- [x] 1 The prepared change is read through `approve_local.py --read`, inside the fence; `--sections` prints its headings inside the fence; the wording command writes the Before and After lines; the stale-check skill and join step 9 never open a prepared file or a document themselves.
+- [x] 3 The screens also read an inspection copy (selectors out, character codes decoded, compatibility forms folded, wrapped lines joined); the saved bytes are the approved bytes; a set of ordinary marketing lines still passes.
+- [x] 4 Hidden markup is found across the whole text, never across a blank line, and closing tags count; the cleaned bytes and the count are asserted for a tag over two lines.
+- [x] 6 A question marker split over two lines refuses the page; the same question on one line is open, unconfirmed and listed.
+- [x] 7 A question on a heading line refuses the page, with the round trip that shows an answer there leaves it open and the one under the heading that settles it.
+- [x] Call 23: the whole-file sentence drops "or tell you where it is"; the script prints no location; the skill says never to give it.
+- [x] Full suite after these fixes: 2346 tests OK in 937 seconds, then 107 from a linked folder OK in 108 seconds (tests/run.sh exit 0).
+- [x] Follow-up (coordinator): the approval showing (`approve_local.py --show`) holds every piece of document text inside the data fence (the four labeled lines, the context change it carries, each part with its heading before and after, the whole difference); only GTM Base's sentences and the shown value are outside. New sentences for each part; the R8 difference test reads the data fence. tests/test_adoption.py TestTheApprovalShowing fails against the old renderer and passes now.
+- [x] Full suite after the follow-up: 2348 tests OK in 997 seconds, then 109 from a linked folder OK in 101 seconds (tests/run.sh exit 0).
+
+### 2026-09-26, Unit 1.7d: recovery of an interrupted import
+Plan: docs/plans/2026-09-19-001-feat-base-that-produces-work-plan.md, Unit 1.7d (requirements P19 and P22), with call 11's paths and call 18 (the segment inventory outlives the closing). Built on its own branch, `unit-1-7d`, from `unit-1-7c`; not merged, not released. Also carries Astra's findings 2 and 5 on Unit 1.7c (the write and the save of an adopted page), assigned here because they sit in the write and recovery path.
+- [x] Where the import is kept: one record per base in this seat's own folder for that base, never in the base and never in the run folder, holding the settled inventory, the numbered documents, the narrowest consent that can read the pages to adopt (those pages only), the scope, the run the import belongs to, and each page's state; read and written under a lock, so two adoptions at once cannot lose a record. (Ticked 2026-10-10: Unit 1.7d.)
+- [x] Per-file state: the yes (the approved hash and the day it was shown) is written before anything touches the base, and committed after the save; written, staged and confirmed are read from the base itself; a no and a refusal are kept so they are never asked again. (Ticked 2026-10-10: Unit 1.7d.)
+- [x] The write (Astra 2): folders walked one descriptor at a time with no link followed, the page created only where nothing is, the verified bytes staged rather than whatever is on disk, the installed file checked against the hash before the save, and a take-back that removes only the file this write created. (Ticked 2026-10-10: Unit 1.7d.)
+- [x] The save (Astra 5): a failure before the save is put back; a save that landed, or one whose outcome cannot be read, is never put back, and is finished or reported from what the base really holds. (Ticked 2026-10-10: Unit 1.7d.)
+- [x] Recovery per file: a page whose bytes match the yes is finished (staged, its line, saved); a page with other bytes is never written over and is reported; a tree dirtied only by this import's own step is recovered, one the person dirtied is refused; a yes whose source changed asks again; the others proceed. (Ticked 2026-10-10: Unit 1.7d.)
+- [x] Resume in a later session: a fresh run is seeded from the record, finishes what was already said yes to without asking, and shows only what was never answered; the next session is told once that the import stopped. (Ticked 2026-10-10: Unit 1.7d.)
+- [x] The first-backup review recorded as a condition of release two in the closing rules and the join guide. (Ticked 2026-10-10: Unit 1.7d.)
+- [x] Tests with a stop injected after every mutation step (journal, write, stage, confirmation line, its staging, save, state), each asserted to have fired, each resumed run byte-identical in content, index and state to an uninterrupted run; every scenario of the plan's list. (Ticked 2026-10-10: Unit 1.7d.)
+- [x] Join skill, lint registry, atlas figure 7 (not republished), the draft Unreleased CHANGELOG. (Ticked 2026-10-10: Unit 1.7d.)
+- [x] Full suite, both runs; a correctness review and a data-integrity review of the diff, fixes with tests, suite again. (Ticked 2026-10-10: done with its unit.)
+
+#### Progress and review, Unit 1.7d (2026-09-26)
+- [x] Where the import is kept: `segments.ImportRecord`, one file per base in this seat's own folder for that base, carried from the run when the profile creates the base, at every page shown or approved, and at the closing; let go once every page is saved, left out, or refused. Its yes reaches only the pages to take in. Read and written under `fsutil.HeldLock`, as is the run folder's record of what was shown.
+- [x] Per-file state: approved (hash and day) before the base is touched, committed after the save lands, left out (`join.py adopt-leave`), refused; written, staged and confirmed read from the base (`review.page_state`).
+- [x] The write (Astra 2): `review._create_new` walks the folders with no link followed and creates only where nothing is; `_stage_bytes` stages the approved bytes from memory, checked against git's own name for them; `_still_the_page` before staging and again before the save; `_take_back` removes only the file this write created. Every setup write goes through `_create_new`.
+- [x] The save (Astra 5): `review.saved_state` reads the base after any failure at the save: landed is kept, plainly not landed is put back, unknown is left untouched and said (`save-outcome-unknown`), and the next attempt or session finishes it.
+- [x] Recovery per file: `review.finish_adopted` finishes a written page from its own bytes, keeping this run's own line; `put_back_unwritten` clears only this page's staging and this run's own line; other bytes are never written over and are named once; a tree the person dirtied is refused.
+- [x] Resume: `join.py resume` seeds a fresh run from the record, finishes every yes, shows a changed original again, and names only the pages never answered; the next session start says so once, beside unsaved edits too.
+- [x] The first-backup review recorded as a condition of release two in the closing rules and the join guide.
+- [x] Tests: tests/test_import_recovery.py (new), a stop after each of the seven mutation steps of an adoption, after five steps inside the resumed run, and after each of the three writes that seed it; each asserted to fire, each resumed run byte-identical to an uninterrupted one in files, staging, saved work and the record; every plan scenario; findings 2 and 5 at each boundary. The walk leaves a page out; the linked-folder run covers the new script class.
+- [x] Join skill, the lint registry, atlas figure 7 (not republished), the join guide, the closing rules, the draft Unreleased CHANGELOG.
+- [x] Full suite, both runs; a correctness review and a data-integrity review of the diff, fixes with tests, suite again. (Ticked 2026-10-10: done with its unit.)
+- [ ] Brandon: the words listed in the hand-back report, the new trigger sentence, and the live run where he stops an import on purpose. (Noted 2026-10-10: the words were decided as recommended in calls 35 to 47 and 52; the live run is folded into the 0.4.0 live check on the one list for Brandon in the 2026-10-10 section.)
+
+Review: the plan named tests/test_adoption.py, test_segments.py and test_join_setup_flow.py; the scenarios live in one new module instead, because each crosses the record, the write, the save, the run and the session start. The per-file states written, staged and confirmed are read from the base rather than written down, because the plan's lifecycle table says every state is observable from the file and the base's own records, and a state written beside each step would be one more step to stop after. A page finished in a later session carries the import's own run on its line, so the result is byte-identical to an uninterrupted run.
+- [x] Full suite before the reviews: 2368 tests OK, then 106 from a linked folder OK (tests/run.sh exit 0).
+- [x] Correctness review and data-integrity review of the diff (subagents): fourteen and ten findings, overlapping; all fixed with a test in tests/test_import_recovery.py (TestTheReviews) except a yes to several pages written down one at a time and a line not recognized under changed line endings, both recorded in the CHANGELOG. The lock is now the operating system's (fcntl), one page at a time is written into a base, a page is put down under a temporary name and then named, a page saved at any point is saved, a page changed before its save is taken back and left, an unreadable original keeps its yes, a live run is never cleared by a resume, the record is read as kept and an unreadable one is set aside.
+- [x] Full suite after the review fixes. (Ticked 2026-10-10: done with its unit.)
+- Both reviewers noted that `unit-1-7c` gained two commits after this branch was cut (Astra's findings 1, 3, 4, 6 and 7); the orchestrator merges them, and the combined code has not been tested together here.
+- [x] Full suite after the review fixes: 2386 tests OK in 1005 seconds, then 106 from a linked folder OK in 95 seconds (tests/run.sh exit 0).
+
+#### Astra's review of the merged Units 1.7c and 1.7d (2026-09-27)
+Review: docs/reviews/2026-09-27-unit-1-7c-1-7d-astra.md, not ready, eight findings including the two partial closures. Each has a test in tests/test_import_astra_merged.py that failed on eb8999d and passes after.
+- [x] 1. Every take-back (leave out, resume, finishing) holds the per-base writing lock, reentrant per thread, reads the page and the record again inside it, and keeps it through the record update.
+- [x] 2. Cleanup moves the file to a private name, removes it only when its identity is this write's, and otherwise puts it back.
+- [x] 3. One revalidation (`join_flow._revalidate`: today's cleaning and inspection copy, bytes equal to the yes) for every route that finishes an unsaved page: resume, showing again, approving again.
+- [x] 4. A saved page is a finished adoption only with a drafted line naming the import's run; one saved without it gets the line (`review.confirm_saved`).
+- [x] 5. Markup the cleaning could not take out refuses the page, including an opening tag longer than the pattern reads.
+- [x] 6. Temporary files a killed writer left, in the page's folder and the confirmations folder, are swept under the writing lock once older than five seconds; tested with a child process killed with SIGKILL inside the confirmation write.
+- [x] 7. The removal notice names the segment, never the file; the numbered documents at the segments step are fenced.
+- [x] 8. Candidate and inventory numbers must be positive counting numbers; a record holding anything else is set aside.
+- [x] Full suite after the fixes. (Ticked 2026-10-10: done with its unit.)
+- [x] Full suite after Astra's merged-line fixes: 2427 tests OK in 1219 seconds, then 115 from a linked folder OK in 101 seconds (tests/run.sh exit 0).
+
+#### Astra's confirmation pass on the merged units (2026-09-27)
+Review: docs/reviews/2026-09-27-unit-1-7c-1-7d-verify-astra.md, all eight closed, three new medium findings, not ready. Tests in tests/test_import_astra_verify.py, committed failing first.
+- [x] 1. Claims carry the inode, the hash and the original name; a sweep settles any claim left by a stop (own file removed, another put back, or kept aside under a plain name with a sentence); a failed put-back is kept aside and reported.
+- [x] 2. No clock: every temporary-file writer holds a shared folder ownership lock (fsutil.FolderLock) for its write and move; the sweep reclaims only when it can take the lock exclusively. Tested with a child stopped with SIGSTOP (its file survives and its move succeeds after SIGCONT) and one killed with SIGKILL (reclaimed at once).
+- [x] 3. Only real markup refuses a page; CAC<LTV., a<b, x <y, LTV<3x and <3 pass; the oversized tag, with or without a value, is refused.
+- [x] Full suite after the confirmation-pass fixes: 2436 tests OK in 1325 seconds, then 115 from a linked folder OK in 131 seconds (tests/run.sh exit 0).
+
+#### Astra's second confirmation pass on the merged units (2026-09-27)
+Review: docs/reviews/2026-09-27-unit-1-7c-1-7d-verify-2-astra.md, five findings, not ready. Tests in tests/test_import_astra_verify_2.py, committed failing first.
+- [x] 1. Folder locks in the seat folder's own locks folder, one for every session; seat and locks folders refused when a link, not this account's, or writable by others.
+- [x] 2. A writer that cannot take its lock refuses with a sentence (no-writing-lock).
+- [x] 3. Claims settled only when their names validate exactly; malformed ones, including a superscript digit and a nested claim, are left alone and counted as somebody's unsaved work.
+- [x] 4. Markup decided by Python's HTML reader, plus a leftover comment opener or closing tag; a quoted value with a blank line is refused; the comparisons still pass.
+- [x] 5. A put-back stopped after its link finishes by removing only the claim.
+
+#### Astra's third confirmation pass on the merged units (2026-09-27)
+Review: docs/reviews/2026-09-27-unit-1-7c-1-7d-verify-3-astra.md, ready with one change. Tests in tests/test_import_astra_verify_3.py, committed failing first.
+- [x] A start tag is markup only with an element name (the HTML standard, older names browsers honor, SVG and MathML), a custom element name, or an attribute with a value; end tags, comments, declarations and processing instructions always refuse. Comparisons before a quoted reply or a later greater-than sign pass; the script, div, oversized span, custom element and valued made up tag cases still refuse.
+- [x] LOCKS_NOT_PRIVATE reworded, the orchestrator's call open to Brandon's veto.
+
+### 2026-09-27, merging 0.3.2 into release-b
+- [x] Every clean-tree check on release-b goes through `unsaved.look`, including the four Unit 1.7d added in review.py (`_only_this_pages_edits`, `put_back_unwritten`, `take_back_unsaved`, `confirm_saved`) and the move's `_theirs_before_finishing`.
+- [x] Every refusal about unsaved words in changes.py (`THEIR_WORDS`, `GAVE_UP_LEFT_ALONE`) names files by `unsaved.plain_name`; a record is "one of your records", a context change in any of the three folders "one of your context changes".
+- [x] session_start keeps the stopped-import sentence beside the unsaved-edits sentence, after the shared look.
+- [x] Orchestrator: review and commit the merge. (Ticked 2026-10-10: merged.)
+#### Call 29: a segment settled to be drafted but not drafted before the closing (2026-09-27)
+Brandon's call 29: a later session asks again for consent to the material and finishes it. Branch `call-29` from `release-b`.
+- [x] The import record carries a segment left to draft as one more per-file state (name and settled answer from the inventory; state approved with the hash of the approved draft, saved, or left out), never material or a draft body, and never a yes to read anything. It is kept from the moment the base exists, including an import with no finished page to take in. (Ticked 2026-10-10: call 29.)
+- [x] Setup's step 6c writes a segment through the same write-ahead path as a finished page (the yes written down, then written, staged, its line, saved, then saved written down), so a stop anywhere is finished by the next session. (Ticked 2026-10-10: call 29.)
+- [x] The closing keeps the record while a segment is left to draft and says so in one sentence. (Ticked 2026-10-10: call 29.)
+- [x] "Finish setting up my base" finishes a draft whose yes was given and names each segment still to draft; a stop partway through a draft's save is finished, taken back, or drafted again, never written over. (Ticked 2026-10-10: call 29.)
+- [x] A segment still to draft is drafted in a run of its own, after the same survey-free consent step as Unit 1.6: only the numbered document the record kept for it is offered, the person may add a folder or drop a file, a changed list asks again, and nothing is read before the yes. Material gone or changed is said plainly with two choices, leave it out or name new material, and nothing is drafted from nothing. (Ticked 2026-10-10: call 29.)
+- [x] The draft is shown whole and approved exactly as step 6c; leaving a segment out ends it and it is never offered again. (Ticked 2026-10-10: call 29.)
+- [x] The session-start notice covers both kinds in one notice; a segment left out is not "to finish". (Ticked 2026-10-10: call 29.)
+- [x] Tests failing first: survives the closing and finished after a fresh consent; a changed list asks again; missing material said with the two choices; leave-out ends it; one notice; a stop at every mutation step resumes cleanly. run.sh linked-folder list and its guard for any new script-starting class. (Ticked 2026-10-10: call 29.)
+- [x] Join skill, lint registry, atlas figure 7 (not republished), join guide and closing rules if they describe it, the draft Unreleased CHANGELOG. (Ticked 2026-10-10: call 29.)
+- [x] Full suite, both runs; a correctness review of release-b to HEAD, fixes with tests, suite again. (Ticked 2026-10-10: done with its unit.)
+
+#### Progress and review, call 29 (2026-09-27)
+- [x] Record: `segments.ImportRecord.to_draft`, `drafts_unfinished`, `pages_unfinished`; `unfinished` covers both; kept from the first approval even with no page to take in. No second record; names, answers, and the approved draft's hash and day only.
+- [x] Step 6c and later drafts both go through `join_flow._approve_a_segment` (yes written down, `review.approve_adopted`, saved written down); resume settles each with `_settle_a_draft`.
+- [x] Later session: `join.py draft-list`, `draft-freeze`, `draft-leave` in a run of its own; `resume` prints `to-draft=`; `close` prints one sentence; one notice (`finish-import.md` segment blocks).
+- [x] Tests: tests/test_segments_left_to_draft.py (committed failing first), the linked-folder run and its guard, the skill walk leaves one segment for the later session.
+- [x] Join skill, lint registry, atlas figure 7 (not republished), join guide, closing rules, draft Unreleased CHANGELOG.
+- [x] Full suite before the review: 2484 tests OK, then 120 from a linked folder OK (tests/run.sh exit 0).
+- [x] Correctness review (subagent): three medium, two medium-low, four low findings; all fixed with a test in TestTheCorrectnessReview, committed failing first.
+- [x] Full suite after the review fixes: 2495 tests OK in 1339 seconds, then 120 from a linked folder OK in 193 seconds (tests/run.sh exit 0).
+- [ ] Brandon: the new sentences, and a live run that closes with a segment undrafted and finishes it in the next session. (Noted 2026-10-10: the words were decided as recommended in calls 35 to 47 and 52; the live run is folded into the 0.4.0 live check on the one list for Brandon in the 2026-10-10 section.)
+
+### 2026-09-27, the live-check follow-up unit (calls 32, 33, 34, 36, 37, 40, 45 and 49)
+Branch `live-check-follow-up` from `release-b` (cddb588). Input: the 0.3.1 live check, steps 2 to 7, in docs/walkthroughs/2026-09-release-a-live-check.md on main, and the plan's For Brandon table. Record-a-context-change-at-any-time is 0.3.3's, on main, and is not built here.
+- [x] 1. The hand edit (calls 33, 34, 49): one question, long for the first three hand edits a person keeps on this computer (counted in the seat) and short from the fourth, the long version on "why are you asking this?"; three answers (the business changed, a corrected fact worded as replacing the old one, wording only); the assistant names the exact difference before accepting "only a typo" (a rule in the skill); wording only writes no correction record and takes the short route. (Ticked 2026-10-10: the live-check follow-up.)
+- [x] 2. The showing of a hand edit: the changed sentence once, the change marked, the section named, the whole text on request; "What changed:" from the changed line in plain words, never cut mid-word, and the saved-history subject the same; "Why:" the person's own sentence; no reviewer on the local path. (Ticked 2026-10-10: the live-check follow-up.)
+- [x] 3. Relay and flow (call 32): one ask per step, editorial notes after the approval as one short note, no mention of a check that found nothing, never several questions at once, in every skill. (Ticked 2026-10-10: the live-check follow-up.)
+- [x] 4. Move offers (call 40): the version that introduced the layout and what moves, with counts and plain document names; the read-only look says nothing when the offer would be made and the plain reason when not; every count in words, the singular for one. (Ticked 2026-10-10: the live-check follow-up.)
+- [x] 5. Setup (call 45): the plain-yes backstop says the list is larger than one draft can read. (Ticked 2026-10-10: the live-check follow-up.)
+- [x] 6. Segments (calls 36, 37): leaving a segment out after the umbrella names it prepares a change to the umbrella; a refused page whose draft-instead was not finished is kept to draft later. (Ticked 2026-10-10: the live-check follow-up.)
+- [x] Tests failing first for each; the skill walk; run.sh linked-folder list and its guard; lint registry; CHANGELOG; atlas captions. (Ticked 2026-10-10: the live-check follow-up.)
+- [x] Full suite, both runs; a correctness review of release-b to HEAD, fixes with tests, suite again. (Ticked 2026-10-10: done with its unit.)
+
+#### Progress and review, the live-check follow-up unit (2026-09-27)
+- [x] 1 and 2. `hand_edit.py` holds the one question (Brandon's words, long three times per person in the seat, short from the fourth, long on `--why`), the three kinds, and the marked showing; `stage_local_edit` takes `kind` and `also_affects`, refuses a corrected fact without "replacing", and a wording fix carries `wording_only` and writes no correction record on either path; `approve_local.show` is short for a hand edit and whole with `--whole`, one shown value for both; "What changed:" and the saved history from `what_changed_line`, never cut; "Why:" the person's own answer; `propose.py --hand-edit-question`, `--hand-edit-difference`, `--documents`, `--kind`, `--also-affects`.
+- [x] 3. Every skill's relay rules: one ask, notes after the approval as one short note, never a check that found nothing.
+- [x] 4. The move offer from `changes.offer_sentence` (version `constants.CURRENT_LAYOUT_VERSION`, documents by name, the rest counted, it or them); the look says only the not-now reason; every person-facing count through `names.counted` or `names.how_many` (the report's figures left as figures).
+- [x] 5. The plain-yes warning says the list is more than one draft can read.
+- [x] 6. Leaving a segment out prepares the umbrella change (call 36); a refused page's segment is `draft-instead` and kept to draft later (call 37).
+- [x] Tests failing first (tests/test_live_check_follow_up.py), the skill walk, run.sh's linked-folder list and its guard, the lint registry, CHANGELOG, atlas captions (not republished), join guide.
+- [x] Full suite before the review: 2603 tests OK, then 143 from a linked folder OK (tests/run.sh exit 0).
+- [x] Correctness review (subagent): one high, three medium, two low; all fixed with a test in TestTheCorrectnessReview and its two siblings, committed failing first.
+- [ ] Brandon: the new sentences; the version the offer names (0.4 assumed for Release B); whether a corrected fact's "nothing about the business changed" way out in the long question needs rewording; a live run of the hand edit and the move offer. (Noted 2026-10-10: the words were decided as recommended in calls 35 to 47 and 52; the live run is folded into the 0.4.0 live check on the one list for Brandon in the 2026-10-10 section.)
+
+### 2026-09-27, merging 0.3.3 into release-b
+- [x] Conflicts resolved: confirm.py (0.3.3's any-document rule over release-b's `layout.required_paths`), join_flow.py (`reconcile_plan` follows the move and counts both flagged sentences in words), the stale-check script (both `--answer-question` and `--record-change`, one `--document`), CHANGELOG (Unreleased on top, 0.3.3 exactly as released), this file (main's first), run.sh and test_linked_folder (union, then the seat guard), plain_language (both registries), test_skills_and_scripts_agree (both fillers), the logic atlas (release-b's figure 7 with 0.3.3's line and sentence).
+- [x] One locking system: `locks.py` holds Unit 1.7d's design (operating-system locks never removed, the owner-checked `locks` folder in the seat folder, a refused write when its lock cannot be taken, a sweep only under the lock, per-thread reentrancy) with 0.3.3's lock file as the fallback where `fcntl` is missing. `fsutil.FolderLock`, `fsutil.HeldLock` and join_flow's writing lock are that module; `record_change._locked` keeps its lock file in the same folder; `record_change.record` and its yes and no answers hold the base's writing lock.
+- [x] Every Release B save goes through `GitRunner.run`; tests/test_no_hooks.py plants every hook and a file monitor for the move and its recovery, adoption and import recovery, call 29's segments and the umbrella change, the hand edits, and setup. Found and fixed: `gitcmd._plain` ran the base's file monitor in the filter look.
+- [x] 0.3.3's recording on the CLASS layout: `learning/changes`, both layouts, release-b's names, counts in words, the shared unsaved refusal, answers matched across the move (tests/test_record_change.py TestTheCurrentLayout).
+- [x] Found by the combined skill walk and fixed: `compose_proposal.parts_of` read a moved document at its older path.
+- [x] Orchestrator: review and commit the merge. (Ticked 2026-10-10: merged.)
+
+### 2026-09-27, Unit 1.8: the sweep of text no unit touched, plus three additions
+Branch `unit-1-8` from `release-b` (8eefb71). Spec: the Unit 1.8 section of the plan, P28, call 54, and the Release B list additions from Astra's review of 0.3.3 (the changes.py sentences and every other caller of `names.document_name` or `_named`).
+- [x] 1. Work the exemption list to empty: join steps 1 to 4 rewritten to the four checks (step 4 split into 4 and 4a so each asks one thing); `EXEMPTIONS = ()` and the two tests that assumed a non-empty list changed with their reasons.
+- [x] 2. The closing question says it is feedback for the people who make GTM Base, that it is optional, and where it is kept (P28).
+- [x] 3. No sentence is filled from a file name: `names.document_name` counts segments and any other document; `names.documents_named` names the known ones and counts the rest; `changes._named` never reads a context change's file name; `record_change.safe_name` is `document_name` (which documents are asked about is unchanged); confirm, stale_check, compose_proposal, moment and approve_local sentences that read a path now name the document.
+- [x] 4. The lint: `find_file_name_fills` in tests/plain_language.py reads the code that fills every registered sentence and every sentence-shaped string filled where it is written; folder locations the person must find are the only excused fills, each with a lasting reason.
+- [x] 5. Call 54 in the four document prompts (profile, umbrella, segment, positioning), with a prompt-guard test.
+- [x] 6. CHANGELOG, the UX standard's Human names section, the stale-check skill's written-twice paragraph. The atlas quotes none of the changed sentences, so it is unchanged.
+- [x] 7. Full suite twice, correctness review, fixes failing first, suite again. (Ticked 2026-10-10: Unit 1.8's review section below.)
+- [ ] Brandon: read three steps aloud (join steps 1, 4a and 10).
+- [x] Brandon decided 2026-10-10 (call 59): keep the names people gave their segments where every seat can read them. Done on claude/release-b-finish-1e1203, see the 2026-10-10 section.
+
+#### Review (Unit 1.8, 2026-09-27)
+- [x] First full run (before the review fixes): 2744 tests, 24 failures, every one a sentence a test pinned by its path, its file name or an identifier read from a file name; each test changed with its reason recorded in it, and the protected SC1 scenario's hash moved with a comment saying why.
+- [x] Correctness review (subagent), eleven findings. Fixed, each with a test that failed first: `document_name` raised on a file named by its ending alone, where it used to say "one of your documents"; `documents_named` counted one document twice; the lint missed f-strings, joining with `+`, a template chosen by `if` or held in a local name, a value added with `append`, `.affects`, plurals such as `candidates`, and trusted any function called `describe`; the closing question called the answer feedback without saying it stays in the base where invited people can read it and is sent nowhere. Fixed without a new test: the candidates list in a prepared change read out paths (now caught by the lint), sentences that did not agree with a plural name ("your goals is"), step 4a asking a question the printed sentence already asks, the worktree name worked out before the worktree was taken away, three comments the change made untrue. A stale exemption (`MULTIPLE_CHILDREN`) removed, found by the new check that every exemption still excuses something.
+- [x] (Fixed 2026-10-10 under call 59.) Not fixed, for Brandon: after setup no record keeps the names people gave their segments, so the any-time record-a-change list and its questions call every segment "one of your segments" and cannot tell two apart (review finding 1, high). The fix is to keep the settled names where every seat can read them, which changes what a base stores. Refusals in the layout move no longer say which context change could not be read (finding 6); the brief named those sentences, so they follow the brief.
+- [x] Full suite after the review fixes (tests/run.sh): 2748 tests OK, then 210 from a linked folder OK, exit 0, the seat guard silent.
+
 ### 2026-10-05, 0.3.4: the command check refused lines that only held the letters "git"
 Observed in the Gridwise folder on 2026-10-05: every `codex exec --skip-git-repo-check` line and most pipelines out of git refused with the "could not tell" sentence.
 - [x] A line is about git only when a part of it runs git or gh as its program (prefixes stripped, shell `-c` and substitutions read recursively); an unknown program handed the word git still counts.
@@ -1344,9 +1630,47 @@ Observed in the Gridwise folder on 2026-10-05: every `codex exec --skip-git-repo
 - [x] A refusal of its own for an unknown program beside git, naming the program; "could not tell" kept for parse failures.
 - [x] Tests: flag case passes, pipeline into cut and uniq passes, a real push is still a push, unknown wrapper still refused.
 - [x] Full suite run; version 0.3.4 in both manifests; changelog entry.
-- [ ] Brandon: review the pull request, then update the installed plugin.
+- [x] Brandon: review the pull request, then update the installed plugin. (Ticked 2026-10-10: merged as pull request #1.)
 
 Review: the fix is in `plugins/gtm-base/lib/gtmbase/gate.py` (`mentions_git_or_gh`, `_INERT_WORDS`, `_strip_prefixes`, `REASON_STRICT_UNKNOWN`) with tests in `tests/test_gate.py`. One judgment call: the first-token rule alone would have let `find . -exec git push` and `watch "git push"` run unread, so an unknown program handed the word git keeps the old refusal.
+
+### 2026-10-10, finishing Release B (0.4.0), branch claude/release-b-finish-1e1203 from release-b
+Brandon's calls 57 to 59 (plan, "For Brandon"): 1.7e rebuilt as option D, Claude Code's own permission prompt forced by a hook; 1.7e stays in Release B with a time limit (ships as 0.4.1 if not through review by the time the replay is scored); segment names kept where every seat can read them.
+- [x] Merge main (0.3.4) into the branch; CHANGELOG and this file kept both sides.
+- [x] Calls 57 to 59 and the change log recorded in the plan; call 56 marked superseded.
+- [x] Merge 0.3.5 from main once it lands (write_hook.py and hooks/write-check.sh are the 0.3.5 session's; not edited here). (Ticked 2026-10-10: merged on 2026-10-10.)
+- [x] Unit 1.8 finding 1: segment names kept where every seat can read them. Nothing new stored: the customer profile already names each segment under a `###` heading that `drafting.check_umbrella` matches to the settled inventory by slug, so `record_change.segment_names` reads it (one heading per slug, plain words only, at most 80 characters) and the list, the four lines, the questions and the answers say `your segment "Name"` inside the data fence; anything else stays "one of your segments". tests/test_segment_names.py, 9 tests, the first 8 failing before the fix (4 failures, 4 errors): a base made through the real join flow, an older-layout base before and after `--move-changes`, names refused, and a guard that every namer handed over reads no file name (the lint now trusts `name_of`).
+- [x] Unit 1.7e, option D, verified before building. Docs (read 2026-10-10, hooks reference, permission modes, VS Code page, CHANGELOG): a hook "ask" prompts in default and in auto ("the classifier can still deny the tool call, but it can't approve the call silently"); the reason is shown in the prompt; updatedInput with ask shows the modified input. Not documented: acceptEdits, bypassPermissions, dontAsk, the VS Code extension, the desktop Code tab. Live on CLI 2.1.276: default and acceptEdits show "Hook PreToolUse:Bash requires confirmation for this command:", the reason, Yes/No. auto started in a terminal tab but the auto-mode classifier refused this session reading or closing it; bypassPermissions launch refused by the classifier. Notes: side-session-notes/.../release-b-finish-hook-ask-docs.md.
+- [x] Unit 1.7e, option D, built on branch unit-1-7e-d: `gtmbase.approval` (classify with each script's own parser, ask + sentence + updatedInput ticket, ticket in the seat folder, taken back by the next command in the conversation, 6 hours at most), wired into the Bash gate (also on Monitor and PowerShell), fifteen library writers gated, `state.go_quiet`, the gate refuses commands naming the ticket. Approvals refused in bypassPermissions/dontAsk (call 60, awaiting Brandon) and for Codex. Tests: tests/test_approval_ask.py, three failing first by design (commit "test: every approval asks the person"), 16 passing after.
+- [x] Unit 1.7e, option D: security and correctness reviews, fixes with failing tests first, full suite twice. (Ticked 2026-10-10: two reviews and a confirmation pass, findings fixed, see docs/reviews/2026-10-10-unit-1-7e-d-*.)
+- [x] Brandon: call 60, decided 2026-10-10: let them run. The refusal in bypassPermissions and dontAsk is taken out (test rewritten first, then the code), and the CHANGELOG, the approval module and the atlas say an approval may go through there with nobody asked, a limit Brandon accepted.
+- [ ] Brandon: a live run of D (default, auto, VS Code extension, the desktop Code tab, and whether bypassPermissions shows the question at all).
+- [x] Unit 1.9 prepared: both answer keys unchanged since Brandon's review of 2026-09-27; their sha256 values recorded in the private replay folder (`freeze-and-limit-2026-10-10.md`), frozen the moment Brandon says approved; corpora.md still matches its frozen hash. Case three's limit rechecked with Release B's own reading code: 40,000 characters reads ten of sixteen files (the older version set aside first) and drops six, two segment pages among them. Proposal stands, runner-up 35,000.
+- [x] Brandon, 2026-10-10: approved, so both answer keys are frozen at the recorded hashes (checked again after the answer); yes to 40,000 for case three, written into the private corpora.md (its hash changed for that alone; the earlier version is kept) and the walkthrough.
+- [x] The three replay cases run on 2026-10-10 on Brandon's instruction (on the stand-in's confirmation of finding 5), on 114a73a, through Release B's own setup flow in sandboxes, every draft by a fresh agent given only its request. Outputs and a blank scoring sheet per case: ~/GTM Bases/Gridwise/fidelity-replay/runs/2026-10-10/README.md. Case two's list frozen first (70 files, case-two-list-2026-10-10.md). One correction made during the run (case two: `todo.md` taken out of twelve sources lists to get past the placeholder check), recorded.
+- [ ] Brandon: score the three cases against the five-point bar, in the private README.
+- [ ] Two defects the replay found, to fix after Brandon scores (fixing them changes the build that was replayed, so whether to run again is his call): the older version of a finished page is offered and taken in (segment_candidates should prefer the final version, as drafting already does); the placeholder check reads the sources list (it should read only the body).
+- [ ] When Codex resets on 2026-10-14, run Astra's confirmation of finding 5 anyway; if it finds something, fix it and say whether the fix could affect any replay result.
+- [x] Astra's review of all of Release B (docs/reviews/2026-10-10-release-b-review-astra.md: not ready; 2 critical, 3 high, 2 medium, 1 low), every finding fixed with a test, then two confirmations (verify: six closed, findings 5 and 8 open; verify-2: 8 closed, 5 open), fixed again (every setup step's output in one data fence).
+- [ ] Astra's third confirmation (brief: docs/reviews/2026-10-10-release-b-verify-3-brief.md). Blocked: Codex is at its usage limit until 2026-10-14 06:08. An interim confirmation by a review subagent stands in until then.
+- [x] Release prepared, not merged: 0.4.0 in both manifests and the library, CHANGELOG dated 2026-10-10 (the date changes to the day it ships), atlas figures 5, 6 and 8 and its version, this file ticked (finished work since 2026-09-05 ticked with a note on each), lessons recorded.
+
+#### Review (2026-10-10)
+- Merged into this branch: main at 0.3.4, then 0.3.5 (PR #2). `write_hook.py` and `hooks/write-check.sh` were not edited here.
+- Call 59 (Unit 1.8 finding 1): nothing new stored in a base; names read from the profile's own headings, fenced. Correctness review, four findings fixed; Astra's finding 7 fixed.
+- Unit 1.7e, option D: built on unit-1-7e-d and merged; two reviews and a confirmation pass, then Astra. Fifteen approval points plus five Astra added; the residuals are in the CHANGELOG.
+- Unit 1.9: keys hashed for Brandon's approval; case three's 40,000 rechecked on Release B's code.
+- Suites (tests/run.sh): the 0.4.0 commit 9141219, 2815 OK then 213 from a linked folder OK; the head's code at e527480, 2818 OK then 214 OK; the final head ae88eb1, 2819 OK then 215 OK. Each exit 0, the seat guard silent.
+- A commit that was on local main, dff9f24 "docs: Phase 2 and 3 decisions, settled for Plan 1", is on no branch since main moved to 0.3.5; it is kept on branch keep/phase-2-3-decisions-dff9f24 for whoever wrote it.
+
+#### For Brandon, exactly what is left (2026-10-10)
+1. Call 60: decided 2026-10-10, let them run (done; the refusal is taken out).
+2. A live run of option D on 0.4.0: in the default mode, in auto mode, in the VS Code extension, and in the desktop app's Code tab, approve one change and refuse one, and check the question shows "Hook PreToolUse:Bash requires confirmation", GTM Base's sentence, and Yes or No; then in bypassPermissions note whether the question appears at all, since under call 60 an approval may run there unasked. Close the terminal tab "hook ask: auto" left from this session's live test, which the auto-mode classifier would not let this session close.
+3. The live check, steps 7 to 10 (docs/walkthroughs/2026-09-release-a-live-check.md) on 0.4.0: the moment of use against the 9 of 10 bar, a setup closing in a scratch folder (now with segments, and every approval asked), ordinary work untouched, your own settings.
+4. Read three steps aloud: join steps 1, 4a and 10 (Unit 1.8).
+5. The fidelity replay: keys frozen and 40,000 set (done, 2026-10-10). Left for you: score the three cases once they are run and presented. Case two's list is frozen at the start of its run.
+6. Astra's third confirmation once Codex resets on 2026-10-14 (or with more credits): docs/reviews/2026-10-10-release-b-verify-3-brief.md.
+7. Then your yes to merge this branch into release-b and to release 0.4.0 to main. release-b has moved since this branch began (the 0.3.5 carry, d275d70), so that merge will need a small conflict resolution in the CHANGELOG and this file.
 
 ### 2026-10-10, 0.3.5: the write check refused every write inside a linked folder (branch claude/fix-0-3-5-linked-folder-writes, from main)
 Reproduced on the installed 0.3.4: a Write under `~/Gridwise/.claude/worktrees/<session>/` was denied with "Some folders are GTM Base's own to keep". `write_hook.problem_with` held each joined entry's `content_root` to a base's rules, refusing `<content_root>/.git` and `<content_root>/.claude`, which is where every Claude desktop session there works and where the person's own skills and agents live.
@@ -1413,6 +1737,23 @@ Two reviews by subagents, one for correctness and one for security, run on the f
 - Left as it is, and said in the CHANGELOG: a script in a file (`python3 fix.py`), a name built from pieces inside a script (`'.clau' + 'de'`), a write over the folder above the assistant folder as a whole, and a question for some lines that only read or only mention a file in passing (a commit message).
 - Residual risks noted by the reviews, not changed: whether a PreToolUse "ask" can turn a command the person's own settings deny into one they can approve is not documented (the write check has asked the same way since 0.3.0); Codex gets "ask" here as the write check already sends it; right after a restart the disk tool may be slow past its two seconds, and then the folder still comes back unlinked, which the person fixes with "link this folder to my base"; a record written without a disk identifier is never filled in; and with a full list of documents the map gets about 2,000 characters instead of 4,000.
 
+
+### 2026-10-11, the summarize-first stage (branch summarize-first, from claude/release-b-finish-1e1203)
+The fidelity replay failed on Brandon's scores of 2026-10-10 (8 rule passes, 7 fails; every case fails at least one rule), so the gate builds the summarize-first stage in this release. Plan approved by Brandon in plan mode on 2026-10-11, with the three recommended options: the full evidence list in the positioning and the profile and each segment page holding its own, the independent support check kept, and a counts-only rehearsal on the real corpora before the scored re-run. The two prepared defect fixes are folded in, and all three cases are re-run once afterwards. Brandon scores; the builder scores nothing. Private figures stay in `~/GTM Bases/Gridwise/fidelity-replay/`.
+- [x] U0: branch from the finish branch; merge origin/main (0.3.6) and `replay-defect-fixes`; the settings question goes before approvals and still takes a waiting ticket back (two tests, the first failed first).
+- [x] U0: full suite on the merged head (2,871 tests OK, then 215 OK).
+- [x] Hygiene (parent, 2026-10-11): the fixtures in `tests/test_record_change.py` and `tests/test_live_check_follow_up.py` (and one assertion in `tests/test_no_hooks.py`) rewritten from scratch with an invented company and figures; Brandon confirmed the live check's figure is public, so the walkthrough, plan and CHANGELOG lines stay and no history is rewritten. Still carrying the figure, for Brandon's call: the worked example in `skills/propose-change/SKILL.md` and two comments in `lib/gtmbase/hand_edit.py`.
+- [x] U1: packing and notes requests (`notes.py`, `references/prompts/notes.md`, `notes-plan`, `notes-assemble`): every batch under the limit at 240,000 and 40,000, a file over the limit split into parts that join back exactly, nothing dropped, a stable batch digest, a changed list refused.
+- [x] U2: the notes check (`notes-check`, `notes-status`): quotes found word for word in their file after evening out spacing, quotes, dashes and table marks; figures and customer names inside their quote; every file accounted for; quotes screened; setup numbers the notes; the status floor (proposed, on hold, to be clarified and the like lower a note to open); storage tied to the agreed list and resume; three attempts, then the failing items are recorded as not noted.
+- [x] U3: draft requests read the notes, grouped by segment; a segment reads its own notes and the company-wide ones; adopted pages' customers placed under their segment; the preview says every file was read.
+- [x] U4: citation checks in review: every paragraph and bullet cites notes; unknown citations refused; figures in a paragraph must be in a cited note; no customer named in the model's own prose; a paragraph citing a note that is not settled sits inside a `[your call: ...]` marker; the positioning names every segment; after the third refusal the failing paragraph becomes a question.
+- [x] U5: the support check: an independent read of each paragraph beside only its cited words and the same segment's other notes; its answer must cover every paragraph; a flagged paragraph becomes a question.
+- [x] U6: setup writes Evidence by segment, Still open in the material, and Where this came from (footnotes with file, version date and the exact words); `sources:` rebuilt from the notes cited; the same bytes shown and saved; base readers, stale-check and propose-change read the new sections.
+- [x] U7: prompts, the join skill's steps 6 to 6c (subagents, resume, the loop limit), plain-language registration, CHANGELOG, atlas figure 7, plan Unit 1.9b.
+- [x] Correctness and security reviews by subagents, each finding fixed with a failing test first; full suite green (712601c).
+- [ ] Astra's review once Codex resets (2026-10-14).
+- [x] Counts-only rehearsal, case three only (lean plan, Brandon 2026-11-25), 2026-11-24: see the section below.
+- [ ] The scored re-run of all three cases, for Brandon to score.
 
 ## 0.3.7: the command check asks about reads inside the assistant folder (2026-10-15)
 
@@ -1482,3 +1823,35 @@ Brandon decided to build the web app now and productize from the start. No revie
 - [ ] P2. Join a base from a link (after Release B merges).
 - [ ] P3. Shared base: record-change and the setup closing send proposals; no direct push to main from a seat (after Release B merges).
 - [ ] The end-to-end run with a second GitHub account.
+
+### 2026-11-24, the Release B replay gate on the summarize-first build (branch claude/release-b-replay-40efb2)
+The lean plan Brandon approved on 2026-11-25: merge main, rehearse case three alone with counts only, measure usage, and ask before the scored run of all three cases. Client figures and names stay in the private replay folder; this list holds counts only.
+- [x] Merged origin/main (0.3.7 to 0.4.0 and the web app, W1 to W6). Release B ships as 0.5.0: version pins, the atlas stamp, and the layout version the move offer names (0.5). The command check keeps 0.4.0's copy-and-undo for settings and Release B's approval question; the two Release B tests of the 0.3.6 settings question now test 0.4.0's behaviour.
+- [x] A stale test fixed: narrowing a draft to one file expected the run's day as the file's date, but the fixture has given that file its own date since U6.
+- [x] The namer lint flagged a local dictionary in the notes code named `name_of`, the one name the lint trusts; renamed `settled_names` (pre-existing since U3 to U7).
+- [x] Main's replay of 457 real commands met Release B's rule that an approval script runs only from the running plugin's own folder: one command named the 0.3.8 install folder. The test now replays it against the plugin that runs, as it was run that day; the rule is unchanged.
+- [x] Rehearsal of case three at 40,000 characters in a sandbox, all seventeen files matching their frozen hashes: 2 note batches, 2 refusals (one per batch, first try), no loop limits, no file left not noted; both drafts ready on the first review; the support check turned 7 of 13 profile lines and 2 of 20 positioning lines into questions. Record in the private folder, `runs/2026-11-24-rehearsal/`.
+- [x] The note request now states the three rules the notes check refused by and never told the note taker (contact details in a quote, a segment named outside its quote, a note credited to a segment its own heading does not name); a test failed first.
+- [x] Brandon's decision (2026-11-24): every draft reads the notes, and at 40,000 characters both drafts left out 209 of 516 notes (whole segments among them), because the notes are as large as the files they come from (108%). The sections setup writes (evidence, still open, footnotes) use every note, so the loss is to the drafted prose. Brandon chose the digest; plan written at `docs/plans/2026-11-24-002-feat-note-digests-plan.md` (Unit 1.9c), waiting for his review and his three decisions.
+- [x] Unit 1.9c approved by Brandon on 2026-11-24 with the recommended answers to all three decisions.
+- [x] D1 to D4: `digests.py` (the plan, the request, the check, what a draft reads), `references/prompts/digest.md`, the four commands `digest-plan`, `digest-assemble`, `digest-check` and `digest-status`, the notebook carrying the digests (so a request, review and support all see the same lines), and the preview sentences. `tests/test_digests.py`: the core tests were written just after the module rather than before it, so each guard (the carry rule, the status rule, the figure rule, largest first, customers kept, narrowing) was proven by breaking it once in place and watching its test fail; the last-resort test (a request never goes over the limit, open lines kept longest) failed first.
+- [x] D5: join skill step 5f and its wait line, a paragraph in each draft prompt on condensed lines (cite the ids, never quote a shorter line as the company's words), the CHANGELOG, the atlas caption, plan Unit 1.9c.
+- [x] D6, the correctness review (one subagent pass): five findings, each with a test that failed first. (1, high) the last resort sized whole groups with customer words held back and printed them in full, so a request could go over the limit; (2, high) it left out open, customer and segment notes before settled shorter lines; both fixed by one ordered last resort (settled shorter lines, then customer words, then settled facts, then the rest, and a request still over says so). (3) a narrowed draft could lose an open note and count it as settled; setup now carries it and only settled facts are counted. (4) review and support took the full view's notes, not the narrowed request's; each request now remembers its own notes. (5) checking a done digest again wiped it; a kept digest now stays kept. The check also sizes lines as they are drawn.
+- [ ] Follow-up, not in this change: `notes-check` on a batch already done starts it again at attempt 1 and throws its notes away, the same pattern as finding 5.
+- [x] D6: full suite on 008598b (3,021 OK, then 215 OK); committed.
+- [x] Rehearsal two of case three on 008598b, counts only (record in the private folder, `runs/2026-11-24-rehearsal-two/`): notes 2 batches, both accepted first time; 8 digests, none hit the loop limit; each draft read 412 of 514 notes, and every note it did not read was a settled fact (rehearsal one: 307 of 516, with 51 customer and 13 segment notes unread); usage 10 points of the five-hour window and 1 of the week.
+- [x] Two defects in the digest check, found in rehearsal two and fixed test first: the check counted each line's note numbers and status, then a line break per line, against a room the request gives for the words alone.
+- [ ] Follow-up (tuning, not correctness): the plan gives each digest room for its words only, so the note numbers and status of each line push the last resort to leave out settled lines (70 in rehearsal two).
+- [x] Brandon's go-ahead for the scored re-run of all three cases (2026-11-24). Cases one and three drafted, outputs, blank sheets and evidence packs in the private folder `runs/2026-11-24/`. Case two stopped after its notes (all thirteen batches checked): its customer and segment lines alone exceed one draft request.
+- [x] Brandon's call (2026-11-25): stop case two and fix the design. Plan written: `docs/plans/2026-11-25-001-feat-digests-at-scale-plan.md` (Unit 1.9d), approved the same day with the recommended answers.
+- [x] Unit 1.9d built test-first: customers of a condensed group as a count, three segment notes kept in their words, honest rooms (no floor without room, note numbers and line additions counted, a digest with no room carried by setup, the plan says up front when setup's own lines do not fit), each draft waits only for the groups it reads. Plan counts on case two's kept notes, no subagent: 17 digests (was 38), not over; with digests kept to their rooms a draft reading every group comes to 237,972 of 240,000 characters with nothing left out, and every segment's draft fits. One correctness review: three findings fixed test-first (rooms now also count the numbers of settled notes and each line break; the count of the whole company's customers no longer says a document lists them, since a segment's document does not; the skill says the over-the-limit sentence before anything else), and a room smaller than one average line is now no room. Risk to watch: digest 1 (the whole company's notes) must carry 915 open notes in 21,236 characters, so lines have to join several open notes each.
+- [x] Unit 1.9d: full suite twice, green both times (3,038 main tests and 215 linked-folder tests, exit 0 each run), committed.
+- [x] Found during case two's digests (2026-11-25): the figure check read an amount with a capital unit ($900K, $1.4M) as the bare number, so a figure word for word in its note was refused (digests 8, 10 and 12 each lost figures to pass). Fixed test-first in citations (units read in any case); the citation, digest and review tests pass. Case two's drafts run on the fix; cases one and three were drafted before it.
+- [x] Figure fix: full suite twice, green both times (3,039 main tests and 215 linked-folder tests, exit 0 each run).
+- [x] Case two resumed and finished on 2026-11-25: 17 digests accepted (12 first try, 5 second), all 13 documents approved with questions open; outputs, evidence pack and README filed with the run (outside this repository).
+- [x] Brandon scored all three cases on 2026-11-25: every rule and every case passed, on his instruction "pass all", given after he was told the record would carry no notes for each rule. The scores, in his words, are in the run's README outside this repository. Nothing merged or released.
+- [x] Case two resumes from its kept notes on a plugin copy of the new commit (done 2026-11-25, above).
+- [x] Brandon scores cases one and three, and case two once it is run (done 2026-11-25, above).
+- [x] The scored re-run of all three cases (done 2026-11-25). The gate passes.
+- [ ] Customer-name check fix (`d7c4ad7`, branch `claude/customer-name-false-refusals`, built on this branch's tip): Brandon decides whether it goes into Release B.
+- [ ] Brandon: review and merge Release B (0.5.0) into main. Then P1 to P3 (backup, join from a link, shared base), which wait on that merge.

@@ -55,6 +55,30 @@ def _check_inside(folder: str, inside: str) -> None:
         )
 
 
+# --- Who owns the temporary files in a folder ---------------------------------
+#
+# A writer puts its bytes in a temporary file beside the real one and then
+# moves it into place. A writer that dies between the two leaves the
+# temporary file behind, and something has to take it away; a writer that is
+# only paused must keep it. So every writer holds its folder shared for the
+# whole of its write and its move, and a sweep takes it exclusively, without
+# waiting, only when no writer holds it (Astra's confirmation pass on the
+# merged Units 1.7c and 1.7d, finding 2). The lock itself, where its file
+# lives, and the checks on that folder are `locks`, the one module every lock
+# in GTM Base goes through; the names below are kept so the writers here and
+# their callers read as they always have.
+
+from . import locks  # noqa: E402
+
+FolderLock = locks.FolderLock
+HeldLock = locks.HeldLock
+CODE_NO_LOCK = locks.CODE_NO_LOCK
+CODE_LOCKS_NOT_PRIVATE = locks.CODE_LOCKS_NOT_PRIVATE
+LOCK_WAIT_SECONDS = locks.LOCK_WAIT_SECONDS
+_lock_home = locks.lock_home
+_folder_lock_path = locks.folder_lock_path
+
+
 def atomic_write_text(
     path: str, text: str, mode: int = FILE_MODE, inside: Optional[str] = None
 ) -> str:
@@ -67,20 +91,21 @@ def atomic_write_text(
     ensure_dir(folder)
     if inside:
         _check_inside(folder, inside)
-    handle, temp_path = tempfile.mkstemp(prefix=".gtmbase-", dir=folder)
-    try:
-        with os.fdopen(handle, "w", encoding="utf-8", newline="\n") as stream:
-            stream.write(text)
-            stream.flush()
-            os.fsync(stream.fileno())
-        os.chmod(temp_path, mode)
-        os.replace(temp_path, path)
-    except BaseException:
+    with FolderLock(folder):
+        handle, temp_path = tempfile.mkstemp(prefix=".gtmbase-", dir=folder)
         try:
-            os.unlink(temp_path)
-        except OSError:
-            pass
-        raise
+            with os.fdopen(handle, "w", encoding="utf-8", newline="\n") as stream:
+                stream.write(text)
+                stream.flush()
+                os.fsync(stream.fileno())
+            os.chmod(temp_path, mode)
+            os.replace(temp_path, path)
+        except BaseException:
+            try:
+                os.unlink(temp_path)
+            except OSError:
+                pass
+            raise
     _sync_folder(folder)
     return path
 
@@ -147,21 +172,22 @@ def atomic_write_bytes(
     if inside is not None:
         _check_inside(folder, inside)
     ensure_dir(folder)
-    handle, temporary = tempfile.mkstemp(dir=folder, prefix=".tmp-")
-    try:
-        with os.fdopen(handle, "wb") as stream:
-            stream.write(data)
-            stream.flush()
-            os.fsync(stream.fileno())
-        os.chmod(temporary, mode)
-        os.replace(temporary, path)
-        _sync_folder(folder)
-    except BaseException:
+    with FolderLock(folder):
+        handle, temporary = tempfile.mkstemp(dir=folder, prefix=".tmp-")
         try:
-            os.unlink(temporary)
-        except OSError:
-            pass
-        raise
+            with os.fdopen(handle, "wb") as stream:
+                stream.write(data)
+                stream.flush()
+                os.fsync(stream.fileno())
+            os.chmod(temporary, mode)
+            os.replace(temporary, path)
+            _sync_folder(folder)
+        except BaseException:
+            try:
+                os.unlink(temporary)
+            except OSError:
+                pass
+            raise
     return path
 
 

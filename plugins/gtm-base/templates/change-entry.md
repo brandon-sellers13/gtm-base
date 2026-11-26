@@ -5,7 +5,7 @@ happened_on: 2026-01-01
 written_on: 2026-01-02
 noted_by: owner@example.com
 source: src-000000000000000000000000
-affects: [context/strategy/icp.md]
+affects: [context/icps.md]
 review_by: 2026-04-01
 origin: ledger
 status: open

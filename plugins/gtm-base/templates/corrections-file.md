@@ -8,7 +8,7 @@ intake_path: ledger
 mode: decision
 third_party: false
 content_hash: e4e209e500ebd05237ba871116647d7a04bc899f7d86a487bba1aef376861dd1
-touched_paths: [context/strategy/icp.md, work/changes/stg-0000000000000000.md]
+touched_paths: [context/icps.md, learning/changes/stg-0000000000000000.md]
 correction_class: wrong-definition
 marker: gtm-base proposal stg-0000000000000000 entry stg-0000000000000000 source src-000000000000000000000000
 ---

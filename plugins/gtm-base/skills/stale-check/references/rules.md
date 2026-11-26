@@ -57,7 +57,7 @@ dates say, because naming it is proof the person saw it.
 
 ## When an accepted record settles a change for a document
 
-An accepted record in the `corrections` folder can settle a change for a
+An accepted record in the `learning/corrections` folder can settle a change for a
 document without anybody being asked. All three of these have to hold:
 
 1. The record names that change.
@@ -168,10 +168,11 @@ At the end of setting a base up, exactly one thing is said, and the order it is
 looked for never changes:
 
 1. A required document the person chose not to write.
-2. No context change written down at all.
-3. A document whose material is dated before the change it is meant to
+2. A document still holding a question a draft left open for the person.
+3. No context change written down at all.
+4. A document whose material is dated before the change it is meant to
    reflect, which is worth reading again.
-4. Otherwise, that nothing is out of date yet, naming the first date it will
+5. Otherwise, that nothing is out of date yet, naming the first date it will
    watch and the change that date belongs to.
 
 The wording never claims more than the dates show, and the finding is worked out
@@ -232,3 +233,30 @@ than what the person was shown.
 Somebody who does not own the document can still carry on or stop, but the
 confirmation is the owner's to give and is refused for anybody else before any
 question is used up.
+
+## A question a draft left open
+
+A draft marks a call only the person can make with the question itself, as in
+`[your call: is it twenty people or fifty?]`. A document holding one is in a
+state of its own, worked out from what the document says every time it is
+read and never written down anywhere, whatever its status says.
+
+1. It is not confirmed. No line counts for it while the question is open:
+   the line setting a base up wrote, a yes, a yes naming a change, and an
+   owner accepting a prepared change that left the question where it was all
+   count for nothing until it is answered. The lines stay in the file and
+   count again once it is.
+2. It is not complete. The first run names it second, after a document the
+   person did not write, and before anything worked out from dates.
+3. Nothing may record that it is right while the question is open. A yes in
+   the review, "it already reflects this" at the moment of use, and the
+   closing's own question are all refused with one sentence, and the closing
+   does not ask about it at all. A no and a not now are allowed, because
+   neither says it is right.
+4. The review lists each question first, one line each, with the question
+   shown under it as data. The answer becomes a prepared change to the part
+   of the document holding the question, which the owner approves like any
+   other, and wording that still asks the question is refused. Setting a base
+   up never writes over a file to settle one.
+5. It never raises the moment of use on its own. Only a recorded change that
+   has moved past a document does that.

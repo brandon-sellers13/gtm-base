@@ -32,7 +32,9 @@ from . import (
     formats,
     gate,
     ghcmd,
+    hand_edit,
     ids,
+    layout,
     names,
     paths,
     push_conditions,
@@ -237,7 +239,7 @@ def load_staging(path: str) -> "formats.ProposalStaging":
     text = read_text(path)
     if text is None:
         raise ValidationError(
-            "GTM Base could not read the staged proposal at %s." % path,
+            "GTM Base could not read that prepared change.",
             code=CODE_UNREADABLE,
         )
     return staging_from_text(text)
@@ -368,7 +370,7 @@ def check_edits(base_root: str, staging) -> List[Tuple[str, str]]:
                 (
                     CODE_OUTSIDE_CONTEXT,
                     "A proposal may only change files in the context folder, and "
-                    "this one names %s." % edit.path,
+                    "this one names a file outside it.",
                 )
             )
             continue
@@ -386,7 +388,7 @@ def check_edits(base_root: str, staging) -> List[Tuple[str, str]]:
                 (
                     CODE_OUTSIDE_CONTEXT,
                     "A proposal may only change files in the context folder, and "
-                    "%s is a name for a file somewhere else." % edit.path,
+                    "one of the files this one names is really somewhere else.",
                 )
             )
             continue
@@ -616,6 +618,7 @@ def waiting_changes(base_root: str) -> List[WaitingChange]:
             continue
         if staging.staging_id != staging_id:
             continue
+        layout.follow_the_move(base_root, staging)
         targets = targets_of(staging)
         if not targets:
             continue
@@ -656,7 +659,8 @@ def content_hash_for(worktree_path: str, ordered_paths: List[str]) -> str:
         text = read_text(os.path.join(worktree_path, checked))
         if text is None:
             raise ValidationError(
-                "GTM Base could not read %s after changing it." % relative,
+                "GTM Base could not read %s after changing it."
+                % names.document_name(relative),
                 code=CODE_MISSING_FILE,
             )
         parts.append(text)
@@ -672,12 +676,81 @@ def summary_of(staging) -> str:
     return _WHITESPACE_RE.sub(" ", body.get("after") or "").strip()
 
 
+def _at_a_word(text: str, limit: int) -> str:
+    """Text no longer than the limit, cut only between two words.
+
+    The saved history and a review's title both used to cut the line at a
+    fixed count of characters, so the live check's history read "trip data
+    directly f" (the 0.3.1 live check, step 5). A line is now whole when it
+    fits, and otherwise ends at the last whole word that does.
+    """
+    line = _WHITESPACE_RE.sub(" ", str(text or "")).strip()
+    if len(line) <= limit:
+        return line
+    cut = line[:limit]
+    if " " in cut and not line[limit].isspace():
+        cut = cut[: cut.rindex(" ")]
+    return cut.rstrip(" ,;:")
+
+
+def what_changed_line(staging, entry=None, steps=None) -> str:
+    """What a change is called as "What changed:", in plain words and whole.
+
+    A change carrying a context change is called by that change's first line.
+    A fix to wording only is called a typo fix. Anything else is called by the
+    first line it puts in, read from each part's words before and after
+    (`steps`, as the local approval walks them) when those are known, and
+    never by the first line of the part, which is what the live check found
+    quoted when the change was to the second bullet (step 6, finding 1).
+    """
+    if entry is None and getattr(staging, "decision_block", None):
+        try:
+            entry = formats.LedgerEntry.parse(staging.decision_block)
+        except (ValidationError, PathError):
+            entry = None
+    if entry is not None:
+        line = names.first_line_of(entry.body)
+        if line:
+            return line
+    if getattr(staging, "wording_only", False):
+        return hand_edit.TYPO_FIX
+    for step in steps or []:
+        _relative, _heading, before, after = step
+        line = hand_edit.changed_line(before, after)
+        if line:
+            return line
+    for step in steps or []:
+        _relative, _heading, before, after = step
+        if not after and before:
+            # The whole part is taken out.
+            return PART_TAKEN_OUT
+        line = hand_edit.taken_out_line(before, after)
+        if line:
+            return hand_edit.TOOK_OUT % line
+    if steps:
+        return PART_TAKEN_OUT
+    try:
+        body = formats.parse_pr_body(staging.pr_body)
+    except ValidationError:
+        return staging.staging_id
+    return (
+        hand_edit.changed_line(body.get("before") or "", body.get("after") or "")
+        or hand_edit.plain_words(body.get("after") or "")
+        or PART_TAKEN_OUT
+    )
+
+
+def one_line_of(text: str) -> str:
+    """Words on one line, for a note in the saved history."""
+    return _WHITESPACE_RE.sub(" ", str(text or "")).strip()
+
+
 def commit_subject(staging) -> str:
     """The note saved with the change, which a repeat run recognises."""
     return "%s%s: %s" % (
         COMMIT_SUBJECT_PREFIX,
         staging.staging_id,
-        summary_of(staging)[:COMMIT_SUMMARY_CHARS].strip(),
+        one_line_of(what_changed_line(staging)),
     )
 
 
@@ -687,9 +760,10 @@ def review_title(staging) -> str:
     where = ordered[0] if ordered else "the base"
     if len(ordered) > 1:
         where = "%s and %d more" % (where, len(ordered) - 1)
-    return ("Proposed change to %s: %s" % (where, summary_of(staging)))[
-        : TITLE_SUMMARY_CHARS + 60
-    ].strip()
+    return _at_a_word(
+        "Proposed change to %s: %s" % (where, what_changed_line(staging)),
+        TITLE_SUMMARY_CHARS + 60,
+    )
 
 
 def ledger_entry_for(staging, today: datetime.date) -> "formats.LedgerEntry":
@@ -909,6 +983,9 @@ def propose(
         return ProposalResult(
             STATUS_REFUSED, codes=[failure.code or CODE_INVALID], reasons=[str(failure)]
         )
+    # A change prepared before the base was moved names its documents at
+    # their older paths, and it is still the change to those documents.
+    layout.follow_the_move(base_root, staging)
     edit_problems = check_edits(base_root, staging)
     if edit_problems:
         return ProposalResult(
@@ -1081,15 +1158,15 @@ def propose(
                 made.path, staging, today, entry_id, source_id, git, base_root, codes
             )
     except ConflictError as clash:
-        files = ", ".join(edited_paths(staging))
         worktree.remove_worktree(base_root, made.path, runner=git)
+        named = names.documents_named(edited_paths(staging))
         return ProposalResult(
             STATUS_CONFLICT,
             staging_id=staging.staging_id,
             codes=[clash.code or CODE_HEADING_MISSING],
             reasons=[
                 "The part of %s this proposal changes is not there any more, so "
-                "it was not sent. Ask for it to be prepared again." % files
+                "it was not sent. Ask for it to be prepared again." % named
             ],
             branch=made.branch,
         )
@@ -1178,6 +1255,8 @@ def propose(
     _record_row(base_id, source_id, staging.staging_id, number, codes)
     retire(base_root, staging_path, staging.staging_id)
     worktree.remove_worktree(base_root, made.path, runner=git)
+    if staging.origin == LOCAL_EDIT_ORIGIN:
+        hand_edit.one_more_kept(base_id)
     return ProposalResult(
         STATUS_OPENED,
         staging_id=staging.staging_id,
@@ -1212,6 +1291,12 @@ def _prepare(
     codes: List[str],
 ) -> List[str]:
     """Apply the edits, write the context change and the record, and save it."""
+    # The paths are followed again, to where each document lives in the copy
+    # being written to, which is the shared copy and not the person's own. The
+    # person's own copy may have been moved to the current layout while the
+    # shared one still holds the older one (Astra's review of Unit 1.5b,
+    # finding 11).
+    layout.follow_the_move(worktree_path, staging)
     ordered = edited_paths(staging)
     for edit in in_original_positions(staging.edits):
         # Checked here and not only against the clone, because the same name
@@ -1222,8 +1307,8 @@ def _prepare(
         text = read_text(target)
         if text is None:
             raise ValidationError(
-                "The file %s is not in the shared copy, so it cannot be changed."
-                % edit.path,
+                "The shared copy does not hold %s, so it cannot be changed."
+                % names.document_name(edit.path),
                 code=CODE_MISSING_FILE,
             )
         atomic_write_text(
@@ -1243,23 +1328,27 @@ def _prepare(
         )
         touched.append(entry_path)
 
-    hash_value = content_hash_for(worktree_path, ordered)
-    correction = corrections_for(
-        staging, today, hash_value, touched, entry_id, source_id
-    )
-    correction_path = "%s/%s-%s.md" % (
-        constants.CORRECTIONS_DIR,
-        today.isoformat(),
-        staging.staging_id,
-    )
-    atomic_write_text(
-        os.path.join(worktree_path, correction_path),
-        correction.render(),
-        mode=0o644,
-        inside=worktree_path,
-    )
-
-    written = touched + [correction_path]
+    written = list(touched)
+    if not getattr(staging, "wording_only", False):
+        # A fix to wording only writes no correction record (Brandon's call
+        # 49): the saved history already says who changed what and when, and a
+        # correction record means something was wrong.
+        hash_value = content_hash_for(worktree_path, ordered)
+        correction = corrections_for(
+            staging, today, hash_value, touched, entry_id, source_id
+        )
+        correction_path = "%s/%s-%s.md" % (
+            constants.CORRECTIONS_DIR,
+            today.isoformat(),
+            staging.staging_id,
+        )
+        atomic_write_text(
+            os.path.join(worktree_path, correction_path),
+            correction.render(),
+            mode=0o644,
+            inside=worktree_path,
+        )
+        written.append(correction_path)
     git.check(["add", "--"] + written, cwd=worktree_path)
     name, email, author_codes = _author(base_root, git)
     codes.extend(author_codes)
@@ -1340,6 +1429,12 @@ STILL_THE_NOTE = (
     "wording, so nothing was written. Say what the document should say now, "
     "in the document's own voice."
 )
+# Said when the wording for an answer to an open question still asks it.
+CODE_STILL_ASKS = "wording-still-asks-the-question"
+STILL_ASKS = (
+    "Those words still ask the question they were meant to answer, so nothing "
+    "was written. Write what that part should say with the question answered."
+)
 NEEDS_A_PART = (
     "That change does not say which part of the document it is about, so the "
     "wording has nowhere to go and would leave what it corrects standing. "
@@ -1365,8 +1460,14 @@ def parts_of(base_root: str, staging) -> List[Tuple[str, str, int]]:
     """
     found: List[Tuple[str, str, int]] = []
     for relative in edited_paths(staging):
+        # A change prepared before the base was moved to the current layout
+        # names the document at its older place. Its parts are read where the
+        # document lives now, and the path stays the one the change names, so
+        # the prepared change keeps agreeing with itself and the approval
+        # follows the move as it always does.
+        where = layout.where_it_lives(base_root, relative)
         text = read_text(
-            os.path.join(base_root, relative.replace("/", os.sep))
+            os.path.join(base_root, where.replace("/", os.sep))
         ) or ""
         lines = text.split("\n")
         seen: Dict[str, int] = {}
@@ -1416,6 +1517,14 @@ def write_the_wording(
 
     if stale_check.still_the_note(words):
         raise ValidationError(STILL_THE_NOTE, code=CODE_STILL_THE_NOTE)
+    # A prepared answer to a question a draft left open keeps that question as
+    # its excerpt. Wording that still asks it would leave the document as
+    # unfinished as it was, so it is refused (Unit 1.7b).
+    from . import callmarkers
+
+    for asked in callmarkers.markers_in(getattr(staging, "excerpt", "") or ""):
+        if callmarkers.holds(words, asked):
+            raise ValidationError(STILL_ASKS, code=CODE_STILL_ASKS)
     text = str(words).strip() + "\n"
     needs_a_part = any(edit.op == "add" for edit in staging.edits)
     if needs_a_part and part is None:
@@ -1430,10 +1539,48 @@ def write_the_wording(
         edit.text = text
     staging.first_draft = False
     staging.revision = int(getattr(staging, "revision", 0) or 0) + 1
+    _summary_follows(base_root, staging, text)
     atomic_write_text(resolved, staging.validate().render(), mode=0o600)
     if base_id:
         state.clear_first_draft(base_id, staging.staging_id)
     return staging
+
+
+def _summary_follows(base_root: str, staging, words: str) -> None:
+    """Keep the Before and After lines in step with the wording, one line each.
+
+    They used to be rewritten by hand, which meant opening the prepared file
+    and reading the part of the document it quotes outside the fence (Astra's
+    review of Unit 1.7c, finding 1). The After line is the wording, and the
+    Before line is what the part it replaces says today.
+    """
+    body = getattr(staging, "pr_body", None)
+    if not body:
+        return
+    try:
+        fields = formats.parse_pr_body(body)
+    except ValidationError:
+        return
+    fields["after"] = _WHITESPACE_RE.sub(" ", str(words)).strip() or fields["after"]
+    edit = staging.edits[0] if staging.edits else None
+    if edit is not None and edit.op == "replace":
+        where = layout.where_it_lives(base_root, str(edit.path))
+        text = read_text(os.path.join(base_root, where.replace("/", os.sep)))
+        if text is not None:
+            lines = text.split("\n")
+            index = find_heading(
+                lines, edit.heading or "", frontmatter_end(lines),
+                getattr(edit, "occurrence", 1),
+            )
+            if index >= 0:
+                part = " ".join(lines[index + 1 : section_end(lines, index)])
+                said = _WHITESPACE_RE.sub(" ", part).strip()
+                if said:
+                    fields["before"] = said
+    try:
+        staging.pr_body = formats.render_pr_body(fields)
+    except ValidationError:
+        return
 
 
 # --- The path for a person who edited a file themselves -----------------------
@@ -1564,13 +1711,28 @@ OUTSIDE_EVERY_PART = (
 PART_TAKEN_OUT = "This part is taken out."
 
 
-# The one thing this path asks on top of where the material came from. It is
-# short on purpose: requirement P16 asks one question here, not two.
-LOCAL_EDIT_ASK = "What changed, and why?"
+# The question this path asks is in `hand_edit`: one question whose answer
+# says what changed, why, and where it came from (Brandon's call 33).
 # What the change says it came from, when a hand edit becomes one. It is the
 # person's own editing, so there is no label from a document to name.
 LOCAL_EDIT_SOURCE = "what the owner said when they raised their own edit"
 CODE_NO_CHANGE_WORDS = "no-words-for-the-change"
+# A corrected fact is written as the fact now replacing the one it corrects,
+# so the change itself says what every other document may still repeat
+# (Brandon's call 34).
+CODE_FACT_NOT_REPLACING = "a-corrected-fact-names-what-it-replaces"
+FACT_NOT_REPLACING = (
+    "A corrected fact is written as the fact now, replacing the one it "
+    "corrects, so nothing was prepared. Write it that way and ask again."
+)
+# A document the change also affects has to be one of the documents in this
+# base, other than its map.
+CODE_NOT_A_DOCUMENT_HERE = "not-a-document-in-this-base"
+NOT_A_DOCUMENT_HERE = (
+    "One of the documents named as affected is not a document in this base, "
+    "so nothing was prepared."
+)
+CODE_WHICH_ANSWER = "which-of-the-three-answers"
 
 
 def local_edit_entry(
@@ -1580,8 +1742,14 @@ def local_edit_entry(
     affects: List[str],
     today: datetime.date,
     git: GitRunner,
+    answer: Optional[str] = None,
 ) -> "formats.ChangeEntry":
     """The context change that travels with one hand edit, from their words.
+
+    Its first line is the one line it is called by, on one line whatever it
+    was written on, and their whole answer follows it, so the record holds
+    why and where it came from as well as what changed (Brandon's call 33),
+    and the moment a document is used reads the answer as the reason.
 
     Requirement P16. Somebody who edits a context file by hand because the
     business moved has just told the base something it had no other way to
@@ -1605,7 +1773,12 @@ def local_edit_entry(
         origin=LOCAL_EDIT_ORIGIN,
         status="open",
         run_id=None,
-        body=str(what_changed).strip(),
+        body=(
+            "%s\n\n%s"
+            % (_WHITESPACE_RE.sub(" ", str(what_changed)).strip(), answer.strip())
+            if answer and answer.strip()
+            else _WHITESPACE_RE.sub(" ", str(what_changed)).strip()
+        ),
     )
     return entry.validate(today)
 
@@ -1616,7 +1789,9 @@ def local_edit_entry(
 LOCAL_EDIT_SEQUENCE_CAP = 200
 
 
-def free_local_edit_id(base_root: str, path: str) -> str:
+def free_local_edit_id(
+    base_root: str, path: str, runner: Optional[GitRunner] = None
+) -> str:
     """The first identifier for a hand edit that nothing in this base holds.
 
     Finding N3 of the 2026-09-20 verification round. The identifier was worked
@@ -1626,11 +1801,22 @@ def free_local_edit_id(base_root: str, path: str) -> str:
     place a name is remembered is looked in: the changes waiting, the ones
     raised, the ones nobody wanted, the record of what was corrected, and both
     of the folders a base keeps its context changes in.
+
+    The saved history is looked in as well. A fix to wording only leaves no
+    correction record and no context change (Brandon's call 49), and the
+    folder of prepared changes is this computer's alone, so on another
+    computer, or once that folder is cleared, only the saved history still
+    carries its name. A name used again would carry the same marker line, and
+    the next wording fix would be skipped as already accepted (the
+    correctness review of the live-check follow-up, finding 1).
     """
+    saved = _names_in_the_saved_history(base_root, runner)
     for sequence in range(LOCAL_EDIT_SEQUENCE_CAP):
         candidate = ids.staging_id(
             LOCAL_EDIT_ORIGIN, path, LOCAL_EDIT_ORIGIN, sequence
         )
+        if candidate in saved:
+            continue
         if not _name_is_taken(base_root, candidate):
             return candidate
     raise ValidationError(
@@ -1639,25 +1825,72 @@ def free_local_edit_id(base_root: str, path: str) -> str:
     )
 
 
+_STAGING_ID_RE = re.compile(r"\bstg-[0-9a-f]{16}\b")
+
+
+def _names_in_the_saved_history(base_root: str, runner: Optional[GitRunner]):
+    """Every prepared change's name the notes of the saved history carry.
+
+    Every saved piece of work a prepared change leaves, raised or approved
+    here, carries its name in its note, so this is the one record of a name
+    every copy of the base shares.
+    """
+    git = runner_or_default(runner)
+    found = git.run(["log", "--all", "--format=%s"], cwd=base_root)
+    if not found.ok:
+        return set()
+    return set(_STAGING_ID_RE.findall(found.stdout))
+
+
 def _name_is_taken(base_root: str, staging_id: str) -> bool:
     """Whether anything in this base already remembers this identifier."""
     for folder in (
         constants.PROPOSALS_PENDING_DIR,
         constants.PROPOSALS_OPENED_DIR,
         constants.PROPOSALS_DROPPED_DIR,
-        constants.CHANGES_DIR,
-        constants.LEGACY_CHANGES_DIR,
-    ):
+    ) + constants.ALL_CHANGES_DIRS:
         whole = os.path.join(base_root, folder.replace("/", os.sep))
         if os.path.lexists(os.path.join(whole, staging_id + ".md")):
             return True
-    corrections = os.path.join(base_root, constants.CORRECTIONS_DIR)
     wanted = "-%s.md" % staging_id
-    try:
-        names = os.listdir(corrections)
-    except OSError:
-        names = []
-    return any(name.endswith(wanted) for name in names)
+    for folder in constants.ALL_CORRECTIONS_DIRS:
+        corrections = os.path.join(base_root, folder.replace("/", os.sep))
+        try:
+            names = os.listdir(corrections)
+        except OSError:
+            names = []
+        if any(name.endswith(wanted) for name in names):
+            return True
+    return False
+
+
+def _documents_it_also_affects(base_root: str, named: List[str]) -> List[str]:
+    """The other documents a hand edit's context change affects, checked.
+
+    Each has to be a document in this base's context folder that is there,
+    and not the map, because a context change about the map would flag the
+    one file that says where everything lives. Anything else refuses the
+    whole preparation rather than being dropped, so nothing the assistant
+    worked out is lost without a word.
+    """
+    found: List[str] = []
+    for given in named:
+        try:
+            relative = paths.canonical_context_path(base_root, str(given))
+        except (PathError, ValidationError):
+            raise ValidationError(NOT_A_DOCUMENT_HERE, code=CODE_NOT_A_DOCUMENT_HERE)
+        full = os.path.join(base_root, relative.replace("/", os.sep))
+        if (
+            relative == constants.MAP_PATH
+            or _is_the_map(base_root, relative)
+            or not relative.endswith(".md")
+            or not os.path.isfile(full)
+            or os.path.islink(full)
+        ):
+            raise ValidationError(NOT_A_DOCUMENT_HERE, code=CODE_NOT_A_DOCUMENT_HERE)
+        if relative not in found:
+            found.append(relative)
+    return found
 
 
 def stage_local_edit(
@@ -1668,20 +1901,31 @@ def stage_local_edit(
     now: Optional[datetime.date] = None,
     what_changed: Optional[str] = None,
     records_a_change: bool = False,
+    kind: Optional[str] = None,
+    also_affects: Optional[List[str]] = None,
 ) -> str:
     """Turn a change the person made by hand into a staged proposal.
 
-    Their own copy of the file is left exactly as they left it. What they read
-    before making the change is the evidence, and it is read for things that
-    must never leave before anything else happens.
+    Their own copy of the file is left exactly as they left it. The person is
+    asked one question on this path (Brandon's call 33), and `source_text` is
+    their answer in their own words: what changed, why, and where it came
+    from. It is the evidence, and it is read for things that must never leave
+    before anything else happens.
 
-    The person is asked one more thing on this path, what changed and why, and
-    their answer decides one thing only: whether a context change travels with
-    the proposal. An answer about the business becomes that change, and the
-    caller says so by passing `records_a_change`. An answer about a spelling
-    mistake records nothing at all, which is the other half of requirement
-    P16: nobody fixing a typo is made to invent a change to get it fixed, and
-    what they get is exactly the proposal this path has always produced.
+    Which of the three answers it was is `kind` (call 34). Something about the
+    business changed, or a fact the company states was corrected, and a
+    context change travels with the proposal, named by `what_changed`; a
+    corrected fact is worded as the fact now replacing the one it corrects, so
+    every other document still repeating the old one is flagged. The change
+    affects the documents the person edited and every document in
+    `also_affects`, which the assistant works out by reading the others. Only
+    the wording changed, and nothing is recorded: no context change, no
+    correction record once it is kept (call 49), and no answer is needed at
+    all. Nobody fixing a typo is made to invent a change to get it fixed.
+
+    A caller naming no kind is the path as it was before these calls:
+    `records_a_change` says the answer is about the business, and otherwise
+    the proposal carries nothing but the edit and the answer.
     """
     git = runner_or_default(runner)
     today = now or state.today()
@@ -1690,26 +1934,45 @@ def stage_local_edit(
 
     refuse_a_name_with_a_space(base_root, git)
 
-    if records_a_change and not str(what_changed or "").strip():
+    if kind is None and records_a_change:
+        kind = hand_edit.KIND_BUSINESS
+    if kind is not None and kind not in hand_edit.KINDS:
+        raise ValidationError(
+            "Say which of the three answers this is.", code=CODE_WHICH_ANSWER
+        )
+    records = kind in hand_edit.RECORDS_A_CHANGE
+    wording_only = kind == hand_edit.KIND_WORDING
+
+    if records and not str(what_changed or "").strip():
         raise ValidationError(
             "A context change needs the words you would use for what changed.",
             code=CODE_NO_CHANGE_WORDS,
         )
+    if kind == hand_edit.KIND_FACT and not re.search(
+        r"\b%s\b" % hand_edit.REPLACING, str(what_changed or ""), re.IGNORECASE
+    ):
+        raise ValidationError(FACT_NOT_REPLACING, code=CODE_FACT_NOT_REPLACING)
 
+    if wording_only and not (isinstance(source_text, str) and source_text.strip()):
+        source_text = hand_edit.TYPO_FIX
     if not isinstance(source_text, str) or not source_text.strip():
         raise ValidationError(
-            "A change made by hand needs the source you read, in your own words.",
+            "A change made by hand needs what they said about it, in their own "
+            "words.",
             code="no-source",
         )
     allowlist, _code = scan.load_allowlist(base_root)
-    hits = scan.scan_text(source_text, allowlist, "the source you gave")
+    hits = scan.scan_text(source_text, allowlist, "what you said about it")
+    if not hits and records:
+        hits = scan.scan_text(str(what_changed), allowlist, "what you said changed")
     if hits:
         raise ValidationError(hits[0].sentence(), code=hits[0].pattern_class)
     if len(source_text) > constants.MAX_EXCERPT_CHARS:
         raise ValidationError(
-            "The source you gave is longer than a proposal may carry.",
+            "What you said about it is longer than a proposal may carry.",
             code="too-long",
         )
+    affected_too = _documents_it_also_affects(base_root, also_affects or [])
 
     changed, diff = _changed_files(base_root, git)
     if not changed:
@@ -1728,7 +1991,7 @@ def stage_local_edit(
         except PathError:
             raise ValidationError(
                 "Only files in the context folder can be proposed this way, and "
-                "%s is not one of them." % relative,
+                "this one is not in it.",
                 code=CODE_LOCAL_OUTSIDE,
             )
     if _added_characters(diff) > constants.LOCAL_EDIT_MAX_CHARS:
@@ -1763,7 +2026,8 @@ def stage_local_edit(
             )
             before_parts.append(
                 previous.get((heading, occurrence))
-                or "This part of %s was not there before." % relative
+                or "This part of %s was not there before."
+                % names.document_name(relative)
             )
             after_parts.append(body)
         # A part that is gone is described as taken out, which is all a person
@@ -1788,12 +2052,22 @@ def stage_local_edit(
         raise ValidationError(NO_PARTS_AT_ALL, code=CODE_LOCAL_NO_SECTION)
 
     first = changed[0]
-    staging_id = free_local_edit_id(base_root, first)
+    staging_id = free_local_edit_id(base_root, first, git)
     ordered_targets: List[str] = list(changed)
     entry = None
-    if records_a_change:
+    if records:
+        affects = list(ordered_targets)
+        for relative in affected_too:
+            if relative not in affects:
+                affects.append(relative)
         entry = local_edit_entry(
-            base_root, staging_id, what_changed, ordered_targets, today, git
+            base_root,
+            staging_id,
+            what_changed,
+            affects,
+            today,
+            git,
+            answer=source_text,
         )
     # A proposal that carries a change names that change in its own marker, and
     # one that carries none names none. `marker_problems` refuses either half
@@ -1803,18 +2077,11 @@ def stage_local_edit(
         {
             "before": _WHITESPACE_RE.sub(" ", " ".join(before_parts)).strip(),
             "after": _WHITESPACE_RE.sub(" ", " ".join(after_parts)).strip(),
-            "why": (
-                (
-                    "The owner read the source quoted below and brought the file "
-                    "in line with it by hand, and said what changed: %s"
-                    % _WHITESPACE_RE.sub(" ", str(what_changed or "")).strip()
-                )
-                if entry is not None
-                else (
-                    "The owner read the source quoted below and brought the file "
-                    "in line with it by hand."
-                )
-            ),
+            # The person's own sentence, which is what "Why:" reads out. It
+            # used to be a sentence about "the owner" and "the source quoted
+            # below", which named the person in the third person and pointed
+            # at nothing (the 0.3.1 live check, step 5, finding 4).
+            "why": _WHITESPACE_RE.sub(" ", source_text).strip(),
             "evidence": source_text.strip(),
             "confidence": "high",
             "rule_changed": "None",
@@ -1830,7 +2097,7 @@ def stage_local_edit(
         if data is None:
             raise ValidationError(
                 "GTM Base could not read %s as it stands, so it prepared "
-                "nothing." % relative,
+                "nothing." % names.document_name(relative),
                 code=CODE_UNREADABLE,
             )
         target_bytes.append(ids.bytes_hash(data))
@@ -1850,6 +2117,7 @@ def stage_local_edit(
         edits=edits,
         excerpt=source_text.strip(),
         target_bytes=target_bytes,
+        wording_only=wording_only,
     )
     staging.validate()
 

@@ -95,6 +95,33 @@
 - A guard test only guards if it fails when the code it names is removed. Mutate the branch once and watch the test
   fail before trusting it; the first "base folders still refused" test passed with the changed branch deleted.
 
+## 2026-10-10, Release B finish (Unit 1.7e option D, call 59, Astra's review)
+- A check that recognises a command by its words decides only what the person is asked. The control is what the
+  library refuses: every writer requires the ticket, so a spelling the hook misses writes nothing. Design the hook so
+  every miss fails closed, then let reviewers attack the hook for false descriptions rather than for misses.
+- Name the command the person allows exactly: the script's real path from the folder it runs in, nothing else on the
+  line, no file opened by the shell, no setting in front. Each of those was a way for "Allowing it saves the draft"
+  to describe less than what ran (Astra's findings 1 and 2).
+- A suite that holds every approval cannot see a ticket and a writer disagreeing. Keep a test that runs every
+  approval with no hold and a real ticket, and prove it by swapping two mappings once and watching it fail.
+- A test-only way past a control must live in the tests, never in the plugin (the "standing" ticket did), and it must
+  not import the plugin early: an eager import in sitecustomize loaded the real library ahead of a deliberately
+  broken copy and hid a failure the suite exists to see.
+- A name somebody typed is untrusted wherever it is printed, the lines for the assistant included. Fence by default in
+  the printer (`held_apart`), then sweep every write in the script rather than the ones a review names; the first fix
+  missed six print sites.
+- The installed gate refuses any line holding git beside another program, and any line naming the seat folder or its
+  variable, even inside a heredoc. Run git alone on its line, and put edits that mention either into a script file.
+- When one module offers a choice and another acts on it, the test must check that what is acted on is what was
+  offered, not only what the list shows. The replay fix that skipped a template when offering a segment page made the
+  offered page the one version drafting leaves out; only a test against what drafting really reads caught it.
+- Skip as little as possible when exempting text from a check. Skipping the whole sources line let "TBD" through, and
+  "ends in a dot and a few letters" let "e.g" through; the exemption that held was an item ending in a file ending the
+  plugin really reads or lists.
+- Test fixtures are written from scratch, with an invented company, invented sentences and invented figures, even
+  when the client material is already public. The live check's driver figure reached two test files that way; a push
+  scan that only searches for the replay's own keys will not find wording carried in from an earlier session.
+
 ## 2026-10-15, 0.3.7
 - A guarded folder should be the folder that holds the guarded files, not the whole tree above them. Counting all of
   `~/.claude` as guarded asked about every interpreter run from `~/.claude/projects`, where Claude Code saves large

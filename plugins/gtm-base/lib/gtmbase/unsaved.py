@@ -2,9 +2,10 @@
 
 Every check in this plugin that asks "is anything unsaved in this base?" asks
 it here, so the answer is the same wherever it is asked: approving a prepared
-change or a hand edit, the move of the context changes, the review bringing a
-base up to date, the session start update, setup, and every write that refuses
-a folder somebody is still working in.
+change or a hand edit, the move to the CLASS layout and its recovery, the
+review bringing a base up to date, the session start update, setup, taking a
+finished page into a base and finishing or taking back an import that
+stopped, and every write that refuses a folder somebody is still working in.
 
 The answer leaves out the files an operating system makes on its own. A Mac
 writes a `.DS_Store` file into every folder somebody opens in Finder, and the
@@ -184,6 +185,9 @@ OTHER_DOCUMENTS = "%s other documents"
 # What a file holding one context change is called when a sentence names it on
 # its own. Its file name is the change's identifier, which is never read out.
 ONE_OF_YOUR_CONTEXT_CHANGES = "one of your context changes"
+# What a dated record of what changed is called when a sentence names it on
+# its own. Its file name is never read out either.
+ONE_OF_YOUR_RECORDS = "one of your records"
 
 # How many documents are named before the rest are counted.
 MOST_NAMED = 3
@@ -209,24 +213,13 @@ def _counted(number: int) -> str:
     return str(number)
 
 
-# The documents the product itself knows, each with a fixed label: the two a
-# base needs, the map, and the nine documents of the context standard a base
-# is being moved to (plan revision 2.2, Unit 1.5b), so a refusal there names
-# them too. Nothing here is read out of a file name.
+# The documents the product itself knows, each with a fixed label: the nine
+# documents of the CLASS layout (Unit 1.5b), the map and the source map, at
+# their current paths and at the older paths a base laid out before Unit 1.5b
+# still holds them at. The labels are the ones `names` gives every other
+# sentence, so a document is called the same thing wherever it is named.
+# Nothing here is read out of a file name.
 KNOWN_DOCUMENT_LABELS = dict(names.KNOWN_DOCUMENTS)
-KNOWN_DOCUMENT_LABELS.update(
-    {
-        "context/goals.md": "your goals",
-        "context/product.md": "your product",
-        "context/icps.md": "your customer profiles",
-        "context/buyer-personas.md": "your buyer personas",
-        "context/positioning.md": "your positioning",
-        "context/messaging.md": "your messaging",
-        "context/voice.md": "your voice",
-        "context/design.md": "your design",
-        "context/metrics.md": "your metrics",
-    }
-)
 
 def _known_label(path: str) -> Optional[str]:
     """The fixed label of a document the product knows, or None.
@@ -253,9 +246,12 @@ def plain_name(path: str, base_root: Optional[str] = None) -> str:
     if _computer_made(path, base_root):
         return COMPUTER_MADE_ONE
     normalized = str(path).replace(os.sep, "/")
-    for folder in (constants.CHANGES_DIR, constants.LEGACY_CHANGES_DIR):
+    for folder in constants.ALL_CHANGES_DIRS:
         if normalized.startswith(folder + "/"):
             return ONE_OF_YOUR_CONTEXT_CHANGES
+    for folder in constants.ALL_CORRECTIONS_DIRS:
+        if normalized.startswith(folder + "/"):
+            return ONE_OF_YOUR_RECORDS
     label = _known_label(path)
     if label:
         return label

@@ -33,7 +33,12 @@ class TestEveryPromptCarriesTheFenceSentence(unittest.TestCase):
         for step in drafting.STEPS:
             text = prompt(step)
             self.assertIn(constants.SOURCE_FENCE_SENTENCE, text, step)
-            heading = text.index("## The sources")
+            # A document drafted from the notes reads them under its own
+            # heading (the summarize-first stage); a context change still
+            # reads its sources.
+            heading = text.index(
+                "## The sources" if step == drafting.STEP_CHANGE else "## The notes"
+            )
             sentence = text.index(constants.SOURCE_FENCE_SENTENCE)
             placeholder = text.index("{{sources}}")
             self.assertLess(heading, sentence, step)
@@ -103,7 +108,15 @@ class TestEveryPromptRefusesPlaceholdersAndContactDetails(unittest.TestCase):
     def test_each_prompt_keeps_names_and_figures_but_never_contact_details(self):
         for step in drafting.STEPS:
             text = prompt(step)
-            self.assertIn("Keep the customer names", flat(text), step)
+            # A context change still keeps the customer names its sources
+            # carry; a document drafted from the notes keeps the figures, and
+            # setup writes its customers itself (the summarize-first stage).
+            kept = (
+                "Keep the customer names"
+                if step == drafting.STEP_CHANGE
+                else "written exactly as the notes write them"
+            )
+            self.assertIn(kept, flat(text), step)
             self.assertIn(
                 "Never carry a person's contact details across", flat(text), step
             )
@@ -147,6 +160,83 @@ class TestThePositioningPromptPutsTheirWordsFirst(unittest.TestCase):
         self.assertIn(
             "Where you have no quote for a claim, you have no claim", flat(text)
         )
+
+
+class TestTheDocumentPromptsWriteDefinitionsNeverTracking(unittest.TestCase):
+    """Brandon's call 54, decided 2026-09-27.
+
+    A context document holds definitions and never tracking. Customers, deals,
+    deal stages and values, and the pipeline live in the CRM, and a named
+    customer appears in a context document only as evidence. The four prompts
+    that draft a context document say so; the one that drafts a context change
+    records what happened and is not one of them.
+    """
+
+    DOCUMENT_STEPS = (
+        drafting.STEP_ICP,
+        drafting.STEP_UMBRELLA,
+        drafting.STEP_SEGMENT,
+        drafting.STEP_POSITIONING,
+    )
+
+    def test_each_document_prompt_forbids_pipeline_state(self):
+        for step in self.DOCUMENT_STEPS:
+            text = prompt(step)
+            self.assertIn("## Definitions, never tracking", text, step)
+            self.assertLess(
+                text.index("## Definitions, never tracking"),
+                text.index("## Rules"),
+                step,
+            )
+            words = flat(text)
+            self.assertIn("belong in the company's CRM", words, step)
+            self.assertIn(
+                "never write a deal value, a deal stage, a next step, a "
+                "prospect or a list of prospects, or an instruction to contact "
+                "anybody",
+                words,
+                step,
+            )
+            self.assertIn("Leave each one out rather than rewording it", words, step)
+
+    def test_each_document_prompt_names_a_customer_only_as_evidence(self):
+        for step in self.DOCUMENT_STEPS:
+            words = flat(prompt(step))
+            self.assertIn("A named customer appears only as evidence", words, step)
+            self.assertIn(
+                "never as an account to work, a deal to close, or somebody to "
+                "contact",
+                words,
+                step,
+            )
+
+    def test_setup_writes_the_evidence_and_the_draft_names_no_customer(self):
+        """The fidelity replay of 2026-10-10, case one: a customer credited with
+        what another bought. Setup writes every customer itself, beside the
+        material's own words, and the draft never names one."""
+        for step in self.DOCUMENT_STEPS:
+            words = flat(prompt(step))
+            self.assertIn("setup writes that evidence itself", words, step)
+            self.assertIn("never name a customer in your own sentences", words.lower(), step)
+            self.assertNotIn("Keep the customer names", words, step)
+
+
+class TestEveryLineRestsOnItsNotes(unittest.TestCase):
+    """The summarize-first stage: each document prompt carries the rules the
+    citation checks in review hold every draft to."""
+
+    def test_each_document_prompt_says_how_to_cite_and_what_is_checked(self):
+        for step in TestTheDocumentPromptsWriteDefinitionsNeverTracking.DOCUMENT_STEPS:
+            text = prompt(step)
+            words = flat(text)
+            self.assertIn("## Every line rests on its notes", text, step)
+            self.assertIn("[n3, n7]", words, step)
+            self.assertIn("Cite it only in a paragraph or item that asks about it", words, step)
+            self.assertIn("Copy every figure exactly as its note writes it", words, step)
+            self.assertIn("Nothing in the material covers this.", words, step)
+            self.assertIn("sources: []", text, step)
+            for heading in ("Evidence by segment", "Still open in the material", "Where this came from"):
+                self.assertIn(heading, words, step)
 
 
 class TestEveryPlaceholderTheLibraryFillsIsUsed(unittest.TestCase):

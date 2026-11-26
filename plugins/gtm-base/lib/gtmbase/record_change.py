@@ -46,23 +46,28 @@ import os
 import re
 import secrets
 import time
-from typing import List, Optional, Sequence, Tuple
+import unicodedata
+from typing import Callable, Dict, List, Optional, Sequence, Tuple
 
 from . import (
+    approval,
     base_reader,
     compose_proposal,
     confirm,
     constants,
+    drafting,
     formats,
     gitcmd,
     ids,
     locks,
     join_flow,
+    layout,
     moment,
     names,
     paths,
     review,
     scan,
+    segments,
     stale,
     state,
     unsaved,
@@ -147,12 +152,14 @@ CODE_CHANGE_CHANGED = "the-change-changed"
 CODE_RUNS_A_PROGRAM = gitcmd.CODE_EXECUTABLE_DRIVER
 CODE_NOT_ALL_TAKEN_BACK = "not-all-taken-back"
 CODE_BUSY = "busy"
+CODE_SAVING_ELSEWHERE = "saving-elsewhere"
 
 # What a document is called in anything this path says, when its file name is
 # not one a sentence may safely repeat (finding S1 of the same review).
 UNNAMED_DOCUMENT = names.DOCUMENT_WITHOUT_A_PLAIN_NAME
-# A file name read out in a sentence is at most a few plain words, lower case,
-# joined by hyphens or underscores. Anything else is not repeated back.
+# A document the product does not know is asked about only when its file name
+# is a few plain words, lower case, joined by hyphens or underscores. No file
+# name is ever read out (Unit 1.8); this only decides which are asked about.
 _SAFE_STEM_RE = re.compile(r"^[a-z0-9]+(?:[-_][a-z0-9]+){0,5}$")
 SAFE_STEM_CHARS = 40
 
@@ -286,6 +293,10 @@ BUSY = (
     "Another window is answering about this base right now, so nothing was "
     "recorded. Ask again in a moment."
 )
+SAVING_ELSEWHERE = (
+    "Another window is saving into your base right now, so nothing was "
+    "recorded. Ask again in a moment."
+)
 
 
 class Refused(GtmBaseError):
@@ -357,43 +368,154 @@ def ask(long: bool = False) -> List[str]:
 def safe_name(path: str) -> str:
     """What a document is called in anything this path says out loud.
 
-    The documents the product knows keep their own names, and a file named in
-    a few plain lower-case words is called by those words. Every other name is
-    "one of your documents", because a file name is whatever somebody typed,
-    and a name shaped like an instruction was read out as one (the same class
-    0.3.2 closed for the refusal that names unsaved files).
+    The documents the product knows keep their own names, a segment is "one
+    of your segments", and every other document is "one of your documents",
+    because a file name is whatever somebody typed and a name shaped like an
+    instruction was read out as one (the same class 0.3.2 closed for the
+    refusal that names unsaved files). Since Unit 1.8 this is exactly what
+    `names.document_name` says, apart from a path it cannot name at all.
     """
     normalized = str(path or "").replace(os.sep, "/")
-    if normalized in names.KNOWN_DOCUMENTS:
-        return names.KNOWN_DOCUMENTS[normalized]
-    stem = os.path.basename(normalized)
-    if stem.endswith(".md"):
-        stem = stem[: -len(".md")]
-    if len(stem) > SAFE_STEM_CHARS or not _SAFE_STEM_RE.match(stem):
-        return UNNAMED_DOCUMENT
     try:
         return names.document_name(normalized)
     except ValueError:
         return UNNAMED_DOCUMENT
 
 
-def can_be_asked_about(path: str) -> bool:
-    """Whether the questions and answers may name this document at all.
+# A segment is called by the name it was given as "your segment "Fintech
+# lenders"", the name in quotation marks so it reads as a name wherever it
+# sits in a sentence (Brandon's call 59).
+SEGMENT_NAMED = 'your segment "%s"'
 
-    Every sentence the questions and the answers print names the document the
-    way the closing does, so only a document whose name is safe to repeat, and
-    whose name has no space in it (which no confirmation line can carry yet),
-    is asked about. Any other stays flagged for the review, which names it.
+# The punctuation a kept name may hold beside letters, digits and spaces. A
+# quotation mark, a backtick, a bracket, an angle bracket and any character
+# that draws nothing are left out, so a name can never close the quotation it
+# is read in, open a fence, or hide anything from the person reading it.
+_NAME_PUNCTUATION = frozenset("&'.,-/+()!?:")
+
+
+def _plain_name(heading: str) -> Optional[str]:
+    """The heading's words as a segment's name, or None when any are in doubt."""
+    text = " ".join(str(heading or "").split())
+    if not text or len(text) > constants.SEGMENT_NAME_MAX_CHARS:
+        return None
+    if not any(character.isalpha() for character in text):
+        return None
+    for character in text:
+        if character == " " or character in _NAME_PUNCTUATION:
+            continue
+        category = unicodedata.category(character)
+        # A modifier letter can look like a quotation mark, and the Hangul
+        # fillers are letters that draw nothing (the review of call 59).
+        if category[0] not in ("L", "N") or category == "Lm":
+            return None
+        if "FILLER" in unicodedata.name(character, "FILLER"):
+            return None
+    return text
+
+
+def segment_names(base_root: str) -> Dict[str, str]:
+    """Each segment's name, as the customer profile gives it, by its file name.
+
+    The names people give their segments are kept where every seat can read
+    them, in the base itself: the customer profile names each one under a
+    heading of its own in its Segments part, and setup refuses a profile whose
+    headings are not exactly the segments the person settled, matched by the
+    file name the name makes (`drafting.check_umbrella`). So nothing new is
+    stored for this (Brandon's call 59, Unit 1.8's review, finding 1). A name
+    is kept only when one heading alone makes that file name and its words
+    are plain; anything else leaves that segment "one of your segments". The
+    name is only ever said inside text held apart as data.
     """
+    relative = layout.where_it_lives(base_root, constants.REQUIRED_CONTEXT_FILES[0])
     try:
-        closing_name = names.document_name(path)
-    except ValueError:
-        return False
-    return (
-        not formats.name_has_a_space(path)
-        and safe_name(path) == closing_name
-        and closing_name != UNNAMED_DOCUMENT
+        if paths.canonical_context_path(base_root, relative) != relative:
+            return {}
+    except (PathError, ValidationError):
+        return {}
+    text = read_text(os.path.join(base_root, relative.replace("/", os.sep)))
+    if text is None:
+        return {}
+    try:
+        _block, body = formats.split_document(text)
+    except (ValidationError, PathError):
+        return {}
+    found: Dict[str, Optional[str]] = {}
+    for heading, _paragraph in drafting.segment_paragraphs(body):
+        slug = segments.slug_for(heading)
+        if not slug:
+            continue
+        # Two headings making one file name are both in doubt.
+        found[slug] = None if slug in found else _plain_name(heading)
+    # A segment kept in both the current folder and the older one is two
+    # files, and naming both would point two numbers at one name. Each
+    # folder's files are compared by the name they make, so a file spelled
+    # with capitals counts as the same segment (Astra's review of Release B,
+    # finding 7).
+    held = []
+    twice = set()
+    for folder in names.SEGMENT_DIRS:
+        try:
+            listed = os.listdir(os.path.join(base_root, folder))
+        except OSError:
+            listed = []
+        made = [
+            segments.slug_for(entry[: -len(".md")])
+            for entry in listed
+            if entry.endswith(".md")
+        ]
+        twice.update(slug for slug in made if made.count(slug) > 1)
+        held.append(set(made))
+    return dict(
+        (slug, name)
+        for slug, name in found.items()
+        if name and slug not in twice and not all(slug in folder for folder in held)
     )
+
+
+def name_in(kept: Dict[str, str]) -> Callable[[str], str]:
+    """How the steps of recording a change name a document, given the kept names."""
+
+    def named(path: str) -> str:
+        said = safe_name(path)
+        if said != names.ONE_OF_YOUR_SEGMENTS:
+            return said
+        folder, _sep, file_name = (
+            str(path or "").replace(os.sep, "/").strip().rpartition("/")
+        )
+        # Only a file sitting directly in a folder segments are kept in is a
+        # segment the profile names; a copy in a folder below it is not.
+        if folder not in names.SEGMENT_DIRS:
+            return said
+        name = kept.get(segments.slug_for(file_name[: -len(".md")]))
+        return SEGMENT_NAMED % name if name else said
+
+    return named
+
+
+def names_for(base_root: str) -> Callable[[str], str]:
+    """`name_in` over the names this base's customer profile keeps."""
+    return name_in(segment_names(base_root))
+
+
+def can_be_asked_about(path: str) -> bool:
+    """Whether the questions and answers may be about this document at all.
+
+    A document the product knows is always asked about. Any other is asked
+    about only when its file name is a few plain lower-case words and has no
+    space in it (which no confirmation line can carry yet), and any other
+    stays flagged for the review. Which documents are asked about is the rule
+    0.3.3 set; since Unit 1.8 none of them is named from its file name.
+    """
+    normalized = str(path or "").replace(os.sep, "/")
+    if formats.name_has_a_space(path):
+        return False
+    if normalized in names.KNOWN_DOCUMENTS:
+        return True
+    stem = os.path.basename(normalized)
+    if stem.endswith(".md"):
+        stem = stem[: -len(".md")]
+    return len(stem) <= SAFE_STEM_CHARS and bool(_SAFE_STEM_RE.match(stem))
 
 
 def documents(base_root: str) -> List[Tuple[int, str, str]]:
@@ -405,6 +527,7 @@ def documents(base_root: str) -> List[Tuple[int, str, str]]:
     cannot hold, is left off rather than offered and refused later.
     """
     found: List[Tuple[int, str, str]] = []
+    name_of = names_for(base_root)
     for info in base_reader.context_files(base_root):
         path = info.path
         # A map is left off by what it says it is, wherever it sits (Astra's
@@ -418,7 +541,7 @@ def documents(base_root: str) -> List[Tuple[int, str, str]]:
                 continue
         except (PathError, ValidationError):
             continue
-        found.append((len(found) + 1, path, safe_name(path)))
+        found.append((len(found) + 1, path, name_of(path)))
     return found
 
 
@@ -558,11 +681,13 @@ def _named_anywhere(base_root: str, entry_id: str) -> bool:
     if relative is not None:
         return True
     for where in (
-        constants.CONFIRMATIONS_DIR,
-        constants.CORRECTIONS_DIR,
-        constants.PROPOSALS_PENDING_DIR,
-        constants.PROPOSALS_OPENED_DIR,
-        constants.PROPOSALS_DROPPED_DIR,
+        (constants.CONFIRMATIONS_DIR,)
+        + tuple(constants.ALL_CORRECTIONS_DIRS)
+        + (
+            constants.PROPOSALS_PENDING_DIR,
+            constants.PROPOSALS_OPENED_DIR,
+            constants.PROPOSALS_DROPPED_DIR,
+        )
     ):
         folder = os.path.join(base_root, where.replace("/", os.sep))
         try:
@@ -737,7 +862,7 @@ def forget_showing(base_id: str) -> None:
 
 
 def _affected_names(affects: Sequence[str]) -> str:
-    return ", ".join(safe_name(path) for path in affects) or "nothing yet"
+    return names.documents_named(affects, name_of=safe_name) or "nothing yet"
 
 
 def preview(
@@ -774,8 +899,20 @@ def preview(
     # and the list is held to the same cap the fence keeps, counted as shown.
     # A list longer than that is refused here, before anything is kept, so
     # the four lines never leave out a document the yes would write down
-    # (Astra's review of 0.3.3, finding 4).
-    if len(as_shown(_affected_names(affects))) > SHOWN_CHARS:
+    # (Astra's review of 0.3.3, finding 4). Since Unit 1.8 the four lines
+    # count the segments and other documents rather than naming each, so the
+    # cap is measured as though every document were named on its own, which
+    # keeps a long list refused as it was rather than folded into a count.
+    # A segment is said by the name its profile keeps (Brandon's call 59), so
+    # the cap is measured on those names, as they will be shown.
+    name_of = names_for(base_root)
+    one_by_one = ", ".join(name_of(path) for path in affects)
+    if len(as_shown(one_by_one)) > SHOWN_CHARS:
+        # Names too long to fit are counted instead, as before call 59, so a
+        # change to every segment is never refused for the names alone.
+        name_of = safe_name
+        one_by_one = ", ".join(name_of(path) for path in affects)
+    if len(as_shown(one_by_one)) > SHOWN_CHARS:
         raise _refuse(TOO_MANY_DOCUMENTS, CODE_TOO_MANY_DOCUMENTS)
     entry = build_entry(
         base_root, what, why, source, affects, day, happened_on, runner=git
@@ -785,7 +922,7 @@ def preview(
     # own `four_lines_for` reading the very text that will be written.
     showing = moment.fenced(
         join_flow.four_lines_for(
-            entry, why_when_none(entry), what_in_full=True, name_of=safe_name
+            entry, why_when_none(entry), what_in_full=True, name_of=name_of
         )
     )
     # The yes is bound to the whole entry rather than to the four lines. That
@@ -859,19 +996,63 @@ def _locked(base_id: str):
     two windows can never both answer the same question or bring back one
     already answered (Astra's review of 0.3.3, finding 10).
     """
-    # Through the one interface every lock goes through, which uses the
+    # Through the one module every lock goes through, which uses the
     # operating system's own lock where it has one and a lock file where it
     # does not (Astra's confirmation of 0.3.3, defect 4: importing `fcntl`
-    # here stopped the whole script on Windows before it ran).
+    # here stopped the whole script on Windows before it ran), and keeps the
+    # lock file in the seat folder's own checked folder of locks with every
+    # other lock (Unit 1.7d), never where a caller happens to name it.
     try:
-        with locks.held(
-            os.path.join(paths.seat_dir(base_id), LOCK_FILE),
+        holding = locks.held(
+            locks.file_lock_path(os.path.join(paths.seat_dir(base_id), LOCK_FILE)),
             wait_seconds=LOCK_WAIT_SECONDS,
             kind=LOCK_KIND,
-        ):
-            yield
+        )
+        holding.__enter__()
     except locks.Busy:
         raise _refuse(BUSY, CODE_BUSY)
+    except PathError as failure:
+        raise _lock_refusal(failure)
+    try:
+        yield
+    finally:
+        holding.__exit__(None, None, None)
+
+
+def _lock_refusal(failure: PathError) -> "Refused":
+    """The sentence for a lock that could not be taken for want of its folder.
+
+    The same two sentences taking a page into a base says: the folder of
+    locks is not this account's alone, or the lock could not be taken.
+    """
+    if failure.code == locks.CODE_LOCKS_NOT_PRIVATE:
+        return _refuse(join_flow.LOCKS_NOT_PRIVATE, locks.CODE_LOCKS_NOT_PRIVATE)
+    return _refuse(join_flow.NO_LOCK, locks.CODE_NO_LOCK)
+
+
+@contextlib.contextmanager
+def _writing(base_id: str):
+    """Hold this base's writing lock while anything is written into the base.
+
+    It is the lock taking finished pages into a base and finishing an import
+    hold for every write, so a context change is never written and saved in
+    the middle of one of theirs, nor one of theirs in the middle of this.
+    """
+    lock = join_flow.writing(base_id)
+    try:
+        lock.__enter__()
+    except GtmBaseError as refusal:
+        # Only a lock that could not be taken is said this way; anything the
+        # write itself refuses is said as it is.
+        if refusal.code == join_flow.CODE_LOCKED:
+            raise _refuse(SAVING_ELSEWHERE, CODE_SAVING_ELSEWHERE)
+        if refusal.code in (locks.CODE_LOCKS_NOT_PRIVATE, locks.CODE_NO_LOCK):
+            raise _lock_refusal(refusal)
+        raise
+    try:
+        yield
+    finally:
+        lock.__exit__(None, None, None)
 
 
 def _asked_path(base_id: str) -> str:
@@ -1066,6 +1247,9 @@ def record(
     is seen to hold exactly the entry that was approved (Astra's review of
     0.3.3, finding 8).
     """
+    # Only a command the person allowed through Claude Code's own question
+    # writes an approval (Unit 1.7e, Brandon's call 57).
+    approval.require("record_change.record")
     git = runner_or_default(runner)
     day = today or state.today()
     refuse_a_shared_copy(base_root, runner=git)
@@ -1096,55 +1280,62 @@ def record(
     if gitcmd.executable_drivers(base_root):
         raise _refuse(RUNS_A_PROGRAM, CODE_RUNS_A_PROGRAM)
 
-    try:
-        review.ready_to_write(base_root, git)
-    except GtmBaseError as refusal:
-        if refusal.code == review.CODE_NOT_DEFAULT_BRANCH:
-            raise _refuse(NOT_ON_MAIN, CODE_NOT_ON_MAIN)
-        said = unsaved.where_sentence(unsaved.look(base_root, git).paths(), base_root)
-        if said:
-            raise _refuse(UNSAVED_NAMED % said, CODE_UNSAVED)
-        raise _refuse(UNSAVED, CODE_UNSAVED)
+    with _writing(base_id):
+        try:
+            review.ready_to_write(base_root, git)
+        except GtmBaseError as refusal:
+            if refusal.code == review.CODE_NOT_DEFAULT_BRANCH:
+                raise _refuse(NOT_ON_MAIN, CODE_NOT_ON_MAIN)
+            # The shared look and the shared refusal, which leave out the files
+            # a computer makes on its own and name the rest the way 0.3.2 does.
+            raise _refuse(
+                unsaved.refusal(UNSAVED_NAMED, UNSAVED, unsaved.look(base_root, git)),
+                CODE_UNSAVED,
+            )
+        # Read again under the lock: a save another window made while this one
+        # waited for it means the base moved on since the showing.
+        if _head(base_root, git) != before:
+            raise _refuse(MOVED_ON, CODE_MOVED_ON)
 
-    # Where the closing writes one: the folder every change is written to
-    # today, on either layout, so one identifier never names two files.
-    relative = base_reader.where_to_write_the_entry(base_root, entry.id)
-    full = os.path.join(base_root, relative.replace("/", os.sep))
-    if os.path.lexists(full):
-        raise _refuse(MOVED_ON, CODE_MOVED_ON)
-    folder = os.path.dirname(full)
-    try:
-        if not os.path.isdir(folder):
-            os.makedirs(folder)
-    except OSError:
-        raise _refuse(COULD_NOT_SAVE, CODE_COULD_NOT_SAVE)
-    if not _inside_the_base(base_root, full):
-        # A folder of changes that leads out of the base through a link is
-        # never written through.
-        raise _refuse(COULD_NOT_SAVE, CODE_COULD_NOT_SAVE)
-    blob = _blob_of(base_root, text, git)
-    if not blob:
-        raise _refuse(COULD_NOT_SAVE, CODE_COULD_NOT_SAVE)
-    try:
-        identity = _publish(full, text)
-    except FileExistsError:
-        # Somebody else's file arrived in between. It is left exactly as it is.
-        raise _refuse(MOVED_ON, CODE_MOVED_ON)
-    except OSError:
-        raise _refuse(COULD_NOT_SAVE, CODE_COULD_NOT_SAVE)
-    try:
-        git.check(["add", "--", relative], cwd=base_root)
-        git.check(
-            ["commit", "-q", "-m", SAVE_MESSAGE, "--", relative], cwd=base_root
-        )
-    except (GtmBaseError, OSError):
-        # Whatever the command said, what counts is what was saved.
-        pass
-    after = _head(base_root, git)
-    if not (after and after != before and _saved_in_head(base_root, relative, text, git)):
-        if _take_it_back(base_root, relative, text, identity, blob, git):
+        # Where the closing writes one: the folder every change is written to
+        # today, on either layout, so one identifier never names two files.
+        relative = base_reader.where_to_write_the_entry(base_root, entry.id)
+        full = os.path.join(base_root, relative.replace("/", os.sep))
+        if os.path.lexists(full):
+            raise _refuse(MOVED_ON, CODE_MOVED_ON)
+        folder = os.path.dirname(full)
+        try:
+            if not os.path.isdir(folder):
+                os.makedirs(folder)
+        except OSError:
             raise _refuse(COULD_NOT_SAVE, CODE_COULD_NOT_SAVE)
-        raise _refuse(NOT_ALL_TAKEN_BACK, CODE_NOT_ALL_TAKEN_BACK)
+        if not _inside_the_base(base_root, full):
+            # A folder of changes that leads out of the base through a link is
+            # never written through.
+            raise _refuse(COULD_NOT_SAVE, CODE_COULD_NOT_SAVE)
+        blob = _blob_of(base_root, text, git)
+        if not blob:
+            raise _refuse(COULD_NOT_SAVE, CODE_COULD_NOT_SAVE)
+        try:
+            identity = _publish(full, text)
+        except FileExistsError:
+            # Somebody else's file arrived in between. It is left exactly as it is.
+            raise _refuse(MOVED_ON, CODE_MOVED_ON)
+        except OSError:
+            raise _refuse(COULD_NOT_SAVE, CODE_COULD_NOT_SAVE)
+        try:
+            git.check(["add", "--", relative], cwd=base_root)
+            git.check(
+                ["commit", "-q", "-m", SAVE_MESSAGE, "--", relative], cwd=base_root
+            )
+        except (GtmBaseError, OSError):
+            # Whatever the command said, what counts is what was saved.
+            pass
+        after = _head(base_root, git)
+        if not (after and after != before and _saved_in_head(base_root, relative, text, git)):
+            if _take_it_back(base_root, relative, text, identity, blob, git):
+                raise _refuse(COULD_NOT_SAVE, CODE_COULD_NOT_SAVE)
+            raise _refuse(NOT_ALL_TAKEN_BACK, CODE_NOT_ALL_TAKEN_BACK)
 
     forget_showing(base_id)
     try:
@@ -1178,6 +1369,12 @@ def record(
             _save_asked(base_id, held)
     except (GtmBaseError, OSError):
         plan = join_flow.Reconciliation([], list(entry.affects))
+    # Each question names a segment by the name its profile keeps. The change
+    # is written by now, so a name that cannot be read leaves it counted.
+    try:
+        plan.name_of = names_for(base_root)
+    except (GtmBaseError, OSError, ValueError):
+        plan.name_of = safe_name
     return Recorded(entry, relative, plan)
 
 
@@ -1203,6 +1400,9 @@ def answer(
     was written then, and only once. Checking the question, answering it and
     taking it off the list happen under one lock.
     """
+    # Only a command the person allowed through Claude Code's own question
+    # writes an approval (Unit 1.7e, Brandon's call 57).
+    approval.require("record_change.answer")
     git = runner_or_default(runner)
     if given not in ANSWERS:
         raise _refuse(ANSWER_UNKNOWN, CODE_BAD_ANSWER)
@@ -1212,7 +1412,10 @@ def answer(
     with _locked(base_id):
         held = _asked(base_id)
         asked = held.get(str(entry_id))
-        if not asked or relative not in asked["documents"]:
+        # A document is the same document at its place in either layout, so
+        # a question asked before the base was moved to the current layout is
+        # still answered about it where it lives now (Unit 1.5b).
+        if not asked or not _names(asked["documents"], relative):
             raise _refuse(NOT_ASKED, CODE_NOT_ASKED)
         # The change has to be exactly what it was when the question was
         # asked. One changed in another window since is a different change,
@@ -1226,35 +1429,46 @@ def answer(
         except (ValidationError, PathError):
             raise _refuse(CHANGE_CHANGED, CODE_CHANGE_CHANGED)
         if (
-            relative not in list(entry.affects)
+            not _names(entry.affects, relative)
             or entry.origin != ORIGIN
             or entry.run_id is not None
         ):
             raise _refuse(NOT_ASKED, CODE_NOT_ASKED)
-        named = safe_name(relative)
+        name_of = names_for(base_root)
+        named = name_of(relative)
         if given == ANSWER_NOT_NOW:
             result = join_flow.Reconciled(
                 relative, False, LEFT_FLAGGED % _capital(named)
             )
         elif given == ANSWER_YES:
-            result = join_flow.reconcile_yes(
-                base_root, base_id, relative, str(entry_id), now=now, runner=git,
-                any_document=True,
-            )
+            with _writing(base_id):
+                result = join_flow.reconcile_yes(
+                    base_root, base_id, relative, str(entry_id), now=now,
+                    runner=git, any_document=True, name_of=name_of,
+                )
             if not result.answered_yes:
                 # A refused yes can be given again once what stood in the way
                 # is dealt with, so the question stays open.
                 return result
         else:
-            result = join_flow.reconcile_no(
-                base_root, base_id, relative, str(entry_id), now=now, runner=git
-            )
+            with _writing(base_id):
+                result = join_flow.reconcile_no(
+                    base_root, base_id, relative, str(entry_id), now=now,
+                    runner=git, name_of=name_of,
+                )
         asked["documents"] = [
-            path for path in asked["documents"] if path != relative
+            path
+            for path in asked["documents"]
+            if not layout.same_document(path, relative)
         ]
         held[str(entry_id)] = asked
         _save_asked(base_id, held)
         return result
+
+
+def _names(paths_named: Sequence[str], relative: str) -> bool:
+    """Whether a list of paths names this document, at either of its places."""
+    return any(layout.same_document(path, relative) for path in paths_named)
 
 
 def _capital(text: str) -> str:

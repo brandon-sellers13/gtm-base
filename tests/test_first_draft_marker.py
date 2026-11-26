@@ -240,9 +240,11 @@ class TestTheObsoleteClaimIsGone(unittest.TestCase):
             printed = listed.stdout.decode("utf-8")
             self.assertIn("Firmographics", printed)
             number = None
+            # The headings are listed inside the data fence, each after its
+            # number (Astra's review of Unit 1.7c, finding 1).
             for line in printed.split("\n"):
-                if line.startswith("section=") and "Firmographics" in line:
-                    number = line[len("section=") :].split(" ")[0]
+                if line.endswith(". Firmographics"):
+                    number = line.split(".", 1)[0]
             self.assertIsNotNone(number, printed)
 
             handed = run_script(root, ["--new-words-file", "answer"])
@@ -809,6 +811,32 @@ class TestAWordsFileIsClaimedOnce(unittest.TestCase):
             self.assertNotIn(wordsfile.WORDS_STILL_THERE, printed)
             self.assertEqual([], os.listdir(os.path.dirname(path)))
 
+
+class TestThePartsFollowTheMove(unittest.TestCase):
+    """A change prepared before the move to the CLASS layout, worded after it.
+
+    Found while merging 0.3.3 into Release B: the list of a document's parts
+    read the document at the older place the prepared change names, found
+    nothing there once the base was moved, and printed an empty list, so the
+    wording could not be put into any part of it.
+    """
+
+    def test_the_parts_are_read_where_the_document_lives_now(self):
+        with support.Sandbox() as sandbox:
+            root, _base_id = local_base(sandbox)
+            staged = a_first_draft(root)
+            support.git(["mv", ICP, "context/icps.md"], cwd=root)
+            support.git(["commit", "-q", "-m", "moved"], cwd=root)
+            staging = compose_proposal.load_staging(staged)
+            parts = compose_proposal.parts_of(root, staging)
+            self.assertEqual([(ICP, "## Firmographics", 1)], parts)
+            written = compose_proposal.write_the_wording(
+                root, staged, "Companies of twenty to two hundred people.", part=parts[0]
+            )
+            self.assertEqual("replace", written.edits[0].op)
+            self.assertEqual("## Firmographics", written.edits[0].heading)
+            fields = formats.parse_pr_body(written.pr_body)
+            self.assertEqual("Companies of any size.", fields["before"])
 
 if __name__ == "__main__":
     unittest.main()

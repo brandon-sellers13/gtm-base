@@ -84,7 +84,13 @@ another folder first.
   run or a folder it keeps to itself, and never list guesses about why
   something was refused.
 - When the check before a document is used finds nothing wrong, say nothing
-  about the check at all and go straight on with what the person asked for.
+  about the check at all and go straight on with what the person asked for,
+  and never mention a check that found nothing.
+- Ask only the one thing the step asks, and never several questions at once.
+- Keep anything you notice about the content yourself, such as a figure that
+  needs a source or a quote that does not match, until after the approval,
+  and then say it once as one short note, such as "two things you may want to
+  check". Never raise it before or between the flow's own questions.
 - Never mention confirming that everyone who opens this base is on the
   current version of GTM Base unless a script's own sentence asks for it.
   When one does, say that sentence as it is, with its one-line reason: an
@@ -92,6 +98,10 @@ another folder first.
   nothing is out of date.
 
 ## Running it
+
+Each answer below is an approval, so Claude Code asks the person before it
+runs, with a sentence from GTM Base saying what it does. Run it on a line of
+its own and wait for their answer; if they choose No, nothing was recorded.
 
 - `python3 scripts/confirm.py --question <id> --answer yes`
 
@@ -150,6 +160,11 @@ is a thing nobody else can write for them.
   again in this session.
 - It prepared a change: tell them it is waiting, and hand it to the
   `propose-change` skill when they want it raised.
+- A yes about a document that still holds a question a draft left open for
+  them, marked `[your call: ...]`, is refused with one sentence, because
+  nobody can say a document is right while it still asks something. Say the
+  sentence. The review lists that question first, and answering it there is
+  how it is settled.
 
 ## What you never do
 

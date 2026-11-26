@@ -13,12 +13,11 @@ log of questions and their own index, so their numbers are their own.
 from __future__ import annotations
 
 import datetime
-import glob
 import json
 import os
 from typing import Any, Dict, List, Optional
 
-from . import constants, formats, ghcmd, state
+from . import base_reader, constants, formats, ghcmd, state
 from .errors import PathError, ValidationError
 from .fsutil import read_text
 from .gitcmd import GitRunner, runner_or_default
@@ -102,8 +101,16 @@ def _introducing_subject(base_root: str, relative: str, git: GitRunner) -> str:
     """
     name = relative.split("/")[-1]
     both = [relative]
-    if relative.startswith(constants.CHANGES_DIR + "/"):
-        both.append(constants.LEGACY_CHANGES_DIR + "/" + name)
+    # Every folder a context change has ever been kept in is asked about,
+    # because a change moved twice, first by the rename and then by the move
+    # to the current layout, was first added under the oldest of them.
+    if any(
+        relative.startswith(folder + "/") for folder in constants.ALL_CHANGES_DIRS
+    ):
+        for folder in constants.ALL_CHANGES_DIRS:
+            other = folder + "/" + name
+            if other not in both:
+                both.append(other)
     result = git.run(
         ["log", "--diff-filter=A", "--format=%s", "--"] + both, cwd=base_root
     )
@@ -120,7 +127,7 @@ def _entry_path_and_text(base_root: str, entry_id: str):
     either one while a migration has not run or a copy from before it came
     back.
     """
-    for folder in (constants.CHANGES_DIR, constants.LEGACY_CHANGES_DIR):
+    for folder in constants.ALL_CHANGES_DIRS:
         relative = "%s/%s.md" % (folder, entry_id)
         text = read_text(os.path.join(base_root, relative.replace("/", os.sep)))
         if text is not None:
@@ -149,9 +156,10 @@ def catches(
     """
     found: List[Dict[str, Any]] = []
     considered = 0
-    folder = os.path.join(base_root, constants.CORRECTIONS_DIR)
-    for path in sorted(glob.glob(os.path.join(folder, "*.md"))):
-        text = read_text(path)
+    # Both folders a record may sit in are read, the one written to today
+    # first, and a record name found in both is read once.
+    for relative in base_reader.correction_files(base_root):
+        text = read_text(os.path.join(base_root, relative.replace("/", os.sep)))
         if text is None:
             continue
         try:

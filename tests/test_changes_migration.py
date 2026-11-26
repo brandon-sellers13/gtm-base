@@ -1,8 +1,14 @@
-"""Moving a base from `work/decisions` to `work/changes`, and picking it up again.
+"""Moving a base to the current layout, and picking it up again.
+
+Unit 1.4 wrote this file for the move from `work/decisions` to `work/changes`.
+Unit 1.5b widened that move to take a base all the way to the CLASS layout, so
+every test here now moves the documents, the context changes, and the records
+together, and the folder a test calls new is `learning/changes`.
 
 Every test here builds a base the shape the one real base is: a repository with
-the map, the two required documents, and entries in the older folder. Nothing
-here reaches the person's own home folder, their git settings, or a real base.
+the map, the two required documents at their older paths, and entries in the
+older folder. Nothing here reaches the person's own home folder, their git
+settings, or a real base.
 """
 
 import datetime
@@ -353,6 +359,20 @@ class MigrationCase(unittest.TestCase):
             self.put(constants.LEGACY_CHANGES_DIR, entry_id, old_entry(entry_id))
         self.save()
 
+    def documents_on_the_current_layout(self):
+        """Move the two documents to where the current layout keeps them.
+
+        A test about a base with nothing left to move needs its documents
+        where they belong as well as its context changes, because since Unit
+        1.5b the move carries both.
+        """
+        for older, current in (
+            ("context/strategy/icp.md", "context/icps.md"),
+            ("context/strategy/positioning.md", "context/positioning.md"),
+        ):
+            support.git(["mv", older, current], cwd=self.root)
+        self.save("documents where they belong")
+
     def entries_now(self):
         """Every context change the base reads, by identifier."""
         rows = base_reader.ledger(self.root, self.base_id, TODAY, collect=[])
@@ -513,6 +533,7 @@ class TestMigrating(MigrationCase):
         self.assertEqual(after, support.head_of(self.root))
 
     def test_a_base_already_in_the_new_layout_is_left_alone(self):
+        self.documents_on_the_current_layout()
         self.put(constants.CHANGES_DIR, ENTRY_ONE, new_entry(ENTRY_ONE))
         self.save()
         before = support.head_of(self.root)
@@ -1182,7 +1203,7 @@ class TestAConflictIsNeverSilent(MigrationCase):
 
         self.in_conflict()
         self.assertNotIn(
-            stale_check.LEDGER_BEHIND_EMPTY % 30, self.run_check().sentences
+            stale_check.LEDGER_BEHIND_EMPTY % "30 days", self.run_check().sentences
         )
 
     def test_the_affected_document_is_still_named_as_one_it_cannot_vouch_for(self):
@@ -1430,7 +1451,11 @@ class TestBothSpellingsOfOneSetting(MigrationCase):
         self.save()
         result = changes.migrate(self.root, self.base_id, today=TODAY)
         self.assertEqual(changes.STATUS_REFUSED, result.status)
-        self.assertIn(ENTRY_ONE, result.sentence)
+        # Unit 1.8: this refusal used to call the context change by the name
+        # of its file, which had an identifier's shape. No sentence reads a
+        # file's own name out any more, so it is one of your context changes.
+        self.assertNotIn(ENTRY_ONE, result.sentence)
+        self.assertIn(changes.NAMED_CONTEXT_CHANGE, result.sentence)
 
     def test_a_required_value_that_folds_away_to_nothing_is_a_plain_refusal(self):
         """K6. It used to die on an attribute, which nothing above catches."""
@@ -1494,7 +1519,7 @@ class TestWhenTheOfferIsMade(MigrationCase):
 
         result = self.review()
 
-        self.assertNotIn(changes.OFFER, result.sentences)
+        self.assertFalse(any(changes.is_the_offer(line) for line in result.sentences))
         self.assertNotIn(stale_check.CODE_CHANGES_CAN_MOVE, result.codes)
 
     def test_no_offer_while_there_are_unsaved_edits(self):
@@ -1507,7 +1532,7 @@ class TestWhenTheOfferIsMade(MigrationCase):
 
         result = self.review()
 
-        self.assertNotIn(changes.OFFER, result.sentences)
+        self.assertFalse(any(changes.is_the_offer(line) for line in result.sentences))
         self.assertNotIn(stale_check.CODE_CHANGES_CAN_MOVE, result.codes)
 
     def test_a_base_with_a_shared_copy_is_told_the_condition_instead(self):
@@ -1518,8 +1543,8 @@ class TestWhenTheOfferIsMade(MigrationCase):
 
         result = self.review()
 
-        self.assertNotIn(changes.OFFER, result.sentences)
-        self.assertIn(changes.EVERY_SEAT_FIRST, result.sentences)
+        self.assertFalse(any(changes.is_the_offer(line) for line in result.sentences))
+        self.assertIn(changes.offer_sentence(self.root, every_seat_first=True), result.sentences)
         self.assertIn(stale_check.CODE_EVERY_SEAT_FIRST, result.codes)
 
     def test_the_move_itself_refuses_on_a_base_with_a_shared_copy(self):
@@ -1548,11 +1573,11 @@ class TestWhenTheOfferIsMade(MigrationCase):
         from gtmbase import stale_check
 
         self.old_layout()
-        self.assertIn(changes.OFFER, self.review().sentences)
+        self.assertIn(changes.offer_sentence(self.root), self.review().sentences)
 
         changes.not_now(self.base_id, TODAY)
 
-        self.assertNotIn(changes.OFFER, self.review().sentences)
+        self.assertFalse(any(changes.is_the_offer(line) for line in self.review().sentences))
 
     def test_the_offer_comes_back_once_the_window_has_passed(self):
         import datetime as when
@@ -1572,11 +1597,11 @@ class TestWhenTheOfferIsMade(MigrationCase):
             mode="review",
             dry_run=True,
         )
-        self.assertIn(changes.OFFER, result.sentences)
+        self.assertIn(changes.offer_sentence(self.root), result.sentences)
 
     def test_the_offer_names_no_folder_path(self):
-        self.assertNotIn("work/", changes.OFFER)
-        self.assertNotIn("/", changes.OFFER)
+        self.assertNotIn("work/", changes.offer_sentence(self.root))
+        self.assertNotIn("/", changes.offer_sentence(self.root))
 
 
 class TestAWayOutOfAStoppedRun(MigrationCase):
@@ -1605,7 +1630,11 @@ class TestAWayOutOfAStoppedRun(MigrationCase):
         result = changes.migrate(self.root, self.base_id, today=TODAY)
 
         self.assertEqual(changes.STATUS_REFUSED, result.status)
-        self.assertIn(ENTRY_ONE, result.sentence)
+        # Unit 1.8: this refusal used to call the context change by the name
+        # of its file, which had an identifier's shape. No sentence reads a
+        # file's own name out any more, so it is one of your context changes.
+        self.assertNotIn(ENTRY_ONE, result.sentence)
+        self.assertIn(changes.NAMED_CONTEXT_CHANGE, result.sentence)
 
     def test_giving_up_on_it_clears_the_note_and_says_what_it_left_alone(self):
         # Before the move is saved, because after it is saved there is
@@ -1626,7 +1655,13 @@ class TestAWayOutOfAStoppedRun(MigrationCase):
 
         self.assertTrue(result.ok, result.sentence)
         self.assertFalse(os.path.exists(self.note_path()))
-        self.assertIn(ENTRY_ONE, result.sentence)
+        # Named the way every sentence about unsaved words names a context
+        # change since 0.3.2, never by its identifier.
+        self.assertEqual(
+            changes.GAVE_UP_LEFT_ALONE % unsaved.ONE_OF_YOUR_CONTEXT_CHANGES,
+            result.sentence,
+        )
+        self.assertNotIn(ENTRY_ONE, result.sentence)
         self.assertEqual(
             theirs,
             support.read(
@@ -1795,7 +1830,11 @@ class TestAFileWhoseNameDisagreesWithWhatIsInIt(MigrationCase):
         result = changes.migrate(self.root, self.base_id, today=TODAY)
 
         self.assertEqual(changes.STATUS_REFUSED, result.status)
-        self.assertIn("some-note.md", result.sentence)
+        # The change is named by the identifier inside it, which is of the one
+        # shape GTM Base gives, and the file's own name is never read out
+        # (Astra's review of Unit 1.5b, finding 7).
+        self.assertIn(ENTRY_ONE, result.sentence)
+        self.assertNotIn("some-note", result.sentence)
 
 
 class TestAnEmptyOlderFolderFromAnEarlierRelease(MigrationCase):
@@ -2104,7 +2143,11 @@ class TestTheRewriteIsCheckedAgainstItself(MigrationCase):
         result = changes.migrate(self.root, self.base_id, today=TODAY)
 
         self.assertEqual(changes.STATUS_REFUSED, result.status)
-        self.assertIn(ENTRY_ONE, result.sentence)
+        # Unit 1.8: this refusal used to call the context change by the name
+        # of its file, which had an identifier's shape. No sentence reads a
+        # file's own name out any more, so it is one of your context changes.
+        self.assertNotIn(ENTRY_ONE, result.sentence)
+        self.assertIn(changes.NAMED_CONTEXT_CHANGE, result.sentence)
 
     # --- N4: a byte-order mark ----------------------------------------------
 
@@ -2158,7 +2201,11 @@ class TestTheRewriteIsCheckedAgainstItself(MigrationCase):
         result = changes.migrate(self.root, self.base_id, today=TODAY)
 
         self.assertEqual(changes.STATUS_REFUSED, result.status)
-        self.assertIn(ENTRY_ONE, result.sentence)
+        # Unit 1.8: this refusal used to call the context change by the name
+        # of its file, which had an identifier's shape. No sentence reads a
+        # file's own name out any more, so it is one of your context changes.
+        self.assertNotIn(ENTRY_ONE, result.sentence)
+        self.assertIn(changes.NAMED_CONTEXT_CHANGE, result.sentence)
         self.assertEqual(
             [ENTRY_ONE + ".md"], self.files_in(constants.LEGACY_CHANGES_DIR)
         )
@@ -2263,7 +2310,14 @@ class TestNothingIsDeletedUnlessAnotherCopyIsThere(MigrationCase):
                 encoding="utf-8",
             )
         )
-        came_from = [str(item.get("path")) for item in note["came_from"]]
+        # The documents move too since Unit 1.5b, so only the context changes
+        # are asked about here: each is recorded under the spelling git holds.
+        came_from = [
+            str(item.get("path"))
+            for item in note["came_from"]
+            if str(item.get("path")).lower().startswith(constants.LEGACY_CHANGES_DIR)
+        ]
+        self.assertTrue(came_from)
         self.assertTrue(
             all(path.startswith(self.CAPITAL + "/") for path in came_from),
             came_from,
@@ -2775,8 +2829,8 @@ class TestAnUnreadableCopyBesideAReadableOne(MigrationCase):
         )
 
         said = " ".join(result.sentences)
-        self.assertNotIn("1 things", said)
-        self.assertIn("1 thing ", said)
+        self.assertNotIn("1 thing", said)
+        self.assertIn("One thing ", said)
 
 
 class TestAFailedFirstRunReallyLeavesItAsItWas(MigrationCase):
@@ -2892,7 +2946,7 @@ class TestTheReadOnlyCheck(MigrationCase):
         said = finished.stdout.decode("utf-8")
         # How many, in words, and never which ones by identifier (finding 4
         # of the release A live check: this used to print the change's id).
-        self.assertIn("update one of your context changes", said)
+        self.assertIn("two documents and one context change", said)
         self.assertNotIn(ENTRY_ONE, said)
 
     def test_it_counts_in_words_and_names_no_identifier(self):
@@ -2901,7 +2955,7 @@ class TestTheReadOnlyCheck(MigrationCase):
 
         said = self.run_script("--check-move").stdout.decode("utf-8")
 
-        self.assertIn("update two of your context changes", said)
+        self.assertIn("two documents and two context changes", said)
         for entry_id in (ENTRY_ONE, ENTRY_TWO):
             self.assertNotIn(entry_id, said)
         self.assertNotIn("stg-", said)
@@ -2927,12 +2981,18 @@ class TestTheReadOnlyCheck(MigrationCase):
         finished = self.run_script("--check-move")
 
         said = finished.stdout.decode("utf-8") + finished.stderr.decode("utf-8")
-        self.assertIn(ENTRY_ONE, said)
+        # Unit 1.8: this refusal used to call the context change by the name
+        # of its file, which had an identifier's shape. No sentence reads a
+        # file's own name out any more, so it is one of your context changes.
+        self.assertNotIn(ENTRY_ONE, said)
+        self.assertIn(changes.NAMED_CONTEXT_CHANGE, said)
 
-    def test_it_says_whether_the_offer_would_be_made(self):
+    def test_it_says_why_the_offer_would_not_be_made(self):
         self.old_layout()
+        # Today as the script reads it, which is the real day.
+        changes.not_now(self.base_id)
         said = self.run_script("--check-move").stdout.decode("utf-8")
-        self.assertIn("offer", said.lower())
+        self.assertIn("because you said not now", said)
 
 
 # --- The last of the smaller things -------------------------------------------
@@ -3237,7 +3297,10 @@ class TestGivingUpTakesAwayItsOwnLeftovers(MigrationCase):
 
         result = changes.abandon(self.root, self.base_id, today=TODAY)
 
-        self.assertIn(written, result.sentence)
+        # Named plainly, never by its file name (finding 7 of Astra's review
+        # of Unit 1.5b).
+        self.assertIn(changes.NAMED_RECORD, result.sentence)
+        self.assertNotIn(written, result.sentence)
         self.assertEqual(
             "words of my own\n",
             support.read(
@@ -3386,7 +3449,7 @@ class TestTheOfferAndTheYes(MigrationCase):
 
         result = self.review()
 
-        self.assertIn(changes.OFFER, result.sentences)
+        self.assertIn(changes.offer_sentence(self.root), result.sentences)
         self.assertIn(stale_check.CODE_CHANGES_CAN_MOVE, result.codes)
         self.assertEqual(before, support.head_of(self.root))
         self.assertEqual(
@@ -3396,12 +3459,13 @@ class TestTheOfferAndTheYes(MigrationCase):
     def test_a_base_with_nothing_to_move_is_never_offered_it(self):
         from gtmbase import stale_check
 
+        self.documents_on_the_current_layout()
         self.put(constants.CHANGES_DIR, ENTRY_ONE, new_entry(ENTRY_ONE))
         self.save()
 
         result = self.review()
 
-        self.assertNotIn(changes.OFFER, result.sentences)
+        self.assertFalse(any(changes.is_the_offer(line) for line in result.sentences))
         self.assertNotIn(stale_check.CODE_CHANGES_CAN_MOVE, result.codes)
 
     def test_the_offer_is_gone_once_the_move_has_been_made(self):
@@ -3409,7 +3473,7 @@ class TestTheOfferAndTheYes(MigrationCase):
         self.assertTrue(changes.needed(self.root))
         changes.migrate(self.root, self.base_id, today=TODAY)
         self.assertFalse(changes.needed(self.root))
-        self.assertNotIn(changes.OFFER, self.review().sentences)
+        self.assertFalse(any(changes.is_the_offer(line) for line in self.review().sentences))
 
     def test_asking_whether_it_is_needed_opens_no_file(self):
         """The question is cheap enough to ask on the way past."""
@@ -3461,13 +3525,14 @@ class TestTheWholeWayThroughOnAMigratedBase(MigrationCase):
             session_id="sess-1",
             mode="review",
         )
+        # The profile is listed where it lives now.
         self.assertIn(
-            "context/strategy/icp.md",
+            "context/icps.md",
             " ".join(review.sentences) + " ".join(line.path for line in review.review),
         )
         # The offer to move is gone, because there is nothing left to move.
         self.assertNotIn(stale_check.CODE_CHANGES_CAN_MOVE, review.codes)
-        self.assertNotIn(changes.OFFER, review.sentences)
+        self.assertFalse(any(changes.is_the_offer(line) for line in review.sentences))
 
         # An ordinary run prepares one edit, and the owner approves it here,
         # because this base has no shared copy of its own to send it to.

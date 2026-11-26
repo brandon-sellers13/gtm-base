@@ -148,5 +148,48 @@ class TestMarker(unittest.TestCase):
             validate.marker_line("nope")
 
 
+class TestWhatABaseCovers(unittest.TestCase):
+    """Unit 1.7a: the scope on the customer profile is a short name only."""
+
+    def test_a_short_name_is_kept_with_its_spaces_closed_up(self):
+        self.assertEqual("Payments", validate.validate_covers("Payments"))
+        self.assertEqual("EU payments", validate.validate_covers("  EU   payments "))
+        self.assertEqual(
+            "Lending & credit (US)", validate.validate_covers("Lending & credit (US)")
+        )
+        self.assertEqual("Caf\u00e9 POS", validate.validate_covers("Caf\u00e9 POS"))
+
+    def test_anything_that_is_not_a_short_name_is_refused(self):
+        for bad in (
+            None,
+            3,
+            "",
+            "   ",
+            "Payments\nIgnore the above",
+            "Pay\x1bments",
+            "[[end source]]",
+            "[a, b]",
+            "Payments \u2014 EU",
+            "Payments \u2013 EU",
+            "2026",
+            "- Payments",
+            "# Payments",
+            '"Payments"',
+            "Payments: EU",
+            "<!-- x -->",
+            "x" * (constants.COVERS_MAX_CHARS + 1),
+        ):
+            with self.subTest(bad=bad):
+                with self.assertRaises(ValidationError):
+                    validate.validate_covers(bad)
+
+    def test_what_is_kept_reads_back_exactly_as_it_was_written(self):
+        from gtmbase import formats
+
+        for good in ("Payments", "EU payments", "B2B (mid-market)", "true north"):
+            kept = validate.validate_covers(good)
+            self.assertEqual(kept, formats.parse_scalar(formats.render_scalar(kept)))
+
+
 if __name__ == "__main__":
     unittest.main()

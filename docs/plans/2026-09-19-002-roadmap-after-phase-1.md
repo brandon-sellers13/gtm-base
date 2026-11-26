@@ -15,11 +15,15 @@ This file is not an implementation plan. Both reviews of the build plan (Astra a
 
 **Order, set by Brandon on 2026-09-19: all of the context goes into the base first, and skills that use it come after.** So the next plan after Phase 1 is what a base holds (the inventory, then messaging, voice, design, competitors, personas, metric definitions, goals, and the sources-of-truth file), and the runner and the skills follow it. Revision 2 of the build plan briefly pulled the runner and the outbound sequence forward as Units 1.4b and 1.4c; revision 2.1 moved them back here. Their revision 2 text, which already carries the review fixes, is at the end of this file and replaces Units 3.1 and 3.4 below. The success criterion for the first skill (SC-C in the build plan) is that one output is used in real work and what happened is recorded.
 
-**What stays outside the base, set by Brandon on 2026-09-19.** Work in flight (the project board, the campaign calendar, meeting transcripts, decisions made in chat) and a person's own notes are not kinds a base holds. They stay where they are and are listed as sources in the sources-of-truth file, with where each lives, which connected tool reads it, and the fallback. What follows from that: the base never gains a `context/work/` folder; the inventory's list of kinds leaves both out; the empty `context/notes/` folder in the company template is removed when the inventory plan is written; and drift grade and the content brief lose the feature that compared a piece against other work in flight, unless a later plan reads that from a source at run time. This closes Fable M8.
+**What stays outside the base, set by Brandon on 2026-09-19.** Work in flight (the project board, the campaign calendar, meeting transcripts, decisions made in chat) and a person's own notes are not kinds a base holds. They stay where they are and are listed as sources in the sources-of-truth file, with where each lives, which connected tool reads it, and the fallback. What follows from that: the base never gains a `context/work/` folder; the inventory's list of kinds leaves both out; the empty `context/notes/` folder in the company template was removed by Unit 1.5b of the build plan; and drift grade and the content brief lose the feature that compared a piece against other work in flight, unless a later plan reads that from a source at run time. This closes Fable M8.
 
 **The kinds a base holds, set by Brandon on 2026-09-25.** The CLASS context standard replaces the kinds listed in the units below: nine files flat in `context/` (goals, product, icps, buyer-personas, positioning, messaging, voice, design, metrics), segments under `context/icps/`, the source map `context/stack.md` in place of `sources-of-truth.md`, `competitors.md` folded into positioning, and a new Standard kind in `context/standards/<job>.md` holding each job's goal, what is unacceptable, what needs approval, and the checks, which is where the per-skill rubric files below now live. Unit 1.5b of the build plan makes the move. Read every path in the units below through this mapping.
 
+**Written through, 2026-09-26 (Unit 1.5b).** The units below now name the current layout directly rather than asking to be read through the mapping: the kinds are the nine files of the context standard plus the source map and the standards; `competitors.md` is gone, and the alternatives buyers consider are a section of `context/positioning.md`; the source map is `access/stack.md`, whose starter the company template now carries; each skill's rules live in `standards/<job>.md`; and the company-skills brainstorm runs before the first skill and has to settle who may approve a change under `skills/`, which the plugin refuses until it does.
+
 **The layout by CLASS part, set by Brandon on 2026-09-25 (revision 2.3).** A base has `context/`, `learning/` (changes, corrections, and `lessons/` for lessons from results), `access/stack.md` in place of `context/stack.md` and `sources-of-truth.md`, `skills/<job>/` (refused until the company-skills brainstorm settles who may approve a skill change; that brainstorm runs before the first skill), `standards/<job>.md`, and `work/` for approvals. The first reporting skill is where `learning/lessons/` first gets filled: it proposes changes to personas or messaging from results, with the evidence attached.
+
+**The next plan, set by Brandon on 2026-09-27 (call 48 of the build plan).** The plan written as soon as Release B ships is the inventory (Unit 2.1), the thin runner (Unit 3.1, as the reviewed Unit 1.4b text at the end of this file) and the outbound sequence (Unit 3.4, as the reviewed Unit 1.4c text), pulled forward ahead of the rest of Phase 2. The outbound sequence is the shortest line from the base to pipeline (a sequence, then sends, replies and meetings), and SC-C is its test. The company-skills brainstorm (Unit 4.1) runs alongside it, because the outbound sequence ships with the plugin rather than as a company skill kept in a base. This replaces the sentence above that each phase's plan waits for a skill used on real work. The rest of Phase 2 (messaging and voice, design, the other kinds, the source map, and updating GTM Base) follows.
 
 ## Review findings to fold in when each plan is written
 
@@ -54,7 +58,7 @@ Starts after Phase 1 ships. Setup stays at two documents throughout.
 - Modify: `plugins/gtm-base/lib/gtmbase/constants.py` (`BASE_KINDS`: ordered, each with destination path, adoptable, draftable), `plugins/gtm-base/lib/gtmbase/stale_check.py` (the inventory is part of the review), `plugins/gtm-base/skills/stale-check/SKILL.md` ("what is my base missing?")
 - Test: `tests/test_stale_check.py`, `tests/test_scaffold.py`
 
-**Approach:** The inventory is a read over `base_reader.context_files` against `BASE_KINDS`, returned as a small table: the kind, whether the base has it, and when it was last confirmed. It offers adopt or draft per kind on request and does nothing on its own. The reference file says in plain words what each kind is for and what a good one contains, and a test holds the constant and the reference in step.
+**Approach:** `BASE_KINDS` is, in order, the nine files of the context standard (`context/goals.md`, `product.md`, `icps.md`, `buyer-personas.md`, `positioning.md`, `messaging.md`, `voice.md`, `design.md`, `metrics.md`, with segments under `context/icps/`), the source map `access/stack.md`, and one Standard kind, `standards/<job>.md`, holding a job's goal, what is unacceptable, what needs approval, and the checks run before work is handed back. The inventory is a read over `base_reader.context_files` against `BASE_KINDS`, returned as a small table: the kind, whether the base has it, and when it was last confirmed. It offers adopt or draft per kind on request and does nothing on its own. The reference file says in plain words what each kind is for and what a good one contains, and a test holds the constant and the reference in step.
 
 **Patterns to follow:** The review's one-list-in-one-sitting shape; the map-settings-and-reference pattern.
 
@@ -79,7 +83,7 @@ Starts after Phase 1 ships. Setup stays at two documents throughout.
 **Dependencies:** 2.1.
 
 **Files:**
-- Create: `plugins/gtm-base/skills/join/references/prompts/draft-messaging.md`, `draft-voice.md`, `templates/company-base/context/strategy/messaging.md` and `voice.md` (and the plugin-side copies), `tests/fixtures/drafts/messaging.md`, `voice.md`
+- Create: `plugins/gtm-base/skills/join/references/prompts/draft-messaging.md`, `draft-voice.md`, `templates/company-base/context/messaging.md` and `voice.md` (and the plugin-side copies), `tests/fixtures/drafts/messaging.md`, `voice.md`
 - Modify: `plugins/gtm-base/lib/gtmbase/drafting.py` (two explicit document variants), `plugins/gtm-base/lib/gtmbase/inventory.py`, `plugins/gtm-base/lib/gtmbase/constants.py`
 - Test: `tests/test_drafting.py`, `tests/test_inventory.py`, `tests/test_review.py`, `tests/test_prompt_guards_join.py`
 
@@ -108,7 +112,7 @@ Starts after Phase 1 ships. Setup stays at two documents throughout.
 **Dependencies:** 2.2.
 
 **Files:**
-- Create: `templates/company-base/context/strategy/design.md` and the plugin-side copy, `plugins/gtm-base/skills/join/references/prompts/draft-design.md`, `tests/fixtures/drafts/design.md`
+- Create: `templates/company-base/context/design.md` and the plugin-side copy, `plugins/gtm-base/skills/join/references/prompts/draft-design.md`, `tests/fixtures/drafts/design.md`
 - Modify: `plugins/gtm-base/lib/gtmbase/drafting.py`, `constants.py`, `inventory.py`, `plugins/gtm-base/skills/stale-check/references/base-kinds.md`
 - Test: `tests/test_drafting.py`, `tests/test_inventory.py`
 
@@ -127,7 +131,7 @@ Starts after Phase 1 ships. Setup stays at two documents throughout.
 
 **Atlas: figure 1.**
 
-- [ ] **Unit 2.4: Competitors, personas, metric definitions, goals**
+- [ ] **Unit 2.4: Product, buyer personas, metric definitions, goals**
 
 **Goal:** The remaining kinds arrive through the same path, with the honest limit on the two that depend on numbers.
 
@@ -136,27 +140,27 @@ Starts after Phase 1 ships. Setup stays at two documents throughout.
 **Dependencies:** 2.1.
 
 **Files:**
-- Create: `templates/company-base/context/strategy/competitors.md`, `context/strategy/personas/.gitkeep`, `context/metrics/definitions.md`, `context/plan/goals.md` and the plugin-side copies, `plugins/gtm-base/skills/join/references/prompts/draft-competitors.md`, `draft-persona.md`, `draft-metric-definitions.md`, `draft-goals.md`
+- Create: `templates/company-base/context/product.md`, `context/buyer-personas.md`, `context/metrics.md`, `context/goals.md` and the plugin-side copies, `plugins/gtm-base/skills/join/references/prompts/draft-product.md`, `draft-buyer-personas.md`, `draft-metric-definitions.md`, `draft-goals.md`
 - Modify: `plugins/gtm-base/lib/gtmbase/drafting.py`, `constants.py`, `inventory.py`, `plugins/gtm-base/skills/stale-check/references/base-kinds.md`
 - Test: `tests/test_drafting.py`, `tests/test_inventory.py`, `tests/test_base_reader.py`
 
-**Approach:** Competitors and personas draft from the person's own material exactly as the other kinds do, with personas kept explicitly distinct from segments. Metric definitions and goals are different and the prompts say so: a definition of a new customer or of the price payback divides by is a decision the person states, and a target is a number that lives in a model outside the base. Both prompts therefore ask rather than infer, and both refuse to write a number the sources did not carry. This is the doctrine's own line: targets stay in the model, the judgment about targets lives in context, and the map points between them, which is what Unit 2.5 builds.
+**Approach:** The product document and the buyer personas draft from the person's own material exactly as the other kinds do, with personas kept explicitly distinct from segments. There is no competitors file: the alternatives buyers consider are a section of the positioning (Brandon's call 10), so a competitor the sources name is proposed as a change to the positioning. Metric definitions and goals are different and the prompts say so: a definition of a new customer or of the price payback divides by is a decision the person states, and a target is a number that lives in a model outside the base. Both prompts therefore ask rather than infer, and both refuse to write a number the sources did not carry. This is the doctrine's own line: targets stay in the model, the judgment about targets lives in context, and the map points between them, which is what Unit 2.5 builds.
 
 **Patterns to follow:** The never-hallucinate and leave-empty rules from the donor prompts; the standing rule against an invented number.
 
 **Test scenarios:**
-- Happy path: fixture sources produce a competitors document and one persona file, with personas written to `context/strategy/personas/` and never to `segments/`.
-- Edge case: a source naming a competitor with no claim about it produces a named competitor and an empty claim section rather than an invented claim.
+- Happy path: fixture sources produce a product document and a buyer personas document, with personas written to `context/buyer-personas.md` and never to a segment file under `context/icps/`.
+- Edge case: a source naming a competitor with no claim about it produces a proposed change to the positioning's alternatives with an empty claim rather than an invented claim.
 - Security: a metric definitions draft that contains a figure absent from the sources is refused and returned to the same step.
 - Edge case: a goals draft with no target in the sources produces the definition and the question, never a number.
-- Edge case: the inventory distinguishes personas (a folder that may hold many) from the single-file kinds.
+- Edge case: the product document separates what has shipped from what is planned, and says where pricing lives rather than restating it.
 - Integration: all four are read, owned, confirmed, and flagged like any other context file.
 
 **Verification:** The metric definitions file in Brandon's base states the payback price rule he actually uses and cites where the number lives, without restating the number.
 
 **Atlas: figure 1.**
 
-- [ ] **Unit 2.5: The sources-of-truth file**
+- [ ] **Unit 2.5: The source map, `access/stack.md`**
 
 **Goal:** The map grows up. For each kind of data: where it lives outside the base, which connected tool reads it, and the fallback. Nothing reads it over the network at context time.
 
@@ -165,8 +169,8 @@ Starts after Phase 1 ships. Setup stays at two documents throughout.
 **Dependencies:** 2.1, 2.4.
 
 **Files:**
-- Create: `templates/company-base/context/sources-of-truth.md` and the plugin-side copy, `plugins/gtm-base/lib/gtmbase/truth_map.py` (parse and validate the rows), `plugins/gtm-base/skills/join/references/prompts/draft-sources-of-truth.md`, `tests/test_sources_of_truth.py`
-- Modify: `plugins/gtm-base/lib/gtmbase/constants.py`, `inventory.py`, `plugins/gtm-base/skills/stale-check/references/base-kinds.md`, `templates/company-base/context/map.md` and the plugin-side copy (the "where things live" paragraph points at the new file and the map stays settings only)
+- Create: `plugins/gtm-base/lib/gtmbase/truth_map.py` (parse and validate the rows of `access/stack.md`, whose starter Unit 1.5b put in the company template), `plugins/gtm-base/skills/join/references/prompts/draft-stack.md`, `tests/test_stack.py`
+- Modify: `plugins/gtm-base/lib/gtmbase/constants.py`, `inventory.py`, `plugins/gtm-base/skills/stale-check/references/base-kinds.md`, `templates/company-base/context/map.md` and the plugin-side copy (the "where things live" paragraph already points at `access/stack.md` since Unit 1.5b, and the map stays settings only)
 - Test: `tests/test_inventory.py`, `tests/test_base_reader.py`, `tests/test_session_start.py`
 
 **Approach:** One row per kind of data, with four columns: the kind, where it lives, which connected tool reads it, and the fallback when that tool is not connected. It is an ordinary context file, owned and confirmed, so it goes stale like everything else and the existing machinery catches it, which is the point. `truth_map.py` parses it for the skills that will use it and validates the shape; it never calls anything. The map keeps its two settings and gains a pointer, which preserves the settings-only contract Codex defended in condition E.
@@ -177,7 +181,8 @@ Starts after Phase 1 ships. Setup stays at two documents throughout.
 - Happy path: a well-formed file parses into rows with all four columns; a row missing the fallback is reported as incomplete rather than accepted.
 - Security: parsing makes no network call and no git call that reaches a remote, asserted with a runner that fails on any fetch.
 - Edge case: a row naming a tool that is not connected on this seat is still valid, because the file is the team's record and not this seat's inventory.
-- Edge case: session start injects the map and does not inject the sources-of-truth file, keeping the injection cap intact.
+- Edge case: session start injects the map and does not inject the source map, keeping the injection cap intact.
+- Security: a line shaped like a key or a token in the source map is refused by the same screens a proposal gets, and nothing in it is ever a credential.
 - Integration: the file is flagged by a change that affects it and confirmed like any other context file.
 
 **Verification:** Brandon can answer "where does our spend data actually live and what reads it?" from the file alone.
@@ -256,11 +261,11 @@ Starts after Phase 2's inventory and Unit 2.2 have shipped, because a skill that
 **Dependencies:** 3.1.
 
 **Files:**
-- Create: `plugins/gtm-base/skills/drift-grade/SKILL.md`, `scripts/drift_grade.py` (a shim), `references/rubric-source.md`, `examples/`, `templates/company-base/context/strategy/messaging-rubric.md` and the plugin-side copy, `tests/test_drift_grade.py`
+- Create: `plugins/gtm-base/skills/drift-grade/SKILL.md`, `scripts/drift_grade.py` (a shim), `references/rubric-source.md`, `examples/`, `templates/company-base/standards/drift-grade.md` and the plugin-side copy, `tests/test_drift_grade.py`
 - Modify: `plugins/gtm-base/lib/gtmbase/constants.py`, `inventory.py` (the rubric is a kind), `plugins/gtm-base/skills/stale-check/references/base-kinds.md`
 - Test: `tests/test_skill_examples.py`
 
-**Approach:** Reads `context/strategy/icp.md`, the relevant `segments/`, `positioning.md`, `messaging.md`, `voice.md`, and `context/work/` for what else is in flight, so it can report a contradiction between two pieces rather than only a drift from strategy. The rubric lives in `context/strategy/messaging-rubric.md` and the skill is a runner over it. Its second output is a proposal, never an edit, which is P13.
+**Approach:** Reads `context/icps.md`, the relevant segments in `context/icps/`, `positioning.md`, `messaging.md`, `voice.md`, and `context/work/` for what else is in flight, so it can report a contradiction between two pieces rather than only a drift from strategy. The rubric lives in `standards/drift-grade.md` and the skill is a runner over it. Its second output is a proposal, never an edit, which is P13.
 
 **Patterns to follow:** The parent scope's drift-grade description, including reading across `context/work/`; the proposal path in `compose_proposal.py`.
 
@@ -286,11 +291,11 @@ Starts after Phase 2's inventory and Unit 2.2 have shipped, because a skill that
 **Dependencies:** 3.1.
 
 **Files:**
-- Create: `plugins/gtm-base/skills/content-brief/SKILL.md`, `scripts/content_brief.py`, `references/brief-shape.md`, `examples/`, `templates/company-base/context/strategy/content-rules.md` and the plugin-side copy, `tests/test_content_brief.py`
+- Create: `plugins/gtm-base/skills/content-brief/SKILL.md`, `scripts/content_brief.py`, `references/brief-shape.md`, `examples/`, `templates/company-base/standards/content-brief.md` and the plugin-side copy, `tests/test_content_brief.py`
 - Modify: `constants.py`, `inventory.py`, `base-kinds.md`
 - Test: `tests/test_skill_examples.py`
 
-**Approach:** Reads the umbrella and the named segment, `positioning.md`, `messaging.md`, `voice.md`, `design.md` where present, and `context/work/` for what else is in flight, and produces the brief. Its rules live in `context/strategy/content-rules.md`. Anything it cannot ground is a named gap, which is the "leave fields empty, never hallucinate" rule the donor prompts already carry.
+**Approach:** Reads the umbrella and the named segment, `positioning.md`, `messaging.md`, `voice.md`, `design.md` where present, and `context/work/` for what else is in flight, and produces the brief. Its rules live in `standards/content-brief.md`. Anything it cannot ground is a named gap, which is the "leave fields empty, never hallucinate" rule the donor prompts already carry.
 
 **Patterns to follow:** The horizontal-coherence argument in the definition: one audience, so each piece must know what the others said.
 
@@ -315,18 +320,18 @@ Starts after Phase 2's inventory and Unit 2.2 have shipped, because a skill that
 **Dependencies:** 3.1.
 
 **Files:**
-- Create: `plugins/gtm-base/skills/outbound-sequence/SKILL.md`, `scripts/outbound_sequence.py`, `references/sequence-shape.md`, `examples/`, `templates/company-base/context/strategy/outbound-rules.md` and the plugin-side copy, `tests/test_outbound_sequence.py`
+- Create: `plugins/gtm-base/skills/outbound-sequence/SKILL.md`, `scripts/outbound_sequence.py`, `references/sequence-shape.md`, `examples/`, `templates/company-base/standards/outbound-sequence.md` and the plugin-side copy, `tests/test_outbound_sequence.py`
 - Modify: `constants.py`, `inventory.py`, `base-kinds.md`
 - Test: `tests/test_skill_examples.py`
 
-**Approach:** Reads the named segment file, `positioning.md`, `messaging.md`, `voice.md`, and the competitors file where present, and writes the sequence against rules that live in `context/strategy/outbound-rules.md`. Every claim is attributable to a context file, and a claim that is not is dropped rather than softened.
+**Approach:** Reads the named segment file, `positioning.md` (whose alternatives section is where competitors live), `messaging.md`, and `voice.md`, and writes the sequence against rules that live in `standards/outbound-sequence.md`. Every claim is attributable to a context file, and a claim that is not is dropped rather than softened.
 
 **Patterns to follow:** The verbatim-first extraction and banned-word rules from the donor messaging prompt.
 
 **Test scenarios:**
 - Happy path: a sequence for a named segment uses that segment's felt needs in its own words.
 - Edge case: a claim with no grounding in any context file is dropped and the drop is reported.
-- Edge case: a competitor mentioned with no competitors file produces a named gap.
+- Edge case: a competitor mentioned that the positioning's alternatives do not name produces a named gap.
 - Security: no prospect name, email, or phone number appears in the output, asserted by the screens.
 - Edge case: the segment named does not exist: the skill lists the segments that do and stops.
 - Integration: the approved examples pass through the harness.
@@ -343,7 +348,7 @@ Starts after Phase 2's inventory and Unit 2.2 have shipped, because a skill that
 
 **Requirements:** P34.
 
-**Dependencies:** 3.1 (the thin-runner pattern is an input), 2.5 (the sources-of-truth file is an input).
+**Dependencies:** 3.1 (the thin-runner pattern is an input), 2.5 (the source map is an input). **Scheduled before the first skill ships** (Brandon's call 13): the plugin refuses every file under `skills/` until this brainstorm settles who may approve a change there.
 
 **Files:**
 - Create: `docs/brainstorms/2026-XX-company-skills-requirements.md`
@@ -351,7 +356,9 @@ Starts after Phase 2's inventory and Unit 2.2 have shipped, because a skill that
 
 **Approach:** Run the brainstorm with the skill lifecycle from the MKT1 comparison as an input (examples as tests, a propose-an-update step after a session for approval, weekly and monthly audits) and with this repository's trust posture as the constraint. The document answers the questions below or records why each is deferred. It proposes nothing that is not answerable.
 
-**Open questions the brainstorm must answer:**
+**Open questions the brainstorm must answer, the first of them before anything else:**
+
+- Who may approve a change to a file under `skills/`, and how that approval is recorded, so the refusal Unit 1.5b put on that folder can be lifted for approved skills and nothing else.
 1. **The trust model for code on every seat.** A company skill is code that runs on every teammate's machine. Today the trust-surface check refuses `CLAUDE.md`, `AGENTS.md`, `plugins/`, and every `.sh`, `.py`, and `.js` file in a base, and the session-start pull refuses the same paths. What replaces that refusal, and who reviews what.
 2. **How the pull refusal and the trust-surface check change**, path by path, and what a seat does when a pulled skill changes.
 3. **Review and ownership.** Who owns a skill, who approves a change to one, and how that is enforced on a plan with no branch protection.
@@ -414,7 +421,7 @@ These replace Units 3.1 and 3.4 above. Their dependencies on Units 1.3, 1.4, and
 - Modify, append only: `plugins/gtm-base/lib/gtmbase/constants.py`
 - Not created, by r2 (Astra 8): nothing under `templates/company-base/`. Base creation copies that whole tree, so a rules file placed there would already exist in every new base, absent-only writing would then refuse it, and the one existing base would never receive it.
 
-**Approach:** Reads the named segment's file when the base has one and otherwise the customer profile, saying which it used; reads the positioning; reads messaging, voice, and competitors where present and names each one that is missing as a gap, never filling it. The Gridwise base holds a profile and a positioning today, so the first real run is against those two with the gaps named. The rules live in `context/strategy/outbound-rules.md`. When the base has no rules file the skill says so and offers the starter as a proposed change, which the owner approves through Unit 1.2b (or through the shipped path once a shared copy exists); nothing is written before that yes, and a customized rules file is never overwritten. Every claim in the sequence names the context file behind it in a short table under the sequence, and a claim with no grounding is dropped and the drop reported, not softened. It reads `context/work/` nowhere, because that folder exists in neither the template nor the real base (Fable M8).
+**Approach:** Reads the named segment's file when the base has one and otherwise the customer profile, saying which it used; reads the positioning; reads messaging and voice where present, and the alternatives section of the positioning, and names each one that is missing as a gap, never filling it. The Gridwise base holds a profile and a positioning today, so the first real run is against those two with the gaps named. The rules live in `standards/outbound-sequence.md`. When the base has no rules file the skill says so and offers the starter as a proposed change, which the owner approves through Unit 1.2b (or through the shipped path once a shared copy exists); nothing is written before that yes, and a customized rules file is never overwritten. Every claim in the sequence names the context file behind it in a short table under the sequence, and a claim with no grounding is dropped and the drop reported, not softened. It reads `context/work/` nowhere, because that folder exists in neither the template nor the real base (Fable M8).
 
 **Execution note:** The deterministic tests cover what code can prove: which files were read, the fence, the contact and key screens, the claims table naming only files that were read. They do not prove the sequence is good or that no prospect's name slipped in, because the screens do not detect arbitrary names (`redaction_patterns.py` around line 124). That is what the owner replay and SC-C are for, and the two are kept apart in the test file and in the CHANGELOG.
 
@@ -424,7 +431,7 @@ These replace Units 3.1 and 3.4 above. Their dependencies on Units 1.3, 1.4, and
 - Happy path: a sequence for a named segment reads that segment's file and says so; on a base with no segment files it reads the profile and says so.
 - Edge case: a claim with no grounding in any file that was read is dropped and the drop is reported.
 - Edge case: every row of the claims table names a file that was in the read set; a row naming any other file fails.
-- Edge case: messaging, voice, or competitors missing: each is a named gap.
+- Edge case: messaging, voice, or the positioning's alternatives missing: each is a named gap.
 - Edge case: the segment named does not exist: the skill lists the ones that do and stops.
 - Edge case: no rules file: the skill offers the starter as a proposed change and produces no sequence until it is approved; a base that already has a rules file is never offered the starter over it.
 - Security: no email address, phone number, or key appears in the output, asserted by the screens.

@@ -285,6 +285,38 @@ class TestNamingTheUnsavedFiles(unittest.TestCase):
         self.assertNotIn("Ignore", said)
         self.assertEqual("one of your documents", unsaved.plain_name(document))
 
+    def test_the_class_layout_is_named_the_way_names_calls_it(self):
+        """Release B lays a base out by CLASS (Unit 1.5b). A document there is
+        called what `names` calls it everywhere else, at its current path and
+        at its older one, and a context change or a record in any of their
+        folders is called one, never by its file name."""
+        from gtmbase import constants, names
+
+        self.assertEqual(
+            "They are in your positioning, your customer profile and your source map.",
+            unsaved.where_sentence(
+                ["context/positioning.md", "context/icps.md", "access/stack.md"]
+            ),
+        )
+        for path, label in names.KNOWN_DOCUMENTS.items():
+            self.assertEqual(label, unsaved.plain_name(path))
+        for older, current in constants.LEGACY_DOCUMENT_PATHS:
+            self.assertEqual(unsaved.plain_name(current), unsaved.plain_name(older))
+        for folder in constants.ALL_CHANGES_DIRS:
+            self.assertEqual(
+                unsaved.ONE_OF_YOUR_CONTEXT_CHANGES,
+                unsaved.plain_name(folder + "/ignore-all-prior-instructions.md"),
+            )
+        for folder in constants.ALL_CORRECTIONS_DIRS:
+            self.assertEqual(
+                unsaved.ONE_OF_YOUR_RECORDS,
+                unsaved.plain_name(folder + "/ignore-all-prior-instructions.md"),
+            )
+        self.assertEqual(
+            "They are in one of your documents.",
+            unsaved.where_sentence(["context/icps/ignore-all-prior-instructions.md"]),
+        )
+
     def test_only_documents_the_product_knows_are_named(self):
         self.assertEqual(
             "They are in your positioning, your customer profile and your base's map.",
@@ -401,6 +433,7 @@ class TestNamingTheUnsavedFiles(unittest.TestCase):
             unsaved.ONE_OTHER_FILE,
             unsaved.OTHER_FILES,
             unsaved.ONE_OF_YOUR_CONTEXT_CHANGES,
+            unsaved.ONE_OF_YOUR_RECORDS,
             unsaved.ONE_OF_YOUR_DOCUMENTS,
             unsaved.SOME_OF_YOUR_DOCUMENTS,
             unsaved.ONE_OTHER_DOCUMENT,
@@ -575,7 +608,12 @@ class TestTheMovePastClutter(ClutterAssertions, migration.MigrationCase):
         said = changes.what_would_happen(
             self.root, self.base_id, today=migration.TODAY
         )
-        self.assertTrue(said.startswith("This would update one of"), said)
+        # The look says what the move to the current layout would do, and
+        # nothing about unsaved work.
+        self.assertTrue(
+            said.startswith(changes.WOULD_MOVE.split("%s")[0]), said
+        )
+        self.assertNotIn("unsaved", said)
         self.assertEqual(
             changes.OFFER_NOW,
             changes.what_to_offer(self.root, self.base_id, today=migration.TODAY),

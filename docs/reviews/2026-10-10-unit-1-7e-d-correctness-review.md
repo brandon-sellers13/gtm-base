@@ -1,0 +1,10 @@
+# Unit 1.7e, option D: correctness review
+
+Reviewer: a correctness-review agent, read only, on `claude/release-b-finish-1e1203..unit-1-7e-d`, 2026-10-10. Every documented approval line in the skills and the session guidance is recognised, no documented step runs two approvals in one command, `_held` covers the nested writes, no command that is not an approval reaches a gated function (all fifteen traced), and importing a script's parser costs about 70 to 150 ms only on lines that name a script.
+
+1. **P1, verified.** `join.py` never printed the refusal sentence: `ApprovalRefused` is a `ReviewError`, caught by the generic handler, which says to go back to the same step. Fix: join says the approval's own sentence.
+2. **P2, verified.** The documented look-only `--move-changes --dry-run` was asked as "moves your base". Fix: a dry run is not an approval.
+3. **P2, inferred.** Any other command in the same conversation while the question is open takes the ticket back, so a parallel tool call or a background subagent can make a yes refuse with a sentence that says it did not come through the question. Kept, because taking the ticket back is what makes a ticket the person refused useless; the refusal sentence now says plainly that this is one of the two reasons.
+4. **P3, verified.** A line whose settings the script cannot read (`# a comment`, `python3 -X utf8 ...`) was let through unasked and then refused with no way forward. Fix: an approval script whose settings cannot be read is refused with a sentence saying to run it as the skill writes it. `bash -lc "..."` stays a residual: the script refuses with its sentence.
+5. **P3, verified.** `seat.py --weekly-line off --quiet month` wrote the weekly line before the quiet was refused. Fix: such a line asks for two things and is refused, and the quiet is checked first.
+6. **P3.** The hook's order of checks differs from each script's order of dispatch, and an answer the script does not know was asked with a default sentence. Fix: two things at once are refused, and an unknown answer is refused as unreadable.

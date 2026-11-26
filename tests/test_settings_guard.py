@@ -529,7 +529,13 @@ class TestReadsAreNeverAskedAbout(Home):
                 self.assertIsNone(gate.check_command(command, cwd, self.session), command)
 
     def test_the_real_commands_through_the_hook(self):
+        # A command that ran a GTM Base script named the folder the plugin
+        # was installed in that day. Release B refuses any of its approval
+        # scripts run from a folder that is not the running plugin's own, so
+        # each is replayed against the plugin that runs here, as it was then.
+        installed = "~/.claude/plugins/cache/gtm-base/gtm-base/0.3.8/"
         for command in self.corpus():
+            command = command.replace(installed, support.PLUGIN_DIR + "/")
             payload = {
                 "tool_name": "Bash",
                 "tool_input": {"command": command},

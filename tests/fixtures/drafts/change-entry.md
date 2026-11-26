@@ -9,7 +9,7 @@ happened_on: 2026-08-04
 written_on: 2026-09-06
 noted_by: owner@example.com
 source: pricing-notes.txt
-affects: [context/strategy/icp.md]
+affects: [context/icps.md]
 review_by: 2026-11-04
 origin: join
 run_id: pending

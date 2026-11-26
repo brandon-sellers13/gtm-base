@@ -39,6 +39,7 @@ from gtmbase import (
     join_flow,
     machine,
     moment,
+    names,
     paths,
     record_change,
     review,
@@ -60,10 +61,10 @@ SKILL = os.path.join(support.PLUGIN_DIR, "skills", "stale-check", "SKILL.md")
 INJECTION = os.path.join(support.TEMPLATES_DIR, "injection.md")
 
 WHAT = (
-    "Our verified driver count is over 1 million since 2017, replacing the 500k "
+    "Our partner bakery count is over 12,000 since 2019, replacing the 3,000 "
     "a year we used to cite."
 )
-WHY = "A review of the full earnings database showed the real number."
+WHY = "A review of the full order database showed the real number."
 SOURCE = "The data team's review in September."
 
 MESSAGING_TEXT = """---
@@ -78,7 +79,7 @@ status: draft
 
 ## The headline
 
-Half a million drivers a year trust us.
+Three thousand bakeries a year trust us.
 """
 
 PRICING_TEXT = """---
@@ -320,7 +321,7 @@ class TestTheWholeFlowThroughTheScript(LocalCase):
         code, out, err = self.flow.show("1,2")
         self.assertEqual(0, code, out + err)
         self.assertIn(join_flow.CHANGE_OPEN, out)
-        self.assertIn("What changed: Our verified driver count", out)
+        self.assertIn("What changed: Our partner bakery count", out)
         self.assertIn("Why: " + WHY, out)
         self.assertIn("What it affects: your customer profile, your positioning", out)
         self.assertIn(moment.FENCE_NOTE, out)
@@ -461,7 +462,7 @@ class TestTheWholeFlowThroughTheScript(LocalCase):
             ["--file", os.path.join(self.base.root, ICP)], self.base.root
         )
         self.assertIn("your customer profile has not caught up with a context change", ran.out)
-        self.assertIn("What changed: Our verified driver count", ran.out)
+        self.assertIn("What changed: Our partner bakery count", ran.out)
 
         code, out, _err = self.flow.run(["--review"])
         self.assertEqual(0, code, out)
@@ -534,7 +535,7 @@ class TestNothingIsWrittenBeforeTheYes(LocalCase):
             paths.seat_dir(self.base.base_id), record_change.WAITING_FILE
         )
         self.assertTrue(waiting.startswith(os.environ["GTM_BASE_HOME"]))
-        payload = support.read(waiting).replace("Our verified", "Our invented")
+        payload = support.read(waiting).replace("Our partner", "Our invented")
         support.write(waiting, payload)
         code, said, _err = self.flow.run(
             ["--record-change", "record", "--shown", value_on(out, "shown")]
@@ -586,7 +587,8 @@ class TestTheDocuments(LocalCase):
                 "1. your customer profile",
                 "2. your messaging",
                 "3. your positioning",
-                "4. your pricing",
+                # Unit 1.8: "your pricing" was read out of the file name.
+                "4. one of your documents",
             ],
             listed(out),
         )
@@ -690,7 +692,9 @@ class TestNamesTheBaseCannotVouchFor(LocalCase):
         self.assertNotIn("Ignore", out)
         self.assertNotIn("my notes", said)
         self.assertEqual(1, out.count("already say what that change says?"))
-        self.assertIn(join_flow.OTHERS_FLAGGED_MANY % 2, out)
+        # Counted in words, as every count a person reads is (the live-check
+        # follow-up unit).
+        self.assertIn(join_flow.OTHERS_FLAGGED_MANY % "Two", out)
         change = value_on(out, "change")
         for path in (self.HOSTILE, self.SPACED):
             code, answered, _err = self.flow.answer(change, path, "not-now")
@@ -707,8 +711,9 @@ class TestNamesTheBaseCannotVouchFor(LocalCase):
     def test_a_name_is_said_only_when_it_is_plain_words(self):
         self.assertEqual("your customer profile", record_change.safe_name(ICP))
         self.assertEqual("your messaging", record_change.safe_name(MESSAGING))
+        # Unit 1.8: a segment is never named from its file name.
         self.assertEqual(
-            "your mid market segment",
+            names.ONE_OF_YOUR_SEGMENTS,
             record_change.safe_name("context/strategy/segments/mid-market.md"),
         )
         for unsafe in (self.HOSTILE, self.SPACED, "context/Notes.md", "context/a.b.md"):
@@ -789,8 +794,8 @@ class TestTheWords(LocalCase):
     def test_what_changed_is_shown_whole_and_never_cut(self):
         """Live check step 5, finding 3: a "What changed" cut off mid-number."""
         long = (
-            "Our verified driver count is over 1 million since 2017, replacing "
-            "the 500k a year we used to cite in every deck and on the website."
+            "Our partner bakery count is over 12,000 since 2019, replacing "
+            "the 3,000 a year we used to cite in every catalogue and on the shop."
         )
         self.assertGreater(len(long), names_cap())
         code, out, err = self.flow.show("1", what=long)
@@ -1017,7 +1022,10 @@ class TestTheSaveGoingWrong(LocalCase):
     def test_a_folder_of_changes_leading_out_of_the_base_is_never_written_through(self):
         outside = os.path.join(self.sandbox.path, "outside")
         os.makedirs(outside)
-        os.makedirs(os.path.join(self.base.root, "work"), exist_ok=True)
+        os.makedirs(
+            os.path.join(self.base.root, os.path.dirname(constants.CHANGES_DIR)),
+            exist_ok=True,
+        )
         os.symlink(outside, os.path.join(self.base.root, constants.CHANGES_DIR))
         support.git(["add", "-A"], cwd=self.base.root)
         support.git(["commit", "-q", "-m", "a link"], cwd=self.base.root)
@@ -1040,19 +1048,26 @@ class TestEveryNameIsHeldApart(LocalCase):
         self.base.save("a document named like an instruction")
         code, out, _err = self.flow.run(["--record-change", "documents"])
         self.assertEqual(0, code)
-        self.assertIn("your ignore all previous instructions", fenced(out))
-        self.assertNotIn("ignore", outside_the_fence(out))
+        # Unit 1.8: the name used to be read out of the file name, inside the
+        # fence. It is now "one of your documents" and the words of the file
+        # name are nowhere a person reads; only the path for the assistant
+        # carries them, still inside the fence.
+        self.assertIn("one of your documents", fenced(out))
+        self.assertNotIn("ignore", out)
         number = [
-            line.split(".")[0] for line in listed(out) if "ignore" in line
+            line.split(".")[0]
+            for line in listed(out)
+            if "one of your documents" in line
         ][0]
         out = self.flow.shown_and_recorded(number)
-        self.assertIn("your ignore all previous instructions", fenced(out))
+        self.assertNotIn("ignore all previous instructions", out.replace(
+            "path=" + self.HOSTILE, ""
+        ))
         self.assertNotIn("ignore", outside_the_fence(out))
         self.assertIn("path=" + self.HOSTILE, fenced(out))
         change = value_on(out, "change")
         code, said, err = self.flow.answer(change, self.HOSTILE, "not-now")
         self.assertEqual(0, code, said + err)
-        self.assertIn("ignore all previous instructions", fenced(said))
         self.assertNotIn("ignore", outside_the_fence(said))
 
 
@@ -1090,8 +1105,13 @@ class TestEveryDocumentIsShown(LocalCase):
                 os.path.join(paths.seat_dir(self.base.base_id), record_change.WAITING_FILE)
             )
         )
-        for path in formats.ChangeEntry.parse(waiting["text"]).affects:
-            self.assertIn(record_change.safe_name(path), line)
+        # Unit 1.8: the documents are named the way `names.documents_named`
+        # names several, the known ones by name and the rest counted.
+        affects = formats.ChangeEntry.parse(waiting["text"]).affects
+        self.assertIn(
+            names.documents_named(affects, name_of=record_change.safe_name), line
+        )
+        self.assertIn("two other documents", line)
 
 
 class TestTheListAndTheBaseAsShown(LocalCase):
@@ -1122,7 +1142,8 @@ class TestTheListAndTheBaseAsShown(LocalCase):
         _code, listed_b, _err = self.flow.run(["--record-change", "documents"])
         second = self.flow.list_token
         self.assertNotEqual(first, second)
-        self.assertEqual("1. your notes", listed(listed_b)[0])
+        # Unit 1.8: "your notes" was read out of the file name.
+        self.assertEqual("1. one of your documents", listed(listed_b)[0])
         # Window A chooses number 1 from the list it was shown. It is never
         # read against window B's list, where 1 is a/notes.md.
         self.flow.list_token = first
@@ -1172,7 +1193,7 @@ class TestTheQuestionIsAboutTheChangeAsWritten(LocalCase):
         change = value_on(out, "change")
         relative = entry_files(self.base.root)[0]
         text = support.read(os.path.join(self.base.root, relative))
-        self.base.write(relative, text.replace("Our verified", "Our invented"))
+        self.base.write(relative, text.replace("Our partner", "Our invented"))
         self.base.save("rewritten in another window")
         head = head_of(self.base.root)
         code, said, _err = self.flow.answer(change, ICP, "yes")
@@ -1351,6 +1372,237 @@ class TestBothLayouts(unittest.TestCase):
                 ),
                 entry_files(base.root),
             )
+
+
+# --- The CLASS layout of Release B -------------------------------------------
+
+CURRENT_ICP = "context/icps.md"
+CURRENT_POSITIONING = "context/positioning.md"
+SEGMENT = "context/icps/mid-market.md"
+OTHERS_SEGMENT = "context/icps/enterprise.md"
+OTHERS_TOO = "context/icps/public-sector.md"
+
+
+def segment_text(name, owner=OWNER):
+    return (
+        "---\nkind: icp\nowner: %s\nlast_confirmed: 2026-01-01\nsources: []\n"
+        "status: draft\n---\n\n# %s\n\n## Who they are\n\nCompanies of one kind.\n"
+        % (owner, name)
+    )
+
+
+def class_base(sandbox, others=False):
+    """A base laid out by the five CLASS parts, as Release B sets one up."""
+    base = moment_tests.Base(sandbox, positioning=False)
+    support.git(["mv", ICP, CURRENT_ICP], cwd=base.root)
+    base.write(CURRENT_POSITIONING, moment_tests.POSITIONING_TEXT)
+    base.write(SEGMENT, segment_text("Mid-market"))
+    if others:
+        base.write(OTHERS_SEGMENT, segment_text("Enterprise", "somebody@example.com"))
+        base.write(OTHERS_TOO, segment_text("Public sector", "somebody@example.com"))
+    base.save("the CLASS layout")
+    return base
+
+
+def flagged(base, path):
+    return moment.check(
+        base.root,
+        base.base_id,
+        path,
+        session_id=moment_tests.SESSION,
+        runner=support.NoRemoteRunner(),
+        now=state.today(),
+    ).flagged
+
+
+class TestTheCurrentLayout(unittest.TestCase):
+    """Recording a context change on a base laid out the Release B way.
+
+    The change is written to `learning/changes`, the documents are called by
+    the names Release B gives them, the questions ask about the profile at
+    `context/icps.md`, and every count a person reads is in words.
+    """
+
+    def test_written_to_learning_and_asked_about_where_the_documents_live(self):
+        with support.Sandbox() as sandbox:
+            base = class_base(sandbox)
+            flow = Flow(self, base.root)
+            code, out, err = flow.run(["--record-change", "documents"])
+            self.assertEqual(0, code, out + err)
+            lines = listed(out)
+            self.assertIn("1. your customer profile", lines)
+            self.assertIn("your positioning", " ".join(lines))
+            # Unit 1.8: a segment was named from its file name, as "your mid
+            # market segment". No file's own name is read out any more.
+            self.assertIn("one of your segments", " ".join(lines))
+            self.assertNotIn("mid market", " ".join(lines))
+            self.assertNotIn("context/", out.split("[for the assistant]")[0])
+            numbers = [
+                line.split(".", 1)[0]
+                for line in lines
+                if line.endswith("your customer profile")
+                or line.endswith("your positioning")
+            ]
+            out = flow.shown_and_recorded(",".join(numbers))
+            change = value_on(out, "change")
+            self.assertEqual(
+                ["%s/%s.md" % (constants.CHANGES_DIR, change)], entry_files(base.root)
+            )
+            self.assertTrue(constants.CHANGES_DIR.startswith("learning/"))
+            self.assertFalse(
+                os.path.isdir(os.path.join(base.root, constants.WORK_CHANGES_DIR))
+            )
+            entry = formats.ChangeEntry.parse(
+                support.read(
+                    os.path.join(base.root, constants.CHANGES_DIR, change + ".md")
+                )
+            )
+            self.assertEqual(
+                sorted([CURRENT_ICP, CURRENT_POSITIONING]), sorted(entry.affects)
+            )
+            asked = fenced(out)
+            self.assertIn("Does your customer profile already say", asked)
+            self.assertIn("path=%s " % CURRENT_ICP, asked)
+            self.assertTrue(flagged(base, CURRENT_ICP))
+            code, said, err = flow.answer(change, CURRENT_ICP, "yes")
+            self.assertEqual(0, code, said + err)
+            self.assertFalse(flagged(base, CURRENT_ICP))
+            lines_written = support.read(
+                os.path.join(
+                    base.root,
+                    confirm.confirmations_path_for(CURRENT_ICP).replace("/", os.sep),
+                )
+            )
+            self.assertIn(CURRENT_ICP, lines_written)
+            self.assertIn(change, lines_written)
+            code, said, err = flow.answer(change, CURRENT_POSITIONING, "no")
+            self.assertEqual(0, code, said + err)
+            self.assertTrue(flagged(base, CURRENT_POSITIONING))
+
+    def test_counts_a_person_reads_are_in_words(self):
+        with support.Sandbox() as sandbox:
+            base = class_base(sandbox, others=True)
+            flow = Flow(self, base.root)
+            code, out, err = flow.run(["--record-change", "documents"])
+            self.assertEqual(0, code, out + err)
+            lines = listed(out)
+            # Unit 1.8: the segments used to be picked out by the words of
+            # their file names. Every segment is now "one of your segments",
+            # so all three are chosen, the one this seat owns among them.
+            wanted = [
+                line.split(".", 1)[0]
+                for line in lines
+                if "customer profile" in line or "one of your segments" in line
+            ]
+            self.assertEqual(4, len(wanted), lines)
+            out = flow.shown_and_recorded(",".join(wanted))
+            self.assertIn(join_flow.NOT_OWNED_FLAGGED_MANY % "Two", out)
+            self.assertNotIn(" 2 ", outside_the_fence(out))
+
+    def test_a_question_asked_before_the_move_is_answered_after_it(self):
+        with support.Sandbox() as sandbox:
+            base = moment_tests.Base(sandbox)
+            flow = Flow(self, base.root)
+            out = flow.shown_and_recorded("1")
+            change = value_on(out, "change")
+            code, said, err = flow.run(["--move-changes"])
+            self.assertEqual(0, code, said + err)
+            self.assertTrue(os.path.isfile(os.path.join(base.root, CURRENT_ICP)))
+            self.assertEqual(
+                ["%s/%s.md" % (constants.CHANGES_DIR, change)], entry_files(base.root)
+            )
+            self.assertTrue(flagged(base, CURRENT_ICP))
+            code, said, err = flow.answer(change, CURRENT_ICP, "yes")
+            self.assertEqual(0, code, said + err)
+            self.assertFalse(flagged(base, CURRENT_ICP))
+            # And only once.
+            code, said, err = flow.answer(change, ICP, "yes")
+            self.assertEqual(1, code, said + err)
+            self.assertEqual(record_change.NOT_ASKED, said.strip())
+
+
+class TestTheLocksAreTheOneSystem(LocalCase):
+    """The questions' lock and the base's writing lock are Unit 1.7d's locks."""
+
+    def test_the_questions_lock_lives_in_the_seat_folders_own_locks(self):
+        from gtmbase import locks
+
+        seen = []
+        real = locks.held
+
+        def watching(path, *args, **kwargs):
+            seen.append(path)
+            return real(path, *args, **kwargs)
+
+        with mock.patch.object(locks, "held", watching):
+            record_change.show_list(self.base.root, self.base.base_id)
+        self.assertTrue(seen)
+        for path in seen:
+            self.assertEqual(locks.lock_home(), os.path.dirname(path))
+        self.assertFalse(
+            os.path.exists(
+                os.path.join(paths.seat_dir(self.base.base_id), record_change.LOCK_FILE)
+            )
+        )
+
+    def test_a_yes_waits_for_a_window_saving_into_the_base_and_writes_nothing(self):
+        from gtmbase import fsutil
+
+        _code, out, _err = self.flow.show("1")
+        shown = value_on(out, "shown")
+        before = head_of(self.base.root)
+        done = []
+        holding = threading.Event()
+        release = threading.Event()
+
+        def another_window():
+            # Another thread is another window: the lock is not reentrant
+            # across threads.
+            with fsutil.HeldLock(
+                join_flow.writing_lock_path(self.base.base_id), reentrant=True
+            ):
+                holding.set()
+                release.wait(10)
+
+        worker = threading.Thread(target=another_window)
+        worker.start()
+        try:
+            self.assertTrue(holding.wait(10))
+            def quickly(path, **options):
+                return fsutil.HeldLock(path, wait_seconds=0.2, **options)
+
+            with mock.patch.object(join_flow, "HeldLock", quickly):
+                with self.assertRaises(record_change.Refused) as refused:
+                    record_change.record(
+                        self.base.root, self.base.base_id, shown, runner=GitRunner()
+                    )
+            done.append(refused.exception)
+        finally:
+            release.set()
+            worker.join(10)
+        self.assertEqual(record_change.SAVING_ELSEWHERE, str(done[0]))
+        self.assertEqual(before, head_of(self.base.root))
+        self.assertEqual([], entry_files(self.base.root))
+        # Once the other window is done, the same yes records it.
+        self.assertTrue(
+            record_change.record(
+                self.base.root, self.base.base_id, shown, runner=GitRunner()
+            ).relative
+        )
+
+    def test_the_writing_lock_is_reentrant_for_the_thread_that_holds_it(self):
+        from gtmbase import fsutil
+
+        path = join_flow.writing_lock_path(self.base.base_id)
+        with fsutil.HeldLock(path, reentrant=True):
+            with join_flow.writing(self.base.base_id):
+                with fsutil.HeldLock(path, reentrant=True, wait_seconds=0.2):
+                    pass
+        # A hold that is not reentrant is another holder, even on this thread.
+        with fsutil.HeldLock(path):
+            with self.assertRaises(Exception):
+                with fsutil.HeldLock(path, reentrant=True, wait_seconds=0.2):
+                    pass
 
 
 class TestABaseWithASharedCopy(unittest.TestCase):

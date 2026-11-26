@@ -63,6 +63,9 @@ from . import (
     machine,
     names,
     paths,
+    layout,
+    scan,
+    segments,
     stale,
     state,
     trust_surface,
@@ -726,6 +729,42 @@ def _is_refused_path(path: str) -> bool:
     return trust_surface.path_is_refused(parts)
 
 
+def _incoming_contents_refused(
+    root: str, target: str, names: Sequence[str], git: GitRunner
+) -> List[str]:
+    """The paths an update would bring in whose content it may not carry.
+
+    Two files are read rather than only named (Astra's review of Unit 1.5b,
+    findings 8 and 10). The skills folder's placeholder may arrive only
+    empty, because one holding a procedure is a skill by another name. The
+    source map may never arrive holding anything the check before a send
+    refuses, such as a key or a token, because it would be on this computer
+    and read by the assistant before anything else looked at it.
+    """
+    refused: List[str] = []
+    for name in names:
+        placeholder = layout.is_the_skills_placeholder(name)
+        stack = name == constants.STACK_PATH
+        if not placeholder and not stack:
+            continue
+        shown = git.run(
+            ["show", "%s:%s" % (target, name)],
+            cwd=root,
+            timeout=LOCAL_TIMEOUT_SECONDS,
+        )
+        if not shown.ok:
+            # Taken away by the update, which carries nothing into it.
+            continue
+        if placeholder and shown.stdout:
+            refused.append(name)
+            continue
+        if stack:
+            allowlist, _code = scan.load_allowlist(root)
+            if scan.scan_source_map(shown.stdout, allowlist):
+                refused.append(name)
+    return refused
+
+
 def _incoming_symlinks(root: str, target: str, git: GitRunner) -> List[str]:
     """The paths the shared copy would bring in as links rather than as files.
 
@@ -868,7 +907,11 @@ def _daily_work(
     # own, so a Finder file no longer stops the update at every session start.
     status = unsaved.look(root, git, timeout=LOCAL_TIMEOUT_SECONDS)
     if not status.clean:
-        return _stalled(blocks, root, git, root_of_plugin, DIRTY_TREE, part)
+        # An import that stopped in the middle of a page leaves that page
+        # unsaved, so the way to finish it is said beside the unsaved edits.
+        stopped = _import_offer(base_id, root_of_plugin).visible
+        sentence = DIRTY_TREE + ("\n" + stopped if stopped else "")
+        return _stalled(blocks, root, git, root_of_plugin, sentence, part)
 
     has_remote = paths.remote_url(root, runner=git) is not None
 
@@ -878,7 +921,7 @@ def _daily_work(
         # for it to say is the offer to finish a setup that stopped halfway,
         # and the base itself answers that.
         return _render(
-            part, None, _setup_offer(root, root_of_plugin).visible or None
+            part, None, _setup_offer(root, root_of_plugin, base_id).visible or None
         )
 
     branch = git.run(
@@ -912,6 +955,11 @@ def _daily_work(
         refused = [name for name in names if _is_refused_path(name)]
         refused.extend(
             name for name in _incoming_symlinks(root, target, git) if name not in refused
+        )
+        refused.extend(
+            name
+            for name in _incoming_contents_refused(root, target, names, git)
+            if name not in refused
         )
         if refused:
             _record_pull_refusal(base_id, refused, now.date(), part, left_again)
@@ -967,7 +1015,7 @@ def _daily_work(
 
     map_text = _map_text(root)
     settings = _settings_of(map_text)
-    offer = _setup_offer(root, root_of_plugin)
+    offer = _setup_offer(root, root_of_plugin, base_id)
     tail = _tail(blocks, root, base_id, root_of_plugin, offer, now, part)
     context = _fill_main(blocks, map_text, settings, changes, "", tail, root)
     return _render(part, context, offer.visible or None)
@@ -1153,19 +1201,46 @@ def _missing_required(files: Dict[str, stale.ContextFileInfo]) -> List[str]:
     return base_reader.missing_required(files)
 
 
-def _setup_offer(root, root_of_plugin) -> _Question:
+def _import_offer(base_id, root_of_plugin) -> _Question:
+    """The offer to finish taking finished pages in, when that stopped partway.
+
+    Unit 1.7d. It is worked out from the record this seat keeps for the base,
+    read and never written, and it is said only while a page the owner chose
+    is still neither saved, left out, nor refused. Brandon's call 29 adds a
+    segment settled to be drafted and not yet drafted, and it is still one
+    notice: the words that cover segments to draft replace the words about
+    finished pages whenever any segment is still to draft. A segment left out
+    is not still to finish, and is never offered.
+    """
+    try:
+        record = segments.load_import(base_id) if base_id else None
+    except Exception:
+        record = None
+    if record is None or not record.unfinished():
+        return _Question("", "")
+    blocks = load_blocks(root_of_plugin, "finish-import.md")
+    if record.drafts_unfinished():
+        return _Question(
+            blocks.get("context-segments", ""), blocks.get("visible-segments", "")
+        )
+    return _Question(blocks.get("context", ""), blocks.get("visible", ""))
+
+
+def _setup_offer(root, root_of_plugin, base_id=None) -> _Question:
     """The offer to finish a setup that stopped halfway, or nothing at all.
 
     This is the one thing a session start still says out loud. Amendment r2.5
     took the question away from here: a session records itself, brings the base
     up to date, hands over the map and what has changed, and asks nothing. Both
     halves of the session start work this out from the same files, and neither
-    of them writes anything down to do it.
+    of them writes anything down to do it. A base with both of its documents
+    whose import of finished pages stopped partway is a setup not finished
+    either, and is offered in the same way (Unit 1.7d).
     """
     by_path = {info.path: info for info in _context_files(root)}
     missing = _missing_required(by_path)
     if not missing:
-        return _Question("", "")
+        return _import_offer(base_id, root_of_plugin)
     setup = load_blocks(root_of_plugin, "continue-setup.md")
     named = ", ".join(missing)
     return _Question(

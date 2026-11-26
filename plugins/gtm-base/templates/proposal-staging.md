@@ -4,7 +4,7 @@ staging_id: stg-0000000000000000
 origin: ledger
 source_id: src-000000000000000000000000
 intake_path: ledger
-target_paths: [context/strategy/icp.md]
+target_paths: [context/icps.md]
 sequence: 0
 rule_change: false
 confidence: high
@@ -23,7 +23,7 @@ happened_on: 2026-01-01
 written_on: 2026-01-02
 noted_by: owner@example.com
 source: src-000000000000000000000000
-affects: [context/strategy/icp.md]
+affects: [context/icps.md]
 review_by: 2026-04-01
 origin: ledger
 run_id: run-2026-01-01-00000000
@@ -38,7 +38,7 @@ people, and we have stopped calling on companies below that size.
 
 ### Edit 1
 
-path: context/strategy/icp.md
+path: context/icps.md
 heading: ## Firmographics
 op: replace
 

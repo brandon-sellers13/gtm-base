@@ -1,0 +1,9 @@
+# Unit 1.7e, option D: confirmation pass on the review fixes
+
+Reviewer: a security-review agent, read only, on fix commit f0bc955, 2026-10-10. Every finding marked fixed is closed: no standing ticket in the plugin and nothing in plugins/ reads the suite's hold; a ticket opens only its own writes and runs only on its line; two things at once, settings in front, unreadable settings and unknown answers are refused; join says the approval's sentence; a dry run is not asked; seat checks the quiet first. Nested writes traced: record_change.answer to reconcile_yes or reconcile_no, and moment's reflects to confirm.answer, both opened by their tickets; no other gated function calls another. The table of each script's action settings matches every script's dispatch. One hundred documented lines from the skills and templates were read: every approval asked with the right writes, nothing ordinary refused.
+
+Two low findings, both false refusals that failed closed, now fixed with tests that failed first (TestTheConfirmationPass):
+1. A script name anywhere in the arguments of a python command with an option in front counted as an unreadable approval (`python3 -u tests/test_confirm.py`). Now only the word right after an option's value counts.
+2. A backtick or `$(` inside single quotes counted as a command run inside the line, so a document named with one could never be asked about. Now only one the shell would run counts.
+
+Residuals, no new capability: the hook names a script by its file name, so a script of the same name in another folder is asked with the real one's sentence (the accepted "writes its own program" case); in an install that copies the whole repository, tests/held/sitecustomize.py is on disk, but using it needs settings the hook refuses on an approval line; the line digest matters only if Claude Code checks a rewritten line again, and against a learned ticket the protection is that the next command takes it back.

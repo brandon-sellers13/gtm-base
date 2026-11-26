@@ -63,7 +63,7 @@ import shlex
 import sys
 from typing import Any, Dict, List, Optional, Sequence, Tuple
 
-from . import constants, machine, marker, paths, scan, state, trust_surface
+from . import approval, constants, layout, machine, marker, paths, scan, state, trust_surface
 from .errors import GitError
 from .gitcmd import GitRunner, runner_or_default
 
@@ -95,6 +95,13 @@ REASON_BAD_PAYLOAD = "unreadable-request"
 REASON_MISSING_FILE = "body-file-unreadable"
 REASON_SEAT_FOLDER = "seat-folder"
 REASON_BASE_NAME = "changes-the-name-a-base-is-known-by"
+# The send carries a file in the base's own skills folder, which is kept empty
+# until the company-skills brainstorm settles who may approve a change to a
+# skill (Unit 1.5b, Brandon's call 13).
+REASON_SKILLS_FILE = "a-file-in-the-skills-folder"
+# A command that sets, reads or clears the ticket an allowed approval carries
+# (Unit 1.7e). Only `approval` may put one on a command.
+REASON_APPROVAL_TICKET = "names-the-approval-ticket"
 
 SENTENCES = {
     REASON_UNTOKENIZABLE: (
@@ -169,6 +176,15 @@ SENTENCES = {
     REASON_MISSING_FILE: (
         "GTM Base stopped this because it could not read the file holding the "
         "text that would be sent."
+    ),
+    REASON_SKILLS_FILE: (
+        "GTM Base stopped this because it would send a file in the base's "
+        "skills folder, which stays empty until your team has settled who may "
+        "approve a change to a skill."
+    ),
+    REASON_APPROVAL_TICKET: (
+        "GTM Base stopped this because it touches the value GTM Base uses to "
+        "tell that you allowed an approval yourself, which only GTM Base may set."
     ),
 }
 
@@ -284,6 +300,10 @@ _SEAT_FOLDER_NAME = re.compile(
     )
 )
 
+
+# The other tools that run a command, which the plugin's hooks file sends here
+# too.
+_OTHER_COMMAND_TOOLS = ("Monitor", "PowerShell")
 
 # --- Verdicts ----------------------------------------------------------------
 
@@ -1357,6 +1377,67 @@ def _diff_text(git: GitRunner, cwd: str, start: str, end: str) -> Optional[str]:
     return result.stdout if result.ok else None
 
 
+# The one blob an empty file is, which is the only thing the skills folder's
+# placeholder may hold.
+EMPTY_BLOB = "e69de29bb2d1d6434b8b29ae775ad8c2e48c5391"
+# The one mode an ordinary file is saved under.
+REGULAR_FILE_MODE = "100644"
+
+
+def _skills_in_every_piece_of_work(
+    git: GitRunner, cwd: str, start: str, end: str
+) -> Optional[bool]:
+    """Whether any piece of work in the range carries something in skills.
+
+    Every piece of work a send carries is read, merges included, and not only
+    the difference between the two ends: a file added in one piece and taken
+    away in the next still travels with the history (Astra's review of Unit
+    1.5b, finding 6). The placeholder is allowed only as an empty ordinary
+    file (finding 8). None comes back when git could not say.
+
+    Names end in a NUL and come out exactly as they are, so a file with an
+    accent or a space in its name is read as itself.
+    """
+    span = end if start == EMPTY_TREE else "%s..%s" % (start, end)
+    result = git.run(
+        [
+            "log",
+            "--format=",
+            "--raw",
+            "-z",
+            "-m",
+            "--no-abbrev",
+            "--diff-filter=ACMRT",
+            span,
+        ],
+        cwd=cwd,
+    )
+    if not result.ok:
+        return None
+    fields = (result.stdout or "").split("\0")
+    index = 0
+    while index < len(fields):
+        head = fields[index].strip()
+        index += 1
+        if not head.startswith(":"):
+            continue
+        settings = head[1:].split()
+        letter = settings[-1][:1] if settings else ""
+        count = 2 if letter in ("R", "C") else 1
+        named = fields[index : index + count]
+        index += count
+        if not named or len(settings) < 4:
+            continue
+        path = named[-1]
+        if layout.names_a_skill_file(path):
+            return True
+        if layout.is_the_skills_placeholder(path) and (
+            settings[1] != REGULAR_FILE_MODE or settings[3] != EMPTY_BLOB
+        ):
+            return True
+    return False
+
+
 def _messages_text(git: GitRunner, cwd: str, start: str, end: str) -> Optional[str]:
     """The saved notes one range would send, or None when they cannot be read."""
     if start == EMPTY_TREE:
@@ -1792,6 +1873,14 @@ def check_command(
 ) -> Optional[str]:
     """Read one command line. Return the reason to refuse, or None to allow."""
     runner = runner_or_default(git)
+    if approval.ENV in command:
+        # Only the line `approval` itself wrote, carrying the ticket this
+        # conversation is waiting on, may name it, and the rest of that line
+        # is read like any other (Unit 1.7e).
+        rest = approval.rewritten_rest(command, session_id)
+        if rest is None:
+            return sentence_for(REASON_APPROVAL_TICKET)
+        command = rest
     if not mentions_git_or_gh(command):
         if names_the_seat_folder(command):
             return sentence_for(REASON_SEAT_FOLDER)
@@ -1924,6 +2013,11 @@ def scan_range(
     diff = _diff_text(git, cwd, start, end)
     if diff is None:
         return sentence_for(REASON_UNREADABLE)
+    carried = _skills_in_every_piece_of_work(git, cwd, start, end)
+    if carried is None:
+        return sentence_for(REASON_UNREADABLE)
+    if carried:
+        return sentence_for(REASON_SKILLS_FILE)
     if len(diff.encode("utf-8", "replace")) > constants.MAX_DIFF_BYTES:
         return sentence_for(REASON_TOO_LARGE)
     hits = scan.scan_diff_added_lines(diff, allowlist)
@@ -2032,6 +2126,22 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
 
     tool_name = payload.get("tool_name")
     tool_input = payload.get("tool_input")
+    session_id = payload.get("session_id")
+    if not isinstance(session_id, str):
+        session_id = None
+    if tool_name in _OTHER_COMMAND_TOOLS and isinstance(tool_input, dict):
+        # Another tool that runs a command. It is not read for sends, but a
+        # ticket waiting in this conversation is taken back before it runs,
+        # and it may not touch a ticket at all (Unit 1.7e).
+        try:
+            approval.take_back(session_id)
+        except Exception:
+            pass
+        if approval.ENV in str(tool_input.get("command") or ""):
+            sys.stdout.write(
+                deny_payload(client, sentence_for(REASON_APPROVAL_TICKET)) + "\n"
+            )
+        return 0
     if tool_name != "Bash" or not isinstance(tool_input, dict):
         return 0
     command = tool_input.get("command")
@@ -2040,9 +2150,6 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     cwd = payload.get("cwd")
     if not isinstance(cwd, str) or not os.path.isdir(cwd):
         cwd = os.getcwd()
-    session_id = payload.get("session_id")
-    if not isinstance(session_id, str):
-        session_id = None
 
     try:
         reason = check_command(command, cwd, session_id)
@@ -2051,6 +2158,18 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     if reason:
         sys.stdout.write(deny_payload(client, reason) + "\n")
         return 0
+    # Every approval is put to the person by Claude Code itself (Unit 1.7e,
+    # Brandon's call 57). A check that cannot run never lets an approval
+    # through unasked.
+    try:
+        verdict = approval.decide(payload, client=client)
+    except Exception:
+        verdict = None
+        if approval.mentions_an_approval_script(command):
+            sys.stdout.write(deny_payload(client, approval.COULD_NOT_PREPARE) + "\n")
+            return 0
+    if verdict is not None:
+        sys.stdout.write(json.dumps(verdict) + "\n")
     _keep_a_copy_of_the_settings(payload)
     return 0
 

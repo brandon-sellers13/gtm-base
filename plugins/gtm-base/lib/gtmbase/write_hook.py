@@ -63,7 +63,7 @@ import os
 import sys
 from typing import Any, Dict, List, Optional, Sequence
 
-from . import constants, machine, paths, trust_surface
+from . import constants, layout, machine, paths, trust_surface
 
 # The tools this hook is declared for. Anything else is somebody else's.
 TOOL_NAMES = ("Write", "Edit", "MultiEdit", "NotebookEdit")
@@ -87,6 +87,14 @@ CODE_SEAT_FOLDER = "in-the-records-folder"
 CODE_BASE_REPOSITORY = "in-a-bases-own-repository-folder"
 CODE_BASE_ASSISTANT_FOLDER = "in-a-bases-assistant-folder"
 CODE_PLUGIN_CODE = "in-the-plugins-own-folder"
+# A file inside a base's own skills folder, which is kept empty until the
+# company-skills brainstorm settles who may approve a change to a skill
+# (Unit 1.5b, Brandon's call 13). Its placeholder is allowed.
+CODE_SKILLS_FILE = "in-a-bases-skills-folder"
+# A write that would put something the check before a send refuses, such as a
+# key or a token, into a base's source map (Astra's review of Unit 1.5b,
+# finding 10).
+CODE_STACK_SECRET = "a-secret-in-the-source-map"
 CODE_PLUGINS_FOLDER = "in-the-folder-plugins-are-kept-in"
 
 # What the client calls the folder it installed this plugin into.
@@ -145,6 +153,21 @@ REFUSED = (
 # this module ends with the same number when the module cannot load, and a
 # test holds the two together.
 COULD_NOT_RUN = 70
+
+# What a person reads when a file is refused in a base's skills folder. It
+# says why, because the folder is theirs and not GTM Base's, and a refusal
+# with no reason reads as a fault.
+SKILLS_REFUSED = (
+    "A base keeps its skills folder empty until your team has settled who may "
+    "approve a change to a skill, so nothing was written there."
+)
+# What a person reads when a write would put a key or a token in the source
+# map. It names no file and repeats nothing that was found.
+STACK_REFUSED = (
+    "The source map says where things live and never holds a password, a key, "
+    "or a token, and this would have written something shaped like one into "
+    "it, so nothing was written."
+)
 
 COULD_NOT_CHECK = (
     "GTM Base could not run its own safety check just now, and this file is "
@@ -593,6 +616,191 @@ def _into_the_sessions_own_history(
     return None
 
 
+def _base_holding(side: str) -> Optional[str]:
+    """The base a path is inside, however the base is known.
+
+    A base holding its map is found by walking up, as everywhere else here.
+    A base whose map is gone is still a base (Astra's review of Unit 1.5b,
+    finding 9): this account's own list of the bases it joined is read, and
+    then the nearest repository is asked the questions that start no program,
+    and last the one question about its saved history.
+    """
+    inside = _base_above(side)
+    if inside is not None:
+        return inside
+    joined = _joined_roots()
+    for root in joined:
+        if _reaches(side, side, root):
+            return root
+    above = _repository_above(side)
+    if above is not None and (
+        _cheaply_a_base(above, joined) or _a_base_by_its_history(above)
+    ):
+        return above
+    return None
+
+
+def _parts_inside(side: str, root: str) -> Optional[List[str]]:
+    """A path's names from the top of a base, folded, or None when it is not in it."""
+    for one, other in ((side, root), (os.path.realpath(side), os.path.realpath(root))):
+        try:
+            relative = os.path.relpath(one, other)
+        except ValueError:
+            continue
+        parts = [_folded(part) for part in relative.replace(os.sep, "/").split("/")]
+        if parts and parts[0] != "..":
+            return parts
+    return None
+
+
+def _in_a_base(named: str, real_file: str, folder: str):
+    """Each (base, the path's names inside it) for a path under one top folder.
+
+    The cheap way out comes first, as it does for the other folders: almost no
+    write on this computer names a folder called skills or access, and only
+    one that does is walked upwards looking for the base it is in.
+    """
+    wanted = _folded(folder)
+    found = []
+    for side in (named, real_file):
+        text = str(side or "").replace("\\", "/").replace(os.sep, "/")
+        if wanted not in [_folded(part) for part in text.split("/")]:
+            continue
+        root = _base_holding(side)
+        if root is None:
+            continue
+        parts = _parts_inside(side, root)
+        if parts and parts[0] == wanted:
+            found.append((side, parts))
+    return found
+
+
+def _into_a_bases_skills(named: str, real_file: str) -> Optional[str]:
+    """Whether a write lands in a base's own skills folder beyond its placeholder."""
+    for side, parts in _in_a_base(named, real_file, constants.SKILLS_DIR):
+        if layout.is_refused_in_skills(parts, os.path.isdir(side)):
+            return CODE_SKILLS_FILE
+    return None
+
+
+def _written_texts(payload: Dict[str, Any]) -> Optional[List[str]]:
+    """Every piece of text this call would put in a file, or None if unknown."""
+    tool = payload.get("tool_name")
+    tool_input = payload.get("tool_input")
+    if not isinstance(tool_input, dict):
+        return None
+    if tool == "Write":
+        content = tool_input.get("content")
+        return [content] if isinstance(content, str) else None
+    if tool == "Edit":
+        new = tool_input.get("new_string")
+        return [new] if isinstance(new, str) else None
+    if tool == "MultiEdit":
+        edits = tool_input.get("edits")
+        if not isinstance(edits, list):
+            return None
+        texts = []
+        for one in edits:
+            new = one.get("new_string") if isinstance(one, dict) else None
+            if not isinstance(new, str):
+                return None
+            texts.append(new)
+        return texts
+    return None
+
+
+def _replaced(text: str, old, new, every) -> Optional[str]:
+    """One replacement made the way the editing tool makes it, or None."""
+    if not isinstance(old, str) or not isinstance(new, str):
+        return None
+    if old == "":
+        return new + text if text == "" else None
+    if old not in text:
+        return None
+    return text.replace(old, new) if every else text.replace(old, new, 1)
+
+
+def _file_after(side: str, payload: Dict[str, Any]) -> Optional[str]:
+    """The whole file as this call would leave it, worked out in memory.
+
+    A piece of an edit can finish something the file already starts, so a
+    file is judged by what it would say afterwards and never by the piece
+    alone (the confirmation pass on Unit 1.5b, finding 3). When the edit
+    cannot be worked out, the file as it stands is read with every new piece
+    after it, which can only find more, never less.
+    """
+    tool = payload.get("tool_name")
+    tool_input = payload.get("tool_input")
+    if not isinstance(tool_input, dict):
+        return None
+    if tool == "Write":
+        content = tool_input.get("content")
+        return content if isinstance(content, str) else None
+    try:
+        with open(side, "r", encoding="utf-8", newline="") as handle:
+            current = handle.read()
+    except (OSError, UnicodeDecodeError):
+        current = ""
+    if tool == "Edit":
+        steps = [tool_input]
+    elif tool == "MultiEdit":
+        steps = tool_input.get("edits")
+        if not isinstance(steps, list):
+            return None
+    else:
+        return None
+    text = current
+    for step in steps:
+        if not isinstance(step, dict):
+            return None
+        after = _replaced(
+            text,
+            step.get("old_string"),
+            step.get("new_string"),
+            bool(step.get("replace_all")),
+        )
+        if after is None:
+            pieces = _written_texts(payload)
+            if pieces is None:
+                return None
+            return "\n".join([current] + pieces)
+        text = after
+    return text
+
+
+def content_problem(
+    named: str, real_file: str, payload: Dict[str, Any]
+) -> Optional[str]:
+    """What is wrong with what this call would write, for the two files that care.
+
+    The skills folder's placeholder may only ever be written empty, by the
+    tool that writes a whole file, because an edit to it is by definition an
+    edit that puts something in it (finding 8). The source map may never be
+    given anything the check before a send refuses (finding 10). A call whose
+    text cannot be read is refused for either, because a check that cannot
+    see what is written cannot say it is clean.
+    """
+    for _side, parts in _in_a_base(named, real_file, constants.SKILLS_DIR):
+        if parts == [_folded(constants.SKILLS_DIR), _folded(constants.PLACEHOLDER_NAME)]:
+            texts = _written_texts(payload)
+            if payload.get("tool_name") != "Write" or texts != [""]:
+                return CODE_SKILLS_FILE
+    stack = [_folded(part) for part in constants.STACK_PATH.split("/")]
+    for side, parts in _in_a_base(named, real_file, constants.ACCESS_DIR):
+        if parts != stack:
+            continue
+        whole = _file_after(side, payload)
+        if whole is None:
+            return CODE_STACK_SECRET
+        from . import scan
+
+        root = _base_holding(side)
+        allowlist, _code = scan.load_allowlist(root) if root else (None, None)
+        if scan.scan_source_map(whole, allowlist):
+            return CODE_STACK_SECRET
+    return None
+
+
 def problem_with(named: str, real_file: str, cwd: Optional[str] = None) -> Optional[str]:
     """Which rule this path falls under, or nothing at all.
 
@@ -630,6 +838,10 @@ def problem_with(named: str, real_file: str, cwd: Optional[str] = None) -> Optio
     own = _into_the_sessions_own_history(named, real_file, cwd, known)
     if own is not None and _a_base_by_its_history(own):
         return CODE_BASE_REPOSITORY
+
+    skills = _into_a_bases_skills(named, real_file)
+    if skills is not None:
+        return skills
 
     if not _names_a_guarded_folder(named, real_file):
         return asking
@@ -692,8 +904,15 @@ def run(payload: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         if found == CODE_CLIENT_SETTINGS:
             asking = True
             continue
+        if found == CODE_SKILLS_FILE:
+            return _answer("deny", SKILLS_REFUSED)
         if found is not None:
             return refusal()
+        written = content_problem(named, real_file, payload)
+        if written == CODE_SKILLS_FILE:
+            return _answer("deny", SKILLS_REFUSED)
+        if written == CODE_STACK_SECRET:
+            return _answer("deny", STACK_REFUSED)
     return question() if asking else None
 
 

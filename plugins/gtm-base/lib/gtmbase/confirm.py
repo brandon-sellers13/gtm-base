@@ -37,11 +37,14 @@ import os
 from typing import List, Optional, Tuple
 
 from . import (
+    approval,
     base_reader,
+    callmarkers,
     constants,
     formats,
     gate,
     ids,
+    layout,
     names,
     paths,
     scan,
@@ -98,6 +101,9 @@ CODE_NOTHING_PENDING = "nothing-pending"
 CODE_NOT_ONE_OF_THE_TWO = "not-one-of-the-two-documents"
 CODE_NOT_ABOUT_THIS_FILE = "change-does-not-affect-this-file"
 CODE_NOT_AN_OWNER = "not-an-owner"
+# The document still holds a question the draft left for the person, marked
+# `[your call: ...]`, so nothing may say it is right yet (Unit 1.7b).
+CODE_QUESTION_OPEN = "a-question-is-still-open"
 
 # The one code this module is allowed to leave in seat state.
 PENDING_CODE = "pending-push"
@@ -147,8 +153,8 @@ DROPPED_PATH = (
     "write, so nothing was recorded."
 )
 INBOX_WAITING = (
-    "There are %d items waiting to be read in your inbox, so nothing was "
-    "recorded yet. Read those first and the question comes back."
+    "Your inbox holds %s waiting to be read, so nothing was recorded yet. Once "
+    "everything in it is read, the question comes back."
 )
 NO_OWNER_ADDRESS = (
     "GTM Base does not know which address to record your answer under, so "
@@ -185,7 +191,7 @@ PROPOSAL_STAGED = (
 # itself about. Recording a yes there would settle the change against the
 # document for good, and neither copy of it has been read by anybody yet.
 WRITTEN_TWICE = (
-    "The context change %s is written down twice, in %s, and the two do not "
+    "The context change %s is written down twice, and the two copies do not "
     "say the same thing, so GTM Base cannot record anything about %s yet. "
     "Decide which copy is right, take the other one away, and ask again."
 )
@@ -231,6 +237,14 @@ UNSAVED_EDITS_HERE_NAMED = (
     "There are words in your base that you have not saved, so nothing was "
     "recorded about %s. %s Save them or put them aside and answer again."
 )
+# Said when somebody says a document is right, or already says what a change
+# says, while it still holds a question nobody answered. The question itself is
+# not repeated here, because it came out of the file.
+QUESTION_STILL_OPEN = (
+    "%s still has a question in it that only you can answer, so it cannot be "
+    "recorded as right yet. Answer that question in a review of your base "
+    "first."
+)
 NOT_ON_THE_MAIN_LINE = (
     "Your base is not on its main line right now, so nothing was recorded "
     "about %s. Ask GTM Base to put it back."
@@ -270,16 +284,30 @@ def refusal_while_written_twice(base_root, base_id, path, today, git=None):
     )
     if found is None:
         return None
-    entry_id, files = found
-    return WRITTEN_TWICE % (
-        entry_id,
-        " and ".join(files),
-        names.document_name(path),
-    )
+    entry_id, _files = found
+    return WRITTEN_TWICE % (entry_id, names.document_name(path))
 
 
 def _refused(code: str, sentence: str) -> ConfirmResult:
     return ConfirmResult(STATUS_REFUSED, codes=[code], reasons=[sentence])
+
+
+def refusal_while_a_question_is_open(base_root: str, relative: str):
+    """The refusal for a yes about a document still holding an open question.
+
+    No path that records an owner saying a document is right may record it
+    while the document still asks a question nobody answered (requirement
+    P27): the review's yes, the moment of use's "it already reflects this",
+    and the closing's own answer all come through here. Setup's own line is
+    the one exception, because the file and that line are written together,
+    and the rules count it for nothing until the question is answered.
+    """
+    text = read_text(os.path.join(base_root, relative.replace("/", os.sep)))
+    if not text or not callmarkers.count(text):
+        return None
+    return _refused(
+        CODE_QUESTION_OPEN, QUESTION_STILL_OPEN % names.document_name(relative)
+    )
 
 
 # --- Where a confirmation line lives ----------------------------------------
@@ -432,6 +460,9 @@ def answer(
     another answer to the same question, so the question has to still be there
     to answer.
     """
+    # Only a command the person allowed through Claude Code's own question
+    # writes an approval (Unit 1.7e, Brandon's call 57).
+    approval.require("confirm.answer")
     git = runner_or_default(runner)
     moment = now or state.now_utc()
     if isinstance(moment, datetime.date) and not isinstance(moment, datetime.datetime):
@@ -471,7 +502,10 @@ def answer(
 
     waiting = state.unprocessed_rows(base_id)
     if waiting:
-        return _refused(CODE_INBOX_WAITING, INBOX_WAITING % len(waiting))
+        return _refused(
+            CODE_INBOX_WAITING,
+            INBOX_WAITING % names.how_many(len(waiting), "item", "items"),
+        )
 
     # A document a context change is written down twice about, with the two
     # copies disagreeing, cannot be settled by anybody. It is refused before
@@ -484,6 +518,15 @@ def answer(
         )
         if disagreeing is not None:
             return _refused(CODE_WRITTEN_TWICE, disagreeing)
+
+    # A yes about a document that still asks a question nobody answered is
+    # refused before the question is used up, so it is still there to answer
+    # once the open question is settled. A no and a not now are both allowed,
+    # because neither says the document is right.
+    if answer == ANSWER_YES:
+        still_asking = refusal_while_a_question_is_open(base_root, path)
+        if still_asking is not None:
+            return still_asking
 
     def use_the_question():
         """Use the question up. Everything after this records the answer."""
@@ -540,7 +583,10 @@ def _not_now(base_root, base_id, question_id, path, today) -> ConfirmResult:
     state.suppress(base_id, path, until)
     state.set_outcome(base_id, question_id, "not-now")
     return ConfirmResult(
-        STATUS_NOT_NOW, reasons=[NOT_NOW_SENTENCE % (path, until.isoformat())]
+        STATUS_NOT_NOW, reasons=[
+            NOT_NOW_SENTENCE
+            % (names.document_name(path), until.isoformat())
+        ]
     )
 
 
@@ -684,7 +730,12 @@ def _send(
         return _open_a_review(base_root, base_id, made, default, line, path, gh, codes)
 
     if _push_to_default(made.path, made.branch, default, git):
-        return ConfirmResult(STATUS_RECORDED, codes=codes, reasons=[RECORDED % path], line=line)
+        return ConfirmResult(
+            STATUS_RECORDED,
+            codes=codes,
+            reasons=[RECORDED % names.document_name(path)],
+            line=line,
+        )
 
     # The shared copy moved while this was being written. Start again from where
     # it is now, add the one line once more, and try the one time.
@@ -711,7 +762,7 @@ def _send(
     if pushed.ok and _push_to_default(second.path, second.branch, default, git):
         worktree.remove_worktree(base_root, second.path, runner=git)
         return ConfirmResult(
-            STATUS_RECORDED, codes=codes, reasons=[RECORDED % path], line=line
+            STATUS_RECORDED, codes=codes, reasons=[RECORDED % names.document_name(path)], line=line
         )
     worktree.remove_worktree(base_root, second.path, runner=git)
     return _hold(base_id, line, path, codes, CODE_PUSH_FAILED)
@@ -734,8 +785,8 @@ def _open_a_review(
     )
     atomic_write_text(
         body_path,
-        "%s was confirmed as still right by its owner on %s.\n"
-        % (line.file, line.date),
+        "Its owner confirmed on %s that %s is still right.\n"
+        % (line.date, names.document_name(line.file)),
         mode=0o600,
     )
     try:
@@ -749,7 +800,7 @@ def _open_a_review(
                 "--head",
                 made.branch,
                 "--title",
-                "Confirmation for %s" % line.file,
+                "Confirmation for %s" % names.document_name(line.file),
                 "--body-file",
                 body_path,
             ],
@@ -763,7 +814,7 @@ def _open_a_review(
     if code != 0:
         return _hold(base_id, line, path, codes, CODE_REVIEW_FAILED)
     return ConfirmResult(
-        STATUS_RECORDED, codes=codes, reasons=[SENT_FOR_REVIEW % path], line=line
+        STATUS_RECORDED, codes=codes, reasons=[SENT_FOR_REVIEW % names.document_name(path)], line=line
     )
 
 
@@ -788,7 +839,7 @@ def _add_to_the_local_copy(
     if not moved.ok:
         return _hold(base_id, line, path, codes, CODE_PUSH_FAILED)
     return ConfirmResult(
-        STATUS_RECORDED, codes=codes, reasons=[RECORDED_LOCALLY % path], line=line
+        STATUS_RECORDED, codes=codes, reasons=[RECORDED_LOCALLY % names.document_name(path)], line=line
     )
 
 
@@ -815,7 +866,7 @@ def _hold(base_id, line, path, codes, code, sentence=None) -> ConfirmResult:
     return ConfirmResult(
         STATUS_PENDING,
         codes=list(codes) + [code],
-        reasons=[sentence or (PENDING_SENTENCE % path)],
+        reasons=[sentence or (PENDING_SENTENCE % names.document_name(path))],
         line=line,
     )
 
@@ -910,7 +961,7 @@ def _no_about_a_decision(
     written = stale_check.save_staging(base_root, staging)
     return ConfirmResult(
         STATUS_PROPOSAL_STAGED,
-        reasons=[PROPOSAL_STAGED % path],
+        reasons=[PROPOSAL_STAGED % names.document_name(path)],
         staging_path=written,
     )
 
@@ -926,12 +977,15 @@ def _no_about_the_calendar(base_root, question_id, path, reason) -> ConfirmResul
     words = _short(reason)
     body = formats.render_pr_body(
         {
-            "before": "%s is written as though it is still right." % path,
-            "after": "%s says what the owner told GTM Base has changed." % path,
+            "before": "Nothing in %s says anything has changed yet."
+            % names.document_name(path),
+            "after": "The words below are what the owner told GTM Base has "
+            "changed in %s." % names.document_name(path),
             "why": (
                 "The owner of %s was asked whether it is still right and said it "
                 "is not. The words below are what they said, written into the "
-                "file as a first draft for them to correct or replace." % path
+                "file as a first draft for them to correct or replace."
+                % names.document_name(path)
             ),
             "evidence": "The owner said this file is no longer true: %s" % words,
             "confidence": DRAFT_CONFIDENCE,
@@ -958,7 +1012,7 @@ def _no_about_the_calendar(base_root, question_id, path, reason) -> ConfirmResul
     written = stale_check.save_staging(base_root, staging)
     return ConfirmResult(
         STATUS_PROPOSAL_STAGED,
-        reasons=[PROPOSAL_STAGED % path],
+        reasons=[PROPOSAL_STAGED % names.document_name(path)],
         staging_path=written,
     )
 
@@ -1035,7 +1089,7 @@ def drafted(
         return _refused(failure.code or CODE_MALFORMED, str(failure))
     git.check(["add", "--", relative], cwd=base_root)
     return ConfirmResult(
-        STATUS_RECORDED, reasons=[RECORDED % relative_context], line=line
+        STATUS_RECORDED, reasons=[RECORDED % names.document_name(relative_context)], line=line
     )
 
 
@@ -1084,7 +1138,11 @@ def against_change(
         moment = datetime.datetime(moment.year, moment.month, moment.day)
     today = state.today(moment)
     try:
-        relative_context = paths.canonical_context_path(base_root, path)
+        # A path named at its older place, on a base that has been moved, is
+        # the same document at its new one.
+        relative_context = paths.canonical_context_path(
+            base_root, layout.where_it_lives(base_root, path)
+        )
     except (PathError, ValidationError):
         return _refused(CODE_DROPPED_PATH, DROPPED_PATH)
     if formats.name_has_a_space(relative_context):
@@ -1101,7 +1159,7 @@ def against_change(
         return _refused(CODE_DROPPED_PATH, DROPPED_PATH)
     if (
         not any_affected_document
-        and relative_context not in constants.REQUIRED_CONTEXT_FILES
+        and relative_context not in layout.required_paths(base_root)
     ):
         return _refused(CODE_NOT_ONE_OF_THE_TWO, NOT_ONE_OF_THE_TWO % document)
 
@@ -1110,7 +1168,9 @@ def against_change(
         return _refused(
             CODE_ENTRY_MISSING, CHANGE_NOT_IN_THE_BASE % document
         )
-    if relative_context not in list(entry.affects):
+    if relative_context not in layout.all_where_they_live(
+        base_root, list(entry.affects)
+    ):
         return _refused(
             CODE_NOT_ABOUT_THIS_FILE, CHANGE_IS_NOT_ABOUT_IT % document
         )
@@ -1126,6 +1186,10 @@ def against_change(
     )
     if disagreeing is not None:
         return _refused(CODE_WRITTEN_TWICE, disagreeing)
+
+    still_asking = refusal_while_a_question_is_open(base_root, relative_context)
+    if still_asking is not None:
+        return still_asking
 
     line = formats.ConfirmationLine(
         date=today.isoformat(),
@@ -1143,7 +1207,7 @@ def against_change(
         return _refused(failure.code or CODE_MALFORMED, DROPPED_PATH)
     if _line_already_there(base_root, relative, line.render()):
         return ConfirmResult(
-            STATUS_RECORDED, reasons=[RECORDED_LOCALLY % relative_context], line=line
+            STATUS_RECORDED, reasons=[RECORDED_LOCALLY % names.document_name(relative_context)], line=line
         )
 
     from . import review as review_module
@@ -1186,7 +1250,7 @@ def against_change(
         _take_the_line_back(base_root, relative, before, git)
         return _refused(CODE_UNSAVED_EDITS, UNSAVED_EDITS_HERE % document)
     return ConfirmResult(
-        STATUS_RECORDED, reasons=[RECORDED_LOCALLY % relative_context], line=line
+        STATUS_RECORDED, reasons=[RECORDED_LOCALLY % names.document_name(relative_context)], line=line
     )
 
 
@@ -1317,7 +1381,7 @@ def _send_one_held(
         if _line_already_there(made.path, relative, line.render()):
             worktree.remove_worktree(base_root, made.path, runner=git)
             return ConfirmResult(
-                STATUS_RECORDED, codes=codes, reasons=[RECORDED % line.file], line=line
+                STATUS_RECORDED, codes=codes, reasons=[RECORDED % names.document_name(line.file)], line=line
             )
         hits = _save_the_line(base_root, made.path, relative, line, address, name, git)
     except GtmBaseError as failure:

@@ -127,7 +127,8 @@ class TestAPathTheScriptsDidNotHandOut(unittest.TestCase):
             with support.Sandbox() as sandbox:
                 root, _base_id = local_base(sandbox)
                 mine = a_private_file(sandbox)
-                arguments = ["--local-edit", flag, mine]
+                # Which of the three answers it was is said first (call 34).
+                arguments = ["--local-edit", "--kind", "business", flag, mine]
                 if flag != "--source-file":
                     # The source is asked for first, so it has to be a real one
                     # for the second flag to be the thing that is refused.

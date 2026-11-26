@@ -234,3 +234,54 @@ def find_marker(text) -> Optional[Tuple[str, Optional[str], Optional[str]]]:
         if parsed is not None:
             return parsed
     return None
+
+
+# --- What a base covers (added by Unit 1.7a) ---------------------------------
+
+# A scope is the name of one part of a company. It starts with a letter or a
+# digit, holds letters, digits, spaces and a few marks a name uses, and ends
+# on a letter, a digit, a full stop or a closing bracket. Nothing in it can
+# open a list, a quotation, a fence, or a line of its own.
+_COVERS_RE = re.compile(r"^[^\W_](?:[\w &'.,()/+-]*[\w.)])?$")
+
+
+def validate_covers(value) -> str:
+    """Return the scope written the one way it is kept, or say it is not one.
+
+    The scope is the person's own words, and it is written onto the customer
+    profile's settings block and read back by every later step that keeps
+    material about another part of the company out of the base. So it has to
+    be a short name and nothing else: one line, no mark that could start a
+    list or a quotation, at least one letter, and a value that reads back
+    exactly as it was written. Runs of spaces are closed up; a line break is
+    refused rather than closed up, because a name does not have one.
+    """
+    if not isinstance(value, str):
+        raise ValidationError("the scope is not text", code="covers-invalid")
+    for character in value:
+        if ord(character) < 32 or ord(character) == 127:
+            raise ValidationError(
+                "the scope holds a line break or a control character",
+                code="covers-invalid",
+            )
+    text = " ".join(value.split())
+    if not text:
+        raise ValidationError("the scope is empty", code="covers-empty")
+    if len(text) > constants.COVERS_MAX_CHARS:
+        raise ValidationError(
+            "the scope is longer than %d characters" % constants.COVERS_MAX_CHARS,
+            code="covers-long",
+        )
+    if not _COVERS_RE.match(text) or not any(ch.isalpha() for ch in text):
+        raise ValidationError(
+            "the scope holds a character a name never needs", code="covers-invalid"
+        )
+    from . import formats
+
+    try:
+        back = formats.parse_scalar(formats.render_scalar(text))
+    except ValidationError:
+        raise ValidationError("the scope does not read back", code="covers-invalid")
+    if back != text:
+        raise ValidationError("the scope does not read back", code="covers-invalid")
+    return text

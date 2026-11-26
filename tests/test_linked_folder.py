@@ -321,8 +321,15 @@ class TestTheSecondRunCoversEveryClassThatStartsAScript(unittest.TestCase):
         "test_names_with_a_space": ("run_moment", "where_a_script_runs"),
         "test_third_look": ("run_script",),
         "test_words_files": ("script",),
+        "test_open_questions": ("run_script",),
+        "test_adoption": ("run_script",),
+        "test_import_recovery": ("run_script",),
+        "test_import_astra_merged": ("run_script",),
         "test_os_clutter": ("run_in",),
+        "test_segments_left_to_draft": ("run_script",),
+        "test_live_check_follow_up": ("run_script", "handed"),
         "test_locks": ("_shown_and_recorded",),
+        "test_segment_names": ("run",),
         "test_record_change": (
             "run",
             "show",
@@ -444,13 +451,13 @@ class TestTheOfferWhenNothingIsDue(unittest.TestCase):
 
     def assert_offered_once_after_nothing_due(self, sentences):
         self.assertIn(stale_check.REVIEW_NOTHING, sentences)
-        self.assertEqual(1, sentences.count(changes.OFFER), sentences)
+        self.assertEqual(1, sentences.count(changes.offer_sentence(self.root)), sentences)
         self.assertLess(
             sentences.index(stale_check.REVIEW_NOTHING),
-            sentences.index(changes.OFFER),
+            sentences.index(changes.offer_sentence(self.root)),
         )
         # The offer is the last thing said, after the quiet record ask too.
-        self.assertEqual(changes.OFFER, sentences[-1])
+        self.assertEqual(changes.offer_sentence(self.root), sentences[-1])
 
     def test_the_look_says_it_would_be_offered(self):
         self.assertEqual(
@@ -479,18 +486,21 @@ class TestTheOfferWhenNothingIsDue(unittest.TestCase):
                     code, out, err = run(STALE, arguments, cwd)
                     self.assertEqual(0, code, out + err)
                     self.assertIn(stale_check.REVIEW_NOTHING, out)
-                    self.assertEqual(1, out.count(changes.OFFER), out)
+                    self.assertEqual(1, out.count(changes.offer_sentence(self.root)), out)
                     self.assertLess(
                         out.index(stale_check.REVIEW_NOTHING),
-                        out.index(changes.OFFER),
+                        out.index(changes.offer_sentence(self.root)),
                     )
 
     def test_the_offer_and_the_look_agree(self):
         code, out, _err = run(STALE, ["--check-move"], self.root)
 
         self.assertEqual(0, code)
-        self.assertIn(changes.OFFER_STATE_NOW, out)
-        self.assertIn("update one of your context changes", out)
+        # The look says nothing about an offer it would make (the 0.3.1 live
+        # check, step 3, finding 1).
+        self.assertEqual(changes.OFFER_NOW, changes.what_to_offer(self.root, self.base_id))
+        self.assertNotIn("As things stand", out)
+        self.assertIn("one context change", out)
         self.assertNotIn(migration.ENTRY_ONE, out)
         self.assertEqual([], plain_language.find_dashes(out))
 

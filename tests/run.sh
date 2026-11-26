@@ -77,7 +77,19 @@ python3 -m unittest -v \
   test_words_files.TestAPathTheScriptsDidNotHandOut \
   test_words_files.TestThePathTheScriptsDoHandOut \
   test_words_files.TestTheDraftFileToo \
+  test_open_questions.TestTheScriptAsksAndPrepares \
+  test_adoption.TestAdoptedTextStaysData \
+  test_import_recovery.TestTheResumeScript \
+  test_import_recovery.TestResumeSaysNamesAndNeverPageText \
+  test_adoption.TestAstraFindingOne \
+  test_adoption.TestTheApprovalShowing \
+  test_import_astra_merged.TestNoFileNameOutsideTheFence \
   test_os_clutter.TestTheApprovalScriptPastClutter \
+  test_segments_left_to_draft.TestTheScript \
+  test_live_check_follow_up.TestTheOneQuestion \
+  test_live_check_follow_up.TestTheThreeAnswers \
+  test_live_check_follow_up.TestTheShowingOfAHandEdit \
+  test_live_check_follow_up.TestTheLookBeforeTheMove \
   test_record_change.TestTheWholeFlowThroughTheScript \
   test_record_change.TestNothingIsWrittenBeforeTheYes \
   test_record_change.TestTheAsk \
@@ -98,6 +110,9 @@ python3 -m unittest -v \
   test_record_change.TestABaseWithASharedCopy \
   test_record_change.TestWhatStandsInTheWay \
   test_record_change.TestFromALinkedFolderEveryTime \
+  test_record_change.TestTheCurrentLayout \
+  test_record_change.TestTheLocksAreTheOneSystem \
+  test_segment_names.TestAnUpgradedBase \
   test_locks.TestTheQuestionsUnderTheLockFile
 nothing_written_to_a_seat_nobody_made
 rm -rf "$UNOWNED_SEAT"

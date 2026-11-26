@@ -9,6 +9,13 @@ Three steps, in the order setup runs them. The ideal customer profile first,
 because everything else refers to it. Then the one decision entry, which needs
 the profile's path. Then the positioning.
 
+A company with several segments gets two more (Unit 1.7b of the 2026-09-19
+plan). The umbrella takes the profile's place: it says who the company sells
+to overall, gives each segment one short paragraph, and says what they share.
+Then each segment that has no finished page is drafted into a file of its own,
+at full depth. Both are steps of their own, with their own prompts and their
+own checks, rather than the profile's checks loosened to let them through.
+
 Reading the answer back is deliberately strict and deliberately quiet. Every
 refusal is one short code carrying the step it belongs to, and none of them
 repeats a word of what the model wrote, because a draft that has just been
@@ -22,7 +29,7 @@ import os
 import re
 from typing import Dict, List, Optional, Sequence
 
-from . import constants, formats, location, sources as sources_module
+from . import constants, formats, location, sources as sources_module, validate
 from .errors import DraftError, LocationError, PathError, ValidationError
 from .fsutil import read_text
 
@@ -31,8 +38,17 @@ from .fsutil import read_text
 STEP_ICP = "icp"
 STEP_CHANGE = "change-entry"
 STEP_POSITIONING = "positioning"
+# Unit 1.7b: the umbrella over several segments, which is written where the
+# profile is, and one segment at full depth, written into a file of its own.
+STEP_UMBRELLA = "umbrella"
+STEP_SEGMENT = "segment"
 
-STEPS = (STEP_ICP, STEP_CHANGE, STEP_POSITIONING)
+STEPS = (STEP_ICP, STEP_CHANGE, STEP_POSITIONING, STEP_UMBRELLA, STEP_SEGMENT)
+# The steps that write a context file, and so carry the five settings.
+CONTEXT_STEPS = (STEP_ICP, STEP_POSITIONING, STEP_UMBRELLA, STEP_SEGMENT)
+# The steps whose document is the customer profile at its own path, which is
+# the one that carries what the base covers.
+PROFILE_STEPS = (STEP_ICP, STEP_UMBRELLA)
 
 # What this step was called before the rename. A setup run somebody left
 # halfway through may have saved that name, and coming back to it has to work.
@@ -52,20 +68,32 @@ PROMPT_FILES = {
     STEP_ICP: "draft-icp.md",
     STEP_CHANGE: "draft-change-entry.md",
     STEP_POSITIONING: "draft-positioning.md",
+    STEP_UMBRELLA: "draft-umbrella.md",
+    STEP_SEGMENT: "draft-segment.md",
 }
 
 # Where in the plugin the prompt files live.
 PROMPTS_DIR = os.path.join("skills", "join", "references", "prompts")
 
-# Where in the base each step's work is written.
-ICP_PATH = constants.CONTEXT_DIR + "/strategy/icp.md"
-POSITIONING_PATH = constants.CONTEXT_DIR + "/strategy/positioning.md"
+# Where in the base each step's work is written. Setup writes the current
+# layout only (Unit 1.5b); a base laid out before it is read where it is.
+ICP_PATH = constants.REQUIRED_CONTEXT_FILES[0]
+POSITIONING_PATH = constants.REQUIRED_CONTEXT_FILES[1]
+# The path the identifier of setup's context change is worked out from. It is
+# the path the profile had when that identifier was first worked out, and it
+# stays so, because a setup run picked up after an update has to work out the
+# same identifier it worked out before, or it would write the change twice.
+ENTRY_ID_SEED_PATH = constants.LEGACY_REQUIRED_CONTEXT_FILES[0]
 
 # What the settings block at the top of each file has to say the file is.
 KINDS = {
     STEP_ICP: "icp",
     STEP_CHANGE: constants.ENTRY_KIND,
     STEP_POSITIONING: "positioning",
+    # The umbrella is the customer profile, so it calls itself one, and every
+    # rule that knows the profile by its kind knows the umbrella the same way.
+    STEP_UMBRELLA: "icp",
+    STEP_SEGMENT: constants.SEGMENT_KIND,
 }
 
 # The settings every context file this unit writes has to carry.
@@ -82,6 +110,12 @@ ONLY_IF_SIGNAL_SECTIONS = (
     "Geography",
     "Trigger events",
 )
+
+# The umbrella's three parts, always, in this order (requirement P18).
+UMBRELLA_SECTIONS = constants.UMBRELLA_SECTIONS
+# The part of the umbrella that holds one short paragraph per segment, each
+# under a level three heading carrying that segment's name.
+UMBRELLA_SEGMENTS_SECTION = constants.UMBRELLA_SECTIONS[1]
 
 # The one heading a skipped file is written with.
 SKIPPED_HEADINGS = {
@@ -118,6 +152,21 @@ CODE_BAD_COMPANY = "bad-company"
 # At least one source carried a date that was in the future and was pulled
 # back to today, so the date on it is not the date the file claims.
 CODE_DATE_CLAMPED = "date-clamped"
+# The profile says which part of the company it covers in a way that is not a
+# short name (Unit 1.7a).
+CODE_BAD_COVERS = "bad-covers"
+
+# The umbrella holds something a reader could follow somewhere: a link, a web
+# address, or the name of a file. Nothing in the umbrella is a link, so it
+# never says whether a segment's own file exists (requirement P19).
+CODE_LINK = "link"
+# The umbrella leaves out a segment the person settled, names one nobody
+# settled, says a segment left out is anything but still to come, or says a
+# segment that is being drafted or taken in is still to come.
+CODE_SEGMENT_MISSING = "segment-missing:%s"
+CODE_SEGMENT_NOT_SETTLED = "segment-not-settled"
+CODE_SEGMENT_NOT_PENDING = "segment-not-pending:%s"
+CODE_SEGMENT_SAID_PENDING = "segment-said-pending:%s"
 
 # The long dashes, written as escapes so this file holds neither of them.
 EM_DASH = "\u2014"
@@ -145,9 +194,12 @@ _BANNED = [(word, _banned_pattern(word)) for word in constants.DRAFT_BANNED_WORD
 
 PROGRESS = {
     "reading": "Reading what you named.",
+    "condensing": "Condensing your notes.",
     STEP_ICP: "Drafting your ideal customer profile.",
     STEP_CHANGE: "Drafting the context change.",
     STEP_POSITIONING: "Drafting your positioning.",
+    STEP_UMBRELLA: "Drafting your customer profile across your segments.",
+    STEP_SEGMENT: "Drafting that segment.",
     "saving": "Saving that into the base.",
 }
 
@@ -251,7 +303,9 @@ def _is_wanted_first(source, words) -> bool:
     return any(word in where for word in words)
 
 
-def order_sources(step: str, sources: Sequence["sources_module.Source"]):
+def order_sources(
+    step: str, sources: Sequence["sources_module.Source"], first_path=None
+):
     """Put the sources this step most wants first, and keep the rest in order.
 
     Nothing is dropped here. The cap is what drops things, and it drops from
@@ -261,8 +315,32 @@ def order_sources(step: str, sources: Sequence["sources_module.Source"]):
     was reached, and every one of the fourteen files describing who the company
     sells to sat past it while the profile was drafted from one file about
     messaging.
+
+    Templates and read-me files go last of all, whatever step it is and
+    whatever their names say they are about (Unit 1.6). The third real run
+    spent room on templates while a finished document sat past the cap, and a
+    template is the shape of a document with nothing of the business in it,
+    so it is the first thing the cap should reach.
     """
-    listed = list(sources)
+    ordered = _ordered(step, sources)
+    if first_path:
+        # A segment's own page goes first whatever its name says, so the cap
+        # never leaves out the one document about it (finding 3 of Unit
+        # 1.7b's correctness review).
+        wanted = os.path.realpath(first_path)
+        pinned = [
+            source
+            for source in ordered
+            if getattr(source, "path", None)
+            and os.path.realpath(source.path) == wanted
+        ]
+        ordered = pinned + [source for source in ordered if source not in pinned]
+    return ordered
+
+
+def _ordered(step: str, sources):
+    listed = [source for source in sources if not is_template_or_readme(source)]
+    last = [source for source in sources if is_template_or_readme(source)]
     if step == STEP_CHANGE:
         # What a context change wants first is the most recent material, so
         # the dated sources lead, newest first, and the undated follow in the
@@ -270,23 +348,49 @@ def order_sources(step: str, sources: Sequence["sources_module.Source"]):
         dated = [source for source in listed if getattr(source, "date", None)]
         undated = [source for source in listed if not getattr(source, "date", None)]
         dated.sort(key=lambda source: str(source.date), reverse=True)
-        return dated + undated
+        return dated + undated + last
     words = constants.DRAFT_RELEVANCE.get(step, ())
     if not words:
-        return listed
+        return listed + last
     wanted = [source for source in listed if _is_wanted_first(source, words)]
     rest = [source for source in listed if not _is_wanted_first(source, words)]
-    return wanted + rest
+    return wanted + rest + last
 
 
-def plan_sources(step: str, sources: Sequence["sources_module.Source"]) -> SourcePlan:
+def _words_in(text: str):
+    return [word for word in re.split(r"[^a-z0-9]+", str(text or "").casefold()) if word]
+
+
+def is_template_or_readme(source) -> bool:
+    """Whether a source is a template or a read-me, by its name or first heading.
+
+    The words are matched whole, so a file of email templates and a finished
+    positioning built on somebody's template are not taken for templates. A
+    heading counts only when it is short, as the title of a template is, such
+    as "Launch brief template" (finding 5 of the unit's correctness review).
+    """
+    label = str(getattr(source, "label", "") or "")
+    name_words = _words_in(os.path.splitext(label)[0])
+    if any(word in name_words for word in constants.DRAFT_LAST_NAMES):
+        return True
+    if any(word in name_words for word in constants.DRAFT_LAST_WORDS):
+        return True
+    heading_words = _words_in(_first_heading(source))
+    return len(heading_words) <= 5 and any(
+        word in heading_words for word in constants.DRAFT_LAST_WORDS
+    )
+
+
+def plan_sources(
+    step: str, sources: Sequence["sources_module.Source"], first_path=None
+) -> SourcePlan:
     """Order the sources for one step and say which of them fit in a request.
 
     Whole sources are dropped from the end of the ordered list, never the
     middle of one, because half a document read is worse than a document not
     read at all.
     """
-    ordered = order_sources(step, sources)
+    ordered = order_sources(step, sources, first_path)
     included: List["sources_module.Source"] = []
     dropped: List["sources_module.Source"] = []
     fences: List[str] = []
@@ -332,6 +436,18 @@ def source_line(source) -> str:
     return str(label)
 
 
+def said_as_data(label: str, text: str) -> str:
+    """Words the person gave, held apart as data inside the request.
+
+    The names of their segments and what their base is for are their own
+    words, so they go into a request exactly the way their documents do:
+    inside a fence, after the sentence saying that what follows is data and
+    not instructions.
+    """
+    source = sources_module.paste_source(label, str(text or ""))
+    return sources_module.fence(source).rstrip("\n")
+
+
 def assemble(
     step: str,
     sources: Sequence["sources_module.Source"],
@@ -340,6 +456,8 @@ def assemble(
     owner_email: str,
     icp_path: Optional[str] = None,
     plugin_root: Optional[str] = None,
+    extra: Optional[Dict[str, str]] = None,
+    first_path: Optional[str] = None,
 ) -> Assembly:
     """Build the request for one step out of the prompt file and the sources.
 
@@ -362,7 +480,7 @@ def assemble(
     template = prompt_text(step, plugin_root)
     name = _checked_company(step, company)
 
-    plan = plan_sources(step, sources)
+    plan = plan_sources(step, sources, first_path)
     included = plan.included_labels
 
     if sources and not plan.fences:
@@ -379,6 +497,11 @@ def assemble(
         "owner_email": str(owner_email or ""),
         "icp_path": str(icp_path or ICP_PATH),
     }
+    # What the umbrella and a segment are also told: the settled segments,
+    # the one segment being drafted, and what the base is for. The caller
+    # hands each in already held apart as data.
+    for field, value in (extra or {}).items():
+        values[field] = str(value or "")
     text = template
     for field, value in values.items():
         text = text.replace("{{%s}}" % field, value)
@@ -386,6 +509,44 @@ def assemble(
     return Assembly(
         text, plan.codes, included, plan.dropped_labels, plan.ordered_labels
     )
+
+
+def assemble_from_notes(
+    step: str,
+    notes_text: str,
+    file_lines: Sequence[str],
+    company: str,
+    today,
+    owner_email: str,
+    codes: Sequence[str] = (),
+    icp_path: Optional[str] = None,
+    plugin_root: Optional[str] = None,
+    extra: Optional[Dict[str, str]] = None,
+) -> Assembly:
+    """Build the request for one step from the checked notes (summarize-first).
+
+    The draft reads the notes taken from every file, already fenced as data,
+    and never the files themselves, so nothing is left out of it for room and
+    every line it writes can say which note it rests on. The files are listed
+    by their number in this run, the way the notes name them.
+    """
+    template = prompt_text(step, plugin_root)
+    name = _checked_company(step, company)
+    listing = ["The files these notes were taken from, each with its number:"]
+    listing.extend("- " + line for line in file_lines)
+    values = {
+        "sources": "\n".join(listing) + "\n\n" + notes_text,
+        "company": name,
+        "today": str(today or ""),
+        "owner_email": str(owner_email or ""),
+        "icp_path": str(icp_path or ICP_PATH),
+    }
+    for field, value in (extra or {}).items():
+        values[field] = str(value or "")
+    text = template
+    for field, value in values.items():
+        text = text.replace("{{%s}}" % field, value)
+    return Assembly(text, list(codes), list(file_lines), [], list(file_lines))
 
 
 def _checked_company(step: str, company) -> str:
@@ -437,23 +598,45 @@ def what_is_wrong(draft, answer: str) -> str:
 class Draft(object):
     """One document the assistant wrote back, read and checked."""
 
-    __slots__ = ("step", "text", "fields", "body", "codes", "only_if_signal_present")
+    __slots__ = (
+        "step",
+        "text",
+        "fields",
+        "body",
+        "codes",
+        "only_if_signal_present",
+        "destination",
+    )
 
-    def __init__(self, step, text, fields, body, codes=None, only_if_signal_present=None):
+    def __init__(
+        self,
+        step,
+        text,
+        fields,
+        body,
+        codes=None,
+        only_if_signal_present=None,
+        destination=None,
+    ):
         self.step = step
         self.text = text
         self.fields = dict(fields or {})
         self.body = body
         self.codes = list(codes or [])
         self.only_if_signal_present = list(only_if_signal_present or [])
+        # Where a segment's draft goes, worked out from the settled inventory
+        # by the caller and never read off the draft.
+        self.destination = destination
 
     @property
     def path(self) -> str:
-        """Where in the base this draft belongs, for the two context files."""
-        if self.step == STEP_ICP:
+        """Where in the base this draft belongs, for the context files."""
+        if self.step in PROFILE_STEPS:
             return ICP_PATH
         if self.step == STEP_POSITIONING:
             return POSITIONING_PATH
+        if self.step == STEP_SEGMENT and self.destination:
+            return self.destination
         raise DraftError(self.step, "no-fixed-path")
 
     def __repr__(self) -> str:
@@ -493,6 +676,99 @@ def strip_fence(step: str, model_text: str) -> str:
     return inside + "\n"
 
 
+_SOURCES_KEY_RE = re.compile(r"^(sources?)\s*:(.*)$")
+_LIST_ITEM_RE = re.compile(r"^\s*-(?:\s+(.*)|)$")
+_FILE_LABEL_RE = re.compile(
+    r"^[^\s\[\],][^\[\],]*(?:%s)(?: \(\d{4}-\d{2}-\d{2}\))?$"
+    % "|".join(
+        re.escape(suffix)
+        for suffix in sorted(
+            set(constants.SOURCE_READABLE_SUFFIXES) | set(constants.SOURCE_EXPORT_SUFFIXES)
+        )
+    ),
+    re.IGNORECASE,
+)
+
+
+def _unquoted(item: str) -> str:
+    item = item.strip()
+    if len(item) >= 2 and item[0] == item[-1] and item[0] in "\"'":
+        return item[1:-1].strip()
+    return item
+
+
+def _unnamed(items: Sequence[str]) -> List[str]:
+    """The items that are not a file's name, which the word checks still read.
+
+    A file's name ends in a file ending the plugin reads or lists, so text
+    that only ends like one, such as "e.g" or "v2.1", is still read.
+    """
+    return [item for item in items if not _FILE_LABEL_RE.match(_unquoted(item))]
+
+
+def _without_source_labels(text: str) -> str:
+    """The draft as the word checks read it: the files it cites left out.
+
+    A file is named whatever somebody called it, so a source called todo.md
+    is a source and not a placeholder. Only an item of the sources line (or a
+    change entry's source line, or one item per line under either) that is
+    shaped like a file's name, with or without the date beside it, is left
+    out. Anything else on that line, such as an unfilled TBD, is still read,
+    and so is everything a draft says in its own words (the replay of
+    2026-10-10, case two, and the correctness review of its fix).
+    """
+    lines = text.split("\n")
+    if not lines or lines[0].strip() != formats.FRONTMATTER_FENCE:
+        return text
+    closing = None
+    for index in range(1, len(lines)):
+        if lines[index].strip() == formats.FRONTMATTER_FENCE:
+            closing = index
+            break
+    if closing is None:
+        return text
+    kept = [lines[0]]
+    in_sources = False
+    for line in lines[1:closing]:
+        key = _SOURCES_KEY_RE.match(line)
+        item = _LIST_ITEM_RE.match(line)
+        if key:
+            value = key.group(2).strip()
+            in_sources = not value
+            if value.startswith("[") and value.endswith("]"):
+                items = value[1:-1].split(",") if value[1:-1].strip() else []
+                line = "%s: [%s]" % (key.group(1), ", ".join(i.strip() for i in _unnamed(items)))
+            elif value:
+                line = "%s: %s" % (key.group(1), ", ".join(i.strip() for i in _unnamed([value])))
+        elif in_sources and item:
+            if not _unnamed([item.group(1) or ""]):
+                continue
+        else:
+            in_sources = False
+        kept.append(line)
+    return "\n".join(kept + lines[closing:])
+
+
+def without_setup_sections(text: str) -> str:
+    """A document without the sections setup writes itself from the notes.
+
+    Those sections hold the material's own words, copied and checked against
+    its files, and the file each came from, so they are not held to the words
+    a draft may use, and a file's name in them is not a link. Review refuses
+    any draft that writes one of these headings itself, so only setup's own
+    sections are ever read this way.
+    """
+    kept: List[str] = []
+    skipping = False
+    for line in str(text or "").split("\n"):
+        stripped = line.strip()
+        if stripped.startswith("## ") or stripped.startswith("# "):
+            skipping = any(stripped.startswith(head) for head in constants.SETUP_WRITTEN_HEADINGS)
+        if not skipping:
+            kept.append(line)
+    return "\n".join(kept)
+
+
 def check_words(step: str, text: str) -> None:
     """Refuse the long dash, the words that say nothing, and any placeholder."""
     if EM_DASH in text or EN_DASH in text:
@@ -520,7 +796,10 @@ def parse(step: str, model_text: str) -> Draft:
     if step not in STEPS:
         raise DraftError(step, "unknown-step")
     text = strip_fence(step, model_text)
-    check_words(step, text)
+    # Only a document written from the notes has sections setup writes, so
+    # only its words are read without them (the correctness review, M12).
+    exempt = step in (STEP_ICP, STEP_UMBRELLA, STEP_POSITIONING, STEP_SEGMENT)
+    check_words(step, _without_source_labels(without_setup_sections(text) if exempt else text))
 
     try:
         block, body = formats.split_document(text)
@@ -560,6 +839,16 @@ def parse(step: str, model_text: str) -> Draft:
         # the base, because a setting nothing here checks would sit in the file
         # unread, and a line nobody reads is a line anything could be put on.
         for name in sorted(fields):
+            if name == constants.COVERS_FIELD and step in PROFILE_STEPS:
+                # Which part of the company the base is for (Unit 1.7a). It is
+                # read here only so a profile carrying it can be read back;
+                # what it says is always written by GTM Base from the answer
+                # the person gave, never taken from a draft.
+                try:
+                    validate.validate_covers(fields[name])
+                except ValidationError:
+                    raise DraftError(step, CODE_BAD_COVERS)
+                continue
             if name not in CONTEXT_FIELDS:
                 raise DraftError(step, CODE_UNKNOWN_FIELD % name)
     said_kind = str(fields.get("kind", "")).strip()
@@ -580,7 +869,9 @@ def parse(step: str, model_text: str) -> Draft:
         raise DraftError(step, CODE_WRONG_KIND)
 
     present: List[str] = []
-    if step == STEP_ICP:
+    if step in (STEP_ICP, STEP_SEGMENT):
+        # A segment is drafted at the depth of a whole profile, never as a
+        # shorter summary of one, so it carries the same four parts.
         sections = {
             name.strip().lower(): value
             for name, value in formats.split_sections(body).items()
@@ -593,8 +884,117 @@ def parse(step: str, model_text: str) -> Draft:
             for heading in ONLY_IF_SIGNAL_SECTIONS
             if sections.get(heading.lower(), "").strip()
         ]
+    if step == STEP_UMBRELLA:
+        sections = {
+            name.strip().lower(): value
+            for name, value in formats.split_sections(body).items()
+        }
+        for heading in UMBRELLA_SECTIONS:
+            if not sections.get(heading.lower(), "").strip():
+                raise DraftError(step, CODE_EMPTY_SECTION % heading)
+        if _holds_a_link(without_setup_sections(body)):
+            raise DraftError(step, CODE_LINK)
 
     return Draft(step, text, fields, body, [], present)
+
+
+# Anything a reader could follow: a link written the usual way, a link in angle
+# brackets, a web address, a wiki link, or the name of a document file.
+_LINK_RE = re.compile(
+    r"\]\(|\[\[|<\s*[a-z][a-z0-9+.-]*:|\b(?:https?|ftp|file)://|\bwww\.|"
+    r"[A-Za-z0-9_/-]+\.md\b",
+    re.IGNORECASE,
+)
+
+
+def _holds_a_link(text: str) -> bool:
+    return bool(_LINK_RE.search(str(text or "")))
+
+
+def segment_paragraphs(body: str) -> List[tuple]:
+    """Each segment the umbrella names, and the paragraph under its name.
+
+    A segment is a level three heading inside the part named Segments, and its
+    paragraph runs to the next heading of any size. What comes back is the
+    heading's words and the paragraph, in the order they were written.
+    """
+    found: List[tuple] = []
+    inside = False
+    current = None
+    lines: List[str] = []
+    for line in str(body or "").split("\n"):
+        stripped = line.strip()
+        level = len(stripped) - len(stripped.lstrip("#")) if stripped.startswith("#") else 0
+        if level and stripped[level:level + 1] not in (" ", "\t"):
+            level = 0
+        if level == 2:
+            if current is not None:
+                found.append((current, "\n".join(lines).strip()))
+                current = None
+            inside = stripped[2:].strip().lower() == UMBRELLA_SEGMENTS_SECTION.lower()
+            lines = []
+            continue
+        if level == 1:
+            if current is not None:
+                found.append((current, "\n".join(lines).strip()))
+                current = None
+            inside = False
+            continue
+        if not inside:
+            continue
+        if level == 3:
+            if current is not None:
+                found.append((current, "\n".join(lines).strip()))
+            current = stripped[3:].strip()
+            lines = []
+            continue
+        if level:
+            # A heading smaller than a segment's belongs to that segment.
+            lines.append(line)
+            continue
+        if current is not None:
+            lines.append(line)
+    if current is not None:
+        found.append((current, "\n".join(lines).strip()))
+    return found
+
+
+def check_umbrella(draft, inventory) -> List[str]:
+    """What is wrong with an umbrella, measured against the settled inventory.
+
+    Every segment the person settled is named once, by its own name, under
+    Segments; no segment nobody settled is named; a segment left out says it
+    is still to come, in the fixed words, and nothing else does. Nothing here
+    looks at whether any segment's file exists, because the umbrella never
+    says, and the codes carry the file name GTM Base made and never a word
+    the draft wrote.
+    """
+    from . import segments as segments_module
+
+    codes: List[str] = []
+    written = {}
+    for heading, paragraph in segment_paragraphs(getattr(draft, "body", "")):
+        slug = segments_module.slug_for(heading)
+        if slug in written:
+            codes.append(CODE_SEGMENT_NOT_SETTLED)
+            continue
+        written[slug] = paragraph
+    settled = dict((segment.slug, segment) for segment in inventory.segments)
+    pending = " ".join(constants.UMBRELLA_PENDING_SENTENCE.split()).casefold()
+    for slug, segment in settled.items():
+        paragraph = written.get(slug)
+        if paragraph is None or not paragraph.strip():
+            codes.append(CODE_SEGMENT_MISSING % slug)
+            continue
+        says_pending = pending in " ".join(paragraph.split()).casefold()
+        if segment.answer == constants.SEGMENT_LEAVE_OUT and not says_pending:
+            codes.append(CODE_SEGMENT_NOT_PENDING % slug)
+        if segment.answer != constants.SEGMENT_LEAVE_OUT and says_pending:
+            codes.append(CODE_SEGMENT_SAID_PENDING % slug)
+    for slug in written:
+        if slug not in settled and CODE_SEGMENT_NOT_SETTLED not in codes:
+            codes.append(CODE_SEGMENT_NOT_SETTLED)
+    return codes
 
 
 def skipped_text(step: str, owner_email: str, today) -> str:

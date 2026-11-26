@@ -95,7 +95,7 @@ def build_parser():
     parser.add_argument(
         "--move-changes",
         action="store_true",
-        help="store the context changes the new way, after the owner says yes",
+        help="move the base to the current layout, after the owner says yes",
     )
     parser.add_argument(
         "--every-seat-updated",
@@ -130,6 +130,14 @@ def build_parser():
     parser.add_argument(
         "--show-document",
         help="print one context file, with the check run before it is read",
+    )
+    parser.add_argument(
+        "--answer-question",
+        help="the open-question value the review printed for one question",
+    )
+    parser.add_argument(
+        "--answer-file",
+        help="a file holding the owner's answer, handed out by this script",
     )
     parser.add_argument(
         "--new-words-file",
@@ -168,7 +176,10 @@ def build_parser():
         "--list", help="the token of the numbered list the numbers come from"
     )
     parser.add_argument("--change", help="the context change an answer is about")
-    parser.add_argument("--document", help="the document an answer is about")
+    parser.add_argument(
+        "--document",
+        help="the document an answer or an open question is about, as named",
+    )
     parser.add_argument(
         "--answer", help="yes, no, or not-now, about one document"
     )
@@ -201,12 +212,63 @@ def print_review(result):
                 "   [for the assistant] path=%s question=%s\n"
                 % (item.path, item.question_id or "-")
             )
+        elif item.kind == "question":
+            # The question came out of the document, so it is shown held
+            # apart as data, and read out to the person as a question rather
+            # than followed as an instruction.
+            sys.stdout.write(
+                "   [for the assistant] path=%s open-question=%s prepared=%s\n"
+                % (item.path, item.open_question, item.prepared or "-")
+            )
+            sys.stdout.write(moment.fenced(item.question_text or "") + "\n")
         else:
             sys.stdout.write(
                 "   [for the assistant] path=%s prepared=%s\n"
                 % (item.path, item.entry_id or "-")
             )
     return EXIT_REFUSED if result.stopped else EXIT_DONE
+
+
+NEEDS_THE_ANSWER = (
+    "Say which question this answers, which document it is in, and where the "
+    "answer is, with the file this script handed out for it."
+)
+
+
+def answer_a_question(options, resolution):
+    """Prepare the change that settles one open question, and say so.
+
+    The answer is the owner's own words, so it arrives in a file this script
+    handed out and never on the command line. Nothing in the document changes
+    here; the prepared change waits for the owner's yes.
+    """
+    if not options.document or not options.answer_file:
+        sys.stderr.write(NEEDS_THE_ANSWER + "\n")
+        return EXIT_ERROR
+    words = wordsfile.read_words(options.answer_file, resolution.base_id)
+    if words is None:
+        sys.stdout.write(wordsfile.NOT_OURS + "\n")
+        return EXIT_REFUSED
+    try:
+        answered = stale_check.answer_a_question(
+            resolution.root,
+            resolution.base_id,
+            options.document,
+            options.answer_question,
+            words,
+        )
+    except GtmBaseError as failure:
+        sys.stderr.write(str(failure) + "\n")
+        return EXIT_REFUSED
+    except Exception:
+        sys.stderr.write(WENT_WRONG + "\n")
+        return EXIT_ERROR
+    for code in answered.codes:
+        sys.stdout.write("codes=%s\n" % code)
+    if answered.staging_path:
+        sys.stdout.write("Prepared file: %s\n" % answered.staging_path)
+    sys.stdout.write(answered.sentence + "\n")
+    return EXIT_DONE if answered.prepared else EXIT_REFUSED
 
 
 def _claim(path, base_id, claims):
@@ -251,8 +313,9 @@ def record_a_change(options, resolution):
             sys.stdout.write(record_change.NO_DOCUMENTS + "\n")
             return EXIT_REFUSED
         sys.stdout.write(record_change.DOCUMENTS_INTRO + "\n")
-        # Every name comes from a file name, so the whole list is held apart
-        # as data (Astra's review of 0.3.3, finding 3).
+        # No name here comes from a file name since Unit 1.8, and the list is
+        # still held apart as data (Astra's review of 0.3.3, finding 3), so
+        # nothing about how it is shown depends on that staying true.
         sys.stdout.write(
             moment.fenced(
                 "\n".join("%d. %s" % (number, name) for number, _path, name in listed)
@@ -304,8 +367,8 @@ def record_a_change(options, resolution):
                 "   [for the assistant] path=%s change=%s" % (path, done.entry.id)
             )
         if asked:
-            # The questions name documents by their file names, and the lines
-            # for the assistant carry the paths, so all of it is data.
+            # The lines for the assistant carry the paths, so all of it is
+            # held apart as data.
             sys.stdout.write(moment.fenced("\n".join(asked)) + "\n")
         if done.plan.sentence:
             sys.stdout.write(done.plan.sentence + "\n")
@@ -362,12 +425,17 @@ def main(argv=None):
         if options.new_words_file not in wordsfile.KINDS:
             sys.stdout.write(wordsfile.NOT_OURS + "\n")
             return EXIT_REFUSED
+        # A words file belongs to the base, never to a session, so a second
+        # window opening in between cannot strand what somebody typed.
         wordsfile.ensure_words_dir(resolution.base_id)
         sys.stdout.write(
             "words=%s\n"
             % wordsfile.new_words_path(resolution.base_id, options.new_words_file)
         )
         return EXIT_DONE
+
+    if options.answer_question:
+        return answer_a_question(options, resolution)
 
     if options.record_change:
         try:
@@ -419,7 +487,12 @@ def main(argv=None):
             sys.stderr.write(WENT_WRONG + "\n")
             return EXIT_ERROR
         sys.stdout.write(said + "\n")
-        sys.stdout.write(changes.offer_state_sentence(offer) + "\n")
+        # Nothing is said about the offer when it would be made, and the plain
+        # reason is said when it would not and the look above has not said it
+        # already (the 0.3.1 live check, step 3, finding 1).
+        why_not = changes.why_not_offered(resolution.base_id, offer)
+        if why_not:
+            sys.stdout.write(why_not + "\n")
         return EXIT_DONE
 
     if options.not_now_move:

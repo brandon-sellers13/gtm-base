@@ -83,6 +83,12 @@ FINDING_DOCUMENT_BEHIND = "document-behind-a-change"
 # open: a no at the closing about a change dated before today produced an
 # all-clear in the same breath as the change it had just prepared).
 FINDING_CHANGE_WAITING = "a-change-is-waiting"
+# A document that still holds a question the draft left for the person,
+# marked `[your call: ...]`, and nobody has answered. It is the second place in
+# the order, straight after a document the person did not write, because a
+# document with a question open in it is not finished (Unit 1.7b, which fills
+# the slot Unit 1.2 left for it).
+FINDING_OPEN_QUESTION = "a-question-is-still-open"
 FINDING_NOTHING_OUT_OF_DATE = "nothing-out-of-date-yet"
 
 # The kind the base's own map carries. A file of this kind is left out of
@@ -96,8 +102,10 @@ KIND_MAP = "map"
 STATUS_SKIPPED = "skipped"
 # What a confirmation line's trigger says when setup wrote it.
 TRIGGER_DRAFTED = "drafted"
-# The files the first run expects a new base to hold.
-REQUIRED_FILES = ("context/strategy/icp.md", "context/strategy/positioning.md")
+# The files the first run expects a new base to hold. A base laid out before
+# Unit 1.5b holds them at their older paths, and the caller that read the base
+# says where by setting `required_files` on the report.
+REQUIRED_FILES = constants.REQUIRED_CONTEXT_FILES
 # The kinds a decision is assumed to touch when nothing else points anywhere.
 FALLBACK_KINDS = ("icp", "positioning")
 
@@ -165,7 +173,15 @@ class ContextFileInfo(object):
     left out of the date comparison rather than given one.
     """
 
-    __slots__ = ("path", "owners", "exists", "sources_date", "status", "kind")
+    __slots__ = (
+        "path",
+        "owners",
+        "exists",
+        "sources_date",
+        "status",
+        "kind",
+        "open_questions",
+    )
 
     def __init__(
         self,
@@ -175,6 +191,7 @@ class ContextFileInfo(object):
         sources_date=None,
         status: str = "",
         kind: str = "",
+        open_questions: Optional[Sequence[str]] = None,
     ):
         self.path = path
         self.owners = list(owners or [])
@@ -182,6 +199,10 @@ class ContextFileInfo(object):
         self.sources_date = _as_date(sources_date)
         self.status = status or ""
         self.kind = kind or ""
+        # Every `[your call: ...]` the body still holds, as the question it
+        # asks. Worked out from the body by whoever read the file, never
+        # stored anywhere (Unit 1.7b, requirement P27).
+        self.open_questions = tuple(open_questions or ())
 
     @property
     def skipped(self) -> bool:
@@ -191,6 +212,20 @@ class ContextFileInfo(object):
     def present(self) -> bool:
         """Whether the base actually holds this file today."""
         return self.exists and not self.skipped
+
+    @property
+    def has_open_question(self) -> bool:
+        """Whether the body still holds a question nobody has answered."""
+        return bool(self.open_questions)
+
+    @property
+    def complete(self) -> bool:
+        """Whether the file is there, written, and asks nothing still open.
+
+        A file holding an unanswered marker is not complete whatever its
+        status says, so a retained draft can never pass as finished.
+        """
+        return self.present and not self.has_open_question
 
     def __repr__(self) -> str:
         return "ContextFileInfo(path=%r, status=%r)" % (self.path, self.status)
@@ -405,6 +440,10 @@ class StaleReport(object):
         # whether they said it in a line or by accepting a prepared change.
         # A file nobody has confirmed is not in here at all.
         self.confirmed_on: Dict[str, Any] = {}
+        # The two required documents where they really are on this base. The
+        # caller that read the base knows that and sets it; a report built
+        # without it assumes the current layout.
+        self.required_files = tuple(REQUIRED_FILES)
 
     # A base with nowhere to send its work cannot be behind anyone.
     @property
@@ -448,6 +487,11 @@ class StaleReport(object):
                 continue
             if self._suppressed(flag.path):
                 continue
+            if flag.trigger != TRIGGER_LEDGER and info.has_open_question:
+                # Nobody can say a document is still right while it asks a
+                # question nobody answered, so the calendar asks nothing
+                # about it; the review asks the question instead.
+                continue
             if flag.trigger == TRIGGER_LEDGER:
                 entry_id = flag.entry_ids[0] if flag.entry_ids else None
                 if entry_id is not None and entry_id in seen_entries:
@@ -469,6 +513,26 @@ class StaleReport(object):
             return False
         return self.today < until
 
+    def open_question_paths(
+        self, required_files: Optional[Sequence[str]] = None
+    ) -> List[str]:
+        """Every document still holding a question nobody answered, in order.
+
+        The two required documents come first, in their own order, then every
+        other document by its path, so the same base always names the same
+        one first. The map and a file the person skipped are never in it.
+        """
+        required = list(required_files or self.required_files)
+        found = []
+        rest = sorted(path for path in self.files if path not in required)
+        for path in required + rest:
+            info = self.files.get(path)
+            if info is None or not info.present or is_map(info):
+                continue
+            if info.has_open_question and path not in found:
+                found.append(path)
+        return found
+
     def review_on(self, path: str):
         """The day this file comes up for review, or None if nobody confirmed it.
 
@@ -485,7 +549,7 @@ class StaleReport(object):
         )
 
     def baseline_items(
-        self, required_files: Sequence[str] = REQUIRED_FILES
+        self, required_files: Optional[Sequence[str]] = None
     ) -> List[BaselineItem]:
         """Each required document the base holds, with its two dates.
 
@@ -494,7 +558,7 @@ class StaleReport(object):
         one is worked out on its own rather than one standing in for both.
         """
         items = []
-        for path in required_files:
+        for path in required_files or self.required_files:
             info = self.files.get(path)
             if info is None or not info.present:
                 continue
@@ -505,7 +569,7 @@ class StaleReport(object):
 
     def first_run_finding(
         self,
-        required_files: Sequence[str] = REQUIRED_FILES,
+        required_files: Optional[Sequence[str]] = None,
     ) -> Finding:
         """The one honest thing to say at the end of a first run.
 
@@ -521,16 +585,19 @@ class StaleReport(object):
         of the release review. Without them a "no" at the closing produced an
         all-clear in the same breath as a flagged document.
 
-        The second place in that order is the unanswered marker, which is built
-        in Unit 1.7 of the 2026-09-19 plan. Until then the slot is here and is
-        never reached, so the order the closing rules promise is the order this
-        runs in from the day the baseline lands.
+        The second place in that order is the unanswered marker, which Unit
+        1.7b of the 2026-09-19 plan built into the slot Unit 1.2 left for it.
         """
+        required_files = required_files or self.required_files
         for path in required_files:
             info = self.files.get(path)
             if info is None or not info.present:
                 return Finding(FINDING_REQUIRED_FILE_MISSING, path, None, None)
-        # The unanswered-marker slot. Unit 1.7 fills it.
+        # A document still holding a question nobody answered is not finished,
+        # so it comes before everything worked out from dates (Unit 1.7b).
+        open_questions = self.open_question_paths(required_files)
+        if open_questions:
+            return Finding(FINDING_OPEN_QUESTION, open_questions[0], None, None)
         if self.review_items:
             item = self.review_items[0]
             return Finding(
@@ -658,8 +725,15 @@ def compute(
 
     known = _index_files(files, malformed)
     entries = _usable_entries(ledger, day, malformed)
-    owner_lines, non_owner_counts = _index_confirmations(known, confirmations, malformed)
-    settled, accepted = _corrections_confirmations(known, corrections, malformed)
+    all_owner_lines, non_owner_counts = _index_confirmations(
+        known, confirmations, malformed
+    )
+    settled, all_accepted = _corrections_confirmations(known, corrections, malformed)
+    # A file still holding a question nobody answered is not confirmed by
+    # anything, however it came by its lines (Unit 1.7b, requirement P27).
+    owner_lines, accepted = _while_no_question_is_open(
+        known, all_owner_lines, all_accepted
+    )
     confirmed_on = _newest_confirmations(known, owner_lines, accepted)
 
     file_flags = _file_flags(
@@ -677,7 +751,9 @@ def compute(
     entry_flags = _entry_flags(known, entries)
     proposals = _affected_files_proposals(known, entries, map_hints)
     review_by_items = _review_by_items(day, entries)
-    review_items = _review_items(known, entries, owner_lines)
+    # Whether setup drafted a file is a fact about where it came from, not a
+    # confirmation, so every line is read for it.
+    review_items = _review_items(known, entries, all_owner_lines)
     ledger_behind = _ledger_behind(day, options, entries, seat)
     dropped = [
         DroppedPath(
@@ -707,6 +783,33 @@ def compute(
     report.merge_confirmations = dict(accepted)
     report.confirmed_on = dict(confirmed_on)
     return report
+
+
+def _while_no_question_is_open(known, owner_lines, accepted):
+    """The owner lines and acceptances that count, which is none for a file
+    still holding a question nobody answered.
+
+    Setup's own line, an ordinary yes, a yes naming a change, and an owner
+    accepting a prepared change that left the question where it was all leave
+    such a file unconfirmed. The lines are kept in the file and count again
+    the day the question is answered, because each of them was true about
+    what it was given about.
+    """
+    counted_lines = {
+        path: lines
+        for path, lines in owner_lines.items()
+        if not _holds_a_question(known.get(path))
+    }
+    counted_accepted = {
+        path: acceptance
+        for path, acceptance in accepted.items()
+        if not _holds_a_question(known.get(path))
+    }
+    return counted_lines, counted_accepted
+
+
+def _holds_a_question(info) -> bool:
+    return bool(getattr(info, "open_questions", None))
 
 
 def _index_files(files, malformed) -> "Dict[str, ContextFileInfo]":

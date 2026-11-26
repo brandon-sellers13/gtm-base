@@ -43,12 +43,16 @@ import shutil
 from typing import Dict, List, Optional, Tuple
 
 from . import (
+    approval,
     base_reader,
     compose_proposal,
     confirm,
     constants,
     formats,
+    hand_edit,
     ids,
+    layout,
+    moment,
     names,
     paths,
     report,
@@ -181,11 +185,11 @@ NO_ADDRESS = (
 OUTSIDE_THE_FOLDERS = (
     "A prepared change may only touch your context files, the record of "
     "context changes, and the record of what was corrected, and this one "
-    "names %s."
+    "names a file outside them."
 )
 ASSISTANT_FOLDER = (
     "A prepared change may never touch the assistant's own folder, and this "
-    "one names %s."
+    "one names a file inside it."
 )
 MARKER_DISAGREES = (
     "This prepared change carries a context change that its own marker does "
@@ -242,17 +246,44 @@ NOTE_UNREADABLE = (
     "GTM Base left a note about an unfinished change that it cannot make "
     "sense of, so it touched nothing at all. Ask somebody to look at it."
 )
-APPLIED = "%s now says what this change said, and you are recorded as approving it."
+APPLIED = (
+    "What this change said is now in %s, and you are recorded as approving it."
+)
 KEPT = "The prepared change is still waiting, and nothing in your base changed."
 DROPPED = "The prepared change is gone, and nothing in your base changed."
 ASK = "Approve this change, leave it for now, or drop it?"
-# How a part taken out by a change is introduced in what a person reads, and
-# how one of several parts with the same heading is named (finding R10 of
-# Astra's third look).
-PART_TAKEN_OUT_NOW = (
-    "The part of %s called %s, which this change takes out, as it reads now:"
+# The one yes a fix to wording only asks for (Brandon's calls 34 and 49).
+WORDING_ASK = "Shall I keep this fix to the wording?"
+# How a hand edit is shown: the changed sentence once, the change marked, and
+# the heading it sits under (the 0.3.1 live check, step 5, finding 1). The
+# heading and the words come out of the document, so they sit in the fence
+# below this sentence and never in it.
+MARKED = hand_edit.MARKED
+# How each part of a document is introduced in what a person reads. The part
+# itself, heading first, follows inside the data fence, so no word of it is in
+# these sentences (the second round of Astra's review of Unit 1.7c): a heading
+# comes out of the document, and the document may be a page somebody adopted.
+# One of several parts with the same heading is named by which one it is
+# (finding R10 of Astra's third look).
+PART_NOW = "The part of %s this change rewrites, heading first, as it reads now:"
+PART_NOW_NTH = (
+    "The %s part of %s with that same heading, which this change rewrites, "
+    "heading first, as it reads now:"
 )
-PART_OF_SEVERAL = "%s, the %s part with that heading"
+PART_AFTER = "The same part, as this change would leave it:"
+PART_TAKEN_OUT_NOW = (
+    "The part of %s this change takes out, heading first, as it reads now:"
+)
+PART_TAKEN_OUT_NTH = (
+    "The %s part of %s with that same heading, which this change takes out, "
+    "heading first, as it reads now:"
+)
+CARRIES = "The context change this carries, as it will be written down:"
+DIFFERENCE = (
+    "Everything in %s that is different from the last time it was saved, "
+    "which is all of what saying yes to this writes down:"
+)
+NOTHING_DIFFERENT = "Nothing in %s is different from the last time it was saved."
 # Said under the whole difference of a document when some of what changed is
 # only spaces, tabs, or line endings, which a reader cannot see in the literal
 # difference above it (finding R8 of Astra's third look).
@@ -377,12 +408,12 @@ def path_problems(staging) -> List[Tuple[str, str]]:
             candidates.append(value)
     for candidate in candidates:
         if _in_the_assistant_folder(candidate):
-            found.append((CODE_ASSISTANT_FOLDER, ASSISTANT_FOLDER % candidate))
+            found.append((CODE_ASSISTANT_FOLDER, ASSISTANT_FOLDER))
             continue
         try:
             paths.check_repo_path_syntax(candidate, paths.PROPOSAL_PATH_PREFIXES)
         except PathError:
-            found.append((CODE_OUTSIDE_ALLOWED, OUTSIDE_THE_FOLDERS % candidate))
+            found.append((CODE_OUTSIDE_ALLOWED, OUTSIDE_THE_FOLDERS))
     return found
 
 
@@ -462,11 +493,13 @@ def _owner_problems(
 
 def _recorded_already(base_root: str, staging_id: str) -> bool:
     """Whether the record of what changed already holds this exact change."""
-    folder = os.path.join(base_root, constants.CORRECTIONS_DIR)
-    if not os.path.isdir(folder):
-        return False
     wanted = "-%s.md" % staging_id
-    return any(name.endswith(wanted) for name in os.listdir(folder))
+    # A record written before the base was moved sits in the older folder, and
+    # it records this change just as surely.
+    for relative in base_reader.correction_files(base_root):
+        if relative.endswith(wanted):
+            return True
+    return False
 
 
 # --- Applying the edits in order ---------------------------------------------
@@ -640,27 +673,18 @@ def _one_line(text: str) -> str:
     return " ".join(single.split())
 
 
-def _quoted(text: str) -> str:
-    """A piece of a file, marked as something read rather than written."""
-    lines = str(text or "").strip("\n").split("\n")
-    return "\n".join(("> " + line.rstrip()) if line.strip() else ">" for line in lines)
+# Finding R8 of Astra's third look put the whole difference in a fence no run
+# of backticks in it can close, so it is shown as the characters it is. Since
+# the second round of Astra's review of Unit 1.7c that fence is the data fence,
+# `moment.fenced`, which is built the same way and says the text is data.
 
 
-_BACKTICKS_RE = re.compile(r"`+")
-
-
-def _fenced(text: str, language: str = "") -> str:
-    """Text inside a fence no run of backticks in it can close.
-
-    Finding R8 of Astra's third look. The whole difference was shown as quoted
-    text, which a screen renders: an image added by hand showed as a picture,
-    a link hid where it went, and spaces at the end of a line were taken off.
-    Inside a fence it is shown as the characters it is, and the fence is one
-    backtick longer than the longest run of them in the text.
-    """
-    longest = max((len(run) for run in _BACKTICKS_RE.findall(text)), default=0)
-    fence = "`" * max(3, longest + 1)
-    return "%s%s\n%s\n%s" % (fence, language, text, fence)
+def _part_as_read(heading: str, text: str) -> str:
+    """One part of a document as it reads: its heading line, then its words."""
+    words = str(text or "").strip("\n")
+    return "%s\n\n%s" % (str(heading or "").strip(), words) if words else str(
+        heading or ""
+    ).strip()
 
 
 def _visible(line: str) -> str:
@@ -739,15 +763,15 @@ def _affected_names(walk: "_Walk", entry) -> str:
     for path in list(entry.affects) if entry is not None else []:
         if path not in ordered:
             ordered.append(path)
-    return ", ".join(names.document_name(path) for path in ordered)
+    return names.documents_named(ordered)
 
 
 def four_lines(base_root: str, staging, entry, walk, today) -> str:
     """One context change as the four labeled lines, and nothing else."""
     if entry is not None:
-        what = names.change_name(entry.body, entry.decided_on)
+        what = names.change_name(entry.body, entry.decided_on, whole=True)
     else:
-        what = names.change_name(compose_proposal.summary_of(staging), None)
+        what = compose_proposal.what_changed_line(staging, steps=walk.steps)
     body = formats.parse_pr_body(staging.pr_body)
     values = (
         _one_line(what),
@@ -792,6 +816,93 @@ def whole_difference(base_root: str, ordered: List[str], git: GitRunner) -> Dict
     return found
 
 
+def marked_differences(
+    base_root: str, ordered: List[str], git: GitRunner
+) -> Dict[str, List[Tuple[str, str]]]:
+    """Every change in each of these files, marked, under its heading.
+
+    The same comparison the whole difference makes, between the last saved
+    version and the file as it is, read as a person reads it: the changed
+    sentence once, with what was taken out and what was put in marked.
+    """
+    found: Dict[str, List[Tuple[str, str]]] = {}
+    for relative in ordered:
+        was = _head_text(base_root, relative, git) or ""
+        now = (
+            read_text_exactly(
+                os.path.join(base_root, relative.replace("/", os.sep))
+            )
+            or ""
+        )
+        found[relative] = hand_edit.marked_changes(was, now)
+    return found
+
+
+def hand_edit_difference(base_root: str, runner: Optional[GitRunner] = None) -> str:
+    """What was changed by hand in each document, marked, and nothing prepared.
+
+    The assistant runs this before it accepts that an edit was only a fix to
+    wording, so it can name the exact difference between the saved file and
+    the version last approved (the 0.3.1 live check, step 6). It writes
+    nothing anywhere.
+    """
+    git = runner_or_default(runner)
+    compose_proposal.refuse_a_name_with_a_space(base_root, git)
+    changed = compose_proposal._changed_names(base_root, git) or []
+    documents = []
+    for relative in changed:
+        try:
+            documents.append(paths.canonical_context_path(base_root, relative))
+        except (PathError, ValidationError):
+            continue
+    pieces = []
+    for relative, changes in marked_differences(base_root, documents, git).items():
+        if not changes:
+            continue
+        pieces.append(MARKED % names.document_name(relative))
+        pieces.append("")
+        pieces.append(moment.fenced(hand_edit.as_read(changes)))
+        pieces.append("")
+    return "\n".join(pieces).rstrip("\n")
+
+
+def short_artifact_for(
+    base_root: str, staging, entry, walk, today, differences, marked
+) -> str:
+    """A hand edit as a person reads it in seconds.
+
+    The four labeled lines, unless the edit is a fix to wording only, and then
+    each changed sentence once, with the change marked and the heading it sits
+    under. Every line that saying yes would save is in it; only the unchanged
+    sentences around a change are left off, and the whole text is shown on
+    request. Changes that are only spaces, tabs, or line endings are pointed
+    out as they are in the whole text.
+    """
+    pieces = [ARTIFACT_OPEN]
+    if not getattr(staging, "wording_only", False):
+        pieces.append(moment.fenced(four_lines(base_root, staging, entry, walk, today)))
+        pieces.append("")
+    for relative in walk.ordered:
+        document = names.document_name(relative)
+        changes = (marked or {}).get(relative) or []
+        if not changes:
+            pieces.append(NOTHING_DIFFERENT % document)
+            pieces.append("")
+            continue
+        pieces.append(MARKED % document)
+        pieces.append("")
+        pieces.append(moment.fenced(hand_edit.as_read(changes)))
+        pieces.append("")
+        hidden = _whitespace_lines((differences or {}).get(relative) or "")
+        if hidden:
+            pieces.append(WHITESPACE_ONLY % document)
+            pieces.append("")
+            pieces.append(moment.fenced("\n".join(_visible(line) for line in hidden)))
+            pieces.append("")
+    pieces.append(ARTIFACT_CLOSE)
+    return "\n".join(pieces).rstrip("\n") + "\n"
+
+
 def artifact_for(base_root: str, staging, entry, walk, today, differences=None) -> str:
     """The whole prepared change, written out so nothing about it is hidden.
 
@@ -805,59 +916,65 @@ def artifact_for(base_root: str, staging, entry, walk, today, differences=None) 
     document that is different from the last time it was saved, all of it,
     because that is what saying yes to one of those writes down.
     """
-    pieces = [ARTIFACT_OPEN, four_lines(base_root, staging, entry, walk, today), ""]
+    # Every piece of text that came out of a document, a record, or a
+    # prepared change sits inside the data fence, and only GTM Base's own
+    # sentences sit outside it, so an adopted page can never speak to the
+    # assistant from here (the second round of Astra's review of Unit 1.7c).
+    # The four labeled lines keep their form, inside the fence as the moment
+    # of use shows them.
+    pieces = [
+        ARTIFACT_OPEN,
+        moment.fenced(four_lines(base_root, staging, entry, walk, today)),
+        "",
+    ]
     carried = _carried_entry(staging)
     if carried is not None:
-        pieces.append("The context change this carries, as it will be written down:")
+        pieces.append(CARRIES)
         pieces.append("")
-        pieces.append(_quoted(carried.render()))
+        pieces.append(moment.fenced(carried.render().rstrip("\n")))
         pieces.append("")
     for (relative, heading, before, after), (operation, which, count) in zip(
         walk.steps, walk.kinds
     ):
         document = names.document_name(relative)
-        part = _one_line(heading.lstrip("#"))
-        if count > 1:
-            part = PART_OF_SEVERAL % (part, _ordinal(which))
         if operation == "remove":
-            pieces.append(PART_TAKEN_OUT_NOW % (document, part))
+            if count > 1:
+                pieces.append(PART_TAKEN_OUT_NTH % (_ordinal(which), document))
+            else:
+                pieces.append(PART_TAKEN_OUT_NOW % document)
             pieces.append("")
-            pieces.append(_quoted(before) if before.strip() else "> (nothing there)")
+            pieces.append(moment.fenced(_part_as_read(heading, before)))
             pieces.append("")
             continue
-        pieces.append("The part of %s called %s, as it reads now:" % (document, part))
+        if count > 1:
+            pieces.append(PART_NOW_NTH % (_ordinal(which), document))
+        else:
+            pieces.append(PART_NOW % document)
         pieces.append("")
-        pieces.append(_quoted(before) if before.strip() else "> (nothing there yet)")
+        pieces.append(moment.fenced(_part_as_read(heading, before)))
         pieces.append("")
-        pieces.append(
-            "The part of %s called %s, as this change would leave it:"
-            % (document, part)
-        )
+        pieces.append(PART_AFTER)
         pieces.append("")
-        pieces.append(_quoted(after))
+        pieces.append(moment.fenced(_part_as_read(heading, after)))
         pieces.append("")
     for relative in walk.ordered:
         text = (differences or {}).get(relative)
         if text is None:
             continue
         document = names.document_name(relative)
-        pieces.append(
-            "Everything in %s that is different from the last time it was "
-            "saved, which is all of what saying yes to this writes down:"
-            % document
-        )
-        pieces.append("")
         if not text.strip():
-            pieces.append("> (nothing is different)")
+            pieces.append(NOTHING_DIFFERENT % document)
             pieces.append("")
             continue
-        pieces.append(_fenced(text, "diff"))
+        pieces.append(DIFFERENCE % document)
+        pieces.append("")
+        pieces.append(moment.fenced(text))
         pieces.append("")
         hidden = _whitespace_lines(text)
         if hidden:
             pieces.append(WHITESPACE_ONLY % document)
             pieces.append("")
-            pieces.append(_fenced("\n".join(_visible(line) for line in hidden)))
+            pieces.append(moment.fenced("\n".join(_visible(line) for line in hidden)))
             pieces.append("")
     pieces.append(ARTIFACT_CLOSE)
     return "\n".join(pieces).rstrip("\n") + "\n"
@@ -928,10 +1045,19 @@ class _Reading(object):
         "artifact",
         "shown_hash",
         "by_hand",
+        "entry",
     )
 
     def __init__(
-        self, staging, walk, entry_id, source_id, artifact, shown_hash, by_hand=False
+        self,
+        staging,
+        walk,
+        entry_id,
+        source_id,
+        artifact,
+        shown_hash,
+        by_hand=False,
+        entry=None,
     ):
         self.staging = staging
         self.walk = walk
@@ -940,6 +1066,9 @@ class _Reading(object):
         self.artifact = artifact
         self.shown_hash = shown_hash
         self.by_hand = by_hand
+        # The context change behind it, wherever it is written, which is what
+        # the saved history is named by.
+        self.entry = entry
 
 
 def _a_document_that_moved_on(base_root: str, staging) -> Optional[str]:
@@ -972,7 +1101,7 @@ def _made_by_hand(staging) -> bool:
     return str(getattr(staging, "origin", "")) == compose_proposal.LOCAL_EDIT_ORIGIN
 
 
-def _read_and_check(base_root, base_id, staging_path, git, today):
+def _read_and_check(base_root, base_id, staging_path, git, today, whole=False):
     """Everything show and approve both do, in the one order they both do it.
 
     What comes back is either the refusal to report or the reading to work
@@ -1009,6 +1138,11 @@ def _read_and_check(base_root, base_id, staging_path, git, today):
             ),
             None,
         )
+    # A change prepared before the base was moved names each document at its
+    # older path. It is still accepted: the paths are followed to where the
+    # documents live now, and the prepared file itself, which the yes is bound
+    # to, is left exactly as it was written.
+    layout.follow_the_move(base_root, staging)
 
     # Approving writes a line recording the owner's yes about every document
     # this change edits, and that line cannot carry a name with a space in it.
@@ -1186,14 +1320,27 @@ def _read_and_check(base_root, base_id, staging_path, git, today):
             )
 
     entry = _entry_for(base_root, staging, entry_id)
+    if by_hand and not whole:
+        shown = short_artifact_for(
+            base_root,
+            staging,
+            entry,
+            walk,
+            today,
+            differences,
+            marked_differences(base_root, walk.ordered, git),
+        )
+    else:
+        shown = artifact_for(base_root, staging, entry, walk, today, differences)
     return None, _Reading(
         staging,
         walk,
         entry_id,
         source_id,
-        artifact_for(base_root, staging, entry, walk, today, differences),
+        shown,
         _shown_hash(staged_text, base_root, walk.ordered),
         by_hand,
+        entry,
     )
 
 
@@ -1223,8 +1370,14 @@ def show(
     base_id: str,
     runner: Optional[GitRunner] = None,
     now: Optional[datetime.date] = None,
+    whole: bool = False,
 ) -> LocalResult:
-    """Read one prepared change, screen it, and hand back the whole of it."""
+    """Read one prepared change, screen it, and hand back the showing of it.
+
+    A change somebody made by hand is shown short, as the changed sentence
+    once with the change marked, and whole when they ask for the whole text.
+    The yes is bound to the same bytes either way.
+    """
     git = runner_or_default(runner)
     today = _day_of(now)
     codes: List[str] = []
@@ -1235,14 +1388,18 @@ def show(
     if finished is not None:
         return finished
 
-    refusal, reading = _read_and_check(base_root, base_id, staging_path, git, today)
+    refusal, reading = _read_and_check(
+        base_root, base_id, staging_path, git, today, whole=whole
+    )
     if refusal is not None:
         return refusal
     return LocalResult(
         STATUS_SHOWN,
         staging_id=reading.staging.staging_id,
         codes=codes,
-        reasons=[ASK],
+        reasons=[
+            WORDING_ASK if getattr(reading.staging, "wording_only", False) else ASK
+        ],
         artifact=reading.artifact,
         shown_hash=reading.shown_hash,
         paths=list(reading.walk.ordered),
@@ -1314,14 +1471,22 @@ def _head_text(base_root: str, relative: str, git: GitRunner) -> Optional[str]:
     return shown.stdout if shown.ok else None
 
 
-def _subject(staging) -> str:
-    """The note saved with the work, which a repeat run recognises."""
+def _subject(staging, reading=None) -> str:
+    """The note saved with the work, which a repeat run recognises.
+
+    It says what changed the way "What changed:" says it, whole, so the saved
+    history never stops in the middle of a word (the 0.3.1 live check, step
+    5). Without a reading it is worked out from the prepared change alone.
+    """
+    what = compose_proposal.what_changed_line(
+        staging,
+        entry=getattr(reading, "entry", None),
+        steps=reading.walk.steps if reading is not None else None,
+    )
     return "%s%s: %s" % (
         report.LOCAL_APPROVAL_COMMIT_PREFIX,
         staging.staging_id,
-        compose_proposal.summary_of(staging)[
-            : compose_proposal.COMMIT_SUMMARY_CHARS
-        ].strip(),
+        compose_proposal.one_line_of(what),
     )
 
 
@@ -1344,20 +1509,28 @@ def _plan_the_writes(base_root, reading, today, moment, git) -> "_Plan":
         files.append((entry_path, entry.render(), False))
         touched.append(entry_path)
 
-    # The plain run of the finished files, which is the same value the record
-    # of what changed is read back against later.
-    hash_value = ids.content_hash("".join(walk.texts[path] for path in walk.ordered))
-    correction = compose_proposal.corrections_for(
-        staging, today, hash_value, touched, reading.entry_id, reading.source_id
-    )
-    correction_path = "%s/%s-%s.md" % (
-        constants.CORRECTIONS_DIR,
-        today.isoformat(),
-        staging.staging_id,
-    )
-    if os.path.lexists(os.path.join(base_root, correction_path.replace("/", os.sep))):
-        raise ValidationError(ALREADY_RECORDED, code=CODE_ALREADY_RECORDED)
-    files.append((correction_path, correction.render(), False))
+    if not getattr(staging, "wording_only", False):
+        # The plain run of the finished files, which is the same value the
+        # record of what changed is read back against later. A fix to wording
+        # only writes no such record (Brandon's call 49): the saved history
+        # already says who changed what and when, and a correction record
+        # means something was wrong, which is what a later lessons pass reads.
+        hash_value = ids.content_hash(
+            "".join(walk.texts[path] for path in walk.ordered)
+        )
+        correction = compose_proposal.corrections_for(
+            staging, today, hash_value, touched, reading.entry_id, reading.source_id
+        )
+        correction_path = "%s/%s-%s.md" % (
+            constants.CORRECTIONS_DIR,
+            today.isoformat(),
+            staging.staging_id,
+        )
+        if os.path.lexists(
+            os.path.join(base_root, correction_path.replace("/", os.sep))
+        ):
+            raise ValidationError(ALREADY_RECORDED, code=CODE_ALREADY_RECORDED)
+        files.append((correction_path, correction.render(), False))
 
     confirmations: List[Tuple[str, str, bool]] = []
     for relative in walk.ordered:
@@ -1385,7 +1558,7 @@ def _plan_the_writes(base_root, reading, today, moment, git) -> "_Plan":
     return _Plan(
         files,
         confirmations,
-        _subject(staging),
+        _subject(staging, reading),
         staging,
         list(walk.ordered),
         leave_alone,
@@ -1986,8 +2159,16 @@ def _finish_unfinished_work(
         staged = os.path.join(
             base_root, constants.PROPOSALS_PENDING_DIR, its_id + ".md"
         )
-        compose_proposal.retire(base_root, staged, its_id, base_id=base_id)
+        kept = compose_proposal.retire(base_root, staged, its_id, base_id=base_id)
         _clear_journal(base_id)
+        try:
+            by_hand = _made_by_hand(compose_proposal.load_staging(kept))
+        except GtmBaseError:
+            by_hand = False
+        if by_hand:
+            # A hand edit kept by the run that finishes it counts the same
+            # (the correctness review of the live-check follow-up, finding 5).
+            hand_edit.one_more_kept(base_id)
         if its_id != staging_id:
             return None
         ordered = [
@@ -2000,7 +2181,7 @@ def _finish_unfinished_work(
             STATUS_APPLIED,
             staging_id=its_id,
             codes=list(codes),
-            reasons=[APPLIED % ", ".join(names.document_name(path) for path in ordered)],
+            reasons=[APPLIED % names.documents_named(ordered)],
             paths=ordered,
             written_paths=[str(item.get("path")) for item in items],
             saved_work=git.run(["rev-parse", "HEAD"], cwd=base_root).out(),
@@ -2145,6 +2326,9 @@ def approve(
     now: Optional[datetime.datetime] = None,
 ) -> LocalResult:
     """Apply the prepared change the owner just read, and record their yes."""
+    # Only a command the person allowed through Claude Code's own question
+    # writes an approval (Unit 1.7e, Brandon's call 57).
+    approval.require("approve_local.approve")
     git = runner_or_default(runner)
     moment = _moment_of(now)
     today = _day_of(now)
@@ -2230,12 +2414,16 @@ def approve(
         base_root, staging_path, plan.staging.staging_id, base_id=base_id
     )
     _clear_journal(base_id)
+    if reading.by_hand:
+        # One more hand edit kept, which is what the question a hand edit
+        # asks is explained in full for, three times (Brandon's call 33).
+        hand_edit.one_more_kept(base_id)
     return LocalResult(
         STATUS_APPLIED,
         staging_id=plan.staging.staging_id,
         codes=codes,
         reasons=[
-            APPLIED % ", ".join(names.document_name(path) for path in plan.ordered)
+            APPLIED % names.documents_named(plan.ordered)
         ],
         paths=list(plan.ordered),
         written_paths=written,
@@ -2266,6 +2454,9 @@ def drop(
     and the next check has to be able to tell that this change was decided
     about, so the same change is not prepared all over again tomorrow.
     """
+    # Only a command the person allowed through Claude Code's own question
+    # writes an approval (Unit 1.7e, Brandon's call 57).
+    approval.require("approve_local.drop")
     git = runner_or_default(runner)
     codes: List[str] = []
 

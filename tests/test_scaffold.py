@@ -135,7 +135,7 @@ class TestManifests(unittest.TestCase):
         )
 
         self.assertEqual("gtm-base", plugin["name"])
-        self.assertEqual("0.4.0", plugin["version"])
+        self.assertEqual("0.5.0", plugin["version"])
         self.assertEqual("Brandon Sellers", plugin["author"]["name"])
         self.assertEqual("MIT", plugin["license"])
         self.assertTrue(plugin["keywords"])
@@ -185,11 +185,15 @@ class TestManifests(unittest.TestCase):
         before_a_tool = hooks["hooks"]["PreToolUse"]
         by_tool = {entry["matcher"]: entry for entry in before_a_tool}
         writing = "Write|Edit|MultiEdit|NotebookEdit"
-        self.assertEqual({"Bash", "Read", writing}, set(by_tool))
+        # Unit 1.7e: the check that reads every command also sees the other
+        # tools that run one, so a ticket waiting for the person's answer is
+        # taken back before any of them runs.
+        commands = "Bash|Monitor|PowerShell"
+        self.assertEqual({commands, "Read", writing}, set(by_tool))
         self.assertEqual(3, len(before_a_tool))
-        self.assertEqual(1, len(by_tool["Bash"]["hooks"]))
+        self.assertEqual(1, len(by_tool[commands]["hooks"]))
 
-        declared = by_tool["Bash"]["hooks"][0]
+        declared = by_tool[commands]["hooks"][0]
         self.assertEqual("command", declared["type"])
         self.assertEqual(20, declared["timeout"])
         self.assertIn("${CLAUDE_PLUGIN_ROOT}", declared["command"])
@@ -271,10 +275,10 @@ class TestTemplateTree(unittest.TestCase):
             self.assertEqual(["@owner-handle"], owners)
 
         for open_path in (
-            "work/confirmations/context--strategy--icp.md",
+            "work/confirmations/context--icps.md",
             "work/confirmations/.gitkeep",
-            "work/changes/2026-01-01-a-change.md",
-            "work/changes/.gitkeep",
+            "learning/changes/2026-01-01-a-change.md",
+            "learning/changes/.gitkeep",
         ):
             self.assertFalse(
                 any_rule_matches(rules, open_path),
@@ -282,8 +286,12 @@ class TestTemplateTree(unittest.TestCase):
             )
 
         for gated_path in (
-            "corrections/2026-01-01.md",
-            "context/strategy/icp.md",
+            "learning/corrections/2026-01-01.md",
+            "learning/lessons/2026-01-01.md",
+            "context/icps.md",
+            "access/stack.md",
+            "skills/outbound/SKILL.md",
+            "standards/outbound.md",
             "plugins/gtm-base/README.md",
             ".claude/settings.json",
             "CLAUDE.md",
@@ -389,7 +397,7 @@ class TestPlainLanguage(unittest.TestCase):
         with open(atlas, encoding="utf-8") as handle:
             text = handle.read()
         self.assertNotIn("(proposed)", text)
-        self.assertIn("plugin 0.4.0", text)
+        self.assertIn("plugin 0.5.0", text)
         self.assertIn("built in 0.2.6", text)
 
     def test_the_lint_itself_catches_what_it_should(self):
@@ -449,7 +457,7 @@ class TestFakeGh(unittest.TestCase):
 
 class TestConstants(unittest.TestCase):
     def test_constants_import_and_every_path_is_relative(self):
-        self.assertEqual("0.4.0", __import__("gtmbase").__version__)
+        self.assertEqual("0.5.0", __import__("gtmbase").__version__)
         for name in dir(constants):
             if name.startswith("_"):
                 continue
@@ -468,6 +476,27 @@ class TestConstants(unittest.TestCase):
                 self.assertFalse(
                     item.startswith(".."), "%s must be relative: %r" % (name, item)
                 )
+
+
+class TestTheSegmentsFolder(unittest.TestCase):
+    """Unit 1.7a: both templates hold an empty segments folder beside the profile."""
+
+    def test_both_copies_hold_the_folder_with_its_placeholder_and_nothing_else(self):
+        for folder in (TEMPLATE_DIR, PLUGIN_TEMPLATE_DIR):
+            where = os.path.join(folder, constants.SEGMENTS_DIR)
+            self.assertTrue(os.path.isdir(where), folder)
+            self.assertEqual([constants.PLACEHOLDER_NAME], os.listdir(where), folder)
+            self.assertEqual(
+                0, os.path.getsize(os.path.join(where, constants.PLACEHOLDER_NAME))
+            )
+
+    def test_the_folder_is_under_the_profile_and_is_one_every_base_gets(self):
+        self.assertEqual("context/icps", constants.SEGMENTS_DIR)
+        self.assertIn(constants.SEGMENTS_DIR, constants.TEMPLATE_TREE_DIRS)
+        self.assertEqual(
+            os.path.splitext(constants.REQUIRED_CONTEXT_FILES[0])[0],
+            constants.SEGMENTS_DIR,
+        )
 
 
 if __name__ == "__main__":

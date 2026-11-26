@@ -14,6 +14,7 @@ printed. This checks that no command line in any skill carries one.
 """
 
 import importlib.util
+import json
 import os
 import re
 import shlex
@@ -22,6 +23,8 @@ import sys
 import unittest
 
 import support
+
+from gtmbase import join_flow
 
 SKILLS_DIR = os.path.join(support.PLUGIN_DIR, "skills")
 
@@ -495,6 +498,8 @@ CONSUMES_WORDS = (
     "--words",
     "--content-folder-file",
     "--add-file",
+    "--scope-file",
+    "--segments-file",
 )
 
 # One documented command per script that is actually run, with the placeholders
@@ -576,6 +581,25 @@ class TestTheSkillsAsTheyAreWritten(unittest.TestCase):
         support.write(
             os.path.join(folder, "customers", "acme-icp.md"),
             "# Who we sell to\n\nSmall teams selling to other businesses.\n",
+        )
+        support.write(
+            os.path.join(folder, "customers", "icp-credit-unions.md"),
+            "# Credit unions\n\n## Firmographics\n\nCredit unions with more "
+            "than a billion dollars in assets.\n",
+        )
+        # The same finished page in the other place too, because one pass
+        # of the walk keeps only that place and one drops it, and every pass
+        # has a page to take in (Unit 1.7c).
+        support.write(
+            os.path.join(folder, "positioning", "icp-thrift-lenders.md"),
+            "# Credit unions\n\n## Firmographics\n\nCredit unions and thrifts "
+            "with more than a billion dollars in assets.\n",
+        )
+        # With one document describing customers no list is numbered, so
+        # that place holds a second one.
+        support.write(
+            os.path.join(folder, "positioning", "icp-savings-banks.md"),
+            "# Savings banks\n\n## Firmographics\n\nSavings banks in one state.\n",
         )
         support.write(
             os.path.join(folder, "customers", "personas.md"),
@@ -690,6 +714,8 @@ class TestTheSkillsAsTheyAreWritten(unittest.TestCase):
         "--what-changed-file": "what-changed",
         "--content-folder-file": "folder",
         "--add-file": "folder",
+        "--scope-file": "scope",
+        "--segments-file": "segments",
     }
 
     def _flag_before(self, command, placeholder):
@@ -746,6 +772,17 @@ class TestTheSkillsAsTheyAreWritten(unittest.TestCase):
             state["kept_id"] = kept
         return kept
 
+    def an_open_question(self, state):
+        """The token the review gives the question left open in the base."""
+        from gtmbase import callmarkers, layout
+
+        # The walk may have moved the base to the current layout by now, so
+        # the document is looked for where it lives.
+        where = layout.where_it_lives(state["base"], state["open_question_document"])
+        text = support.read(os.path.join(state["base"], where))
+        found = callmarkers.find(text)
+        return found[0].token if found else None
+
     def a_document_to_ask_about(self, state):
         """The next document the reconcile step said to ask about."""
         waiting = state.get("ask_about") or []
@@ -761,6 +798,9 @@ class TestTheSkillsAsTheyAreWritten(unittest.TestCase):
         "<number>": lambda self, state, command: state.get("folder_number", "1"),
         "<base folder>": lambda self, state, command: state.get("base"),
         "<base folder or company name>": lambda self, state, command: state.get("base"),
+        # Unit 1.8 split step 4 so each part asks one thing; the parent now
+        # comes from step 4a, where the folder is proposed.
+        "<the parent from step 4a>": lambda self, state, command: state.get("parent"),
         # The company a base is for is the folder it sits in, which is what
         # naming a base by its company matches (0.3.6).
         "<company name>": lambda self, state, command: (
@@ -768,8 +808,14 @@ class TestTheSkillsAsTheyAreWritten(unittest.TestCase):
             if state.get("base")
             else None
         ),
-        "<the parent from step 4>": lambda self, state, command: state.get("parent"),
         "<draft file>": lambda self, state, command: state.get("draft"),
+        # The summarize-first stage: one batch of notes, the file its notes go
+        # in, and the file the support check's answer goes in.
+        "<batch number>": lambda self, state, command: "1",
+        "<digest number>": lambda self, state, command: "1",
+        "<digest file>": lambda self, state, command: state.get("digest_file"),
+        "<notes file>": lambda self, state, command: state.get("notes_file"),
+        "<support answer file>": lambda self, state, command: state.get("support_answer"),
         "<the path it printed>": _the_path_it_printed,
         "<id>": lambda self, state, command: (
             state.get("question")
@@ -782,8 +828,18 @@ class TestTheSkillsAsTheyAreWritten(unittest.TestCase):
         "<path>": lambda self, state, command: (
             state.get("document")
             if "--show-document" in shlex.split(command)
+            else state.get("open_question_document")
+            if "--document" in shlex.split(command)
             else state.get("staged")
         ),
+        "<segment>": lambda self, state, command: (
+            state.get("adopt_segment")
+            if shlex.split(command)[1:2]
+            in (["adopt-show"], ["adopt-read"], ["adopt"], ["adopt-leave"])
+            else state.get("segment")
+        ),
+        "<hash>": lambda self, state, command: state.get("hash"),
+        "<question>": lambda self, state, command: self.an_open_question(state),
         "<a short label>": lambda self, state, command: "a note from the call",
         "<file you wrote it to>": lambda self, state, command: state.get("paste"),
         "<the path from step 4>": lambda self, state, command: state.get("words"),
@@ -803,6 +859,11 @@ class TestTheSkillsAsTheyAreWritten(unittest.TestCase):
         "<the path it printed for the words>": lambda self, state, command: state.get("words"),
         "<path to the prepared change>": lambda self, state, command: state.get("staged"),
         "<the shown value>": lambda self, state, command: state.get("shown"),
+        # Another document a hand edit's context change affects, which is a
+        # document of the base other than the one the walk edits by hand.
+        "<another document>": lambda self, state, command: state.get(
+            "open_question_document"
+        ),
         # 0.3.3: recording a context change without editing a document.
         "<the numbers they chose>": lambda self, state, command: "1",
         "<the list token>": lambda self, state, command: state.get("list_token"),
@@ -874,8 +935,38 @@ class TestTheSkillsAsTheyAreWritten(unittest.TestCase):
         if mode == "add-paste":
             state["paste"] = os.path.join(state["cwd"], "pasted.txt")
             support.write(state["paste"], "We win on setup time.\n")
+        if mode == "notes-check":
+            # The notes a subagent writes from the request, for every batch.
+            support.take_notes(state["run"])
         if mode in ("review", "approve", "preview-change") and state.get("draft"):
-            support.write(state["draft"], self.a_draft_for(state["step"]))
+            text = self.a_draft_for(state["step"])
+            if state["step"] in join_flow.NOTES_STEPS:
+                segment = state.get("segment") if state["step"] == "segment" else None
+                text = support.cited(
+                    text, support.settled_note(state["run"], state["step"], segment)
+                )
+            support.write(state["draft"], text)
+            if mode == "approve" and state["step"] in join_flow.NOTES_STEPS:
+                # The skill says the support check once, in step 6b, and the
+                # assistant runs it for every document before its approval.
+                settled = (
+                    join_flow.segment_to_draft(state["run"], segment) if segment else None
+                )
+                support.write(join_flow.draft_path(state["run"], state["step"], settled), text)
+                support.support_checked(
+                    state["run"], state["step"], segment=segment, base_root=state.get("base")
+                )
+        if mode == "support-check" and state.get("support_answer"):
+            # The answer a fresh subagent writes: one verdict for every line.
+            support.write(
+                state["support_answer"],
+                "```jsonl\n"
+                + "\n".join(
+                    json.dumps({"line": "B%d" % number, "verdict": "supported"})
+                    for number in range(1, int(state.get("support_lines", 0)) + 1)
+                )
+                + "\n```\n",
+            )
 
     # What a walk writes into each kind of words file. They are the words a
     # person would really type at that step, and nothing here is the note GTM
@@ -887,7 +978,16 @@ class TestTheSkillsAsTheyAreWritten(unittest.TestCase):
         "label": "a note from the call",
         "reason": "We moved up market, so this is out of date now.",
         "source": "The quarterly review deck, slide four, said so.",
-        "what-changed": "We moved up market because the small ones churned.",
+        # Worded the way a corrected fact has to be, replacing the old one,
+        # so the same words serve the answer about the business as well.
+        "what-changed": (
+            "We sell to companies of twenty to two hundred people, replacing "
+            "the any size we used to state."
+        ),
+        # Unit 1.7a: the part of the company a base is for, and one line per
+        # segment the way the join skill says to write them.
+        "scope": "Payments",
+        "segments": "draft - Fintech lenders\nleave-out - Regional banks\n",
     }
 
     def handed_out(self, state, command, printed):
@@ -905,6 +1005,13 @@ class TestTheSkillsAsTheyAreWritten(unittest.TestCase):
         text = self.WORDS.get(kind)
         if kind == "folder":
             text = state["material"]
+        if kind == "segments" and state.get("adopt_number"):
+            text += "adopt %s Credit unions\n" % state["adopt_number"]
+        if kind == "segments" and state.get("later_number"):
+            # A segment settled to be drafted that the walk never drafts in
+            # step 6c, so the closing keeps it and the later session's steps
+            # have a segment to finish (Brandon's call 29).
+            text += "draft %s Savings banks\n" % state["later_number"]
         self.assertIsNotNone(kind, command)
         support.write(path, text or "Acme")
         state["words"] = path
@@ -917,12 +1024,25 @@ class TestTheSkillsAsTheyAreWritten(unittest.TestCase):
             value = self.value_of(printed, name)
             if value:
                 state[name] = value
+        if mode == "notes-assemble":
+            state["notes_file"] = self.value_of(printed, "notes")
+        if mode == "digest-plan":
+            state["digests"] = self.value_of(printed, "digests")
+        if mode == "digest-assemble":
+            state["digest_file"] = self.value_of(printed, "digest")
+        if mode == "support-assemble":
+            state["support_answer"] = self.value_of(printed, "answer")
+            state["support_lines"] = self.value_of(printed, "lines")
         if mode == "reconcile":
             state["ask_about"] = [
                 line[len("file=") :].strip()
                 for line in printed.split("\n")
                 if line.startswith("file=")
             ]
+            # The document the reconciling step reads before writing its
+            # wording, through the reader that holds it apart as data.
+            if state["ask_about"]:
+                state.setdefault("document", state["ask_about"][0])
         prepared = self.value_of(printed, "prepared")
         if prepared:
             state["staged"] = prepared
@@ -963,6 +1083,44 @@ class TestTheSkillsAsTheyAreWritten(unittest.TestCase):
             held = self.value_of(printed, "paste")
             if held:
                 state["held_paste"] = held
+        if mode == "segments":
+            for line in printed.split("\n"):
+                if line.startswith("candidate=") and (
+                    "icp-credit-unions" in line or "icp-thrift-lenders" in line
+                ):
+                    state["adopt_number"] = line.split(" number=")[1].strip()
+                    break
+            for line in printed.split("\n"):
+                if line.startswith("candidate=") and " number=" in line:
+                    number = line.split(" number=")[1].strip()
+                    if number != state.get("adopt_number"):
+                        state["later_number"] = number
+                        break
+        if mode == "resume":
+            # The segment the later session finishes is the one it names.
+            later = self.value_of(printed, "to-draft")
+            if later:
+                state["segment"] = later
+        if mode == "adopt-show":
+            digest = self.value_of(printed, "hash")
+            if digest:
+                state["hash"] = digest
+        if mode == "segments-settle":
+            for line in printed.split("\n"):
+                if line.startswith("segment=") and " answer=adopt" in line:
+                    state["adopt_segment"] = line[len("segment=") :].split(" ")[0]
+            # More than one segment means the profile is drafted across them,
+            # and the first one to draft is the segment the later step drafts
+            # (Unit 1.7b).
+            settled = [
+                line for line in printed.split("\n") if line.startswith("segment=")
+            ]
+            if len(settled) > 1 and state.get("step") == "icp":
+                state["step"] = "umbrella"
+            for line in settled:
+                if " answer=draft" in line:
+                    state["segment"] = line[len("segment=") :].split(" ")[0]
+                    break
 
     def a_draft_for(self, step):
         import test_join_setup_flow as flow
@@ -970,10 +1128,22 @@ class TestTheSkillsAsTheyAreWritten(unittest.TestCase):
         if step == "change-entry":
             # The change names the part of the document it is about, which is
             # what lets the wording go in without a part being named.
+            # It names a part of the profile by that part's heading, in the
+            # single profile and in the profile across several segments.
             return flow.change_draft(
-                body="Firmographics changed: we stopped selling to companies "
-                "under twenty people."
+                body="Firmographics changed, and so did who we sell to: we "
+                "stopped selling to companies under twenty people."
             )
+        if step in ("umbrella", "segment"):
+            import test_umbrella_and_segments as umbrella
+
+            # The walk settles two segments: one drafted, one left out.
+            if step == "umbrella":
+                return umbrella.umbrella_text(
+                    drafted=("Fintech lenders", "Credit unions", "Savings banks"),
+                    left_out=("Regional banks",),
+                )
+            return umbrella.segment_text("Fintech lenders")
         return flow.captured("icp.md" if step == "icp" else "positioning.md")
 
     # --- the walk itself ---------------------------------------------------
@@ -1110,6 +1280,19 @@ class TestTheSkillsAsTheyAreWritten(unittest.TestCase):
         state["staged"] = first_draft.a_first_draft(
             base.root, body=first_draft.NAMES_THE_PART
         )
+        # A second document holding a question a draft left open, so the
+        # review's own way of answering one has a question to answer (Unit
+        # 1.7b). It is not the document the other questions are about,
+        # because a yes about a document with a question open is refused.
+        base.write(
+            moment_tests.POSITIONING,
+            moment_tests.POSITIONING_TEXT.replace(
+                "We help teams move faster.",
+                "We help teams move faster [your call: is it faster or cheaper?].",
+            ),
+        )
+        base.save("a question left open")
+        state["open_question_document"] = moment_tests.POSITIONING
         waiting = [line for line in base.review().review if line.question_id]
         state["question"] = waiting[0].question_id if waiting else None
         return base
@@ -1149,6 +1332,15 @@ class TestTheSkillsAsTheyAreWritten(unittest.TestCase):
                     )
                 mode = words[1] if len(words) > 1 and not words[1].startswith("-") else ""
                 if not self._taken_this_pass(words, command, index):
+                    continue
+                if mode in ("digest-assemble", "digest-check") and state.get("digests") == "0":
+                    # The skill says to go on to step 6 when the digest plan
+                    # prints digests=0, which it does for this walk's few
+                    # notes, so the walk follows it. These two lines, as the
+                    # skill writes them, are run through the script at a limit
+                    # where they are needed by tests/test_digests.py
+                    # (TestTheSkillsDigestLines).
+                    ran.append(line_number)
                     continue
                 # One pass runs the command as it is printed, and each of the
                 # others adds one of the things a sentence says to add to it.
@@ -1221,7 +1413,7 @@ class TestTheSkillsAsTheyAreWritten(unittest.TestCase):
                     (state.get("handed") or {}).pop(kind, None)
         if mode in ("approve", "skip") and state.get("base"):
             state["cwd"] = state["base"]
-            if state["step"] == "icp":
+            if state["step"] in ("icp", "umbrella"):
                 state["step"] = "positioning"
 
 

@@ -242,7 +242,10 @@ class TestOneHandEnteredDecisionWithNoConfirmation(support.PastTheFirstBackupRev
 
             body = formats.parse_pr_body(staging.pr_body)
             self.assertIn(ENTRY, body["evidence"])
-            self.assertIn("%s.md" % ENTRY, body["evidence"])
+            # Unit 1.8: the evidence used to name the change's file as well.
+            # No file's own name is read out now; the identifier still is.
+            self.assertNotIn("%s.md" % ENTRY, body["evidence"])
+            self.assertIn("the record of context changes", body["evidence"])
             self.assertIn(TUESDAY, body["evidence"])
             self.assertIn("twenty to two hundred people", body["evidence"])
             self.assertEqual("medium", body["confidence"])
@@ -347,7 +350,10 @@ class TestOneHandEnteredChangeInTheNewLayout(unittest.TestCase):
 
             body = formats.parse_pr_body(staging.pr_body)
             self.assertIn(ENTRY, body["evidence"])
-            self.assertIn("%s.md" % ENTRY, body["evidence"])
+            # Unit 1.8: the evidence used to name the change's file as well.
+            # No file's own name is read out now; the identifier still is.
+            self.assertNotIn("%s.md" % ENTRY, body["evidence"])
+            self.assertIn("the record of context changes", body["evidence"])
             self.assertIn(TUESDAY, body["evidence"])
             self.assertIn("twenty to two hundred people", body["evidence"])
             self.assertEqual("medium", body["confidence"])
@@ -742,14 +748,17 @@ class TestItemsWaitingToBeRead(unittest.TestCase):
             self.assertTrue(
                 any("waiting to be read" in line for line in result.lines())
             )
+            # Unit 1.8: the document is named the way a person names it, where
+            # this sentence used to read out its path.
             self.assertTrue(
                 any(
-                    "%s is out of date against context change %s" % (ICP, ENTRY)
+                    "Context change %s has moved past your customer profile" % ENTRY
                     in line
                     for line in result.lines()
                 ),
                 result.lines(),
             )
+            self.assertFalse(any(ICP in line for line in result.lines()))
             self.assertFalse(
                 os.path.isdir(os.path.join(base.root, constants.PROPOSALS_PENDING_DIR))
             )
@@ -1015,7 +1024,10 @@ class TestTheFirstRunFinding(unittest.TestCase):
             self.assertEqual(
                 stale.FINDING_REQUIRED_FILE_MISSING, result.finding.code
             )
-            self.assertIn(POSITIONING, result.finding_sentence)
+            # Unit 1.8: the document is named the way a person names it, where
+            # this sentence used to read out its path.
+            self.assertIn("your positioning", result.finding_sentence)
+            self.assertNotIn(POSITIONING, result.finding_sentence)
             self.assertEqual([], result.staged)
 
     def _confirmed(self, sandbox, icp_date=FRIDAY, positioning_date=FRIDAY):
@@ -1140,7 +1152,13 @@ class TestTheFirstRunFinding(unittest.TestCase):
             result = run_check(base, mode="first-run")
 
             self.assertEqual(stale.FINDING_DOCUMENT_OLDER, result.finding.code)
-            self.assertIn(ICP, result.finding_sentence)
+            # Unit 1.8: the document by its name and the change by its first
+            # line, where this sentence used to read out a path and an
+            # identifier.
+            self.assertIn("your customer profile", result.finding_sentence)
+            self.assertNotIn(ICP, result.finding_sentence)
+            self.assertNotIn(ENTRY, result.finding_sentence)
+            self.assertIn('the context change "We now sell', result.finding_sentence)
             self.assertIn("2026-04-10", result.finding_sentence)
             self.assertIn(TUESDAY, result.finding_sentence)
 
@@ -1518,7 +1536,11 @@ class BothLayouts(unittest.TestCase):
 # and that the wording handed in no longer opens with the two words the
 # note opens with, because the third look made a retyped note refusable
 # wherever it is handed in. The findings are A1 and H1, A6, and V8 with F5.
-SC1_CLASS_HASH = "f9d15c416805e967973e78c0fc989ee7ee7e3a2e72cfbc7b32f411474b1dccdb"
+# Moved once more by Unit 1.8 (2026-09-27), for one assertion and nothing
+# else: the prepared change's evidence cites the context change by its
+# identifier and no longer by the name of its file, because no file's own name
+# is read out any more, so the scenario now checks that the file name is gone.
+SC1_CLASS_HASH = "0518869a3662557bbdca117cefbe68c52a61d3e544e09e5f073c0c5ba12c045b"
 SC1_HELPER_HASH = "6b4841629621dc368463ebaf9a6754cb13f5aa30957a2ce8558114ee88b02132"
 
 

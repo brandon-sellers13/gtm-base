@@ -98,7 +98,9 @@ changed file that nobody approved:
   change is that owner saying the file is right,
 - the record of what changed, which is what says later that this was accepted,
   and which the four-week numbers count exactly as they count a change accepted
-  on a shared copy.
+  on a shared copy. A fix to wording only writes no such record, because the
+  saved history already says who changed what and when, and a record of what
+  changed means something was wrong.
 
 The prepared change is then filed away as the copy it can be raised from again.
 Your base has to have nothing unsaved in it first, and it has to be on its main

@@ -75,7 +75,7 @@ def local_base(sandbox, name="local"):
 def stage(root, text=None, staging_id=STAGING):
     """Put a prepared change where the stale check would have left it."""
     if text is None:
-        text = support.read(os.path.join(support.TEMPLATES_DIR, "proposal-staging.md"))
+        text = support.staging_template()
     path = os.path.join(root, constants.PROPOSALS_PENDING_DIR, staging_id + ".md")
     support.write(path, text)
     return path
@@ -534,9 +534,7 @@ class TestWhatItRefusesToTouch(unittest.TestCase):
     def test_a_path_in_the_assistants_own_folder_is_refused(self):
         with support.Sandbox() as sandbox:
             root, base_id = local_base(sandbox)
-            text = support.read(
-                os.path.join(support.TEMPLATES_DIR, "proposal-staging.md")
-            ).replace(
+            text = support.staging_template().replace(
                 "path: context/strategy/icp.md",
                 "path: context/.claude/settings.md",
             )
@@ -553,9 +551,7 @@ class TestWhatItRefusesToTouch(unittest.TestCase):
     def test_a_path_outside_the_folders_a_change_may_touch_is_refused(self):
         with support.Sandbox() as sandbox:
             root, base_id = local_base(sandbox)
-            text = support.read(
-                os.path.join(support.TEMPLATES_DIR, "proposal-staging.md")
-            ).replace(
+            text = support.staging_template().replace(
                 "affects: [context/strategy/icp.md]\nreview_by",
                 "affects: [CODEOWNERS]\nreview_by",
             )
@@ -567,15 +563,17 @@ class TestWhatItRefusesToTouch(unittest.TestCase):
 
             self.assertEqual(approve_local.STATUS_REFUSED, shown.status)
             self.assertEqual([approve_local.CODE_OUTSIDE_ALLOWED], shown.codes)
-            self.assertIn("CODEOWNERS", shown.reasons[0])
+            # Unit 1.8: the refusal used to read out the path the prepared
+            # change names. A path in a prepared change is whatever somebody
+            # wrote, so it is no longer repeated back.
+            self.assertEqual(approve_local.OUTSIDE_THE_FOLDERS, shown.reasons[0])
+            self.assertNotIn("CODEOWNERS", shown.reasons[0])
             self.assertEqual([], corrections_in(root))
 
     def test_a_change_to_the_map_is_refused(self):
         with support.Sandbox() as sandbox:
             root, base_id = local_base(sandbox)
-            text = support.read(
-                os.path.join(support.TEMPLATES_DIR, "proposal-staging.md")
-            ).replace("context/strategy/icp.md", constants.MAP_PATH)
+            text = support.staging_template().replace("context/strategy/icp.md", constants.MAP_PATH)
             staged = stage(root, text=text)
 
             shown = approve_local.show(
@@ -588,9 +586,7 @@ class TestWhatItRefusesToTouch(unittest.TestCase):
     def test_a_contact_detail_is_refused_by_class_and_never_by_value(self):
         with support.Sandbox() as sandbox:
             root, base_id = local_base(sandbox)
-            text = support.read(
-                os.path.join(support.TEMPLATES_DIR, "proposal-staging.md")
-            ).replace(
+            text = support.staging_template().replace(
                 "Companies of twenty to two hundred people, with a marketing "
                 "team of one to five.",
                 "Companies like the one run by prospect@example.test.",
@@ -610,9 +606,7 @@ class TestWhatItRefusesToTouch(unittest.TestCase):
         with support.Sandbox() as sandbox:
             root, base_id = local_base(sandbox)
             secret = "sk-" + "a1b2c3d4e5" * 4
-            text = support.read(
-                os.path.join(support.TEMPLATES_DIR, "proposal-staging.md")
-            ).replace(
+            text = support.staging_template().replace(
                 "Companies of twenty to two hundred people, with a marketing "
                 "team of one to five.",
                 "The reporting key is %s." % secret,
@@ -979,6 +973,9 @@ section is the one that has to change.
 """ % HAND_ENTERED
 
 
+ICP_HERE = constants.REQUIRED_CONTEXT_FILES[0]
+
+
 class TestTheWholeWayThroughOnARealBase(unittest.TestCase):
     """Built by the code that really builds a base, with nothing standing in.
 
@@ -986,6 +983,8 @@ class TestTheWholeWayThroughOnARealBase(unittest.TestCase):
     be one, because that is the base this whole path exists for.
     """
 
+    # Built by the code that really builds a base, so the profile is where
+    # setup writes it today.
     def build(self):
         from gtmbase import create_base
 
@@ -997,7 +996,7 @@ class TestTheWholeWayThroughOnARealBase(unittest.TestCase):
         support.write(os.path.join(parent, "positioning.md"), "# Positioning\n")
         result = create_base.create(
             parent,
-            create_base.ApprovedFile(ICP, ICP_DRAFT),
+            create_base.ApprovedFile(ICP_HERE, ICP_DRAFT),
             ids.run_id(TODAY),
             support.PLUGIN_DIR,
             runner=NoRemoteRunner(),
@@ -1029,11 +1028,11 @@ class TestTheWholeWayThroughOnARealBase(unittest.TestCase):
             self.assertEqual(1, len(flagged.staged), flagged.lines())
             staged = flagged.staged[0].path
             self.assertIn(
-                stale_check.AWAITING_LOCAL_APPROVAL % names.document_name(ICP),
+                stale_check.AWAITING_LOCAL_APPROVAL % names.document_name(ICP_HERE),
                 flagged.lines(),
             )
             self.assertEqual(
-                [ICP], [flag.path for flag in flagged.report.file_flags]
+                [ICP_HERE], [flag.path for flag in flagged.report.file_flags]
             )
 
             # The assistant writes the real wording into the prepared change
@@ -1056,9 +1055,9 @@ class TestTheWholeWayThroughOnARealBase(unittest.TestCase):
 
             # The file changed, and one line records the yes against the change.
             self.assertNotIn(
-                "Companies of any size.", support.read(os.path.join(root, ICP))
+                "Companies of any size.", support.read(os.path.join(root, ICP_HERE))
             )
-            line = confirmations_of(root)[-1]
+            line = confirmations_of(root, ICP_HERE)[-1]
             self.assertEqual("ledger", line.trigger)
             self.assertEqual(HAND_ENTERED, line.entry)
             self.assertEqual(LATER.isoformat(), line.date)
@@ -1202,7 +1201,7 @@ class TestWhereAPreparedChangeMayBeReadFrom(unittest.TestCase):
         path = os.path.join(sandbox.path, "somewhere", "else.md")
         support.write(
             path,
-            support.read(os.path.join(support.TEMPLATES_DIR, "proposal-staging.md")),
+            support.staging_template(),
         )
         del root
         return path
@@ -1263,9 +1262,7 @@ class TestWhereAPreparedChangeMayBeReadFrom(unittest.TestCase):
             path = os.path.join(root, constants.PROPOSALS_PENDING_DIR, "notes.md")
             support.write(
                 path,
-                support.read(
-                    os.path.join(support.TEMPLATES_DIR, "proposal-staging.md")
-                ),
+                support.staging_template(),
             )
 
             result = approve_local.drop(path, root, base_id)
@@ -2458,7 +2455,7 @@ class TestOnlyAHandEditMayBeUnsaved(unittest.TestCase):
             )
 
             shown = approve_local.show(
-                staged, root, base_id, runner=runner, now=TODAY
+                staged, root, base_id, runner=runner, now=TODAY, whole=True
             )
 
             self.assertEqual(approve_local.STATUS_SHOWN, shown.status, shown.reasons)
@@ -2468,6 +2465,13 @@ class TestOnlyAHandEditMayBeUnsaved(unittest.TestCase):
                 "a change no part of this one is about was not shown",
             )
             self.assertIn("status: draft", shown.artifact)
+            # The short showing leaves none of it out either.
+            short = approve_local.show(
+                staged, root, base_id, runner=runner, now=TODAY
+            )
+            self.assertIn(
+                "status: [took out: draft][put in: confirmed]", short.artifact
+            )
 
     def test_moving_anything_in_the_document_after_it_was_shown_is_refused(self):
         with support.Sandbox() as sandbox:
@@ -2974,7 +2978,13 @@ class TestHandEditsTheSummaryCouldNotDescribe(unittest.TestCase):
                 [("## Pricing", "remove")],
                 [(edit.heading, edit.op) for edit in staging.edits],
             )
-            shown = approve_local.show(staged, root, base_id, runner=runner, now=TODAY)
+            # The whole text, which is what a person asks for to read a part
+            # taken out as it read (the short showing marks it taken out).
+            short = approve_local.show(staged, root, base_id, runner=runner, now=TODAY)
+            self.assertIn("[took out: ## Pricing", short.artifact)
+            shown = approve_local.show(
+                staged, root, base_id, runner=runner, now=TODAY, whole=True
+            )
             self.assertEqual(approve_local.STATUS_SHOWN, shown.status, shown.reasons)
             # The summary says the part is taken out, and shows what it said.
             self.assertIn("Pricing", shown.artifact)
@@ -3009,7 +3019,9 @@ class TestHandEditsTheSummaryCouldNotDescribe(unittest.TestCase):
             self.assertEqual("## Notes", staging.edits[0].heading)
             self.assertEqual("replace", staging.edits[0].op)
             self.assertEqual(1, staging.edits[0].occurrence)
-            shown = approve_local.show(staged, root, base_id, runner=runner, now=TODAY)
+            shown = approve_local.show(
+                staged, root, base_id, runner=runner, now=TODAY, whole=True
+            )
             self.assertEqual(approve_local.STATUS_SHOWN, shown.status, shown.reasons)
             # The part shown is the first one, before and after.
             summary = shown.artifact.split("different from the last time")[0]
@@ -3040,7 +3052,9 @@ class TestHandEditsTheSummaryCouldNotDescribe(unittest.TestCase):
             )
             staging = compose_proposal.load_staging(staged)
             self.assertEqual(2, staging.edits[0].occurrence)
-            shown = approve_local.show(staged, root, base_id, runner=runner, now=TODAY)
+            shown = approve_local.show(
+                staged, root, base_id, runner=runner, now=TODAY, whole=True
+            )
             self.assertEqual(approve_local.STATUS_SHOWN, shown.status, shown.reasons)
             summary = shown.artifact.split("different from the last time")[0]
             self.assertIn("Second words.", summary)
@@ -3104,7 +3118,13 @@ class TestHandEditsTheSummaryCouldNotDescribe(unittest.TestCase):
             self.assertEqual(2, len(staging.target_bytes))
             shown = approve_local.show(staged, root, base_id, runner=runner, now=TODAY)
             self.assertEqual(approve_local.STATUS_SHOWN, shown.status, shown.reasons)
-            self.assertIn("New opening.", shown.artifact)
+            # Both documents are shown, each change marked (the 0.3.1 live
+            # check, step 5, finding 1).
+            self.assertIn("[took out: Old][put in: New] opening.", shown.artifact)
+            self.assertIn(
+                "[took out: any size][put in: twenty to two hundred people]",
+                shown.artifact,
+            )
             applied = approve_local.approve(
                 staged, root, base_id, shown.shown_hash, runner=runner, now=NOW
             )
@@ -3402,7 +3422,9 @@ def _the_whole_difference(artifact):
     import re as _re
 
     after = artifact.split("which is all of what saying yes to this writes down:")[1]
-    match = _re.search(r"\n(`{3,})diff\n(.*?)\n\1\n", after, _re.S)
+    # Inside the data fence since the second round of Astra's review of Unit
+    # 1.7c, which is built the same way the fence for the difference was.
+    match = _re.search(r"\n(`{3,})data\n(.*?)\n\1\n", after, _re.S)
     if match is None:
         raise AssertionError("the whole difference is not in a fenced block:\n" + after)
     return match.group(1), match.group(2), after
@@ -3425,7 +3447,11 @@ class TestTheWholeDifferenceIsShownAsItIs(unittest.TestCase):
         staged = compose_proposal.stage_local_edit(
             root, base_id, HAND_EDIT_SOURCE, runner=runner, now=TODAY
         )
-        shown = approve_local.show(staged, root, base_id, runner=runner, now=TODAY)
+        # The whole difference is the whole text, shown when a person asks
+        # for it (the 0.3.1 live check, step 5, finding 1).
+        shown = approve_local.show(
+            staged, root, base_id, runner=runner, now=TODAY, whole=True
+        )
         self.assertEqual(approve_local.STATUS_SHOWN, shown.status, shown.reasons)
         return shown
 

@@ -237,7 +237,7 @@ class SessionStartTest(support.PastTheFirstBackupReview, SessionStartHelpers):
         context = self.run_hook(root, part="context")
 
         said = "%s %s" % (visible or "", context or "")
-        self.assertNotIn(stale_check.LEDGER_BEHIND_EMPTY % 30, said)
+        self.assertNotIn(stale_check.LEDGER_BEHIND_EMPTY % "30 days", said)
         self.assertNotIn("record of context changes", said)
         self.assertNotIn("is more than", said)
 
@@ -272,7 +272,7 @@ class SessionStartTest(support.PastTheFirstBackupReview, SessionStartHelpers):
 
         shown = self.run_hook(root, part="visible")
         self.assertEqual(["systemMessage"], list(shown.keys()))
-        self.assertIn("context/strategy/positioning.md", shown["systemMessage"])
+        self.assertIn("context/positioning.md", shown["systemMessage"])
         self.assertIn(constants.RESTART_SENTENCE, shown["systemMessage"])
         records, _problems = state.load_question_ids(base_id)
         self.assertEqual([], records)
@@ -280,7 +280,7 @@ class SessionStartTest(support.PastTheFirstBackupReview, SessionStartHelpers):
         primed = self.run_hook(root, part="context")
         self.assertIsInstance(primed, str)
         self.assertIn("Setup is not finished", primed)
-        self.assertIn("context/strategy/positioning.md", primed)
+        self.assertIn("context/positioning.md", primed)
         self.assertIn(constants.RESTART_SENTENCE, primed)
 
     def test_a_refused_update_is_said_out_loud_by_the_next_session(self):
@@ -518,7 +518,7 @@ class SessionStartTest(support.PastTheFirstBackupReview, SessionStartHelpers):
         result = self.run_hook(root)
         context = self.context_of(result)
         self.assertIn("Setup is not finished", context)
-        self.assertIn("context/strategy/positioning.md", context)
+        self.assertIn("context/positioning.md", context)
         self.assertIn(constants.RESTART_SENTENCE, result["systemMessage"])
         self.assertNotIn("The question id for this session:", context)
 

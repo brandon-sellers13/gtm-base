@@ -111,8 +111,12 @@ HIDDEN_COMMENT = re.compile(r"<!--.*?-->", re.DOTALL)
 # An opening or closing comment mark with no partner, which is what is left
 # when comments were nested inside one another.
 HIDDEN_COMMENT_MARK = re.compile(r"<!--|-->")
-# Anything that reads as a tag rather than as words.
-HIDDEN_TAG = re.compile(r"<[a-zA-Z][^>]*>")
+# Anything that reads as a tag rather than as words, opening or closing. A tag
+# may run over several lines, as a browser reads one, but never over a blank
+# line, which ends a paragraph and with it any tag, so a less-than sign in one
+# paragraph and a greater-than sign in the next never take the words between
+# them away (Astra's review of Unit 1.7c, finding 4).
+HIDDEN_TAG = re.compile(r"</?[a-zA-Z](?:[^>\n]|\n(?![ \t]*\n)){0,4000}>")
 # The characters no reader ever sees: the zero-width ones and the two sets
 # that reorder a line without changing a letter of it.
 HIDDEN_CHARACTER = re.compile(
