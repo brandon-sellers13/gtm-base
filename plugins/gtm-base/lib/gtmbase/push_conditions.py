@@ -31,26 +31,22 @@ def sources_read_blocks(session_id: Optional[str]) -> bool:
     return marker.marker_blocks(session_id)
 
 
-def first_push_unreviewed(base_id: str) -> bool:
-    """Whether this base has never had its first backup reviewed.
+def first_push_unreviewed(base_id: str, root: Optional[str] = None, runner=None) -> bool:
+    """Whether this base's sends must still be refused for want of its first backup review.
 
-    In this release the answer is always yes, and it is not read off the
-    seat's own record at all. The first backup review is not shipped, so no
-    code in this release ever sets that record honestly, and any value of it
-    saying the review happened was put there by something that is not this
-    plugin. When the review does ship it will record the address it reviewed
-    and the saved work it reviewed, and this will read those rather than a
-    bare yes.
-
-    The record itself is still kept and still read everywhere else, so nothing
-    is lost by leaving it where it is until there is something honest to put
-    in it.
+    Read from what the seat's record says was reviewed and sent, against the
+    base itself (`backup.first_push_unreviewed`): the address it reviewed and
+    the saved version it reviewed, never a bare yes. With no base folder to
+    read against, the answer is yes.
     """
-    del base_id
-    return True
+    from . import backup
+
+    return backup.first_push_unreviewed(base_id, root, runner)
 
 
-def check(base_id: str, session_id: Optional[str]) -> List[Tuple[str, str]]:
+def check(
+    base_id: str, session_id: Optional[str], root: Optional[str] = None, runner=None
+) -> List[Tuple[str, str]]:
     """Every reason nothing may leave this computer right now.
 
     Each reason is a code and the one sentence the person is shown. An empty
@@ -59,6 +55,6 @@ def check(base_id: str, session_id: Optional[str]) -> List[Tuple[str, str]]:
     reasons: List[Tuple[str, str]] = []
     if sources_read_blocks(session_id):
         reasons.append((CODE_SOURCES_READ, gate.sentence_for(CODE_SOURCES_READ)))
-    if first_push_unreviewed(base_id):
+    if first_push_unreviewed(base_id, root, runner):
         reasons.append((CODE_FIRST_PUSH, gate.sentence_for(CODE_FIRST_PUSH)))
     return reasons

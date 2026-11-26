@@ -1251,6 +1251,25 @@ def _merge(result: Classification, other: Classification) -> None:
 # --- Working out what a send would carry -------------------------------------
 
 
+def shared_branch_ref(git: GitRunner, cwd: str, remote: str = "origin") -> Optional[str]:
+    """The shared copy's own main line, as this clone last saw it, or None.
+
+    Only a branch that came from the shared copy counts. A local branch of the
+    same name is not on the shared copy, and reading a send against it read the
+    whole of a first send as already sent.
+    """
+    head = git.run(
+        ["symbolic-ref", "--quiet", "refs/remotes/%s/HEAD" % remote], cwd=cwd
+    )
+    if head.ok and head.out():
+        return head.out()
+    for candidate in ("main", "master"):
+        ref = "refs/remotes/%s/%s" % (remote, candidate)
+        if git.run(["rev-parse", "--verify", "--quiet", ref], cwd=cwd).ok:
+            return ref
+    return None
+
+
 def default_branch(git: GitRunner, cwd: str, remote: str = "origin") -> Optional[str]:
     """The branch the team shares, as this clone understands it."""
     head = git.run(
@@ -1306,9 +1325,9 @@ def _upstream_for(git, cwd, remote, source_ref, target_ref) -> Optional[str]:
     candidate = "refs/remotes/%s/%s" % (remote, name)
     if git.run(["rev-parse", "--verify", "--quiet", candidate], cwd=cwd).ok:
         return candidate
-    branch = default_branch(git, cwd, remote)
-    if branch:
-        base = git.run(["merge-base", source_ref or "HEAD", branch], cwd=cwd)
+    shared = shared_branch_ref(git, cwd, remote)
+    if shared:
+        base = git.run(["merge-base", source_ref or "HEAD", shared], cwd=cwd)
         if base.ok and base.out():
             return base.out()
     return None
@@ -1532,7 +1551,64 @@ def first_push_is_unreviewed(cwd: str, git: Optional[GitRunner] = None) -> bool:
         )
     except Exception:
         return True
-    return push_conditions.first_push_unreviewed(resolution.base_id or "")
+    return push_conditions.first_push_unreviewed(
+        resolution.base_id or "", getattr(resolution, "root", None), git
+    )
+
+
+def send_from_a_base_allowed(
+    cwd: str,
+    destination: Optional[str],
+    refs: Optional[List[Tuple[str, str]]],
+    git: Optional[GitRunner] = None,
+) -> bool:
+    """Whether a send may go to `destination`: yes outside a base.
+
+    From a base, only ever to the GitHub repository it was backed up to
+    (`backup.destination_allowed`); a question that cannot be answered is
+    answered no.
+    """
+    from . import backup
+
+    try:
+        if not _looks_like_a_base(cwd, git):
+            return True
+        resolution = paths.resolve_base(
+            cwd, machine.load_machine_state(runner=git), runner=git
+        )
+    except Exception:
+        return False
+    return backup.destination_allowed(
+        resolution.base_id or "", getattr(resolution, "root", None), destination, refs, git
+    )
+
+
+def push_destinations(git: GitRunner, cwd: str, push) -> Optional[List[str]]:
+    """Every address a send would actually go to, as git would resolve it, or None.
+
+    Read the way git reads it, after a push address and any address rewriting
+    in this computer's git settings, so a setting cannot quietly send the base
+    somewhere other than the address that was checked.
+    """
+    if getattr(push, "source", "git-push") != "git-push":
+        return None
+    remote = push.remote
+    if not remote:
+        branch = _current_branch(git, cwd)
+        for key in (
+            ["branch.%s.pushRemote" % branch] if branch else []
+        ) + ["remote.pushDefault"] + (["branch.%s.remote" % branch] if branch else []):
+            found = git.run(["config", "--get", key], cwd=cwd)
+            if found.ok and found.out():
+                remote = found.out()
+                break
+        remote = remote or "origin"
+    if "/" in remote or ":" in remote:
+        found = git.run(["ls-remote", "--get-url", remote], cwd=cwd)
+        return [found.out()] if found.ok and found.out() else None
+    found = git.run(["remote", "get-url", "--push", "--all", remote], cwd=cwd)
+    urls = [line.strip() for line in found.out().splitlines()] if found.ok else []
+    return [url for url in urls if url] or None
 
 
 # The entries a base's own saved history always holds, and an ordinary
@@ -1984,6 +2060,12 @@ def check_command(
             # Outside the gate's reach and not a repository either. Git says so
             # itself, and nothing here has to be read to let it.
             continue
+        if _looks_like_a_base(where, runner):
+            destinations = push_destinations(runner, where, push)
+            if not destinations or not all(
+                send_from_a_base_allowed(where, url, None, runner) for url in destinations
+            ):
+                return sentence_for(REASON_FIRST_PUSH)
         branch_now = _current_branch(runner, where)
         # Overwriting the branch the team shares is refused wherever it is run,
         # because knowing what it would undo takes nothing being read.
@@ -2036,7 +2118,11 @@ def scan_range(
 
 
 def check_git_hook(
-    stdin_text: str, cwd: str, git: Optional[GitRunner] = None
+    stdin_text: str,
+    cwd: str,
+    git: Optional[GitRunner] = None,
+    remote_name: Optional[str] = None,
+    remote_url: Optional[str] = None,
 ) -> Optional[str]:
     """Read every range git is about to send. Return a sentence, or None.
 
@@ -2048,21 +2134,22 @@ def check_git_hook(
     runner = runner_or_default(git)
     if marker.marker_blocks(include_recent=True):
         return sentence_for(REASON_SOURCES_READ)
-    if first_push_is_unreviewed(cwd, git=runner):
+    lines = [line.split() for line in (stdin_text or "").splitlines()]
+    lines = [parts for parts in lines if len(parts) >= 4]
+    if not send_from_a_base_allowed(
+        cwd, remote_url, [(parts[1], parts[2]) for parts in lines], runner
+    ):
         return sentence_for(REASON_FIRST_PUSH)
     allowlist, _code = scan.load_allowlist(base_root_for(cwd, git=runner))
-    branch = default_branch(runner, cwd)
-    for line in (stdin_text or "").splitlines():
-        parts = line.split()
-        if len(parts) < 4:
-            continue
+    shared = shared_branch_ref(runner, cwd, remote_name or "origin")
+    for parts in lines:
         local_ref, local_sha, _remote_ref, remote_sha = parts[:4]
         if _ZERO_SHA.match(local_sha):
             continue
         if _ZERO_SHA.match(remote_sha):
             start = None
-            if branch:
-                base = runner.run(["merge-base", local_sha, branch], cwd=cwd)
+            if shared:
+                base = runner.run(["merge-base", local_sha, shared], cwd=cwd)
                 if base.ok and base.out():
                     start = base.out()
             start = start or EMPTY_TREE
@@ -2107,8 +2194,12 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         stdin_text = ""
 
     if mode == MODE_GIT_HOOK:
+        # Git hands a pre-push hook the remote's name and the address it is
+        # actually sending to, after any rewriting.
+        remote_name = _rest[0] if len(_rest) > 0 else None
+        remote_url = _rest[1] if len(_rest) > 1 else None
         try:
-            reason = check_git_hook(stdin_text, os.getcwd())
+            reason = check_git_hook(stdin_text, os.getcwd(), None, remote_name, remote_url)
         except Exception:
             reason = sentence_for(REASON_INTERNAL)
         if reason:

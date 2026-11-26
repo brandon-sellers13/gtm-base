@@ -337,6 +337,9 @@ SEAT_DEFAULTS = {
     # nothing, so a sentence it could not work out for itself is left here.
     "pending_visible_note": None,
     "first_push_reviewed": False,
+    # The first backup review (backup.py): the address and the saved version
+    # it reviewed, when the person said yes to sending it, and when it went.
+    "first_backup": None,
     "git_hook_installed": False,
     "git_hook_code": None,
     # The weekly one line. It is off until somebody turns it on, and the day it
@@ -420,6 +423,11 @@ def _clean_pending_confirmations(value, problems: List[str]) -> List[dict]:
     return kept
 
 
+_FIRST_BACKUP_KEYS = frozenset(
+    ("address", "branch", "reviewed_head", "reviewed_at", "approved_at", "sent_at")
+)
+
+
 def load_seat(base_id: str) -> Tuple[dict, List[str]]:
     """This seat's own settings, with anything unexpected dropped."""
     problems: List[str] = []
@@ -463,6 +471,16 @@ def load_seat(base_id: str) -> Tuple[dict, List[str]]:
         if value is not None and not allowed:
             seat[name] = None
             problems.append("bad-value")
+    backup = seat.get("first_backup")
+    if backup is not None:
+        clean = None
+        if isinstance(backup, dict) and set(backup) <= _FIRST_BACKUP_KEYS:
+            values = [backup.get(k) for k in _FIRST_BACKUP_KEYS]
+            if all(v is None or isinstance(v, str) for v in values) and isinstance(backup.get("address"), str):
+                clean = {k: backup.get(k) for k in _FIRST_BACKUP_KEYS}
+        if clean is None:
+            problems.append("bad-value")
+        seat["first_backup"] = clean
     if _quiet_is_past_the_longest(seat):
         seat["silent_until"] = None
         seat["silent_until_set_on"] = None

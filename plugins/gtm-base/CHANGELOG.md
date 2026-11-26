@@ -1,5 +1,15 @@
 # Changelog
 
+## Unreleased (P1: back up a base)
+
+- You can now back up a base to GitHub. In the GTM Base app, choose Back up a base you already have, which makes an empty private repository, then say "back up my base to" its address in Claude Code. `join.py backup-review` shows what would be sent (how many files and documents, how many saved versions, and the address) and runs the same check the git hook runs before anything leaves this computer. When that check finds nothing, it records the address and the exact saved version it reviewed. `join.py backup` then sends only that version, only to that address, and only into a repository that is still empty, and Claude Code asks you itself before it runs. Until now every send from a base was refused, because this review had never been built.
+- A base only ever sends to the GitHub repository it was backed up to. Both the check on Claude Code's commands and git's own pre-push check work out where each send is really going, after any push address or address rewriting in git's settings, and refuse anywhere else. Before the first backup, only git's own check may let the reviewed version through to the reviewed branch, in the fifteen minutes after your yes; that window is always closed again, whether the send works or not.
+- The review refuses a repository anybody can read without signing in, so a base only goes into a private repository your own account can reach.
+- A first send is now read from nothing, not from a local branch of the same name, so the check before a send reads everything a first backup carries.
+- Git commands that talk to GitHub (sending, fetching and checking a repository) now pass on the sign-in helper git ships with, such as `osxkeychain` on a Mac, when it is one of a few well-known ones. Nothing else from git's own settings file is read, and hooks, monitors and signing stay off as before. Before this, sending a proposal and fetching at session start could not sign in on a standard Mac.
+- What is left: the record of what was backed up lives in a file on this computer. A record somebody wrote by hand can only ever name a GitHub repository, and git still needs your own account's permission to write there, but the record itself is not signed.
+- Joining a base from a link and inviting somebody still answer with one sentence; they arrive next.
+
 ## 0.5.0 (not yet released)
 
 Release B: Units 1.5b, 1.6, 1.7a to 1.7e and 1.8, call 29, calls 57 to 60, and the live-check follow-up, with 0.3.3 to 0.3.10 and 0.4.0 carried. Prepared on 2026-10-10 as 0.4.0; main shipped 0.4.0 on 2026-10-21 first, so Release B ships as 0.5.0, and the date is set on the day it ships.

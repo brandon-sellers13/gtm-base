@@ -107,10 +107,14 @@ export async function createBase(options: {
   repoName: string;
   email: string;
   login: string;
+  // An empty repository for a base that already exists in Claude Code, which
+  // the plugin's backup fills; nothing else may be in it when the backup runs.
+  empty?: boolean;
 }): Promise<{ owner: string; name: string; htmlUrl: string }> {
-  const { token, accountLogin, accountIsOrganization, repoName, email, login } = options;
+  const { token, accountLogin, accountIsOrganization, repoName, email, login, empty } = options;
 
-  // 1. The repository: private, with one first commit so it has a branch to build on.
+  // 1. The repository: private. A new base gets one first commit so it has a
+  // branch to build on; a backup target stays empty.
   let repo: Repo;
   try {
     repo = await api<Repo>(accountIsOrganization ? `/orgs/${accountLogin}/repos` : "/user/repos", {
@@ -119,7 +123,7 @@ export async function createBase(options: {
       body: JSON.stringify({
         name: repoName,
         private: true,
-        auto_init: true,
+        auto_init: !empty,
         description: "Company base for GTM Base: the context the team and its AI work from.",
       }),
     });
@@ -130,6 +134,8 @@ export async function createBase(options: {
     }
     throw new CreateBaseError("failed");
   }
+
+  if (empty) return { owner: repo.owner.login, name: repo.name, htmlUrl: repo.html_url };
 
   // 2. The template, as one commit on top of GitHub's first commit.
   const path = `/repos/${repo.owner.login}/${repo.name}`;

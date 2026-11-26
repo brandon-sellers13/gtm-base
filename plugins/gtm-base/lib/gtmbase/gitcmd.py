@@ -388,6 +388,49 @@ class GitResult(object):
         return "GitResult(code=%r)" % (self.code,)
 
 
+# The commands that talk to the shared copy over the network. Every command
+# still ignores this computer's system-wide git settings, which anybody able to
+# write that file could fill with programs to run. But that file is where
+# Apple's git keeps the program that signs in to GitHub
+# (`credential.helper=osxkeychain`), so for these commands alone, a sign-in
+# helper found there is passed on the command line when it is one of the
+# well-known ones below, and nothing else from that file is read.
+NETWORK_COMMANDS = frozenset(("push", "fetch", "ls-remote", "pull"))
+KNOWN_SIGN_IN_HELPERS = frozenset(
+    ("osxkeychain", "manager", "manager-core", "wincred", "libsecret")
+)
+_system_helpers = None
+
+
+def system_sign_in_helpers(git_path: str = "git") -> Tuple[str, ...]:
+    """The well-known sign-in helpers this computer's system git settings name."""
+    global _system_helpers
+    if _system_helpers is None:
+        # Read the way git itself resolves the setting, from outside any
+        # repository and with the person's own settings file set aside, so only
+        # what git ships with is read. Apple's git keeps it in a file of its own
+        # that `--system` does not name.
+        env = dict(os.environ)
+        env.pop("GIT_CONFIG_NOSYSTEM", None)
+        env["GIT_CONFIG_GLOBAL"] = os.devnull
+        env.pop("GIT_DIR", None)
+        try:
+            found = subprocess.run(
+                [git_path, "config", "--get-all", "credential.helper"],
+                cwd=os.path.abspath(os.sep),
+                env=env,
+                stdin=subprocess.DEVNULL,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.DEVNULL,
+                timeout=10,
+            )
+            values = found.stdout.decode("utf-8", "replace").split()
+        except (OSError, subprocess.TimeoutExpired):
+            values = []
+        _system_helpers = tuple(v for v in values if v in KNOWN_SIGN_IN_HELPERS)
+    return _system_helpers
+
+
 class GitRunner(object):
     """Runs git with prompting turned off and a time limit on every call."""
 
@@ -425,7 +468,14 @@ class GitRunner(object):
             cwd, self.git_path, self.environment(), args
         ):
             return GitResult(DRIVER_CODE, "", CODE_EXECUTABLE_DRIVER)
-        command = [self.git_path] + hook_free(args)
+        words = [str(one) for one in args]
+        sign_in: List[str] = []
+        if subcommand_of(words)[1] in NETWORK_COMMANDS and not any(
+            "credential.helper" in word for word in words
+        ):
+            for helper in system_sign_in_helpers(self.git_path):
+                sign_in += ["-c", "credential.helper=" + helper]
+        command = [self.git_path] + sign_in + hook_free(args)
         try:
             finished = subprocess.run(
                 command,

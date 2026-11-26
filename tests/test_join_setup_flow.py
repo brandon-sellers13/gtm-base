@@ -3551,19 +3551,17 @@ class TestWhatThisReleaseWillNotDo(unittest.TestCase):
     """Three answers, one sentence each, and one of them says why."""
 
     def test_a_session_that_read_their_documents_will_not_send_anything(self):
+        """Backing up is built now (P1); in a session that read their documents it says why it waits."""
         with support.Sandbox():
             marker.write_sources_read_marker(SESSION)
+            finished = run_join(
+                "backup-review", "--address", "https://github.com/acme-co/acme-base", "--session", SESSION
+            )
+            self.assertEqual(1, finished.returncode)
+            self.assertIn(constants.SOURCES_READ_REFUSAL, finished.stdout.decode())
 
-            said = join_flow.refuse_mode(join_flow.MODE_BACKUP, SESSION)
-
-            self.assertEqual(constants.SOURCES_READ_REFUSAL, said)
-            self.assertIn("nothing leaves this computer", said)
-
-    def test_keeping_a_copy_elsewhere_arrives_with_the_next_release(self):
-        with support.Sandbox():
-            said = join_flow.refuse_mode(join_flow.MODE_BACKUP, "another-session")
-
-            self.assertEqual(constants.BACKUP_NOT_IN_THIS_RELEASE, said)
+    def test_backing_up_is_no_longer_a_mode_that_is_refused(self):
+        self.assertNotIn(join_flow.MODE_BACKUP, join_flow.NOT_IN_THIS_RELEASE)
 
     def test_inviting_somebody_and_joining_by_link_are_refused_either_way(self):
         with support.Sandbox():
@@ -3870,17 +3868,13 @@ class TestTheScriptAnswersFromTheCommandLine(unittest.TestCase):
             self.assertIn("run=run-", printed)
             self.assertIn("scratch=", printed)
 
-    def test_asking_to_keep_a_copy_elsewhere_is_refused_with_one_sentence(self):
+    def test_backing_up_with_no_base_says_so_and_sends_nothing(self):
+        """Backing up is built now (P1); with no base on this computer it is refused."""
         with support.Sandbox():
-            finished = self.run_script("backup")
+            finished = self.run_script("backup", "--address", "https://github.com/acme-co/acme-base")
 
             self.assertEqual(1, finished.returncode)
-            # The one sentence, and nothing else, inside the fence every step
-            # prints in since Astra's review of Release B.
-            self.assertEqual(
-                moment.fenced(constants.BACKUP_NOT_IN_THIS_RELEASE, note=moment.NAMES_NOTE) + "\n",
-                finished.stdout.decode("utf-8"),
-            )
+            self.assertNotIn(constants.BACKUP_NOT_IN_THIS_RELEASE, finished.stdout.decode("utf-8"))
 
     def test_a_step_nobody_has_heard_of_is_refused_and_writes_nothing(self):
         with support.Sandbox():

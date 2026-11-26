@@ -59,6 +59,7 @@ import argparse  # noqa: E402
 from gtmbase import (  # noqa: E402
     approval,
     adopt,
+    backup,
     citations,
     constants,
     create_base,
@@ -73,6 +74,7 @@ from gtmbase import (  # noqa: E402
     notes,
     offer_answer,
     paths,
+    push_conditions,
     review,
     segments,
     sources,
@@ -368,6 +370,10 @@ def build_parser():
     parser = argparse.ArgumentParser(add_help=True)
     parser.add_argument("mode", help="which step of setting a base up to run")
     parser.add_argument("--run", help="the identifier of this setup run")
+    parser.add_argument(
+        "--address",
+        help="backup-review and backup: the GitHub repository the GTM Base app made for this base",
+    )
     parser.add_argument(
         "--step", help="icp, umbrella, segment, change-entry, or positioning"
     )
@@ -2456,6 +2462,56 @@ def run_links(options, out):
     return EXIT_DONE
 
 
+def _backup_target(options, out):
+    """The base to back up, and whether this session may send at all."""
+    if push_conditions.sources_read_blocks(options.session):
+        out.write(constants.SOURCES_READ_REFUSAL + "\n")
+        line(out, "codes", push_conditions.CODE_SOURCES_READ)
+        return None, None
+    return named_base(options, out)
+
+
+def run_backup_review(options, out):
+    """Show what a first backup would send, and record the review when it is clean."""
+    root, base_id = _backup_target(options, out)
+    if root is None:
+        return EXIT_REFUSED
+    try:
+        found = backup.review(root, base_id, options.address or "")
+    except GtmBaseError as refusal:
+        out.write(str(refusal) + "\n")
+        line(out, "codes", refusal.code)
+        return EXIT_REFUSED
+    for sentence in backup.describe(found):
+        out.write(sentence + "\n")
+    line(out, "address", found.address[: -len(".git")])
+    if found.problem:
+        line(out, "codes", "backup-scan-found")
+        return EXIT_REFUSED
+    line(out, "status", "reviewed")
+    return EXIT_DONE
+
+
+def run_backup(options, out):
+    """Send the reviewed version to the reviewed repository (an approval)."""
+    root, base_id = _backup_target(options, out)
+    if root is None:
+        return EXIT_REFUSED
+    try:
+        address = backup.send(root, base_id, options.address or "")
+    except GtmBaseError as refusal:
+        out.write(str(refusal) + "\n")
+        line(out, "codes", refusal.code)
+        return EXIT_REFUSED
+    out.write(
+        "Your base is backed up to its GitHub repository. From now on, changes your "
+        "team proposes go there for the owner of each document to accept.\n"
+    )
+    line(out, "address", address[: -len(".git")])
+    line(out, "status", "sent")
+    return EXIT_DONE
+
+
 def run_not_now(options, out):
     return offer_answer.main(["--answer", offer_answer.NOT_NOW])
 
@@ -2513,7 +2569,8 @@ MODES = {
     "unlink": run_unlink,
     "links": run_links,
     "not-now": run_not_now,
-    "backup": run_refusal(join_flow.MODE_BACKUP),
+    "backup-review": run_backup_review,
+    "backup": run_backup,
     "invite": run_refusal(join_flow.MODE_INVITE),
     "join-link": run_refusal(join_flow.MODE_JOIN_LINK),
 }
