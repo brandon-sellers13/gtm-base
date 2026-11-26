@@ -1850,6 +1850,8 @@ The lean plan Brandon approved on 2026-11-25: merge main, rehearse case three al
 - [x] Figure fix: full suite twice, green both times (3,039 main tests and 215 linked-folder tests, exit 0 each run).
 - [x] Case two resumed and finished on 2026-11-25: 17 digests accepted (12 first try, 5 second), all 13 documents approved with questions open; outputs, evidence pack and README filed with the run (outside this repository).
 - [x] Brandon scored all three cases on 2026-11-25: every rule and every case passed, on his instruction "pass all", given after he was told the record would carry no notes for each rule. The scores, in his words, are in the run's README outside this repository. Nothing merged or released.
-- [ ] Case two resumes from its kept notes on a plugin copy of the new commit.
-- [ ] Brandon scores cases one and three (evidence ready), and case two once it is run.
-- [ ] The scored re-run of all three cases, on Brandon's yes.
+- [x] Case two resumes from its kept notes on a plugin copy of the new commit (done 2026-11-25, above).
+- [x] Brandon scores cases one and three, and case two once it is run (done 2026-11-25, above).
+- [x] The scored re-run of all three cases (done 2026-11-25). The gate passes.
+- [ ] Customer-name check fix (`d7c4ad7`, branch `claude/customer-name-false-refusals`, built on this branch's tip): Brandon decides whether it goes into Release B.
+- [ ] Brandon: review and merge Release B (0.5.0) into main. Then P1 to P3 (backup, join from a link, shared base), which wait on that merge.
