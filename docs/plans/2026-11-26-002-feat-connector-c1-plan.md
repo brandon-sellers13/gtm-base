@@ -1,7 +1,7 @@
 ---
 title: "C1: the connector itself (MCP endpoint, sign-in, one base per conversation)"
 type: feat
-status: draft, waiting for Brandon's decisions before any code
+status: approved by Brandon on 2026-11-26 with all four recommended answers; not built
 date: 2026-11-26
 parent: docs/plans/2026-11-26-001-feat-chat-connector-plan.md (Unit C1)
 unit: "C1"
@@ -166,18 +166,18 @@ The review after the build covers at least: the consent page (framing, cross-sit
 
 ## What Brandon must do
 
-1. **Answer the decisions below.**
+1. ~~Answer the decisions below.~~ Done 2026-11-26.
 2. **Add callback addresses to the GTM BaseLive GitHub App:** `https://gtm-base-connector-spike.netlify.app/api/connector/oauth/github-callback` for the test site now, and `https://gtm-base-app.netlify.app/api/connector/oauth/github-callback` for the live site before it is turned on. (GitHub Apps take several callback addresses; the spike's existing one stays until teardown.)
 3. **Set `CONNECTOR_SECRET`** (32 random bytes, base64) on the test site now and on the live site later, marked Sensitive in Netlify: it opens every connector token, so it is the kind of key that rule is for. Set `CONNECTOR_ENABLED` on the test site only.
 4. **Run the product half of the end-to-end test** with the agent, as in the spike: connect, click Allow on the consent page, approve each product's tool prompts.
 5. **After the security review, turn the connector on for the live site** (set `CONNECTOR_ENABLED` there), and then decide the spike teardown.
 
-## Decisions for Brandon
+## Decisions for Brandon (decided 2026-11-26: the recommended answer to all four)
 
-1. **A second small store for sign-in safety.** Single-use codes and revoking rotated refresh tokens, the two fixes the spike deferred, need the server to remember that a code was used and which refresh token in a chain is current. Recommended: a `connector-grants` store holding only random ids, a counter and a used-or-ended mark, never a token or any content. Runner-up: no store, relying on PKCE (a stolen code is useless without the verifier) and on GitHub ending its own used refresh tokens, which leaves a reused refresh token working until GitHub's token needs refreshing, up to eight hours.
-2. **GitHub's tokens stay inside the encrypted tokens the product holds**, never in a store. Recommended, and it keeps the approved store as approved. Runner-up: keep them on the server for instant revocation of one person, which the store approval does not cover.
-3. **A call that carries no conversation id is refused.** Recommended, since it can only be bound by guessing, and both products sent one on every call in the spike. Runner-up: bind it to the GitHub login for an hour, which would let a product without conversation ids work but would also join that person's separate conversations into one wall.
-4. **Use the spike's Netlify site as C1's test site.** Recommended: it already has its environment, its Blobs and a GitHub App entry, and it keeps every test away from the live site's store. It is torn down with the spike after C1. Runner-up: a new site, which means one more site, one more set of variables and one more callback address.
+1. **A second small store for sign-in safety. Decided: yes, the `connector-grants` store.** Single-use codes and revoking rotated refresh tokens, the two fixes the spike deferred, need the server to remember that a code was used and which refresh token in a chain is current. Recommended: a `connector-grants` store holding only random ids, a counter and a used-or-ended mark, never a token or any content. Runner-up: no store, relying on PKCE (a stolen code is useless without the verifier) and on GitHub ending its own used refresh tokens, which leaves a reused refresh token working until GitHub's token needs refreshing, up to eight hours.
+2. **GitHub's tokens stay inside the encrypted tokens the product holds**, never in a store. **Decided: yes.** Recommended, and it keeps the approved store as approved. Runner-up: keep them on the server for instant revocation of one person, which the store approval does not cover.
+3. **A call that carries no conversation id is refused. Decided: yes.** Recommended, since it can only be bound by guessing, and both products sent one on every call in the spike. Runner-up: bind it to the GitHub login for an hour, which would let a product without conversation ids work but would also join that person's separate conversations into one wall.
+4. **Use the spike's Netlify site as C1's test site. Decided: yes.** Recommended: it already has its environment, its Blobs and a GitHub App entry, and it keeps every test away from the live site's store. It is torn down with the spike after C1. Runner-up: a new site, which means one more site, one more set of variables and one more callback address.
 
 ## What stays the same
 
