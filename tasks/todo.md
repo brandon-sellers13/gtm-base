@@ -1824,6 +1824,17 @@ Brandon decided to build the web app now and productize from the start. No revie
 - [ ] P3. Shared base: record-change and the setup closing send proposals; no direct push to main from a seat (after Release B merges).
 - [ ] The end-to-end run with a second GitHub account.
 
+## 2026-11-26, the chat connector, C1 (plan: docs/plans/2026-11-26-002-feat-connector-c1-plan.md)
+Brandon took the recommended answer to all four decisions. Built on branch claude/intelligent-joliot-f9b12e and deployed to the test site (https://gtm-base-connector-spike.netlify.app), which replaced the spike there.
+- [x] The plan, with the library choice, the endpoint and store design, the security points and the tests. (bd11591, decisions ee2f994)
+- [x] The connector built: the endpoint on the official MCP library, sign-in through GitHub with consent, single-use codes and refresh chains, the shared invite rule, one base per conversation. (fcc5d8a, ea2c330)
+- [x] 40 of 40 checks pass on this computer and on the test site against the real store.
+- [x] ChatGPT, end to end on the test site: sign-in, 2026-07-28 with ChatGPT's conversation id, and the one-base runs. (1c94961, b09efaa)
+- [ ] The Claude half (connect, sign in, the one-base runs, whether Claude sends `com.anthropic/session` under 2026-07-28). Brandon chose on 2026-11-26 to skip it for now and come back to it together with Simona's invite (W5's real invite test), since the browser's Claude is on a work organization and the run needs his personal Claude account.
+- [ ] The server's own refusal of a second base, seen from a product or from the check script's one-base section with a real GitHub App token. ChatGPT refused to send that call on its own.
+- [ ] The security review (one pass), before anyone but Brandon connects. Then Brandon sets CONNECTOR_SECRET and CONNECTOR_ENABLED on the live site and adds the live callback address.
+- [ ] Teardown when C1 is done: the spike's old callback address on GTM BaseLive, the old "GTM Base test" connector in ChatGPT, and the test site.
+
 ### 2026-11-24, the Release B replay gate on the summarize-first build (branch claude/release-b-replay-40efb2)
 The lean plan Brandon approved on 2026-11-25: merge main, rehearse case three alone with counts only, measure usage, and ask before the scored run of all three cases. Client figures and names stay in the private replay folder; this list holds counts only.
 - [x] Merged origin/main (0.3.7 to 0.4.0 and the web app, W1 to W6). Release B ships as 0.5.0: version pins, the atlas stamp, and the layout version the move offer names (0.5). The command check keeps 0.4.0's copy-and-undo for settings and Release B's approval question; the two Release B tests of the 0.3.6 settings question now test 0.4.0's behaviour.
