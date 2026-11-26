@@ -55,6 +55,7 @@ from . import (
     compose_proposal,
     confirm,
     constants,
+    docpaths,
     drafting,
     formats,
     gitcmd,
@@ -429,7 +430,7 @@ def segment_names(base_root: str) -> Dict[str, str]:
     """
     relative = layout.where_it_lives(base_root, constants.REQUIRED_CONTEXT_FILES[0])
     try:
-        if paths.canonical_context_path(base_root, relative) != relative:
+        if docpaths.canonical(base_root, relative) != relative:
             return {}
     except (PathError, ValidationError):
         return {}
@@ -537,7 +538,7 @@ def documents(base_root: str) -> List[Tuple[int, str, str]]:
         if any(mark in path for mark in (",", "[", "]")):
             continue
         try:
-            if paths.canonical_context_path(base_root, path) != path:
+            if docpaths.canonical(base_root, path) != path:
                 continue
         except (PathError, ValidationError):
             continue
@@ -1262,7 +1263,7 @@ def record(
     try:
         entry = formats.ChangeEntry.parse(text).validate(day)
         for path in entry.affects:
-            if paths.canonical_context_path(base_root, path) != path:
+            if docpaths.canonical(base_root, path) != path:
                 raise PathError("moved", code=CODE_MOVED_ON)
     except (ValidationError, PathError):
         raise _refuse(MOVED_ON, CODE_MOVED_ON)

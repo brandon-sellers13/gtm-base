@@ -42,6 +42,10 @@ _PLAIN_PATH_CHARACTERS = re.compile(r"[^A-Za-z0-9._/-]")
 MAX_PATH_IN_SENTENCE = 80
 
 _OWNER_LINE = re.compile(r"^(?:owner|owner_handle)\s*:")
+# The map's administrators line holds the addresses of the people who may
+# approve, the way an owner line holds an owner's, and it is let through on
+# the map's own settings lines only (Plan 1, Unit 4.2a).
+_ADMINISTRATORS_LINE = re.compile(r"^administrators\s*:")
 _HUNK_HEADER = re.compile(r"^@@ -\d+(?:,\d+)? \+(\d+)(?:,\d+)? @@")
 
 EMPTY_ALLOWLIST: FrozenSet[str] = frozenset()
@@ -305,9 +309,21 @@ def scan_diff_added_lines(
             if (
                 is_markdown
                 and line_number <= FRONTMATTER_MAX_LINES
-                and _OWNER_LINE.match(content)
+                and (
+                    _OWNER_LINE.match(content)
+                    or (path == constants.MAP_PATH and _ADMINISTRATORS_LINE.match(content))
+                )
             ):
                 line_exempt = tuple(line_exempt) + (redaction_patterns.EMAIL,)
+            if path == constants.STACK_PATH:
+                # The source map never holds a credential, and the start of a
+                # session refuses one arriving in it, so a send carrying one
+                # is refused here first (Plan 1, Unit 4.2a).
+                for hit in scan_source_map(content, allowlist):
+                    hit.line_number = line_number
+                    hit.context = path
+                    hit.is_path = True
+                    hits.append(hit)
             for hit in _scan_line(
                 content, line_number, path or "the change", allowlist, line_exempt
             ):

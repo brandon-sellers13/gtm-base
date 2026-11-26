@@ -38,6 +38,7 @@ from typing import List, Optional, Sequence
 from . import (
     approval,
     adopt,
+    authority,
     base_reader,
     callmarkers,
     citations,
@@ -5814,6 +5815,19 @@ class Reconciliation(object):
         )
 
 
+def _may_answer(base_root: str, path: str, address: str) -> bool:
+    """Whether this address may say a document already reflects a change (Plan 1, Unit 4.2a).
+
+    The one authority rule, read from the saved document and map: its owners,
+    the base owner and the administrators. A history that cannot be read
+    answers no, so the document is left flagged for the review.
+    """
+    try:
+        return authority.at(base_root, path).role_of(address) is not None
+    except authority.AuthorityUnavailable:
+        return False
+
+
 def reconcile_plan(
     base_root: str,
     base_id: str,
@@ -5871,9 +5885,7 @@ def reconcile_plan(
             # question may say, so it is left for the review to name.
             left_flagged.append(path)
             continue
-        if every_document and (
-            not address or address not in confirm.owners_of(base_root, path)
-        ):
+        if every_document and (not address or not _may_answer(base_root, path, address)):
             left_flagged.append(path)
             not_owned.append(path)
             continue
