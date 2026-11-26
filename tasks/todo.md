@@ -1879,3 +1879,31 @@ The order across every track is in `docs/plans/2026-11-26-003-roadmap-to-full-ex
 - [ ] C4. Proposing a context change from chat.
 - [ ] C5. The setup guide and a Project instruction for each base.
 - [ ] The security review, then the end-to-end run in Claude and ChatGPT across two Projects.
+
+### 2026-10-10, Plan 1 of Phases 2 and 3 (branch claude/plan-1-meta-skill-3d436e)
+Plan: `docs/plans/2026-10-10-002-feat-plan-1-company-skills-and-meta-skill-plan.md`. Planning only; no product code.
+- [x] Read the decisions brief (D1 to D10, M6, M7, M8, M12), the roadmap on release-b, the build plan through call 59 on the finish branch, and the Meta skill as it runs today (read only)
+- [x] Write revision 1: Units 4.1, 4.2, 2.1, 3.1, 2.4a, 2.5a, 3.5, 3.6 in two releases; SC-M proposed; seven calls for Brandon
+- [x] Astra reviews the plan read only (brief: docs/reviews/2026-10-10-plan-1-review-brief.md); fix and confirm until ready.
+      r1 not ready (16 findings, 2 blockers on the ownership proof) -> r2 not ready (9 narrower) -> r2.1 ready with 2 changes
+      -> r2.2 ready with 1 change -> r2.3 ready to build as written (docs/reviews/2026-10-10-plan-1-verify-4-astra.md)
+- [x] Rebuilt this branch from origin/main with a cleaned decisions brief (no goal figures, pipeline figure or workbook name);
+      the six Plan 1 commits replayed on top. Local backup ref plan-1-backup-before-rebuild still holds the old history:
+      delete it once checked, and never push it
+- [x] Local main reset to origin/main (3c2c377), dropping the uncleaned decisions commit
+- [x] This repository's git address set to Brandon's personal one (repo config, all worktrees); the branch rebased onto
+      origin/main and every commit re-authored under it. 120 older commits already on the public main carry the Gridwise
+      address; changing those means rewriting the public main, which is Brandon's call
+- [x] Brandon answered the seven calls on 2026-10-10, all as recommended (1 two businesses, 2 SC-M, 3 unattended flag, 4 old skill copy, 5 releases, 6 ownership guarantee, 7 lessons)
+- [x] Unit 4.1 written: docs/brainstorms/2026-10-10-company-skills-requirements.md, revision 3. Astra and Fable 5.1 said
+      not ready on r1 (Astra 8 findings; Fable 1 blocker, 3 high, 9 medium, 8 low); r2 ready with 3 changes; r3 ready for
+      signature (docs/reviews/2026-10-10-company-skills-verify-2-astra.md). Plan 1 kept in step, now revision 2.6
+- [x] Corrected for Release B's call 60 (approvals go through unasked in bypassPermissions and dontAsk): requirements
+      revision 6, Plan 1 revision 2.9; Astra ready for signature again (docs/reviews/2026-10-10-company-skills-verify-5-astra.md)
+- [x] Brandon signs Unit 4.1 (covers scripts, the extra yes for creating a skill, and the guarantee in CS13 and CS14); signed 2026-10-10;
+      Unit 4.2a is not briefed before he signs
+
+#### Review (Plan 1)
+Nine units in two releases (C: 4.2a, 2.1, 2.5a, 3.1, 4.2b, 2.4a, 3.5; D: 3.6), plus 4.1 first. The hard part was D5's
+"provable": history fields prove nothing on one computer, so the plan binds each approval to exact bytes and a seat runs a
+skill only as a whole manifest it approved or accepted, with the guarantee stated exactly as call 6. Planning only; no code.

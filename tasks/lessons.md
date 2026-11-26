@@ -156,3 +156,12 @@
   only says how to unlink. Run `netlify unlink` first, then link, then confirm with `netlify status` in the same
   command as any write (2026-11-26: connector variables meant for the live site went to the test site first, and
   were put back before any deploy read them).
+
+## 2026-10-10, Plan 1 of Phases 2 and 3
+- "Provable" ownership cannot rest on matching the owner line, the seat's address and history authors: all three are
+  claims anyone with the computer can write. Bind each approval to the exact bytes approved, and trust a whole skill only
+  as one manifest (every path and hash); per-file approval lets two approved versions be mixed into one nobody approved.
+- A list of allowed tools does not keep a scheduled run from an approval: scheduled tasks inherit a person's allow rules
+  and can wait on a question. Refuse in the plugin, and claim a second control only where it is independently tested.
+- Redacting client figures in a later commit does not remove them from a public repository's history; check before the
+  first commit that carries them, not before the push.
