@@ -13,6 +13,8 @@ import {
 } from "@/lib/connector/signin";
 import { newState } from "@/lib/oauthState";
 
+const MAX_STATE = 1024;
+
 // Starts a product's sign-in: checks the request, keeps it in a short sealed
 // cookie, and sends the person to GitHub.
 export async function GET(request: NextRequest) {
@@ -27,6 +29,14 @@ export async function GET(request: NextRequest) {
     return stoppedPage("This sign-in did not come from a product registered with GTM Base. Start again from Claude or ChatGPT.");
   }
   const state = p.get("state");
+  // The state travels inside the sign-in cookies, which browsers cap at about
+  // 4,096 bytes; real products send far less than this.
+  if (state && state.length > MAX_STATE) {
+    return backToProduct(redirectUri, null, {
+      error: "invalid_request",
+      error_description: `The state value is longer than ${MAX_STATE} characters.`,
+    });
+  }
   const fail = (error: string) => backToProduct(redirectUri, state, { error });
 
   if (p.get("response_type") !== "code") return fail("unsupported_response_type");

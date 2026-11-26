@@ -7,7 +7,7 @@ import { ensure, smallStore } from "./store";
 // GitHub's own tokens live here and nowhere else (decision 2 of the C1 plan).
 export type Grant = {
   gh: string;
-  ghExp: number; // when GitHub's access token ends, in milliseconds since the epoch
+  ghExp: number | null; // when GitHub's access token ends, in milliseconds since the epoch; null if it never does
   ghRefresh: string | null;
   ghRefreshExp: number | null;
   login: string;
@@ -32,7 +32,10 @@ export const CODE_SECONDS = 120;
 export async function issueTokens(cid: string, chain: string, gen: number, grant: Grant) {
   const now = Date.now();
   // Never outlive GitHub's own token: the product refreshes before it ends.
-  const accessSeconds = Math.max(60, Math.min(ACCESS_SECONDS, Math.floor((grant.ghExp - now) / 1000) - 60));
+  const accessSeconds =
+    grant.ghExp === null
+      ? ACCESS_SECONDS
+      : Math.max(60, Math.min(ACCESS_SECONDS, Math.floor((grant.ghExp - now) / 1000) - 60));
   const refreshSeconds = grant.ghRefreshExp
     ? Math.max(60, Math.floor((grant.ghRefreshExp - now) / 1000) - 60)
     : REFRESH_SECONDS_WITHOUT_GITHUB_EXPIRY;
@@ -56,9 +59,17 @@ export const openCode = (value: string | null | undefined) => open<CodeBody>("co
 
 // --- Single-use codes and refresh chains (the "connector-grants" store) -------
 
+// A chain has two records. `chain/<id>` holds the current refresh generation
+// (and is created already ended for a chain that never started, so reading it
+// never asks the store for a missing key, see `ensure`). `ended/<id>` is the
+// mark that ends the chain: it is written unconditionally, so no number of
+// refreshes running alongside can stop it from landing.
 type Chain = { gen: number; ended: boolean };
+type Ended = { ended: boolean };
 
 const chainKey = (id: string) => `chain/${id}`;
+const endedKey = (id: string) => `ended/${id}`;
+const NEVER_STARTED: Chain = { gen: 0, ended: true };
 
 // A code's id is also the id of the chain of refresh tokens it starts, and the
 // chain's record is the mark that the code was used: it can be created once.
@@ -69,31 +80,30 @@ export async function spendCode(jti: string): Promise<boolean> {
   return false;
 }
 
-// A chain that was never started is created already ended, so reading it never
-// asks the store for a missing key (see `ensure`).
-const ENDED: Chain = { gen: 0, ended: true };
-
 export async function endChain(id: string): Promise<void> {
-  const store = smallStore("connector-grants");
-  for (let attempt = 0; attempt < 3; attempt++) {
-    const found = await ensure(store, chainKey(id), ENDED);
-    if (found.data.ended) return;
-    if (await store.replace(chainKey(id), { ...found.data, ended: true }, found.etag)) return;
-  }
+  await smallStore("connector-grants").put(endedKey(id), { ended: true } satisfies Ended);
 }
 
-// Moves a chain on by one when `gen` is its current generation. A refresh token
-// from an earlier generation means a copy is in use somewhere: the chain ends.
-export async function advanceChain(id: string, gen: number): Promise<"ok" | "refused"> {
+// Moves a chain on by one when `gen` is its current generation, and returns the
+// new record's ETag so a refresh GitHub could not complete can be undone. A
+// refresh token from an earlier generation means a copy is in use somewhere: the
+// chain ends.
+export async function advanceChain(id: string, gen: number): Promise<{ ok: true; etag: string } | { ok: false }> {
   const store = smallStore("connector-grants");
-  const found = await ensure(store, chainKey(id), ENDED);
-  if (found.data.ended) return "refused";
+  const found = await ensure(store, chainKey(id), NEVER_STARTED);
+  if (found.data.ended || (await ensure<Ended>(store, endedKey(id), { ended: false })).data.ended) return { ok: false };
   if (found.data.gen !== gen) {
     await endChain(id);
-    return "refused";
+    return { ok: false };
   }
   // Two refreshes at once with the same token: only one moves the chain on.
-  return (await store.replace(chainKey(id), { gen: gen + 1, ended: false } satisfies Chain, found.etag))
-    ? "ok"
-    : "refused";
+  const etag = await store.replace(chainKey(id), { gen: gen + 1, ended: false } satisfies Chain, found.etag);
+  return etag ? { ok: true, etag } : { ok: false };
+}
+
+// Puts a chain back one generation, when GitHub could not be reached to finish
+// the refresh that moved it on, so the product can retry with the same token.
+// Does nothing if the chain has moved since.
+export async function rewindChain(id: string, gen: number, etag: string): Promise<void> {
+  await smallStore("connector-grants").replace(chainKey(id), { gen, ended: false } satisfies Chain, etag);
 }

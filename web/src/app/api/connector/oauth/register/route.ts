@@ -12,6 +12,9 @@ export async function POST(request: Request) {
   } catch {
     return refuse("invalid_client_metadata", "The registration must be JSON.");
   }
+  if (typeof body !== "object" || body === null || Array.isArray(body)) {
+    return refuse("invalid_client_metadata", "The registration must be a JSON object.");
+  }
   const uris = Array.isArray(body.redirect_uris)
     ? body.redirect_uris.filter((u): u is string => typeof u === "string")
     : [];

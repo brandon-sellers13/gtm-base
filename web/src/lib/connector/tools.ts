@@ -131,6 +131,10 @@ export function connectorServer(): McpServer {
         if (bound) return text(`This conversation uses the base ${bound}.`);
         const gh = facts.access.grant.gh;
         const bases = await listBases(gh, await listInstallations(gh));
+        // A read running alongside may have bound the conversation while GitHub
+        // was being asked: then only that base may be shown.
+        const boundSince = await boundBase(conversation, facts.access.grant.login);
+        if (boundSince) return text(`This conversation uses the base ${boundSince}.`);
         return text(bases.map((b) => `${b.owner}/${b.name}`).join("\n") || "This GitHub account reaches no bases yet.");
       });
     },

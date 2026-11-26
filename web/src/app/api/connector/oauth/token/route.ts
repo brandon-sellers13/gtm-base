@@ -8,10 +8,11 @@ import {
   issueTokens,
   openCode,
   openRefresh,
+  rewindChain,
   spendCode,
 } from "@/lib/connector/grants";
 import { s256, sameText } from "@/lib/connector/seal";
-import { refreshUserTokens } from "@/lib/github";
+import { GitHubError, refreshUserTokens } from "@/lib/github";
 
 // The token endpoint: form-encoded only, as Claude's docs require. Trades a code
 // (with its PKCE verifier) or a refresh token for new tokens. No step calls
@@ -57,10 +58,12 @@ export async function POST(request: Request) {
       await endChain(refresh.chain);
       return fail("invalid_grant");
     }
-    if ((await advanceChain(refresh.chain, refresh.gen)) !== "ok") return fail("invalid_grant");
+    const step = await advanceChain(refresh.chain, refresh.gen);
+    if (!step.ok) return fail("invalid_grant");
 
     let grant: Grant = refresh.grant;
-    if (grant.ghExp - Date.now() < GITHUB_REFRESH_MARGIN_MS) {
+    // A GitHub token that never expires (ghExp null) is never renewed at GitHub.
+    if (grant.ghExp !== null && grant.ghExp - Date.now() < GITHUB_REFRESH_MARGIN_MS) {
       const app = githubApp();
       if (!grant.ghRefresh || !app) return fail("invalid_grant");
       try {
@@ -69,15 +72,21 @@ export async function POST(request: Request) {
         grant = {
           ...grant,
           gh: gh.token,
-          ghExp: now + gh.expiresInSeconds * 1000,
+          ghExp: gh.expiresInSeconds === null ? null : now + gh.expiresInSeconds * 1000,
           ghRefresh: gh.refreshToken,
           ghRefreshExp: gh.refreshExpiresInSeconds ? now + gh.refreshExpiresInSeconds * 1000 : grant.ghRefreshExp,
         };
-      } catch {
-        // GitHub ended the sign-in (the person revoked the app, or its refresh
-        // token ran out): the product must sign in again.
-        await endChain(refresh.chain);
-        return fail("invalid_grant");
+      } catch (error) {
+        if (error instanceof GitHubError && error.oauthError) {
+          // GitHub's own refusal (the person revoked the app, or its refresh
+          // token ran out or was used): the product must sign in again.
+          await endChain(refresh.chain);
+          return fail("invalid_grant");
+        }
+        // GitHub could not be reached or answered with an outage: undo this
+        // step so the product can retry with the same refresh token.
+        await rewindChain(refresh.chain, refresh.gen, step.etag);
+        return fail("temporarily_unavailable", 503);
       }
     }
     return Response.json(await issueTokens(refresh.cid, refresh.chain, refresh.gen + 1, grant), { headers });

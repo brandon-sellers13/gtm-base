@@ -129,7 +129,7 @@ Two Netlify Blobs stores from `getStore` (site-wide, so they last across deploys
 4. The base must be reachable with the person's own GitHub token and hold `context/map.md`.
 5. The base must match the conversation's binding, or bind it if there is none.
 
-The wall stops the model from mixing clients, whether through memory, a guess or an instruction planted in a document. It is not access control: a person can read every base their GitHub account reaches, in GitHub itself, and the connector never shows them more than that. The security review should judge it on that basis.
+The wall stops a conversation from switching to another client's base once its first base is bound, whether the switch comes from memory, a guess or an instruction planted in a document. It does not check that the first base is the one the person meant: the first call binds any real base the person can reach, so a base the model recalls from memory can bind a conversation to the wrong client, and only a guessed name that is not a real base is refused. The first answer names the bound base so the person can see it, but confirming the first base (for example against a base the person chose for that Project in the web app) is an open item, carried from the parent plan's note on the first call. It is not access control: a person can read every base their GitHub account reaches, in GitHub itself, and the connector never shows them more than that. The security review should judge it on that basis.
 
 Nothing is logged that identifies a conversation or holds content: no tokens, no `_meta` values, no arguments. The spike's call log (`spike-log`) is not carried over.
 

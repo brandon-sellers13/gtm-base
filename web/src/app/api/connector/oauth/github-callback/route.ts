@@ -26,8 +26,15 @@ export async function GET(request: NextRequest) {
   const pending = await open<Pending>("pending", request.cookies.get(PENDING_COOKIE)?.value);
   const p = request.nextUrl.searchParams;
   const code = p.get("code");
-  if (!app || !pending || !code || !sameState(pending.ghState, p.get("state"))) {
+  if (!app || !pending || !sameState(pending.ghState, p.get("state"))) {
     return stoppedPage("This sign-in took too long or was started somewhere else. Start again from Claude or ChatGPT.");
+  }
+  // The person cancelled on GitHub (or GitHub refused): tell the product so it
+  // stops waiting, and clear the sign-in in progress.
+  if (!code) {
+    const cancelled = backToProduct(pending.redirectUri, pending.state, { error: "access_denied" });
+    cancelled.cookies.delete(PENDING_COOKIE);
+    return cancelled;
   }
 
   let response: NextResponse;
@@ -44,7 +51,7 @@ export async function GET(request: NextRequest) {
       const now = Date.now();
       const grant: Grant = {
         gh: gh.token,
-        ghExp: now + gh.expiresInSeconds * 1000,
+        ghExp: gh.expiresInSeconds === null ? null : now + gh.expiresInSeconds * 1000,
         ghRefresh: gh.refreshToken,
         ghRefreshExp: gh.refreshExpiresInSeconds ? now + gh.refreshExpiresInSeconds * 1000 : null,
         login: user.login,

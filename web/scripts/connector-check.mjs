@@ -96,6 +96,12 @@ check("Claude Code's loopback address registers", (await register(["http://local
 {
   const [status, body] = await register(["https://example.com/steal"]);
   check("any other return address is refused", status === 400 && body.error === "invalid_redirect_uri");
+  const nullBody = await fetch(`${site}/api/connector/oauth/register`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: "null",
+  });
+  check("a registration that is not a JSON object is refused cleanly", nullBody.status === 400 && (await nullBody.json()).error === "invalid_client_metadata");
 }
 
 async function authorize(params) {
@@ -131,6 +137,11 @@ async function authorize(params) {
   check("authorize with a plain PKCE challenge is refused", plain?.searchParams.get("error") === "invalid_request");
   const foreign = back(await authorize({ ...good, resource: "https://example.com/mcp" }));
   check("authorize for another server's resource is refused", foreign?.searchParams.get("error") === "invalid_target");
+  const huge = back(await authorize({ ...good, state: "s".repeat(1025) }));
+  check(
+    "authorize with an oversized state is refused before any cookie is set",
+    huge?.origin === "https://claude.ai" && huge.searchParams.get("error") === "invalid_request" && !huge.searchParams.get("state"),
+  );
   const ok = await authorize(good);
   const toGitHub = back(ok);
   check(
@@ -223,6 +234,47 @@ if (secret) {
   check("an old refresh token is refused", (await replay.json()).error === "invalid_grant");
   const newest = await fetch(`${site}/api/connector/oauth/token`, form({ grant_type: "refresh_token", refresh_token: t3.refresh_token ?? "", client_id: cid }));
   check("and replaying it ended the chain, so the newest one stops too", (await newest.json()).error === "invalid_grant");
+
+  // A chain whose refresh needs GitHub, given a refresh token GitHub refuses
+  // outright: GitHub's own refusal ends the chain.
+  async function startChain(grant) {
+    const p = pkce();
+    const id = b64url(randomBytes(18));
+    const c = await sealAs("code", { jti: id, cid, redirectUri: CLAUDE, challenge: p.challenge, resource, grant }, 120);
+    return (await fetch(`${site}/api/connector/oauth/token`, form({ grant_type: "authorization_code", code: c, code_verifier: p.verifier }))).json();
+  }
+  const nearEnd = await startChain({ ...grantFor(login), ghExp: Date.now() + 5 * 60_000, ghRefresh: "not-a-real-refresh-token" });
+  const refused = await fetch(`${site}/api/connector/oauth/token`, form({ grant_type: "refresh_token", refresh_token: nearEnd.refresh_token ?? "" }));
+  check("a refresh GitHub refuses outright is invalid_grant", (await refused.json()).error === "invalid_grant", `status ${refused.status}`);
+
+  // A GitHub token that never expires is never renewed at GitHub, and keeps refreshing.
+  const forever = await startChain({ ...grantFor(login), ghExp: null });
+  const r2 = await fetch(`${site}/api/connector/oauth/token`, form({ grant_type: "refresh_token", refresh_token: forever.refresh_token ?? "" }));
+  const r2body = r2.ok ? await r2.json() : {};
+  check("a GitHub token that never expires refreshes without asking GitHub, for a full hour", r2.ok && r2body.expires_in === 3600);
+
+  // Cancelling on GitHub goes back to the product as access_denied.
+  {
+    const ghState = b64url(randomBytes(18));
+    const pendingCookie = await sealAs(
+      "pending",
+      { cid, clientName: "Claude", redirectUri: CLAUDE, challenge: pkce().challenge, state: "cancel-state", resource, ghState },
+      600,
+    );
+    const r = await fetch(`${site}/api/connector/oauth/github-callback?error=access_denied&state=${ghState}`, {
+      redirect: "manual",
+      headers: { Cookie: `gtmb_connector_pending=${pendingCookie}` },
+    });
+    const to = r.headers.get("location") ? new URL(r.headers.get("location")) : null;
+    check(
+      "cancelling on GitHub goes back to the product with access_denied, state and iss",
+      to?.origin === "https://claude.ai" &&
+        to.searchParams.get("error") === "access_denied" &&
+        to.searchParams.get("state") === "cancel-state" &&
+        to.searchParams.get("iss") === site &&
+        (r.headers.get("set-cookie") ?? "").includes("gtmb_connector_pending=;"),
+    );
+  }
 
   // The consent page and its answer.
   {
@@ -335,8 +387,18 @@ if (secret) {
       callTool(real, "read_document", { base: baseA, path: "context/map.md" }, race),
       callTool(real, "read_document", { base: baseB, path: "context/map.md" }, race),
     ]);
-    const wins = [x, y].filter((r) => !r.body?.result?.isError).length;
-    check("two first calls at once for different bases: exactly one binds", wins === 1, `${wins} bound`);
+    // A winner is a real success: HTTP 200, an MCP result, and no error. The
+    // other call must be the binding refusal, not some other failure.
+    const won = (r) => r.status === 200 && !!r.body?.result && r.body.result.isError === false;
+    const refusedForBinding = (r) =>
+      r.status === 200 && r.body?.result?.isError === true && /a conversation can use only one base/.test(toolText(r));
+    const wins = [x, y].filter(won).length;
+    const other = won(x) ? y : x;
+    check(
+      "two first calls at once for different bases: exactly one binds, the other is refused for the binding",
+      wins === 1 && refusedForBinding(other),
+      `${wins} bound`,
+    );
 
     const missing = await callTool(real, "read_document", { base: baseA, path: "context/no-such-document.md" }, one);
     check("a document that does not exist points to the map", /no document at/i.test(toolText(missing)));

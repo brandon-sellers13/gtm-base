@@ -26,8 +26,11 @@ export interface SmallStore {
   read<T>(key: string): Promise<Entry<T> | null>;
   // Writes only when nothing is there yet; false when something already was.
   create(key: string, value: unknown): Promise<boolean>;
-  // Writes only when the entry is still the one read; false when it changed.
-  replace(key: string, value: unknown, etag: string): Promise<boolean>;
+  // Writes only when the entry is still the one read. Returns the new entry's
+  // ETag, or null when the entry had changed and nothing was written.
+  replace(key: string, value: unknown, etag: string): Promise<string | null>;
+  // Writes whatever is there. Used only for a mark that must always land.
+  put(key: string, value: unknown): Promise<void>;
 }
 
 // Creates the entry with `initial` unless it exists, then reads it, so no read
@@ -60,7 +63,11 @@ function blobs(name: StoreName): SmallStore {
       return (await limited(store.setJSON(key, value, { onlyIfNew: true }))).modified;
     },
     async replace(key, value, etag) {
-      return (await limited(store.setJSON(key, value, { onlyIfMatch: etag }))).modified;
+      const written = await limited(store.setJSON(key, value, { onlyIfMatch: etag }));
+      return written.modified ? (written.etag ?? null) : null;
+    },
+    async put(key, value) {
+      await limited(store.setJSON(key, value));
     },
   };
 }
@@ -81,9 +88,13 @@ function inMemory(name: StoreName): SmallStore {
     },
     async replace(key, value, etag) {
       const found = memory.get(k(key));
-      if (!found || found.etag !== etag) return false;
+      if (!found || found.etag !== etag) return null;
+      const next = randomUUID();
+      memory.set(k(key), { data: structuredClone(value), etag: next });
+      return next;
+    },
+    async put(key, value) {
       memory.set(k(key), { data: structuredClone(value), etag: randomUUID() });
-      return true;
     },
   };
 }
