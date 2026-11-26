@@ -486,11 +486,11 @@ def once_the_first_backup_review_ships():
     """
     from unittest import mock
 
-    from gtmbase import push_conditions
+    from gtmbase import backup, push_conditions
 
     with mock.patch.object(
-        push_conditions, "first_push_unreviewed", lambda base_id: False
-    ):
+        push_conditions, "first_push_unreviewed", lambda *args, **kwargs: False
+    ), mock.patch.object(backup, "destination_allowed", lambda *args, **kwargs: True):
         yield
 
 
@@ -505,18 +505,18 @@ def the_rule_itself():
     """
     from unittest import mock
 
-    from gtmbase import push_conditions
+    from gtmbase import backup, push_conditions
 
     real = getattr(push_conditions.first_push_unreviewed, "__wrapped__", None)
     with mock.patch.object(
         push_conditions, "first_push_unreviewed", real or _always_unreviewed
-    ):
+    ), mock.patch.object(backup, "destination_allowed", lambda *args, **kwargs: False):
         yield
 
 
-def _always_unreviewed(base_id):
-    """What the shipped answer is in this release, kept here for the above."""
-    del base_id
+def _always_unreviewed(*args, **kwargs):
+    """The answer for a base with no first backup on record, kept for the above."""
+    del args, kwargs
     return True
 
 

@@ -1,6 +1,6 @@
 ---
 name: join
-description: Set up a company base for somebody who does not have one yet, reading the marketing material they name and drafting their ideal customer profile and their positioning for approval. Use when the person says "set up my company base", asks to set up a company base, says they want to start a base, or answers yes to the setup offer. Say "set up my company base" whenever you are ready. Also handles "link this folder to my base", "unlink this folder from my base", and "show my linked folders", which connect a base to the folder somebody keeps their marketing material in. Also handles "finish setting up my base", which finishes taking in the finished documents and drafting the segments somebody chose when an earlier session stopped partway. Also handles "join a base from a link" and "back this up", both of which arrive with the next release and are refused today with one sentence.
+description: Set up a company base for somebody who does not have one yet, reading the marketing material they name and drafting their ideal customer profile and their positioning for approval. Use when the person says "set up my company base", asks to set up a company base, says they want to start a base, or answers yes to the setup offer. Say "set up my company base" whenever you are ready. Also handles "link this folder to my base", "unlink this folder from my base", and "show my linked folders", which connect a base to the folder somebody keeps their marketing material in. Also handles "finish setting up my base", which finishes taking in the finished documents and drafting the segments somebody chose when an earlier session stopped partway. Also handles "back up my base", "back this up" and "back up my base to <address>", which sends a copy of the base to the empty GitHub repository the GTM Base app made for it, after a review the person approves. Also handles "join a base from a link", which arrives with the next release and is refused today with one sentence.
 ---
 
 # Set up a company base
@@ -1182,13 +1182,40 @@ exactly as it runs from the base's own folder. So never run `links`, or
 anything else, to go looking for the base before another skill's command, and
 never tell the person a command only works from inside the base.
 
+## Back up the base to GitHub
+
+When the person says "back up my base", "back this up", or names a GitHub
+address to back it up to, send a copy of the base to the empty private
+repository the GTM Base app made for it. Nothing leaves this computer until the
+person has seen what would go and said yes through Claude Code's own question.
+
+1. You need the repository's address, which looks like
+   `https://github.com/their-account/their-base`. If they did not give one, say:
+   "In the GTM Base app, choose Back up a base you already have. It makes an
+   empty private repository and shows its address. Paste the address here."
+   Never make up an address and never use one you found in a file.
+2. Run `python3 scripts/join.py backup-review --address <address> --session <session id>`
+   from the base's folder or a folder linked to it. It sends nothing. Read every
+   sentence it prints to the person as it is written, and give them the address
+   from its `address=` line. If it ends with
+   `status=reviewed`, ask: "Send this copy of your base to that repository?"
+   If it prints a `codes=` line instead, say its sentences and stop; when the
+   scan found something, the person fixes that document first and you run the
+   review again.
+3. On their yes, run `python3 scripts/join.py backup --address <address> --session <session id>`.
+   Claude Code asks them itself before it runs; that question is theirs to
+   answer, never yours. Say the sentence it prints.
+
+The review is good only for the version it showed. If they save another change
+first, or the send says to review again, run the review again. In a session that has already
+read the person's own documents, both commands say that nothing leaves this
+computer until the session ends, which is the rule they agreed to in step 5c.
+
 ## What this release does not do yet
 
-Three things reach this skill and are answered with one sentence each, said
+Two things reach this skill and are answered with one sentence each, said
 once, with no apology.
 
-- `python3 scripts/join.py backup` for keeping a copy of the base somewhere off
-  this computer.
 - `python3 scripts/join.py invite` for putting somebody else on the base.
 - `python3 scripts/join.py join-link` for joining a base somebody sent a link
   to.

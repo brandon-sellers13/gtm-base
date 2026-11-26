@@ -563,7 +563,10 @@ class TestTheSkillsAsTheyAreWritten(unittest.TestCase):
 
     # The commands a skill prints on purpose to say they are refused in this
     # release. They are run like everything else and have to be refused.
-    REFUSED_ON_PURPOSE = ("backup", "invite", "join-link")
+    # Backing up needs a real GitHub repository, which this walk has none of, so
+    # here both of its steps must be refused rather than run; tests/test_backup.py
+    # walks them end to end against a repository of its own.
+    REFUSED_ON_PURPOSE = ("backup-review", "backup", "invite", "join-link")
 
     def document(self, relative):
         return os.path.join(SKILLS_DIR, relative.replace("/", os.sep))

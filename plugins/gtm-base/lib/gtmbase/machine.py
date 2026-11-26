@@ -501,6 +501,20 @@ def rewrite_joined_root(base_id: str, new_root: str, runner=None) -> MachineStat
     return _locked_change(change)
 
 
+def record_remote(base_id: str, remote: str) -> MachineState:
+    """Note the shared copy a joined base now sends to, after its first backup."""
+    ids.check_base_id(base_id)
+    clean = _clean_remote(remote)
+
+    def change(state):
+        entry = find_joined_by_id(state, base_id)
+        if entry is None:
+            raise StateError("that base is not joined", code="unknown-id")
+        entry["remote"] = clean
+
+    return _locked_change(change)
+
+
 # --- The folder a base belongs with ------------------------------------------
 
 

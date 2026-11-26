@@ -126,6 +126,10 @@ SAYS_APPROVE_CHANGE = (
     "Allowing it saves the prepared change you were just shown into your base."
 )
 SAYS_DROP_CHANGE = "Allowing it throws away the prepared change you were just shown."
+SAYS_BACKUP = (
+    "Allowing it sends a copy of your base, as the review just showed it, to "
+    "its GitHub repository."
+)
 SAYS_STILL_RIGHT = (
     "Allowing it records that the document you were just asked about is still "
     "right."
@@ -367,7 +371,9 @@ def _what(script: str, options) -> Optional[Tuple[str, Tuple[str, ...]]]:
             found = (SAYS_ALREADY_SAYS, ("confirm.answer",))
     elif script == "join.py":
         mode = get("mode")
-        if mode == "approve":
+        if mode == "backup":
+            found = (SAYS_BACKUP, ("backup.send",))
+        elif mode == "approve":
             found = (SAYS_SAVE_DRAFT, ("join_flow.approve_step",))
         elif mode == "adopt":
             found = (SAYS_ADOPT_PAGE, ("join_flow.adoption_approve",))

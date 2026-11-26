@@ -1042,7 +1042,7 @@ def propose(
 
     # 3. The two conditions that stop anything leaving this computer.
     session = session_id if session_id is not None else _seat_session_id(base_id)
-    blocked = push_conditions.check(base_id, session)
+    blocked = push_conditions.check(base_id, session, base_root, runner)
     if blocked:
         return ProposalResult(
             STATUS_REFUSED,

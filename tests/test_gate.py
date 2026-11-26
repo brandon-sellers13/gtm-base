@@ -37,9 +37,11 @@ def once_the_first_backup_review_ships():
     review will give when it ships. The rule itself is not stood in for
     anywhere: it has its own scenarios, which call the check directly.
     """
+    from gtmbase import backup
+
     with mock.patch.object(
-        push_conditions, "first_push_unreviewed", lambda base_id: False
-    ):
+        push_conditions, "first_push_unreviewed", lambda *args, **kwargs: False
+    ), mock.patch.object(backup, "destination_allowed", lambda *args, **kwargs: True):
         yield
 
 

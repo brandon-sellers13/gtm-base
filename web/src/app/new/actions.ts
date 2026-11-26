@@ -20,12 +20,14 @@ export async function createBaseAction(formData: FormData) {
   const installationId = Number(formData.get("installation"));
   const repoName = String(formData.get("repo") ?? "").trim();
   const email = String(formData.get("email") ?? "").trim();
+  const forBackup = formData.get("kind") === "backup";
 
   // The repository name comes back so it can be fixed; the email never goes in an address.
   const back = (problem: string) => redirect(`/new?problem=${problem}&repo=${encodeURIComponent(repoName)}`);
 
   if (!REPO_NAME.test(repoName) || repoName.startsWith(".")) back("bad-name");
-  if (!EMAIL.test(email) || email.length > 254) back("bad-email");
+  // A backup target holds nothing yet, so it needs no owner email.
+  if (!forBackup && (!EMAIL.test(email) || email.length > 254)) back("bad-email");
 
   // The account must be one GTM Base is installed on and this person can see.
   const installation = (await listInstallations(session.token)).find((i) => i.id === installationId);
@@ -42,10 +44,12 @@ export async function createBaseAction(formData: FormData) {
       repoName,
       email,
       login: session.login,
+      empty: forBackup,
     });
   } catch (error) {
     back(error instanceof CreateBaseError ? error.code : "failed");
     return;
   }
+  if (forBackup) redirect(`/new?ready=${encodeURIComponent(`${created.owner}/${created.name}`)}`);
   redirect(`/?notice=base-created&base=${encodeURIComponent(`${created.owner}/${created.name}`)}`);
 }

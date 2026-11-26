@@ -1032,6 +1032,7 @@ PYTHON_SENTENCES = (
     ("approval", "ASK_CLOSING"),
     ("approval", "SAYS_APPROVE_CHANGE"),
     ("approval", "SAYS_DROP_CHANGE"),
+    ("approval", "SAYS_BACKUP"),
     ("approval", "SAYS_STILL_RIGHT"),
     ("approval", "SAYS_NO_LONGER_RIGHT"),
     ("approval", "SAYS_PUT_OFF"),
