@@ -20,6 +20,9 @@ export type StoreName = "connector-bindings" | "connector-grants";
 export type Entry<T> = { data: T; etag: string };
 
 export interface SmallStore {
+  // Reads an entry that exists. Never call it for a key that may be missing:
+  // on Netlify a strongly consistent read of a missing key is retried for about
+  // 25 seconds before it answers (seen on 2026-11-26), so callers use `ensure`.
   read<T>(key: string): Promise<Entry<T> | null>;
   // Writes only when nothing is there yet; false when something already was.
   create(key: string, value: unknown): Promise<boolean>;
@@ -27,18 +30,37 @@ export interface SmallStore {
   replace(key: string, value: unknown, etag: string): Promise<boolean>;
 }
 
+// Creates the entry with `initial` unless it exists, then reads it, so no read
+// ever asks for a missing key. `created` says whether this call made it.
+export async function ensure<T>(store: SmallStore, key: string, initial: T): Promise<Entry<T> & { created: boolean }> {
+  const created = await store.create(key, initial);
+  const found = await store.read<T>(key);
+  if (!found) throw new Error("The connector's store did not keep an entry it just wrote.");
+  return { ...found, created };
+}
+
+// No store call may hold a request for long: a stuck call fails instead.
+const LIMIT_MS = 8000;
+function limited<T>(work: Promise<T>): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => reject(new Error("The connector's store did not answer in time.")), LIMIT_MS);
+  });
+  return Promise.race([work, timeout]).finally(() => clearTimeout(timer));
+}
+
 function blobs(name: StoreName): SmallStore {
   const store = getStore({ name, consistency: "strong" });
   return {
     async read<T>(key: string) {
-      const found = await store.getWithMetadata(key, { type: "json", consistency: "strong" });
+      const found = await limited(store.getWithMetadata(key, { type: "json", consistency: "strong" }));
       return found && found.etag ? { data: found.data as T, etag: found.etag } : null;
     },
     async create(key, value) {
-      return (await store.setJSON(key, value, { onlyIfNew: true })).modified;
+      return (await limited(store.setJSON(key, value, { onlyIfNew: true }))).modified;
     },
     async replace(key, value, etag) {
-      return (await store.setJSON(key, value, { onlyIfMatch: etag })).modified;
+      return (await limited(store.setJSON(key, value, { onlyIfMatch: etag }))).modified;
     },
   };
 }

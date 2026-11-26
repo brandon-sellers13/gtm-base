@@ -1,6 +1,6 @@
 import "server-only";
 import { keyedHash } from "./config";
-import { smallStore } from "./store";
+import { ensure, smallStore } from "./store";
 
 // One base per conversation. The first base a conversation uses is bound to it,
 // and any other base is refused there. The store holds only that binding: the
@@ -24,14 +24,23 @@ export function conversationFrom(meta: Record<string, unknown> | undefined, sess
   return null;
 }
 
-type Binding = { base: string; product: Conversation["product"]; boundAt: string };
+// A conversation's record starts unbound (base null) the first time it calls,
+// so every later read finds an entry (see `ensure` in store.ts). Binding then
+// replaces the unbound record only if nobody changed it in between.
+type Binding = { base: string | null; product: Conversation["product"]; at: string };
 
 const keyOf = (conversation: Conversation, login: string) =>
   `conversation/${keyedHash("binding", `${conversation.product}\n${conversation.id}\n${login.toLowerCase()}`)}`;
 
+const recordOf = (conversation: Conversation, login: string) =>
+  ensure<Binding>(smallStore("connector-bindings"), keyOf(conversation, login), {
+    base: null,
+    product: conversation.product,
+    at: new Date().toISOString(),
+  });
+
 export async function boundBase(conversation: Conversation, login: string): Promise<string | null> {
-  const found = await smallStore("connector-bindings").read<Binding>(keyOf(conversation, login));
-  return found?.data.base ?? null;
+  return (await recordOf(conversation, login)).data.base;
 }
 
 // Bases compare without regard to case, as GitHub's owner and repository names do.
@@ -44,12 +53,12 @@ export async function bindOrCheck(
 ): Promise<{ ok: true; first: boolean } | { ok: false; bound: string }> {
   const store = smallStore("connector-bindings");
   const key = keyOf(conversation, login);
-  const found = await store.read<Binding>(key);
-  if (found) return same(found.data.base, base) ? { ok: true, first: false } : { ok: false, bound: found.data.base };
-  const record: Binding = { base, product: conversation.product, boundAt: new Date().toISOString() };
-  if (await store.create(key, record)) return { ok: true, first: true };
+  const found = await recordOf(conversation, login);
+  if (found.data.base) return same(found.data.base, base) ? { ok: true, first: false } : { ok: false, bound: found.data.base };
+  const bound: Binding = { base, product: conversation.product, at: new Date().toISOString() };
+  if (await store.replace(key, bound, found.etag)) return { ok: true, first: true };
   // A call running alongside this one bound the conversation first.
   const winner = await store.read<Binding>(key);
-  if (!winner) return { ok: false, bound: "another base" };
+  if (!winner?.data.base) return { ok: false, bound: "another base" };
   return same(winner.data.base, base) ? { ok: true, first: false } : { ok: false, bound: winner.data.base };
 }

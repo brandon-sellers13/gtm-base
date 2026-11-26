@@ -1,7 +1,7 @@
 import "server-only";
 import { SCOPE, resourceUrl } from "./config";
 import { open, seal } from "./seal";
-import { smallStore } from "./store";
+import { ensure, smallStore } from "./store";
 
 // What a sign-in grants, carried sealed inside the tokens the product holds.
 // GitHub's own tokens live here and nowhere else (decision 2 of the C1 plan).
@@ -69,11 +69,14 @@ export async function spendCode(jti: string): Promise<boolean> {
   return false;
 }
 
+// A chain that was never started is created already ended, so reading it never
+// asks the store for a missing key (see `ensure`).
+const ENDED: Chain = { gen: 0, ended: true };
+
 export async function endChain(id: string): Promise<void> {
   const store = smallStore("connector-grants");
   for (let attempt = 0; attempt < 3; attempt++) {
-    const found = await store.read<Chain>(chainKey(id));
-    if (!found) return; // never started, so there is nothing to end
+    const found = await ensure(store, chainKey(id), ENDED);
     if (found.data.ended) return;
     if (await store.replace(chainKey(id), { ...found.data, ended: true }, found.etag)) return;
   }
@@ -83,8 +86,8 @@ export async function endChain(id: string): Promise<void> {
 // from an earlier generation means a copy is in use somewhere: the chain ends.
 export async function advanceChain(id: string, gen: number): Promise<"ok" | "refused"> {
   const store = smallStore("connector-grants");
-  const found = await store.read<Chain>(chainKey(id));
-  if (!found || found.data.ended) return "refused";
+  const found = await ensure(store, chainKey(id), ENDED);
+  if (found.data.ended) return "refused";
   if (found.data.gen !== gen) {
     await endChain(id);
     return "refused";
