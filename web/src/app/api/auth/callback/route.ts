@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
-import { allowedLogins, appUrl, githubApp } from "@/lib/config";
-import { exchangeCode, getUser, getVerifiedEmails, listInstallations } from "@/lib/github";
-import { reachesAllowedBase } from "@/lib/team";
+import { signInDecision } from "@/lib/access";
+import { appUrl, githubApp } from "@/lib/config";
+import { exchangeCode, getUser, getVerifiedEmails } from "@/lib/github";
 import { sameState } from "@/lib/oauthState";
 import { SESSION_COOKIE, sealSession, sessionCookieOptions } from "@/lib/session";
 
@@ -34,10 +34,8 @@ export async function GET(request: NextRequest) {
       `${appUrl()}/api/auth/callback`,
     );
     const user = await getUser(token);
-    const allowed = allowedLogins();
-    const listed = allowed.has(user.login.toLowerCase());
-    const team = !listed && (await reachesAllowedBase(token, await listInstallations(token), allowed));
-    if (!listed && !team) {
+    const { allowed, team } = await signInDecision(token, user.login);
+    if (!allowed) {
       response = NextResponse.redirect(home("invite-only"));
     } else {
       const sealed = await sealSession({

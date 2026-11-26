@@ -1,7 +1,8 @@
 import "server-only";
 import { cookies } from "next/headers";
 import { EncryptJWT, jwtDecrypt } from "jose";
-import { allowedLogins, isDevelopment, sessionSecret } from "./config";
+import { stillAllowed } from "./access";
+import { isDevelopment, sessionSecret } from "./config";
 
 // The session is an encrypted cookie. It holds the person's GitHub user token,
 // so it is encrypted (not only signed) and never readable from the browser.
@@ -36,7 +37,7 @@ export async function openSession(value: string | undefined): Promise<Session | 
     // Checked on every request, so taking a login off the list ends its session at once.
     // A teammate let in at sign-in stays in for the session; if their access to
     // the base is removed, GitHub itself stops showing it to them.
-    if (!session.team && !allowedLogins().has(session.login.toLowerCase())) return null;
+    if (!stillAllowed(session.login, session.team)) return null;
     return session;
   } catch {
     return null;

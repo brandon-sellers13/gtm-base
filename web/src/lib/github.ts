@@ -8,6 +8,9 @@ export class GitHubError extends Error {
   constructor(
     message: string,
     readonly status: number,
+    // Set when GitHub's sign-in service itself refused (for example
+    // bad_refresh_token): a definite answer, unlike a network failure or an outage.
+    readonly oauthError: string | null = null,
   ) {
     super(message);
   }
@@ -36,23 +39,66 @@ export type Installation = {
   repository_selection: "all" | "selected";
 };
 
+// A GitHub App user token, with its refresh token when GitHub's token expiry is
+// on. GitHub leaves out expires_in only for a token that never expires, so null
+// here means exactly that.
+export type UserTokens = {
+  token: string;
+  expiresInSeconds: number | null;
+  refreshToken: string | null;
+  refreshExpiresInSeconds: number | null;
+};
+
+async function userTokens(body: Record<string, string>): Promise<UserTokens> {
+  const response = await fetch("https://github.com/login/oauth/access_token", {
+    method: "POST",
+    headers: { Accept: "application/json", "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+    cache: "no-store",
+  });
+  let answer: {
+    access_token?: string;
+    expires_in?: number;
+    refresh_token?: string;
+    refresh_token_expires_in?: number;
+    error?: string;
+  };
+  try {
+    answer = (await response.json()) as typeof answer;
+  } catch {
+    // Not GitHub's sign-in service answering (an outage page, a proxy): no verdict.
+    throw new GitHubError(`GitHub's sign-in service answered ${response.status} without JSON`, response.status || 502);
+  }
+  if (answer.error) {
+    // GitHub's own refusal, such as bad_refresh_token or bad_verification_code.
+    throw new GitHubError(`GitHub refused the sign-in (${answer.error})`, response.status || 400, answer.error);
+  }
+  if (!response.ok || !answer.access_token) {
+    throw new GitHubError(`GitHub's sign-in service answered ${response.status}`, response.status || 502);
+  }
+  return {
+    token: answer.access_token,
+    expiresInSeconds: answer.expires_in ?? null,
+    refreshToken: answer.refresh_token ?? null,
+    refreshExpiresInSeconds: answer.refresh_token_expires_in ?? null,
+  };
+}
+
+export const exchangeCodeForTokens = (code: string, clientId: string, clientSecret: string, redirectUri: string) =>
+  userTokens({ client_id: clientId, client_secret: clientSecret, code, redirect_uri: redirectUri });
+
+export const refreshUserTokens = (refreshToken: string, clientId: string, clientSecret: string) =>
+  userTokens({ client_id: clientId, client_secret: clientSecret, grant_type: "refresh_token", refresh_token: refreshToken });
+
 export async function exchangeCode(
   code: string,
   clientId: string,
   clientSecret: string,
   redirectUri: string,
 ): Promise<{ token: string; expiresInSeconds: number }> {
-  const response = await fetch("https://github.com/login/oauth/access_token", {
-    method: "POST",
-    headers: { Accept: "application/json", "Content-Type": "application/json" },
-    body: JSON.stringify({ client_id: clientId, client_secret: clientSecret, code, redirect_uri: redirectUri }),
-    cache: "no-store",
-  });
-  const body = (await response.json()) as { access_token?: string; expires_in?: number; error?: string };
-  if (!response.ok || !body.access_token) {
-    throw new GitHubError(`GitHub refused the sign-in code (${body.error ?? response.status})`, response.status);
-  }
-  return { token: body.access_token, expiresInSeconds: body.expires_in ?? 8 * 60 * 60 };
+  const { token, expiresInSeconds } = await exchangeCodeForTokens(code, clientId, clientSecret, redirectUri);
+  // The web app's own session keeps its eight-hour limit either way.
+  return { token, expiresInSeconds: expiresInSeconds ?? 8 * 60 * 60 };
 }
 
 export const getUser = (token: string) => api<GitHubUser>("/user", { token });

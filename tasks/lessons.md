@@ -152,3 +152,7 @@
 - Restore by meaning, not by bytes: re-read the file at repair time and put back only the keys that matter, so a
   concurrent legitimate edit is never clobbered.
 
+- `netlify link --id <other site>` on a folder that is already linked does not switch it: it keeps the old link and
+  only says how to unlink. Run `netlify unlink` first, then link, then confirm with `netlify status` in the same
+  command as any write (2026-11-26: connector variables meant for the live site went to the test site first, and
+  were put back before any deploy read them).
