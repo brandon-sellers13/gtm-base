@@ -382,12 +382,15 @@ class Reviewed(object):
     questions it leaves for the person (Unit 1.7b).
     """
 
-    __slots__ = ("step", "ready", "codes", "draft", "questions", "taken_out")
+    __slots__ = ("step", "ready", "codes", "draft", "questions", "taken_out", "named")
 
-    def __init__(self, step, ready, codes=None, draft=None, questions=0, taken_out=0):
+    def __init__(self, step, ready, codes=None, draft=None, questions=0, taken_out=0, named=None):
         self.step = step
         self.ready = bool(ready)
         self.codes = list(codes or [])
+        # Each customer a refused line names, beside where it is, so the
+        # writer takes out that name and nothing else (`citations.named_for`).
+        self.named = list(named or [])
         self.draft = draft
         self.questions = int(questions or 0)
         # How many lines the third refused review took out and turned into
@@ -4429,14 +4432,17 @@ def digest_assemble(
 class DigestChecked(object):
     """What came of checking one digest: kept or not, and what was wrong."""
 
-    __slots__ = ("accepted", "problems", "count", "attempt", "by_setup")
+    __slots__ = ("accepted", "problems", "count", "attempt", "by_setup", "named")
 
-    def __init__(self, accepted, problems, count, attempt, by_setup):
+    def __init__(self, accepted, problems, count, attempt, by_setup, named=None):
         self.accepted = accepted
         self.problems = list(problems)
         self.count = count
         self.attempt = attempt
         self.by_setup = by_setup
+        # Each customer a refused line names that its notes do not, beside
+        # the line, so the writer is told which name (`digests.check`).
+        self.named = list(named or [])
 
 
 def digest_check(
@@ -4496,6 +4502,7 @@ def digest_check(
         len(rows) if accepted else len(checked.rows),
         attempt,
         len(by_setup),
+        [] if accepted else checked.named,
     )
 
 
@@ -4895,7 +4902,9 @@ def review_step(
     """Read one draft back and say whether it may be shown to the person.
 
     What comes back is either the word that it is ready or the classes of thing
-    that were found in it, never a line of the draft itself. An umbrella is
+    that were found in it, never a line of the draft itself, though a customer
+    a line names is handed back as `named`, so the writer knows which name to
+    take out. An umbrella is
     also measured against the inventory this run settled, and a segment is
     given the one place in the base it may be written to.
     """
@@ -4925,6 +4934,7 @@ def review_step(
     if step == drafting.STEP_UMBRELLA:
         codes.extend(drafting.check_umbrella(draft, several_segments(run_id)))
     taken_out = 0
+    named = []
     stem = _file_stem(step, settled)
     if run_id and step in NOTES_STEPS and _recalled(run_id, "requests", stem) not in (
         None,
@@ -4947,6 +4957,7 @@ def review_step(
                     draft.destination = settled.destination
                 problems = _citation_problems(run_id, step, settled, draft)
         codes.extend(citations.codes_for(problems))
+        named = citations.named_for(problems)
         if not problems and count_attempt:
             # A draft that holds up starts the count of refusals again.
             _remember(run_id, "review-attempts", stem, 0)
@@ -4957,6 +4968,7 @@ def review_step(
         draft,
         questions=callmarkers.count(draft.text),
         taken_out=taken_out,
+        named=named,
     )
 
 

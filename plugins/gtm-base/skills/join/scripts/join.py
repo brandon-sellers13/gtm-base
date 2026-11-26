@@ -1713,6 +1713,8 @@ def run_digest_check(options, out):
     line(out, "attempt", "%d of %d" % (checked.attempt, digests.ATTEMPTS))
     for problem in checked.problems:
         line(out, "problem", problem)
+    for named in checked.named:
+        line(out, "named", named)
     if checked.by_setup:
         line(out, "carried-by-setup", str(checked.by_setup))
     if not checked.accepted:
@@ -1802,6 +1804,8 @@ def run_review(options, out):
             out.write(join_flow.draft_questions_sentence(reviewed.questions) + "\n")
         return EXIT_DONE
     line(out, "codes", ",".join(reviewed.codes))
+    for named in reviewed.named:
+        line(out, "named", named)
     if all(code.split(":")[0] in citations.CODES + (citations.CODE_SETUP_SECTION,) for code in reviewed.codes):
         out.write(CITE_AGAIN + "\n")
     else:

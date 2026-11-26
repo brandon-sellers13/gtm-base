@@ -17,12 +17,14 @@ paragraph and every item of a list, and review checks each one here:
 
 Nothing here talks to a model. What comes back names where in the draft a
 problem is, never the words, so nothing of the company's leaves in a code.
+The one exception is a customer the draft names, which `named_for` hands
+back beside its code: the writer's own words, so it knows which to take out.
 """
 
 from __future__ import annotations
 
 import re
-from typing import Dict, Iterable, List, Sequence
+from typing import Dict, Iterable, List, Optional, Sequence
 
 from . import constants, notes as notes_module
 
@@ -91,7 +93,7 @@ CODE_SETUP_SECTION = "writes-a-section-setup-writes"
 class Block(object):
     """One paragraph, one item of a list, or one row of a table in a body."""
 
-    __slots__ = ("section", "number", "kind", "text", "first", "last")
+    __slots__ = ("section", "number", "kind", "text", "first", "last", "named")
 
     def __init__(self, section, number, kind, text, first, last):
         self.section = section
@@ -100,6 +102,9 @@ class Block(object):
         self.text = text
         self.first = first
         self.last = last
+        # The customer's name this block was refused for, as it stands in
+        # the block, so the writer is told which words to take out.
+        self.named = []
 
     @property
     def where(self) -> str:
@@ -191,25 +196,75 @@ def without_citations(text: str) -> str:
     return CITATION_RE.sub(" ", text)
 
 
-def _names_in(text: str, names: Iterable[str]) -> bool:
-    """Whether a line names a customer as the material writes it.
+def _all_names_in(text: str, names: Iterable[str]) -> List[str]:
+    """Every customer's name a line writes, as the material writes it.
 
     Matched in the line's own letter case, so an ordinary word that happens
-    to be a customer's name, such as box, is not one.
+    to be a customer's name, such as box, is not one. Where a short form
+    stands inside a longer one, such as Acme inside Acme Corp, only the
+    longer is given, so a refusal says "Acme Corp" once. In the order the
+    line writes them, each once.
     """
     plain = " ".join(without_citations(text).split())
+    spans = []
     for name in names:
-        if re.search(r"(?<![\w])%s(?![\w])" % re.escape(name), plain):
-            return True
-    return False
+        if not name:
+            continue
+        for match in re.finditer(r"(?<![\w])%s(?![\w])" % re.escape(name), plain):
+            spans.append((match.start(), match.end(), name))
+    kept = []
+    for start, end, name in sorted(spans, key=lambda span: (span[0] - span[1], span[0])):
+        if all(end <= first or start >= last for first, last, _name in kept):
+            kept.append((start, end, name))
+    found: List[str] = []
+    for _start, _end, name in sorted(kept):
+        if name not in found:
+            found.append(name)
+    return found
 
 
-def _forms_of(name: str) -> List[str]:
-    """A customer's name as written, and without its formal ending."""
+def _names_in(text: str, names: Iterable[str]) -> Optional[str]:
+    """The longest customer's name a line writes, or None if it writes none."""
+    found = _all_names_in(text, names)
+    return max(found, key=len) if found else None
+
+
+# A word standing in the material's own sentences, not inside an email
+# address, a web address or a handle, where a customer's domain is written in
+# lower case whatever the customer is called.
+_IN_PROSE = r"(?<![\w@./#:-])%s(?![\w@/#-])(?!\.\w)"
+
+
+def _ordinary(short: str, quotes: Sequence[str]) -> bool:
+    """Whether the material uses a short name as an ordinary word.
+
+    "enterprise buyers" or "a principal engineer" in the material's own
+    words means "Enterprise" or "Principal" at the start of a sentence or in
+    a job title is the word, not the customer whose formal name it begins.
+    A name with no capital in it is never told apart this way, and neither
+    is one the material writes in lower case only in an address, such as
+    procurement@acme.com.
+    """
+    lower = short.lower()
+    pattern = _IN_PROSE % re.escape(lower)
+    return lower != short and any(re.search(pattern, quote) for quote in quotes)
+
+
+def _forms_of(name: str, quotes: Sequence[str] = ()) -> List[str]:
+    """A customer's name as written, and without its formal ending.
+
+    The short form is left out when the material itself uses it as an
+    ordinary word. The name as the material writes it is always kept.
+    """
     written = " ".join(str(name or "").split())
     forms = [written] if written else []
     short = _NAME_ENDINGS.sub("", written).strip()
-    if short and short not in forms and len(short) > 1:
+    if (
+        short
+        and short not in forms
+        and len(short) > 1
+        and not _ordinary(short, quotes)
+    ):
         forms.append(short)
     return forms
 
@@ -224,11 +279,12 @@ def customer_names(
     neither is the company's own name.
     """
     guarded = [notes_module.even_out(name) for name in [company] + list(segment_names) if name]
+    quotes = [" ".join(str(item.quote or "").split()) for item in found]
     names: List[str] = []
     for item in found:
         if item.kind != notes_module.KIND_CUSTOMER or not item.customer:
             continue
-        for form in _forms_of(item.customer):
+        for form in _forms_of(item.customer, quotes):
             evened = notes_module.even_out(form)
             if not evened or form in names:
                 continue
@@ -291,7 +347,8 @@ def check(
             title = line.strip().lstrip("#").strip()
             if CITATION_RE.search(line):
                 problems.append((heading, CODE_HEADING_CITES))
-            if _names_in(title, customers):
+            heading.named = _all_names_in(title, customers)
+            if heading.named:
                 problems.append((heading, CODE_CUSTOMER))
             if _figures(title) and notes_module.even_out(title) not in allowed:
                 problems.append((heading, CODE_FIGURE))
@@ -311,7 +368,8 @@ def check(
             if not any(_figure_in(figure, quote) for quote in quotes):
                 problems.append((block, CODE_FIGURE))
                 break
-        if _names_in(text, customers):
+        block.named = _all_names_in(text, customers)
+        if block.named:
             problems.append((block, CODE_CUSTOMER))
         if any(not readable[i].settled for i in ids) and not _MARKER_RE.search(text):
             problems.append((block, CODE_NOT_SETTLED))
@@ -321,6 +379,23 @@ def check(
 def codes_for(problems: Sequence[tuple]) -> List[str]:
     """The problems as codes a person can be told, each naming only where."""
     return ["%s:%s" % (code, block.where) for block, code in problems]
+
+
+def named_for(problems: Sequence[tuple]) -> List[str]:
+    """Each customer a refused block names, beside where it is, one apiece.
+
+    The codes name only where a problem is. A writer refused for naming a
+    customer was left to guess which words matched, and in the scored replay
+    of 2026-11-25 cut ordinary words and real detail to get past it. These
+    are the writer's own words handed back, the name as it stands in the
+    block, so only that name is taken out.
+    """
+    return [
+        "%s:%s" % (block.where, name)
+        for block, code in problems
+        if code == CODE_CUSTOMER
+        for name in block.named
+    ]
 
 
 def take_out(body: str, problems: Sequence[tuple]) -> str:

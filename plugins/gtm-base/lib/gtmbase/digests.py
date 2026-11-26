@@ -21,7 +21,9 @@ length, and that every note the material leaves open is carried.
 Drafts still cite the notes, never a digest line, so review, the support
 check and the sections setup writes itself read the notes as before.
 Nothing here talks to a model, and a refusal names where a problem is,
-never the words.
+never the words, except a customer a line names that its notes do not: that
+name, the writer's own words, is handed back beside the line so the writer
+need not guess which words to take out (the scored replay of 2026-11-25).
 """
 
 import hashlib
@@ -364,12 +366,15 @@ def assemble(template: str, batch: DigestBatch, company: str, group_block: str, 
 class DigestChecked(object):
     """What came of checking one digest: the lines that held, and what did not."""
 
-    __slots__ = ("rows", "problems", "uncarried")
+    __slots__ = ("rows", "problems", "uncarried", "named")
 
-    def __init__(self, rows, problems, uncarried):
+    def __init__(self, rows, problems, uncarried, named=None):
         self.rows = rows
         self.problems = problems
         self.uncarried = uncarried
+        # Each customer a refused line names that its notes do not, beside
+        # the line, so the writer is told which name, never left to guess.
+        self.named = list(named or [])
 
 
 def _weakest(statuses) -> str:
@@ -389,14 +394,16 @@ def check(text: str, batch: DigestBatch, screen, customers: Sequence[str]) -> Di
     by_id = dict((item.id, item) for item in batch.notes)
     rows: List[dict] = []
     problems: List[str] = []
+    named: List[str] = []
     number = 0
     for raw in lines:
         if not raw.strip():
             continue
         number += 1
-        row, code = _one_line(raw, by_id, screen, customers)
+        row, code, names = _one_line(raw, by_id, screen, customers)
         if code:
             problems.append("line-%d:%s" % (number, code))
+            named.extend("line-%d:%s" % (number, name) for name in names or ())
             continue
         rows.append(row)
     carried = set(note_id for row in rows for note_id in row["notes"])
@@ -408,51 +415,53 @@ def check(text: str, batch: DigestBatch, screen, customers: Sequence[str]) -> Di
     used = sum(len(row["line"]) for row in rows)
     if used > batch.room:
         problems.append("over-its-room")
-    return DigestChecked(rows, problems, uncarried)
+    return DigestChecked(rows, problems, uncarried, named)
 
 
 def _one_line(raw: str, by_id: Dict[str, object], screen, customers):
     try:
         row = json.loads(raw)
     except ValueError:
-        return None, "not-a-line"
+        return None, "not-a-line", None
     if not isinstance(row, dict):
-        return None, "not-a-line"
+        return None, "not-a-line", None
     line = row.get("line")
     cited = row.get("notes")
     status = row.get("status")
     if not isinstance(line, str) or not line.strip():
-        return None, "no-line"
+        return None, "no-line", None
     line = " ".join(line.split())
     if len(line) > LINE_MAX:
-        return None, "line-too-long"
+        return None, "line-too-long", None
     if _MARKUP.search(line):
-        return None, "markup-in-a-line"
+        return None, "markup-in-a-line", None
     if isinstance(cited, str):
         cited = [cited]
     if not isinstance(cited, list) or not cited or not all(isinstance(i, str) for i in cited):
-        return None, "cites-no-note"
+        return None, "cites-no-note", None
     cited = [note_id.strip() for note_id in cited]
     if any(note_id not in by_id for note_id in cited):
-        return None, "cites-a-note-not-in-this-digest"
+        return None, "cites-a-note-not-in-this-digest", None
     own = [by_id[note_id] for note_id in cited]
     if status not in notes_module.STATUSES:
-        return None, "unknown-status"
+        return None, "unknown-status", None
     weakest = _weakest([item.status for item in own])
     if notes_module._FIRMNESS[status] > notes_module._FIRMNESS[weakest]:
-        return None, "firmer-than-its-notes"
+        return None, "firmer-than-its-notes", None
     for figure in citations._figures(line):
         if not any(citations._figure_in(figure, item.quote) for item in own):
-            return None, "figure-not-in-its-notes"
-    for name in customers:
-        if citations._names_in(line, [name]) and not any(
-            item.customer == name or citations._names_in(item.quote, [name]) for item in own
-        ):
-            return None, "customer-not-in-its-notes"
+            return None, "figure-not-in-its-notes", None
+    named = [
+        name
+        for name in citations._all_names_in(line, customers)
+        if not any(item.customer == name or citations._names_in(item.quote, [name]) for item in own)
+    ]
+    if named:
+        return None, "customer-not-in-its-notes", named
     found = screen(line)
     if found:
-        return None, "screened-%s" % found[0]
-    return {"line": line, "notes": cited, "status": status}, None
+        return None, "screened-%s" % found[0], None
+    return {"line": line, "notes": cited, "status": status}, None, None
 
 
 def carried_by_setup(batch: DigestBatch, uncarried: Sequence[str]) -> List[dict]:

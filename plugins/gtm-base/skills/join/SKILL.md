@@ -549,6 +549,10 @@ python3 scripts/join.py digest-check --run <run identifier> --batch <digest numb
 - `accepted=no` with `problem=` lines means some lines do not hold up
   against their notes. Hand the same request and those lines back to a
   subagent to write that digest again, and check it again.
+- A `named=` line gives, beside a line's number, a customer that line names
+  though none of the notes it cites does, one line for each name. Hand them
+  back with the problem lines, so the subagent takes those names out and
+  keeps the rest of the line.
 - After the third try, setup keeps the lines that held up and carries every
   note the material leaves open itself, in the material's own words, and
   prints `carried-by-setup=`. Go on.
@@ -666,8 +670,9 @@ python3 scripts/join.py review --step <step> --run <run identifier> --draft <dra
 
 - The draft file is the one `assemble` printed as `draft=`, and it is the only
   file this step will read. A draft written anywhere else is refused.
-- It prints `ready`, or one line of `codes=` naming what it found. On any
-  code, write the draft again from the same request and check it again.
+- It prints `ready`, or one line of `codes=` naming what it found, with a
+  `named=` line for each customer a line names. On any code, write the draft
+  again from the same request and check it again.
 - Never show the person a draft that has not come back ready, and never repeat
   a line of a refused draft to them.
 - If a draft cannot be read back at all, write it again from the same step.
@@ -682,6 +687,9 @@ python3 scripts/join.py review --step <step> --run <run identifier> --draft <dra
   After the third refusal of the same draft, `review` takes those lines out
   itself, prints `taken-out=`, and leaves a question in their place. Say the
   sentence it prints.
+- A `named=` line beside a `customer-named` code gives a customer's name as
+  that line wrote it, one line for each name. Write that line again without
+  those names, and keep everything else it says.
 - `questions=<number>` and a sentence mean the draft leaves that many
   questions for them, each marked in it as `[your call: ...]`. Say the
   sentence before you show the draft.
