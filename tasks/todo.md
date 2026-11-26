@@ -1819,9 +1819,9 @@ Brandon decided to build the web app now and productize from the start. No revie
 - [x] W4. Proposals inbox: accept (owner only, records the confirmation) or discard. (done 2026-11-24)
 - [ ] W5. Invite a teammate and give them the line to join from Claude Code. (built and live 2026-11-25, PR #13; the real invite test waits for Simona's GitHub username and the Administration approval on the dev install)
 - [x] W6. Changes that skipped approval: Keep or Undo. (done 2026-11-25)
-- [ ] P1. Back up a base to its repository (after Release B merges).
-- [ ] P2. Join a base from a link (after Release B merges).
-- [ ] P3. Shared base: record-change and the setup closing send proposals; no direct push to main from a seat (after Release B merges).
+- [x] P1. Back up a base to its repository. (done 2026-11-26, PR #16; the approval question is seen live once Brandon updates the installed plugin)
+- [ ] P2. Join a base from a link.
+- [ ] P3. Shared base: record-change and the setup closing send proposals; no direct push to main from a seat.
 - [ ] The end-to-end run with a second GitHub account.
 
 ### 2026-11-24, the Release B replay gate on the summarize-first build (branch claude/release-b-replay-40efb2)
@@ -1854,4 +1854,14 @@ The lean plan Brandon approved on 2026-11-25: merge main, rehearse case three al
 - [x] Brandon scores cases one and three, and case two once it is run (done 2026-11-25, above).
 - [x] The scored re-run of all three cases (done 2026-11-25). The gate passes.
 - [ ] Customer-name check fix (`d7c4ad7`, branch `claude/customer-name-false-refusals`, built on this branch's tip): Brandon decides whether it goes into Release B.
-- [ ] Brandon: review and merge Release B (0.5.0) into main. Then P1 to P3 (backup, join from a link, shared base), which wait on that merge.
+- [x] Brandon: review and merge Release B (0.5.0) into main. (merged 2026-11-25, PR #15)
+
+## 2026-11-26, the connector for Claude chat, Cowork and ChatGPT (plan: docs/plans/2026-11-26-001-feat-chat-connector-plan.md)
+The order across every track is in `docs/plans/2026-11-26-003-roadmap-to-full-experience.md`. No review per unit; one security review before anyone but Brandon connects.
+- [x] S0. The spike: what Claude and ChatGPT accept from a remote connector. (done 2026-11-26, PR #17)
+- [ ] C1. The endpoint, GitHub sign-in and one base per conversation. (in review, PR #18)
+- [ ] C2. Reading documents, with the moment-of-use flag in the answer.
+- [ ] C3. Skills served live. (waits on Plan 1's skills folder, unit 4.2b)
+- [ ] C4. Proposing a context change from chat.
+- [ ] C5. The setup guide and a Project instruction for each base.
+- [ ] The security review, then the end-to-end run in Claude and ChatGPT across two Projects.
