@@ -1,7 +1,7 @@
 ---
 title: "C1: the connector itself (MCP endpoint, sign-in, one base per conversation)"
 type: feat
-status: approved by Brandon on 2026-11-26 with all four recommended answers; not built
+status: approved by Brandon on 2026-11-26 with all four recommended answers; built and checked locally, waiting for the test site
 date: 2026-11-26
 parent: docs/plans/2026-11-26-001-feat-chat-connector-plan.md (Unit C1)
 unit: "C1"
@@ -117,8 +117,8 @@ Two Netlify Blobs stores from `getStore` (site-wide, so they last across deploys
 
 **`connector-grants`, needed for single-use codes and revoking rotated refresh tokens (decision 1).** It holds random ids and counters only, never a token.
 
-- `code/<date>/<id>`: written with `onlyIfNew` when a code is exchanged. A second exchange finds it, is refused, and ends the chain that code started, as OAuth 2.1 asks.
-- `chain/<id>`: the current refresh generation and whether the chain was ended. A refresh with the current generation moves it on by one (`onlyIfMatch` on the record's ETag, so two refreshes at once cannot both win); a refresh with an old generation ends the chain.
+- `chain/<id>`, where the id is the code's own id: created with `onlyIfNew` when a code is exchanged, so its existence is the mark that the code was used. A second exchange finds it, is refused, and ends the chain that code started, as OAuth 2.1 asks. (As built: one record rather than a separate dated code mark, because a dated key would have let a code used just before midnight be used again just after it.)
+- The same record holds the current refresh generation and whether the chain was ended. A refresh with the current generation moves it on by one (`onlyIfMatch` on the record's ETag, so two refreshes at once cannot both win); a refresh with an old generation ends the chain.
 - Access tokens are not checked against this store on every call, to keep calls fast; an ended chain stops at the next refresh, within the access token's one hour.
 
 ## Invite rules and walls, as the endpoint applies them
@@ -140,6 +140,16 @@ Nothing is logged that identifies a conversation or holds content: no tokens, no
 3. **The endpoint and the stores:** `/mcp` on the library, the token and audience check, the two tools, the bindings store and the grants store.
 4. **The checks and the end-to-end run** below, on the test site.
 5. **The security review** (one pass), then Brandon turns the connector on for the live site.
+
+### Where the build stands (2026-11-26)
+
+Steps 2 and 3 are built on this branch and checked on a copy running on this computer; steps 1, 4 and 5 wait for the test site.
+
+- **The code.** `web/src/lib/connector/` (settings and keys, sealing, return addresses, the two stores, the tokens, the tools), `web/src/lib/access.ts` (the invite rule, now shared by the web app's sign-in and the connector's, and by the web app's session check), `web/src/app/mcp/route.ts`, `web/src/app/api/connector/` (discovery, registration, authorize, GitHub callback, consent answer, token) and `web/src/app/connect/consent/page.tsx`. The libraries added are `@modelcontextprotocol/server` 2.4.0, `@netlify/blobs` 11.1.12 and `zod` 4.
+- **Checked locally, 40 of 40** with `web/scripts/connector-check.mjs` against `next dev` (which uses an in-memory stand-in for Netlify Blobs with the same first-write-wins rules): discovery, the 401, registration, every authorize refusal, the token endpoint's refusals, PKCE, single-use codes, refresh rotation and the chain ending on reuse, the consent page and its answer (including a post from another site and a missing one-time value), the audience check, the allowlist on every call, both the 2025-11-25 `initialize` and the 2026-07-28 `server/discover`, refusal with no conversation id under both protocols, a product conversation id reaching the tools under 2026-07-28, and a token GitHub refuses turning into a 401. `tsc`, `eslint` and `next build` pass.
+- **Found and fixed while checking.** The library answers 2025-era calls as a stream that ends only when the tool finishes, so the endpoint now reads the whole answer before deciding whether GitHub refused the token. The consent page was being built as a fixed page while the connector was off, which would have left it a 404 after turning the connector on; it now always renders per request.
+- **Not yet checked.** The one-base checks in the script (binding, refusal of a second base, two first calls at once, the session id fallback) need a real GitHub token for two bases, and the GTM Base guard hook rightly stops an agent from reading `gh auth token`. They run on the test site in the product runs, and Brandon can run them locally with `GITHUB_TOKEN=$(gh auth token) BASE_A=... BASE_B=...`. Netlify Blobs' own `onlyIfNew` and `onlyIfMatch` are checked only on the test site.
+- **Step 1 needs no logging.** Whether a product sends its conversation id under 2026-07-28 shows in its behavior: a call that works was keyed by the product's id, because 2026-07-28 has no session id to fall back to, and a missing id answers with the "could not tell which conversation" refusal.
 
 ## How it is tested
 

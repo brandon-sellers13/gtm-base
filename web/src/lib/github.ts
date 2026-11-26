@@ -36,23 +36,53 @@ export type Installation = {
   repository_selection: "all" | "selected";
 };
 
+// A GitHub App user token, with its refresh token when GitHub's token expiry is on.
+export type UserTokens = {
+  token: string;
+  expiresInSeconds: number;
+  refreshToken: string | null;
+  refreshExpiresInSeconds: number | null;
+};
+
+async function userTokens(body: Record<string, string>): Promise<UserTokens> {
+  const response = await fetch("https://github.com/login/oauth/access_token", {
+    method: "POST",
+    headers: { Accept: "application/json", "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+    cache: "no-store",
+  });
+  const answer = (await response.json()) as {
+    access_token?: string;
+    expires_in?: number;
+    refresh_token?: string;
+    refresh_token_expires_in?: number;
+    error?: string;
+  };
+  if (!response.ok || !answer.access_token) {
+    throw new GitHubError(`GitHub refused the sign-in (${answer.error ?? response.status})`, response.status || 400);
+  }
+  return {
+    token: answer.access_token,
+    expiresInSeconds: answer.expires_in ?? 8 * 60 * 60,
+    refreshToken: answer.refresh_token ?? null,
+    refreshExpiresInSeconds: answer.refresh_token_expires_in ?? null,
+  };
+}
+
+export const exchangeCodeForTokens = (code: string, clientId: string, clientSecret: string, redirectUri: string) =>
+  userTokens({ client_id: clientId, client_secret: clientSecret, code, redirect_uri: redirectUri });
+
+export const refreshUserTokens = (refreshToken: string, clientId: string, clientSecret: string) =>
+  userTokens({ client_id: clientId, client_secret: clientSecret, grant_type: "refresh_token", refresh_token: refreshToken });
+
 export async function exchangeCode(
   code: string,
   clientId: string,
   clientSecret: string,
   redirectUri: string,
 ): Promise<{ token: string; expiresInSeconds: number }> {
-  const response = await fetch("https://github.com/login/oauth/access_token", {
-    method: "POST",
-    headers: { Accept: "application/json", "Content-Type": "application/json" },
-    body: JSON.stringify({ client_id: clientId, client_secret: clientSecret, code, redirect_uri: redirectUri }),
-    cache: "no-store",
-  });
-  const body = (await response.json()) as { access_token?: string; expires_in?: number; error?: string };
-  if (!response.ok || !body.access_token) {
-    throw new GitHubError(`GitHub refused the sign-in code (${body.error ?? response.status})`, response.status);
-  }
-  return { token: body.access_token, expiresInSeconds: body.expires_in ?? 8 * 60 * 60 };
+  const { token, expiresInSeconds } = await exchangeCodeForTokens(code, clientId, clientSecret, redirectUri);
+  return { token, expiresInSeconds };
 }
 
 export const getUser = (token: string) => api<GitHubUser>("/user", { token });
