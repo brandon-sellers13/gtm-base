@@ -1,7 +1,7 @@
 ---
 title: "feat: Track 4, what a base holds"
 type: feat
-status: draft, waiting for Brandon's answers under "For Brandon"; no code is written until then
+status: decided 2026-11-27, all ten calls answered as recommended; no code written yet, and every code unit waits for the Plan 1 catch-up
 date: 2026-11-27
 origin:
   - docs/plans/2026-11-26-003-roadmap-to-full-experience.md (Track 4, and the order it runs in)
@@ -62,7 +62,7 @@ Two consequences follow.
 These are already decided and are not reopened here, except where "For Brandon" says so.
 
 - **The CLASS layout (2026-09-25 and 2026-09-26).** Nine context files flat in `context/`, segments under `context/icps/`, the source map at `access/stack.md`, each job's rules in `standards/<job>.md`, and skills in `skills/<job>/`.
-- **Competitors are a section of the positioning (2026-09-25).** Call 10 folded `competitors.md` into the positioning's alternatives section. This plan recommends reversing that, as call 2 below, and is written so either answer changes one unit only.
+- **Competitors are a section of the positioning (2026-09-25).** Call 10 folded `competitors.md` into the positioning's alternatives section. Brandon reversed that on 2026-11-27 (call 2 below): competitors get their own document again, and the positioning keeps a short list of alternatives.
 - **Starters live in the plugin, not the template (Astra finding 8 of 2026-09-19).** Base creation copies the whole template, absent-only writing would then refuse a starter, and an existing base would never receive it. Every new document shape and every starter skill in this plan ships in the plugin and reaches a base only through an owner-approved creation.
 - **Whoever creates a document or a skill owns it (D5).** A change may be approved by its owner, the base owner or an administrator. Creating a skill also needs the base owner's or an administrator's yes (CS requirements).
 - **Work in flight stays outside the base (2026-09-19, Fable M8).** Nothing here reads a `context/work/` folder. Drift grade and the content brief lose the feature that compared one piece against other work in flight, unless a later plan reads that from a source at run time.
@@ -93,7 +93,7 @@ Each document below is an ordinary base document: it has an `owner:` line, it is
 - *What setup reads to draft it.* A brand guide or brand book the person names, read as text (a PDF's text, a design-system README, a decided record such as this repository's `brandkit/brand-lock.json`). Nothing is read from pixels, so a guide that exists only as images produces a document that names the gap. A colour code appears only where the source states it.
 - *What overtakes it.* Only a decision about the brand itself (a rebrand, a new logo, a colour retired). Like voice, it is not flagged by strategy changes.
 
-**Competitors** (`context/competitors.md`, one per business, if call 2 is answered as recommended)
+**Competitors** (`context/competitors.md`, one per business, by call 2)
 - *What it holds.* One section per alternative the buyer actually considers, including doing nothing and building it in house: who it is for, what it claims, where it wins, where the business wins, its pricing where public, and the date and source of each fact. The positioning keeps a short list of the alternatives and the one-line reason the business is different from each, and points here for the detail.
 - *Owned by.* The product marketing lead.
 - *What setup reads to draft it.* The positioning's alternatives section, then battle cards, win and loss notes, and sales call notes the person names, and any competitor pages the person has saved or names. Setup reads only what the person names, as it does today, and does not browse on its own. A competitor the sources name with no claim about it gets an empty section, never an invented one.
@@ -111,7 +111,7 @@ Each document below is an ordinary base document: it has an `owner:` line, it is
 - *What setup reads to draft it.* It asks rather than reads. Plan 1 Unit 2.4a builds the prompt (`draft-goals.md`) and the starter, which refuse a figure neither the sources nor the person's own words carry. This plan builds nothing for goals beyond the line in the "what overtakes" table below and the inventory's offer to a base with one business.
 - *What overtakes it.* A planning decision: a new quarter, a board reset, a budget change, or a target moved. It is the document skills most often read for judgment, so a change to it flags the standards that relate a threshold to a goal (Plan 1, Unit 3.5).
 
-**Product** is the one kind of the nine that no group above covers. It is listed in the map, the inventory reports it missing, and the messaging and the content brief both lean on it. Call 5 recommends adding it to the buyer personas unit, since both draft from the same sales material.
+**Product** is the one kind of the nine that no group above covers. It is listed in the map, the inventory reports it missing, and the messaging and the content brief both lean on it. By call 5 it is built in the buyer personas unit (T4.3), since both draft from the same sales material.
 
 ### What overtakes what, as one table
 
@@ -175,7 +175,7 @@ This table is what Unit T4.1 builds into the base, so that recording a decision 
 
 **Done when:** A base holds a messaging document and a voice document its owner would hand to a writer.
 
-- [ ] **Unit T4.3: Buyer personas, and product if call 5 says so (roadmap Unit 2.4, its first half)**
+- [ ] **Unit T4.3: Buyer personas and product (roadmap Unit 2.4, its first half; product added by call 5)**
 
 **Goal:** Personas, and the product document, arrive through the same path, with personas kept apart from segments.
 
@@ -200,14 +200,12 @@ This table is what Unit T4.1 builds into the base, so that recording a decision 
 
 **Goal:** The alternatives buyers consider are kept with their facts, their dates and their sources, so a competitor's move can be recorded and followed through.
 
-**Depends on:** Call 2. The Plan 1 catch-up.
+**Depends on:** The Plan 1 catch-up. Call 2 is decided: competitors are their own document.
 
-**Files, if call 2 is answered as recommended:**
+**Files:**
 - Create: `prompts/draft-competitors.md`, `starter/competitors.md`, fixtures
 - Modify: `constants.py` (append only: a `competitors` kind after positioning in `BASE_KINDS`, differing by business), `inventory.py`, `base-kinds.md`, `prompts/draft-positioning.md` (its alternatives section becomes the short list with a pointer), the map template's list of context files and its plugin copy, `plugins/gtm-base/CHANGELOG.md`
 - Test: `tests/test_drafting.py`, `tests/test_inventory.py`, `tests/test_scaffold.py`
-
-**Files, if call 2 keeps competitors in the positioning:** only `prompts/draft-positioning.md` (the alternatives section gains the per-alternative facts with dates and sources) and its tests. No new kind.
 
 **Approach:** Each fact carries a date and where it came from, because a competitor fact without a date cannot be judged stale. A base whose positioning already holds a long alternatives section is offered the move as a proposal to the positioning's owner, never moved on its own. A competitor named with no claim gets an empty section.
 
@@ -223,7 +221,7 @@ This table is what Unit T4.1 builds into the base, so that recording a decision 
 
 **Goal:** A base can hold the visual decisions a piece of work must respect, as prose, not a stylesheet.
 
-**Depends on:** Call 3 (D6). The Plan 1 catch-up. Material: M3 for Gridwise.
+**Depends on:** The Plan 1 catch-up. Call 3 (D6) is decided: four sections, tone left to voice. Material: M3 for Gridwise.
 
 **Files:**
 - Create: `prompts/draft-design.md`, `starter/design.md`, fixtures
@@ -268,7 +266,7 @@ The roadmap's "sources-of-truth file" is `access/stack.md`, renamed by the CLASS
 
 **Goal:** A person can say "update GTM Base" and be told, in one sentence, the installed version and the one step that updates it, and is told which new kinds and starter skills their base can now take.
 
-**Depends on:** Call 4 (D7). The Plan 1 catch-up, for the inventory part.
+**Depends on:** The Plan 1 catch-up, for the inventory part. Call 4 (D7) is decided: no network call.
 
 **Files:**
 - Create: `plugins/gtm-base/lib/gtmbase/update_check.py`, `tests/test_update_step.py`
@@ -321,7 +319,7 @@ One requirement follows for C3. The skill's own `SKILL.md` must not call the run
 - Test: `tests/test_runner_contract.py`, `tests/test_skill_install.py`
 
 **Approach:**
-- *Declarations.* Required: the standard `standards/drift-grade.md`, `context/icps.md` and `context/positioning.md`. Optional: the named segment under `context/icps/`, `context/messaging.md`, `context/voice.md`, `context/competitors.md` (or the positioning's alternatives, per call 2) and `context/buyer-personas.md`. Each missing optional document is a named gap in the grade.
+- *Declarations.* Required: the standard `standards/drift-grade.md`, `context/icps.md` and `context/positioning.md`. Optional: the named segment under `context/icps/`, `context/messaging.md`, `context/voice.md`, `context/competitors.md` and `context/buyer-personas.md`. Each missing optional document is a named gap in the grade.
 - *The standard* uses Plan 1's five sections in words and no digits: the job's goal (work on the approved version), what is unacceptable (a claim the positioning or messaging no longer carries, a claim with no source in the base, a competitor comparison the base does not support, an audience the profile does not name), what needs approval (any change to the context, always as a proposal), the checks before the grade is handed back (every finding quotes the line in the piece and the line in the base it was judged against), and how a verdict relates to the base.
 - *The output.* A verdict in plain words (on the approved version, drifting, or off it), then each finding with the line in the piece, the document and line in the base, and the fix. When several findings point the same way and the piece carries evidence the base does not (a customer quote, a new use case), the grade ends with a proposed context change instead, with that evidence quoted, through propose-change in Claude Code or C4 in chat. It never edits a context document.
 - *Examples.* At least three, on the synthetic company: a piece that matches (no findings, no proposal), a piece using a value proposition the positioning dropped (fixes), and a piece carrying evidence that the buyer moved (a proposal). Each has an expectations file (the verdict, the documents each finding must cite, whether a proposal is expected) and a deliberately wrong output (a finding citing a document that was not read; a grade that edits the positioning instead of proposing).
@@ -370,10 +368,10 @@ One requirement follows for C3. The skill's own `SKILL.md` must not call the run
 
 | Step | Units | Waits on | Why |
 |---|---|---|---|
-| 0, now | Brandon's material (M1 to M5, M9) or the demo base's material; drift grade's examples and standard written as plain documents | Calls 1, 6 | Nothing here touches code the catch-up is moving |
+| 0, now | The GTM Base company base's own material (call 6); drift grade's examples and standard written as plain documents | Nothing | Nothing here touches code the catch-up is moving |
 | 1 | T4.1, T4.2, T4.3, T4.6 in parallel | The Plan 1 catch-up merged | Each touches its own prompt and appends to `constants.py` |
 | 2 | T4.8 drift grade | Plan 1 Units 3.1 and 4.2b merged | C3 needs a real skill to serve |
-| 3 | T4.4, T4.5, T4.7 | Calls 2, 3, 4 | None blocks the connector |
+| 3 | T4.4, T4.5, T4.7 | Nothing beyond step 1 | None blocks the connector |
 | 4 | T4.9, then T4.10 | T4.8, T4.2 | Both follow the pattern drift grade proves |
 
 Files shared across units: `constants.py` and `tests/support.py` are append only, as in Plan 1. `drafting.py`, `inventory.py` and `base-kinds.md` are touched by several units, so units that run in parallel each add their own variant or section and nothing else, and the orchestrator merges them one at a time with the suite run after each.
@@ -400,16 +398,16 @@ Two gaps stay open, and this plan does not close them. The messaging reframe's f
 
 | # | The call | Recommended | Runner-up | Needed before |
 |---|---|---|---|---|
-| 1 | Which skill is built first | **Drift grade**, for the five reasons above: it demonstrates the standardization promise, shows the flag and the proposal in one chat demo, works on a base with only setup's two documents, handles no prospect data, and is the strongest demo in a consulting sprint | The outbound sequence, which is the shortest line to a customer's pipeline but looks like what any AI writes | T4.8 |
-| 2 | Competitors as their own document or a section of the positioning (reopens call 10 of 2026-09-25) | **Their own document**, `context/competitors.md`, with the positioning keeping a short list of alternatives. Competitor facts change far more often than positioning, and in one file every competitor price change would flag the positioning and interrupt every skill that reads it | Keep them in the positioning's alternatives section, as decided on 2026-09-25. Simpler, one fewer document, but the flag fires on the positioning far more often | T4.4 |
-| 3 | The design document's sections (D6, open since 2026-10-10) | **Four sections: colour by role, type, logo rules, forbidden devices. Tone left to the voice document**, so it lives in one place | The five sections in the roadmap, tone included | T4.5 |
-| 4 | How "update GTM Base" knows a newer version exists (D7, open since 2026-10-10) | **It does not try.** It prints the installed version and the one update step and makes no network call, keeping the promise that the plugin reads nothing over the network | One network check, only when asked, answering "unknown" when it fails | T4.7 |
-| 5 | The product document, which no group in Track 4 names | **Add it to T4.3 with buyer personas**, since both draft from the same sales material and the messaging and content brief lean on it | Leave it for later; the inventory keeps reporting it missing | T4.3 |
-| 6 | Which base holds the first real runs and the C3 demo | **GTM Base's own company base**, built from its own material (the messaging reframe, the ICP page, the landing page draft). It holds no client data, so it can be shown to anyone, and drift grade on the current README, which still says "context files an AI can read", is a real finding the reframe already made by hand | The Gridwise base. Real daily use, but it is client material, which keeps it out of demos and out of this public repository's fixtures | Step 0 |
-| 7 | Starter skills: installed into a base and owned by the company, or kept in the plugin | **Installed into a base through 4.2b**, so the company owns its copy, can change its standard, and the connector serves the approved version. This is the standardization the product sells: approved processes, not ours | Plugin-only skills a base cannot change. Simpler, but the connector could not serve them as the company's approved version, and C3 has nothing to serve | T4.8 |
-| 8 | Whether recording a change preselects the documents it probably overtakes | **Suggest, never preselect.** The person still chooses, so nothing is flagged they did not mean to flag, and a wrong suggestion costs one sentence | Preselect the suggested documents and let the person untick | T4.1 |
-| 9 | Drift grade may be installed in a base before the Meta skill (D2 made Meta the first skill on the base) | **Yes.** D2's reason holds for the runner's nightly test, and Meta still runs SC-M. Drift grade being first into a base changes nothing about that, and C3 cannot wait for the Meta plan's dry-run nights | Hold drift grade until the Meta skill is installed, which ties C3 to the Meta plan's Unit 8a | T4.8 |
-| 10 | Linking documents that live in Notion, Google Docs and Drive, or Obsidian, which the second launch gate of 2026-11-25 requires before the landing page goes live | **Its own track, starting with a spike** on whether Notion's and Google's APIs let a base put owners, approvals and flags on a document it does not hold. Track 4 builds documents held in the base and nothing about linked ones | Fold it into Track 4, which would hold every unit here behind an unverified API question | Before the landing page goes live |
+| 1 | Which skill is built first | **Decided 2026-11-27: as recommended.** **Drift grade**, for the five reasons above: it demonstrates the standardization promise, shows the flag and the proposal in one chat demo, works on a base with only setup's two documents, handles no prospect data, and is the strongest demo in a consulting sprint | The outbound sequence, which is the shortest line to a customer's pipeline but looks like what any AI writes | T4.8 |
+| 2 | Competitors as their own document or a section of the positioning (reopens call 10 of 2026-09-25) | **Decided 2026-11-27: as recommended.** **Their own document**, `context/competitors.md`, with the positioning keeping a short list of alternatives. Competitor facts change far more often than positioning, and in one file every competitor price change would flag the positioning and interrupt every skill that reads it | Keep them in the positioning's alternatives section, as decided on 2026-09-25. Simpler, one fewer document, but the flag fires on the positioning far more often | T4.4 |
+| 3 | The design document's sections (D6, open since 2026-10-10) | **Decided 2026-11-27: as recommended.** **Four sections: colour by role, type, logo rules, forbidden devices. Tone left to the voice document**, so it lives in one place | The five sections in the roadmap, tone included | T4.5 |
+| 4 | How "update GTM Base" knows a newer version exists (D7, open since 2026-10-10) | **Decided 2026-11-27: as recommended.** **It does not try.** It prints the installed version and the one update step and makes no network call, keeping the promise that the plugin reads nothing over the network | One network check, only when asked, answering "unknown" when it fails | T4.7 |
+| 5 | The product document, which no group in Track 4 names | **Decided 2026-11-27: as recommended.** **Add it to T4.3 with buyer personas**, since both draft from the same sales material and the messaging and content brief lean on it | Leave it for later; the inventory keeps reporting it missing | T4.3 |
+| 6 | Which base holds the first real runs and the C3 demo | **Decided 2026-11-27: as recommended.** **GTM Base's own company base**, built from its own material (the messaging reframe, the ICP page, the landing page draft). It holds no client data, so it can be shown to anyone, and drift grade on the current README, which still says "context files an AI can read", is a real finding the reframe already made by hand | The Gridwise base. Real daily use, but it is client material, which keeps it out of demos and out of this public repository's fixtures | Step 0 |
+| 7 | Starter skills: installed into a base and owned by the company, or kept in the plugin | **Decided 2026-11-27: as recommended.** **Installed into a base through 4.2b**, so the company owns its copy, can change its standard, and the connector serves the approved version. This is the standardization the product sells: approved processes, not ours | Plugin-only skills a base cannot change. Simpler, but the connector could not serve them as the company's approved version, and C3 has nothing to serve | T4.8 |
+| 8 | Whether recording a change preselects the documents it probably overtakes | **Decided 2026-11-27: as recommended.** **Suggest, never preselect.** The person still chooses, so nothing is flagged they did not mean to flag, and a wrong suggestion costs one sentence | Preselect the suggested documents and let the person untick | T4.1 |
+| 9 | Drift grade may be installed in a base before the Meta skill (D2 made Meta the first skill on the base) | **Decided 2026-11-27: as recommended.** **Yes.** D2's reason holds for the runner's nightly test, and Meta still runs SC-M. Drift grade being first into a base changes nothing about that, and C3 cannot wait for the Meta plan's dry-run nights | Hold drift grade until the Meta skill is installed, which ties C3 to the Meta plan's Unit 8a | T4.8 |
+| 10 | Linking documents that live in Notion, Google Docs and Drive, or Obsidian, which the second launch gate of 2026-11-25 requires before the landing page goes live | **Decided 2026-11-27: as recommended.** **Its own track, starting with a spike** on whether Notion's and Google's APIs let a base put owners, approvals and flags on a document it does not hold. Track 4 builds documents held in the base and nothing about linked ones | Fold it into Track 4, which would hold every unit here behind an unverified API question | Before the landing page goes live |
 
 ## Out of scope
 
@@ -430,3 +428,8 @@ Two gaps stay open, and this plan does not close them. The messaging reframe's f
 - The connector plan and its spike results: `docs/plans/2026-11-26-001-feat-chat-connector-plan.md`
 - The positioning: `docs/ideation/2026-11-24-messaging-reframe.md` and `docs/ideation/2026-11-24-icp/` (untracked in the main checkout)
 - The code read for "where things stand": `plugins/gtm-base/lib/gtmbase/moment.py`, `stale.py`, `record_change.py`, `constants.py`, `plugins/gtm-base/skills/stale-check/SKILL.md`, and `templates/company-base/`, on main at 44b6fab
+
+## Revision log
+
+- 2026-11-27: written. Ten calls for Brandon, each with a recommended answer. Nothing built.
+- 2026-11-27: Brandon accepted all ten calls as recommended. The plan now reads as decided: drift grade is built first, competitors are their own document again (reversing call 10 of 2026-09-25), product is built with buyer personas, the GTM Base company base holds the first runs and the demo, and linking documents kept outside the base becomes its own track. Nothing built.
