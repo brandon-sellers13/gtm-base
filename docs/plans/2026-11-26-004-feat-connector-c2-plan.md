@@ -1,7 +1,7 @@
 ---
 title: "C2: reading documents in chat, with the moment-of-use flag"
 type: feat
-status: draft, waiting for Brandon's decisions before any code
+status: approved by Brandon on 2026-11-26 with all five recommended answers; not built
 date: 2026-11-26
 parent: docs/plans/2026-11-26-001-feat-chat-connector-plan.md (Unit C2)
 unit: "C2"
@@ -26,7 +26,7 @@ This is the part of the connector no competitor offers (the roadmap puts it stra
 - Verified on 2026-11-26: GitHub's GraphQL API answers blame (`Commit.blame(path)`, with each range's commit author email). A live query on `brandon-sellers13/gtm-base-test` returned three ranges with author emails. Inferred, to check in step one: the same query works with a GitHub App user token, not only Brandon's own CLI token.
 - Not available over GitHub's API in one call: "first parent only" history. It can be rebuilt by walking the main branch's commits and their first parents, which costs one call per page of history.
 
-## Decisions for Brandon
+## Decisions for Brandon (decided 2026-11-26: the recommended answer to all five)
 
 1. **How the connector reaches the same verdict as the plugin.**
    - **Recommended: port the moment-of-use rules to TypeScript and prove they agree with the plugin.** A pure function in the web app mirrors the part of `stale.compute` the moment of use needs: usable changes, changes written down twice, owner confirmation lines, accepted records and owner acceptances, and the "settles this change" rule. A small reader gathers its inputs over GitHub's API: the tree and files the web app already reads, blame for each confirmations file in one GraphQL query, and the commit that brought each corrections record onto main. A parity check runs the plugin's own Python on a set of input fixtures and requires the TypeScript to give the same flags. This is the largest unit in the connector so far, because every rule has to match.
@@ -78,7 +78,7 @@ The skill index stays C3's. The tool descriptions name `list_documents` as the f
 
 ## What Brandon must do
 
-1. Answer the five decisions above.
+1. ~~Answer the five decisions above.~~ Done 2026-11-26.
 2. In Claude Code, record one context change in `gtm-base-test` that names its positioning document, for the end-to-end run (or let the agent write it there with the plugin).
 3. Click through the ChatGPT run, and confirm as the owner in the web app.
 
