@@ -1,7 +1,7 @@
 ---
 title: "C2: reading documents in chat, with the moment-of-use flag"
 type: feat
-status: approved by Brandon on 2026-11-26 with all five recommended answers; not built
+status: approved by Brandon on 2026-11-26 with all five recommended answers; built with C4 and deployed to the test site, end-to-end run in progress
 date: 2026-11-26
 parent: docs/plans/2026-11-26-001-feat-chat-connector-plan.md (Unit C2)
 unit: "C2"
@@ -81,6 +81,18 @@ The skill index stays C3's. The tool descriptions name `list_documents` as the f
 1. ~~Answer the five decisions above.~~ Done 2026-11-26.
 2. In Claude Code, record one context change in `gtm-base-test` that names its positioning document, for the end-to-end run (or let the agent write it there with the plugin).
 3. Click through the ChatGPT run, and confirm as the owner in the web app.
+
+## Where the build stands (2026-11-26)
+
+Built on the branch `claude/connector-c2-plan`, together with C4's two proposal tools (decision 4), and deployed to the test site.
+
+- **The rules and their proof.** `web/src/lib/stale/` holds the port (`formats.ts`, `rules.ts`, `words.ts`). `tests/stale_parity.py` builds 22 real git repositories, runs the plugin's own reader and rules on each, and writes the snapshots, the plugin's verdicts and its exact words to `web/scripts/fixtures/stale-parity.json`; `npx tsx scripts/stale-parity.mjs` holds the port to them: 46 of 46 (every verdict, and the flag's words for an owner and for anyone else). Covered: no confirmation, an owner's and a teammate's line, the same-day rule, a line before the change was written down, a line naming the change, setup's drafted line, a done change, two open changes, an open question, a skipped document, the map, an owner's and a teammate's acceptance, a bad hash, a record that did not change the document, a second owner, a change dated in the future, one change naming several documents, a malformed identifier (both refuse), and the older layout (refused by design).
+- **Scope taken.** Only the current layout is read. A base that still holds `work/changes`, `work/decisions`, `corrections/` or the older `context/strategy` paths answers that GTM Base cannot vouch for the document; the person may still use it as it stands. The seat-only "stay quiet" setting does not exist in chat.
+- **The GitHub reader** (`web/src/lib/stale/github.ts`) answers the plugin's git questions over GitHub's API: GraphQL blame for confirmation lines (verified live), and GraphQL commit history with each record's file at each commit for the commit that added it and the first-parent acceptance. Known difference: GitHub gives commit dates in UTC, the plugin the author's local date, so an acceptance made near midnight can land a day apart; the web app's own commits are UTC on both sides.
+- **The tools.** `list_documents`; `read_document` in two steps (decision 2); `propose_change`, which records a context change as a proposal; and `propose_fix`, which keeps the document's settings block, replaces its body, and adds the corrections record that settles the change when the owner accepts. A fix is "already prepared" when an open proposal names that change and touches that document.
+- **The web app.** The document page offers the owner "It already reflects this change" from the connector's link (decision 3), worked out again from GitHub when shown and when clicked, and written as one confirmation line naming the change, committed with the owner's address as the map spells it. A proposal that only records something (such as a change proposed from chat) is now accepted by the base's owner, the map's owner, since it touches no owned document.
+- **Checked.** `tsc`, `eslint`, `next build`; the connector check, 45 of 45 locally and on the test site; parity, 46 of 46.
+- **End to end in ChatGPT so far.** After "Refresh tools" in ChatGPT's plugin settings (ChatGPT keeps a connector's tool list until refreshed), `list_documents` listed `gtm-base-test`'s two documents and `propose_change` opened proposal #7 for a change naming `context/icps.md`; it showed in the test site's web app with the plugin's proposal text. The test site's web app sign-in needed its own callback address on GTM BaseLive (`/api/auth/callback`), which was added. Accepting #7 is the owner's click: Claude Code refused to press Accept on Brandon's behalf, which is the governance working as designed.
 
 ## What stays the same
 
