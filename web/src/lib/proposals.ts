@@ -58,6 +58,7 @@ export type Proposal = ProposalSummary & {
   complete: boolean; // false when the proposal changes too many files to check
   baseRef: string;
   headSha: string; // the version the person was shown
+  baseOwners: string[]; // the map's owners on the base branch: who decides for records alone
 };
 
 export class ProposalNotFound extends Error {}
@@ -196,6 +197,7 @@ export async function getProposal(token: string, owner: string, repo: string, nu
     complete,
     baseRef: pull.base.ref,
     headSha: pull.head.sha,
+    baseOwners,
   };
 }
 
@@ -214,8 +216,14 @@ export function blockedReason(proposal: Proposal): "too-large" | "other-files" |
 export function acceptingEmail(proposal: Proposal, verifiedEmails: string[]): string | null {
   if (blockedReason(proposal)) return null;
   const owned = proposal.files.filter((f) => f.ownedDocument);
-  if (owned.length === 0 || owned.some((f) => f.owners.length === 0)) return null;
   const mine = verifiedEmails.map((e) => e.toLowerCase());
+  // A proposal that only records something (a context change proposed from
+  // chat, say) touches no owned document, so the base's owner decides.
+  if (owned.length === 0) {
+    if (proposal.files.length === 0 || proposal.baseOwners.length === 0) return null;
+    return mine.find((email) => proposal.baseOwners.includes(email)) ?? null;
+  }
+  if (owned.some((f) => f.owners.length === 0)) return null;
   return mine.find((email) => owned.every((f) => f.owners.includes(email))) ?? null;
 }
 

@@ -3,13 +3,14 @@ import { McpServer, type ServerContext } from "@modelcontextprotocol/server";
 import * as z from "zod";
 import { listBases } from "../bases";
 import { GitHubError, api, listInstallations } from "../github";
+import { type Choice, Refusal as DocumentRefusal, listDocuments, proposeChange, proposeFix, readDocument } from "./documents";
 import { validRepo } from "../reader";
 import { type Conversation, bindOrCheck, boundBase, conversationFrom } from "./bindings";
 import type { AccessBody } from "./grants";
 
-// The connector's tools, made fresh for every request by the MCP library.
-// C1 has two: "List my bases" and a plain "Read a document". C2 adds the
-// moment-of-use flag, C3 skills and C4 proposing.
+// The connector's tools, made fresh for every request by the MCP library:
+// list my bases (C1), list documents and read a document with the
+// moment-of-use flag (C2), and propose a change or a fix (C4). C3 adds skills.
 
 // Per-request facts the endpoint verified before the library ran.
 export type CallFacts = {
@@ -107,8 +108,6 @@ async function guarded(facts: CallFacts, work: () => Promise<ReturnType<typeof t
   }
 }
 
-const DOC_PATH = /^[A-Za-z0-9_][A-Za-z0-9._/-]{0,299}\.md$/;
-const MAX_CHARS = 200_000;
 
 export function connectorServer(): McpServer {
   const server = new McpServer({ name: "gtm-base", title: "GTM Base", version: "1.0.0" }, { instructions: INSTRUCTIONS });
@@ -140,49 +139,130 @@ export function connectorServer(): McpServer {
     },
   );
 
+  // Every tool below names a base, which binds the conversation like any read.
+  const withBase = <A extends { base: string }>(
+    run: (facts: CallFacts, owner: string, repo: string, args: A) => Promise<string>,
+  ) =>
+    async (args: A, ctx: ServerContext) => {
+      const facts = factsOf(ctx);
+      return guarded(facts, async () => {
+        const conversation = conversationOf(ctx, facts);
+        if (!conversation) return text(NO_CONVERSATION, true);
+        const admitted = await admitBase(facts, conversation, args.base);
+        const [owner, repo] = admitted.base.split("/");
+        try {
+          return text(admitted.note + (await run(facts, owner, repo, args)));
+        } catch (error) {
+          if (error instanceof DocumentRefusal) return text(admitted.note + error.message, true);
+          throw error;
+        }
+      });
+    };
+
+  server.registerTool(
+    "list_documents",
+    {
+      title: "List documents",
+      description:
+        "Call this first in a conversation: the base's context documents, with each one's path, title and owner, " +
+        "and which are behind a recorded context change. Use these paths with read_document; never guess a path.",
+      inputSchema: z.object({ base: BASE_FIELD }),
+      annotations: { readOnlyHint: true, openWorldHint: false },
+    },
+    withBase((facts, owner, repo) => listDocuments(facts.access.grant.gh, owner, repo)),
+  );
+
   server.registerTool(
     "read_document",
     {
       title: "Read a document",
       description:
-        "Read one document from the base as it stands now, by its path in the base, such as context/map.md.",
+        "Read one context document from the base, by a path list_documents gave. When a recorded context change has " +
+        "overtaken it, the first answer is only the flag and the choices: tell the person, wait for their choice, and " +
+        "call again with choice set to it (use_as_is, fix_first, or already_reflects when offered).",
       inputSchema: z.object({
         base: BASE_FIELD,
-        path: z.string().max(300).describe("The document's path in the base, such as context/map.md."),
+        path: z.string().max(300).describe("The document's path, such as context/positioning.md, from list_documents."),
+        choice: z
+          .enum(["use_as_is", "fix_first", "already_reflects"])
+          .optional()
+          .describe("Only after the person has chosen, in answer to a flag."),
       }),
       annotations: { readOnlyHint: true, openWorldHint: false },
     },
-    async ({ base, path }, ctx) => {
-      const facts = factsOf(ctx);
-      return guarded(facts, async () => {
-        const conversation = conversationOf(ctx, facts);
-        if (!conversation) return text(NO_CONVERSATION, true);
-        const clean = path.trim().replace(/^\/+/, "");
-        if (!DOC_PATH.test(clean) || clean.split("/").some((part) => !part || part.startsWith("."))) {
-          return text("Refused: give the document's path in the base, such as context/map.md.", true);
-        }
-        const admitted = await admitBase(facts, conversation, base);
-        const [owner, repo] = admitted.base.split("/");
-        let file: { type?: string; encoding?: string; content?: string } | unknown[];
-        try {
-          file = await api(
-            `/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/contents/${clean.split("/").map(encodeURIComponent).join("/")}`,
-            { token: facts.access.grant.gh },
-          );
-        } catch (error) {
-          if (error instanceof GitHubError && error.status === 404) {
-            return text(`${admitted.note}There is no document at ${clean} in ${admitted.base}. Start from context/map.md, which lists the base's documents.`, true);
-          }
-          throw error;
-        }
-        if (Array.isArray(file) || file.type !== "file" || file.encoding !== "base64" || typeof file.content !== "string") {
-          return text(`${admitted.note}${clean} in ${admitted.base} is not a document GTM Base can read here.`, true);
-        }
-        const body = Buffer.from(file.content, "base64").toString("utf8");
-        const shown = body.length > MAX_CHARS ? `${body.slice(0, MAX_CHARS)}\n\n[Cut short: the document is longer than GTM Base returns at once.]` : body;
-        return text(`${admitted.note}Document ${clean} from ${admitted.base}:\n\n${shown}`);
-      });
+    withBase((facts, owner, repo, args: { base: string; path: string; choice?: Choice }) =>
+      readDocument(facts.access.grant.gh, owner, repo, args.path, args.choice),
+    ),
+  );
+
+  server.registerTool(
+    "propose_change",
+    {
+      title: "Propose a context change",
+      description:
+        "Record something that happened and makes documents in the base no longer true (a decision, a launch, a price " +
+        "change, something learned from customers), with what changed, why and the evidence, as a proposal the base's " +
+        "owner accepts. It never approves anything. Name the documents it affects by their paths from list_documents.",
+      inputSchema: z.object({
+        base: BASE_FIELD,
+        what_changed: z.string().min(1).max(500).describe("One sentence: what changed."),
+        why: z.string().min(1).max(1000).describe("Why it changed."),
+        evidence: z.string().min(1).max(2000).describe("Where this comes from: the call, document or message, in plain words."),
+        affects: z.array(z.string().max(300)).min(1).max(20).describe("Paths of the documents it makes out of date."),
+        happened_on: z.string().max(10).optional().describe("The day it happened, YYYY-MM-DD; today if left out."),
+      }),
+      annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
     },
+    withBase(
+      (
+        facts,
+        owner,
+        repo,
+        args: { base: string; what_changed: string; why: string; evidence: string; affects: string[]; happened_on?: string },
+      ) =>
+        proposeChange(facts.access.grant.gh, owner, repo, {
+          whatChanged: args.what_changed,
+          why: args.why,
+          evidence: args.evidence,
+          affects: args.affects,
+          happenedOn: args.happened_on,
+        }),
+    ),
+  );
+
+  server.registerTool(
+    "propose_fix",
+    {
+      title: "Prepare a fix for a document",
+      description:
+        "Only after the person chose fix_first on a flagged document and agreed to the draft: prepare the corrected " +
+        "document as a proposal its owner approves. Give the new body (everything after the settings block); the " +
+        "settings block, including the owner, is kept as it is. It never approves anything.",
+      inputSchema: z.object({
+        base: BASE_FIELD,
+        path: z.string().max(300),
+        entry_id: z.string().max(40).describe("The change's id, as read_document gave it."),
+        new_body: z.string().min(1).max(100_000),
+        what_changed: z.string().min(1).max(500).describe("One sentence: what the fix changes in the document."),
+        why: z.string().min(1).max(1000),
+      }),
+      annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
+    },
+    withBase(
+      (
+        facts,
+        owner,
+        repo,
+        args: { base: string; path: string; entry_id: string; new_body: string; what_changed: string; why: string },
+      ) =>
+        proposeFix(facts.access.grant.gh, owner, repo, {
+          path: args.path,
+          entryId: args.entry_id,
+          newBody: args.new_body,
+          whatChanged: args.what_changed,
+          why: args.why,
+        }),
+    ),
   );
 
   return server;
