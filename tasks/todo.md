@@ -1832,7 +1832,8 @@ Brandon took the recommended answer to all four decisions. Built on branch claud
 - [x] ChatGPT, end to end on the test site: sign-in, 2026-07-28 with ChatGPT's conversation id, and the one-base runs. (1c94961, b09efaa)
 - [ ] The Claude half (connect, sign in, the one-base runs, whether Claude sends `com.anthropic/session` under 2026-07-28). Brandon chose on 2026-11-26 to skip it for now and come back to it together with Simona's invite (W5's real invite test), since the browser's Claude is on a work organization and the run needs his personal Claude account.
 - [ ] The server's own refusal of a second base, seen from a product or from the check script's one-base section with a real GitHub App token. ChatGPT refused to send that call on its own.
-- [ ] The security review (one pass), before anyone but Brandon connects. Then Brandon sets CONNECTOR_SECRET and CONNECTOR_ENABLED on the live site and adds the live callback address.
+- [x] The security review (one pass, 2026-11-26, on PR #18): no high or medium finding. Eighteen candidates were traced and rejected. The one residual is inherent to OAuth: someone could forward a victim their own Claude or ChatGPT sign-in link, and since GitHub signs a returning person in silently, one click on Allow would finish it. Whether that works depends on Claude's and ChatGPT's own callbacks tying `state` to the person who started the sign-in, which cannot be checked from here; the consent page's product name, return destination and warning are the defense.
+- [ ] Turn the connector on for the live site: Brandon sets CONNECTOR_SECRET and CONNECTOR_ENABLED there and adds the live callback address.
 - [ ] Teardown when C1 is done: the spike's old callback address on GTM BaseLive, the old "GTM Base test" connector in ChatGPT, and the test site.
 
 ### 2026-11-24, the Release B replay gate on the summarize-first build (branch claude/release-b-replay-40efb2)
