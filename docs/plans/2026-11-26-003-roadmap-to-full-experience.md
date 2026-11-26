@@ -31,7 +31,7 @@ Plan: `docs/plans/2026-11-26-001-feat-chat-connector-plan.md`.
 
 1. **C1.** The endpoint, sign-in and one base per conversation. In review.
 2. **C2.** Reading documents, with the moment-of-use flag and its three choices in the answer. This is the part competitors such as Notion Skills and Calven do not do, so it comes before anything else in this track.
-3. **C3.** Skills served live, with the skill index in the connector's instructions and each skill arriving with the documents it needs. It is blocked until Track 3 gives a base an approved skills folder.
+3. **C3.** Skills served live, with the skill index in the connector's instructions and each skill arriving with the documents it needs. It is blocked until Track 3 builds the runner and gives a base an approved skills folder.
 4. **C4.** Proposing a context change from chat, as a proposal the owner accepts in the web app or in Claude Code. This is how any AI's noticing of a change lands in the governed record.
 5. **C5.** A short setup guide and a copyable Project instruction for each base, so a person working for several clients sets up one Project per client.
 6. A security review (one pass) before anyone but Brandon connects, then an end-to-end run in Claude and in ChatGPT across two Projects.
@@ -51,8 +51,8 @@ Plan: `docs/plans/2026-10-10-002-feat-plan-1-company-skills-and-meta-skill-plan.
 Four of its nine units are built (4.1, the signed requirements; 4.2a, who may approve what; 2.1, the base inventory; 2.5a, the source map), on the branch `claude/plan-1-read-side-6c5559`, which has never been merged and is now behind main by Release B, P1 and the web app.
 
 1. **Bring the Plan 1 branch up to date with main** and merge its four built units. This is real work, because main has changed in the same areas, and the full suite has to pass afterwards.
-2. **4.2b, the skills folder:** where a base keeps its own approved skills, and the rules for trusting them. Track 1's C3 waits on this.
-3. **3.1, the thin runner,** so a skill can run against a base the same way every time.
+2. **3.1, the thin runner,** so a skill can run against a base the same way every time. It comes before the skills folder because installing a skill runs the runner's check.
+3. **4.2b, the skills folder:** where a base keeps its own approved skills, and the rules for trusting them. Track 1's C3 waits on this and on the runner.
 4. **2.4a, metric definitions and goals,** and **3.5, the creative-testing standard.**
 5. **3.6, the first real skill on the runner** (Meta ads).
 
@@ -79,7 +79,7 @@ These make a base worth having. Without them, a new company's base holds little 
 | Step | What | Why this order |
 |---|---|---|
 | 1 | Finish C1 and C2 | The connector's reading half, including the moment-of-use flag, is what reaches the most buyers and what competitors lack |
-| 2 | Bring Plan 1 up to date and build the skills folder (4.2b) | C3 cannot serve skills until a base has an approved skills folder |
+| 2 | Bring Plan 1 up to date, then build the runner (3.1) and the skills folder (4.2b) | C3 cannot serve skills until a base has an approved skills folder, and installing a skill runs the runner's check |
 | 3 | C3 and C4 | Skills and proposals from chat complete the connector |
 | 4 | P2 and P3 | Teammates in Claude Code can work on a shared base |
 | 5 | Both end-to-end runs, with the connector's security review | The checks that the full experience works for two people |
