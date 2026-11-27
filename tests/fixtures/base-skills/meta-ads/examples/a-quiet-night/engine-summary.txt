@@ -1,0 +1,4 @@
+2026-06-14 spend so far $310.00
+2026-06-14 paused ad-7 because cost per link passed the kill line
+2026-06-14 kept ad-9
+2026-06-14 promoted ad-12 to scale

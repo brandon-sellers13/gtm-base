@@ -333,6 +333,7 @@ class TestTheSecondRunCoversEveryClassThatStartsAScript(unittest.TestCase):
         "test_inventory": ("run_inventory",),
         "test_operations_script": ("run_in",),
         "test_runner_contract": ("use_skill",),
+        "test_meta_skill_shape": ("as_scheduled",),
         "test_record_change": (
             "run",
             "show",

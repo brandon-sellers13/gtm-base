@@ -40,6 +40,11 @@ Plan 1, Unit 4.2b, the skills folder:
 - A run of a skill this computer does not trust yet, attended, now says whether somebody with authority approved that version. `use_skill.py --show` says who, in which role, on what day and what changed since the version trusted here, and `--accept` trusts it after one question. A version nobody with authority approved cannot be accepted. Unattended, the run is refused and asks nothing, and installing, changing and accepting are refused in a run nobody is watching.
 - Still to come: a skill listed by the review when it goes stale, and the session start naming the skills this computer trusts.
 
+Plan 1, Unit 3.6, the repository side of a nightly skill on the runner:
+
+- The start of a session in a base now lists, in one line each, the skills kept in the base that this computer trusts exactly as they stand, by name and what each is for, held apart as data and pointing at the use-skill skill. A skill this computer does not trust is not named.
+- A made-up nightly ad creative skill, written from scratch for a made-up courier app, now sits in the tests as the worked example of a skill on the runner: its examples pass the contract check, a made-up pause or figure fails it, a flagged goals document is reported first while the engine check still runs, a missing standard means nothing runs that night, missing goals leave a named gap, and the runner command in a scheduled prompt runs exactly as written. The real skill, its engine and its nights are Brandon's live session D, outside this repository.
+
 ## 0.5.0 (not yet released)
 
 Release B: Units 1.5b, 1.6, 1.7a to 1.7e and 1.8, call 29, calls 57 to 60, and the live-check follow-up, with 0.3.3 to 0.3.10 and 0.4.0 carried. Prepared on 2026-10-10 as 0.4.0; main shipped 0.4.0 on 2026-10-21 first, so Release B ships as 0.5.0, and the date is set on the day it ships.

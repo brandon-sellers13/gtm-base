@@ -1064,7 +1064,7 @@ def _daily_work(
     settings = _settings_of(map_text)
     offer = _setup_offer(root, root_of_plugin, base_id)
     tail = _tail(blocks, root, base_id, root_of_plugin, offer, now, part)
-    context = _fill_main(blocks, map_text, settings, changes, "", tail, root)
+    context = _fill_main(blocks, map_text, settings, changes, "", tail, root, base_id)
     return _render(part, context, offer.visible or None)
 
 
@@ -1130,7 +1130,9 @@ def fence_for(text: str) -> str:
     return "`" * max(3, longest + 1)
 
 
-def _fill_main(blocks, map_text, settings, changes, status_note, question_text, root=None):
+def _fill_main(
+    blocks, map_text, settings, changes, status_note, question_text, root=None, base_id=None
+):
     """The whole injected text, with the map given the room the rest leaves.
 
     The text is cut at the session start's budget, and the hard rule about
@@ -1142,6 +1144,7 @@ def _fill_main(blocks, map_text, settings, changes, status_note, question_text, 
         "changes": changes,
         "status_note": status_note,
         "documents": _documents_block(blocks, root),
+        "skills": _skills_block(blocks, root, base_id),
         "threshold_days": settings.confirmation_threshold_days,
         "not_now_days": settings.not_now_days,
         "tail": question_text,
@@ -1234,6 +1237,51 @@ def _documents_block(blocks, root) -> str:
             "documents": listed,
         },
     )
+
+
+# The most skills the list names, and the longest description it repeats, so
+# the list fits the session start's budget beside the documents and the map.
+MAX_SKILLS_LISTED = 10
+MAX_SKILL_DESCRIPTION = 200
+_PLAIN_SKILL_TEXT = re.compile(r"[^A-Za-z0-9 .,;:'()/&+?!-]")
+
+
+def _skills_block(blocks, root, base_id) -> str:
+    """One line per skill in the base this computer trusts exactly as it stands.
+
+    Plan 1's Unit 3.6 and the company-skills requirements (CS25): a base skill
+    reaches Claude through the plugin, never by being copied into a person's
+    own skills folder. A skill this computer does not trust, or one it cannot
+    read whole, is not named at all, because naming it would invite a run
+    the runner then refuses. What a skill says about itself is held apart as
+    data and stripped to plain characters.
+    """
+    from . import authority, formats
+
+    template = blocks.get("skills", "")
+    folder = os.path.join(root or "", constants.SKILLS_DIR)
+    if not template or not root or not base_id or not os.path.isdir(folder):
+        return ""
+    lines: List[str] = []
+    for name in sorted(os.listdir(folder)):
+        if len(lines) >= MAX_SKILLS_LISTED:
+            break
+        read = authority.read_skill(root, base_id, name)
+        if read is None or not authority.trusts(base_id, read[0]):
+            continue
+        head = "%s/%s/SKILL.md" % (constants.SKILLS_DIR, name)
+        try:
+            block, _body = formats.split_document(read[1][head].decode("utf-8"))
+            fields = formats.parse_frontmatter(block)
+        except Exception:
+            continue
+        said = _PLAIN_SKILL_TEXT.sub(" ", str(fields.get("description") or ""))
+        said = " ".join(said.split())[:MAX_SKILL_DESCRIPTION]
+        lines.append("%s: %s" % (name, said) if said else name)
+    if not lines:
+        return ""
+    listed = "\n".join(lines)
+    return fill(template, {"fence": fence_for(listed), "skills": listed})
 
 
 # --- Reading the base ---------------------------------------------------
