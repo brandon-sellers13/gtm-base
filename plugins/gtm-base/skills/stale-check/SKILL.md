@@ -1,6 +1,6 @@
 ---
 name: stale-check
-description: Work out which parts of the company base have fallen behind the context changes the team wrote down, prepare the change for each one, and walk the whole list with the person when they ask for a review. Use when the person says review my base, or asks what is out of date, what needs updating, what GTM Base would flag, how the base has been doing, or what their base is missing. Also records a context change without editing any document, when the person says record a context change, something changed, or note that we now do something differently, from the base or from a folder linked to it.
+description: Work out which parts of the company base have fallen behind the context changes the team wrote down, prepare the change for each one, and walk the whole list with the person when they ask for a review. Use when the person says review my base, or asks what is out of date, what needs updating, what GTM Base would flag, how the base has been doing, or what their base is missing. Also answers "update GTM Base" with the installed version and the one step that updates it. Also records a context change without editing any document, when the person says record a context change, something changed, or note that we now do something differently, from the base or from a folder linked to it.
 ---
 
 # Check what is out of date
@@ -124,6 +124,9 @@ another folder first.
   against the list of kinds in `references/base-kinds.md`, for each business
   the base covers. It reads and writes nothing, so it is the one to run when
   somebody asks what their base is missing.
+- `python3 scripts/stale_check.py --update` says which version of GTM Base is
+  installed and the one step that updates it, and what the base can now take
+  that it does not hold. This is what "update GTM Base" runs.
 - `python3 scripts/stale_check.py --review` walks what is due and what has been
   prepared, one line each. This is what "review my base" runs.
 - `python3 scripts/stale_check.py --show-document '<path>'` prints one context
@@ -207,6 +210,22 @@ Run `python3 scripts/stale_check.py --inventory`.
 - When it offers to record a context change about what the customer profile
   covers, a yes starts the steps under "Record a context change" below.
 - When it says drafting arrives later, say that and offer nothing more.
+
+## Update GTM Base
+<!-- step -->
+
+This step tells the person which version of GTM Base they have and how to
+update it, then what their base can now take.
+
+Run `python3 scripts/stale_check.py --update`.
+
+- Say what it printed, as it is. It names the version and the commands to run
+  in a terminal, and never runs them; never run them for the person either.
+- It does not look online, so never say whether a newer version is out.
+- When it lists what the base can take, each one is written only through its
+  own step and the person's yes, such as "draft my competitors" or "install
+  drift grade".
+- When it says it could not read the version, say that and guess nothing.
 
 ## Record a context change
 <!-- step -->

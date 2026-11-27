@@ -401,7 +401,7 @@ _ACTIONS = {
         "first_run", "dismiss_quiet_record", "dismiss_ledger_behind",
         "move_changes", "abandon_move", "not_now_move", "check_move", "report",
         "review", "show_document", "answer_question", "new_words_file",
-        "record_change",
+        "record_change", "update",
     ),
     "seat.py": ("weekly_line", "quiet", "speak"),
     "operations.py": (

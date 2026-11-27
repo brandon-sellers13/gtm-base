@@ -20,7 +20,7 @@ recompute them and check that they match.
 | `drafts/ledger-entry.md` | The same drafted change in the older layout, kept for the same reason. |
 | `drafts/umbrella.md` | A drafted customer profile across three segments, one short paragraph each, as the model hands it back. |
 | `drafts/segment.md` | One of those segments drafted at full depth, as the model hands it back. |
-| `drafts/messaging.md`, `drafts/voice.md`, `drafts/buyer-personas.md`, `drafts/product.md` | The four documents a base takes after setup (Track 4), drafted for a made-up freight software company, as the model hands them back. |
+| `drafts/messaging.md`, `drafts/voice.md`, `drafts/buyer-personas.md`, `drafts/product.md`, `drafts/competitors.md`, `drafts/design.md` | The six documents a base takes after setup (Track 4), drafted for a made-up freight software company, as the model hands them back. |
 | `confirmations.md` | Three confirmations for one context file: drafted, a context change, and the threshold. |
 | `corrections-file.md` | What the run found wrong and which rule changed as a result. |
 | `pending-item.json` | What the analysis step proposes, before any check has run on it. |

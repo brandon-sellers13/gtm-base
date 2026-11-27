@@ -46,6 +46,7 @@ if _lib not in sys.path:
 import argparse  # noqa: E402
 
 from gtmbase import (  # noqa: E402
+    alternatives,
     changes,
     inventory,
     machine,
@@ -55,6 +56,7 @@ from gtmbase import (  # noqa: E402
     report,
     stale_check,
     state,
+    update_check,
     wordsfile,
 )
 from gtmbase.errors import GtmBaseError  # noqa: E402
@@ -127,6 +129,11 @@ def build_parser():
         "--inventory",
         action="store_true",
         help="say what the base holds and what it is missing, for each business",
+    )
+    parser.add_argument(
+        "--update",
+        action="store_true",
+        help="say the installed version and the one step that updates it, and what the base can now take",
     )
     parser.add_argument(
         "--review",
@@ -449,10 +456,38 @@ def print_inventory(resolution):
     sys.stdout.write(moment.fenced(found.table()) + "\n")
     for sentence in found.sentences():
         sys.stdout.write(sentence + "\n")
+    # A positioning written before competitors had a document of their own
+    # (Track 4, Unit T4.4). Said, never done, and never a second question.
+    moved = alternatives.move_offer(resolution.root)
+    if moved:
+        sys.stdout.write(moved + "\n")
     asked = found.ask()
     if asked:
         sys.stdout.write(asked + "\n")
     return EXIT_DONE
+
+
+def print_update(resolution):
+    """The installed version and the one step, then what the base can take (Unit T4.7).
+
+    Read only, and it runs nothing: the step is said, never run. Outside a
+    base only the version is said, because there is no base to bring current.
+    """
+    found = update_check.check()
+    sys.stdout.write(found.sentence + "\n")
+    if found.code:
+        sys.stdout.write("[for the assistant] code=%s\n" % found.code)
+    if resolution.active and resolution.root and resolution.base_id:
+        try:
+            said = update_check.base_sentence(resolution.root, resolution.base_id)
+        except GtmBaseError as failure:
+            sys.stderr.write(str(failure) + "\n")
+            return EXIT_REFUSED
+        except Exception:
+            sys.stderr.write(WENT_WRONG + "\n")
+            return EXIT_ERROR
+        sys.stdout.write(said + "\n")
+    return EXIT_DONE if not found.code else EXIT_REFUSED
 
 
 def _item_for(result, sentence):
@@ -477,6 +512,8 @@ def main(argv=None):
 
     here = os.getcwd()
     resolution = paths.resolve_base(here, machine.load_machine_state())
+    if options.update:
+        return print_update(resolution)
     # The folder somebody works in is as good as the base's own folder. A
     # folder linked to a base resolves to that base with its folder and its
     # identifier, which is everything below needs, and asking for a base that

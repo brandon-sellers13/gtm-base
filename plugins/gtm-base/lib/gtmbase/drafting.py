@@ -59,7 +59,18 @@ STEP_MESSAGING = "messaging"
 STEP_VOICE = "voice"
 STEP_BUYER_PERSONAS = "buyer-personas"
 STEP_PRODUCT = "product"
-LATER_STEPS = (STEP_MESSAGING, STEP_VOICE, STEP_BUYER_PERSONAS, STEP_PRODUCT)
+# Track 4, Units T4.4 and T4.5: the competitors and the design guide, drafted
+# the same way.
+STEP_COMPETITORS = "competitors"
+STEP_DESIGN = "design"
+LATER_STEPS = (
+    STEP_MESSAGING,
+    STEP_VOICE,
+    STEP_BUYER_PERSONAS,
+    STEP_PRODUCT,
+    STEP_COMPETITORS,
+    STEP_DESIGN,
+)
 STEPS = STEPS + LATER_STEPS
 CONTEXT_STEPS = CONTEXT_STEPS + LATER_STEPS
 
@@ -91,6 +102,8 @@ PROMPT_FILES.update(
         STEP_VOICE: "draft-voice.md",
         STEP_BUYER_PERSONAS: "draft-buyer-personas.md",
         STEP_PRODUCT: "draft-product.md",
+        STEP_COMPETITORS: "draft-competitors.md",
+        STEP_DESIGN: "draft-design.md",
     }
 )
 
@@ -156,6 +169,8 @@ SKIPPED_HEADINGS = {
     STEP_VOICE: "Voice guide",
     STEP_BUYER_PERSONAS: "Buyer personas",
     STEP_PRODUCT: "Product",
+    STEP_COMPETITORS: "Competitors",
+    STEP_DESIGN: "Design guide",
 }
 
 # The section every document drafted after setup ends with: what the material
@@ -186,9 +201,25 @@ LATER_SECTIONS = {
         "Where pricing lives",
         GAPS_SECTION,
     ),
+    STEP_COMPETITORS: ("Alternatives", GAPS_SECTION),
+    STEP_DESIGN: (
+        "Colour by role",
+        "Type",
+        "Logo rules",
+        "Forbidden devices",
+        GAPS_SECTION,
+    ),
 }
-# The part that holds one level three heading per principle or per persona.
-LATER_ITEMS_SECTION = {STEP_VOICE: "Principles", STEP_BUYER_PERSONAS: "Personas"}
+# The part that holds one level three heading per principle, per persona or
+# per alternative.
+LATER_ITEMS_SECTION = {
+    STEP_VOICE: "Principles",
+    STEP_BUYER_PERSONAS: "Personas",
+    STEP_COMPETITORS: "Alternatives",
+}
+# A part that may be empty, because an empty list is a real answer: a design
+# guide that forbids nothing says so by leaving this part empty (call 3).
+LATER_MAY_BE_EMPTY = {STEP_DESIGN: ("Forbidden devices",)}
 
 # --- The codes a refusal carries ---------------------------------------------
 
@@ -242,7 +273,18 @@ CODE_PRINCIPLE_UNQUOTED = "principle-without-a-quote"
 CODE_NO_ITEMS = "no-items:%s"
 CODE_PRICING_RESTATED = "pricing-restated"
 # A figure the draft writes that none of the material it was handed carries.
+# A colour code counts as a figure, so the design guide never writes a code
+# the brand guide does not state.
 CODE_FIGURE_NOT_IN_SOURCES = "figure-not-in-sources"
+# A competitor fact without the date and the material it came from, which
+# cannot be judged stale (Unit T4.4).
+CODE_FACT_UNDATED = "fact-without-a-date-and-source"
+# A design guide part the material covers none of, not named under what the
+# material does not show (Unit T4.5).
+CODE_GAP_UNNAMED = "gap-not-named:%s"
+# A picture written into the design guide. Nothing but text is ever written
+# into a base by this path (Unit T4.5).
+CODE_IMAGE = "image"
 
 # The long dashes, written as escapes so this file holds neither of them.
 EM_DASH = "\u2014"
@@ -280,6 +322,8 @@ PROGRESS = {
     STEP_VOICE: "Drafting your voice guide.",
     STEP_BUYER_PERSONAS: "Drafting your buyer personas.",
     STEP_PRODUCT: "Drafting your product document.",
+    STEP_COMPETITORS: "Drafting your competitors document.",
+    STEP_DESIGN: "Drafting your design guide.",
     "saving": "Saving that into the base.",
 }
 
@@ -597,7 +641,9 @@ def assemble(
         included,
         plan.dropped_labels,
         plan.ordered_labels,
-        material="\n".join(plan.fences),
+        # A competitor fact is dated with the date its material's label
+        # carries, so for that document the listing counts as material too.
+        material=block if step == STEP_COMPETITORS else "\n".join(plan.fences),
     )
 
 
@@ -1033,7 +1079,10 @@ def check_later_shape(step: str, body: str) -> None:
         name.strip().lower(): value
         for name, value in formats.split_sections(body).items()
     }
+    may_be_empty = LATER_MAY_BE_EMPTY.get(step, ())
     for heading in LATER_SECTIONS[step]:
+        if heading in may_be_empty and heading.lower() in sections:
+            continue
         if not sections.get(heading.lower(), "").strip():
             raise DraftError(step, CODE_EMPTY_SECTION % heading)
     items_heading = LATER_ITEMS_SECTION.get(step)
@@ -1047,18 +1096,78 @@ def check_later_shape(step: str, body: str) -> None:
                 not _QUOTE_RE.search(text) for _heading, text in items
             ):
                 raise DraftError(step, CODE_PRINCIPLE_UNQUOTED)
+            if step == STEP_COMPETITORS and any(
+                not _facts_dated(text) for _heading, text in items
+            ):
+                raise DraftError(step, CODE_FACT_UNDATED)
     if step == STEP_PRODUCT and _PRICE_RE.search(
         sections.get("where pricing lives", "")
     ):
         raise DraftError(step, CODE_PRICING_RESTATED)
+    if step == STEP_DESIGN:
+        if _IMAGE_RE.search(body):
+            raise DraftError(step, CODE_IMAGE)
+        gaps = " ".join(sections.get(GAPS_SECTION.lower(), "").lower().split())
+        for heading in LATER_SECTIONS[step]:
+            if heading == GAPS_SECTION:
+                continue
+            if sections.get(heading.lower(), "").strip() == NOT_COVERED and (
+                _gap_word(heading) not in gaps
+            ):
+                raise DraftError(step, CODE_GAP_UNNAMED % heading)
+
+
+# One competitor fact: a line of its own, ending with the material it came
+# from and that material's date, as "(source: the pricing page, 2026-10-02)".
+_FACT_RE = re.compile(r"\(source:\s*[^()\n]*\S[^()\n]*,\s*\d{4}-\d{2}-\d{2}\)\s*\.?\s*$")
+# A picture in a document: the usual image markup, an image tag, or an image
+# carried inside a link as data.
+_IMAGE_RE = re.compile(r"!\[[^\]]*\]\(|<img\b|data:image/", re.IGNORECASE)
+# A colour code as a brand guide writes one: a hash and three, six or eight
+# hexadecimal digits, or an rgb or hsl value.
+_COLOUR_RE = re.compile(
+    r"#(?:[0-9a-fA-F]{8}|[0-9a-fA-F]{6}|[0-9a-fA-F]{3})(?![0-9A-Za-z])|\b(?:rgba?|hsla?)\([^)]*\)",
+)
+
+
+def _facts_dated(text: str) -> bool:
+    """Whether every line under one alternative is a fact with its source and date.
+
+    An alternative the material names with no claim about it is left empty,
+    or holds only the sentence saying the material covers none of it.
+    """
+    lines = [line.strip() for line in str(text or "").split("\n") if line.strip()]
+    if lines == [NOT_COVERED]:
+        return True
+    return all(_FACT_RE.search(line) for line in lines)
+
+
+def _gap_word(heading: str) -> str:
+    """The word a gap is named by: the heading's first word that says what it is."""
+    return {
+        "Colour by role": "colour",
+        "Type": "type",
+        "Logo rules": "logo",
+        "Forbidden devices": "forbidden",
+    }.get(heading, heading.lower())
+
+
+def colour_codes_in(text: str) -> List[str]:
+    """Every colour code a text carries, written the one way codes are compared."""
+    found = []
+    for match in _COLOUR_RE.finditer(str(text or "")):
+        code = re.sub(r"\s+", "", match.group(0)).lower()
+        if code not in found:
+            found.append(code)
+    return found
 
 
 def figures_in(text: str) -> List[str]:
     """Every figure the text carries, evened out the way a quote is matched."""
     from . import citations, notes as notes_module
 
-    found = []
-    for figure in citations._figures(str(text or "")):
+    found = list(colour_codes_in(text))
+    for figure in citations._figures(_COLOUR_RE.sub(" ", str(text or ""))):
         evened = notes_module.even_out(figure)
         if evened and evened not in found:
             found.append(evened)
@@ -1074,9 +1183,14 @@ def figures_beyond(body: str, allowed: Sequence[str]) -> List[str]:
     from . import citations
 
     pool = " ; ".join(str(one) for one in (allowed or ()))
-    return [
+    known = set(colour_codes_in(pool))
+    written = _without_source_labels(str(body or ""))
+    beyond = [code for code in colour_codes_in(written) if code not in known]
+    # A colour code is read whole, so its digits are not also read as figures.
+    written = _COLOUR_RE.sub(" ", written)
+    return beyond + [
         figure
-        for figure in citations._figures(_without_source_labels(str(body or "")))
+        for figure in citations._figures(written)
         if not citations._figure_in(figure, pool)
     ]
 
