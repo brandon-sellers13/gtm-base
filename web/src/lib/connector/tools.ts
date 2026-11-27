@@ -164,7 +164,7 @@ export function connectorServer(): McpServer {
     {
       title: "List documents",
       description:
-        "Call this first in a conversation: the base's context documents, with each one's path, title and owner, " +
+        "Call this first in a conversation: the base's documents (context, standards, source map), with each one's path, title and owner, " +
         "and which are behind a recorded context change. Use these paths with read_document; never guess a path.",
       inputSchema: z.object({ base: BASE_FIELD }),
       annotations: { readOnlyHint: true, openWorldHint: false },
@@ -177,7 +177,7 @@ export function connectorServer(): McpServer {
     {
       title: "Read a document",
       description:
-        "Read one context document from the base, by a path list_documents gave. When a recorded context change has " +
+        "Read one document from the base (a context document, a standard or the source map), by a path list_documents gave. When a recorded context change has " +
         "overtaken it, the first answer is only the flag and the choices: tell the person, wait for their choice, and " +
         "call again with choice set to it (use_as_is, fix_first, or already_reflects when offered).",
       inputSchema: z.object({

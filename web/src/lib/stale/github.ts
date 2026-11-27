@@ -1,14 +1,23 @@
 import "server-only";
 import { GitHubError, api } from "../github";
 import { validRepo } from "../reader";
-import { parseCorrectionsFile, Refused, Unreadable } from "./formats";
-import { CONFIRMATIONS_DIR, CORRECTIONS_DIR, type CorrectionFacts, type Snapshot, contentHash } from "./rules";
+import { classify, parseCorrectionsFile, Refused, Unreadable } from "./formats";
+import {
+  CONFIRMATIONS_DIR,
+  CORRECTIONS_DIR,
+  type CorrectionFacts,
+  type SavedRevision,
+  type Snapshot,
+  contentHash,
+} from "./rules";
 
 // Builds the snapshot the moment-of-use rules read, from one base on GitHub,
 // with the person's own token. It answers the same questions the plugin asks
 // git, over GitHub's API:
 //
-// - who added each confirmation line: GraphQL blame on the default branch;
+// - who added each confirmation line, and in which revision: GraphQL blame;
+// - the map and the documents as each of those revisions saved them, which
+//   decide whether that person could confirm or accept then (authority.py);
 // - which commit first added each accepted record (the oldest commit that is
 //   not a merge and adds it relative to its first parent), what else that
 //   commit changed, and the record's listed context files as it left them;
@@ -19,7 +28,7 @@ import { CONFIRMATIONS_DIR, CORRECTIONS_DIR, type CorrectionFacts, type Snapshot
 // each author's local date, so an acceptance made near midnight local time can
 // land a day apart. Commits the web app makes are UTC on both sides.
 
-const FOLDERS = ["context/", "learning/changes/", "learning/corrections/", "work/confirmations/"];
+const FOLDERS = ["context/", "standards/", "access/", "learning/changes/", "learning/corrections/", "work/confirmations/"];
 const OLDER = ["work/changes/", "work/decisions/", "corrections/"];
 const MAX_FILES = 400;
 const MAX_COMMITS = 2000;
@@ -70,9 +79,16 @@ async function blameAll(
   const authors: Snapshot["confirmationAuthors"] = {};
   if (!paths.length) return authors;
   const fields = paths
-    .map((path, i) => `b${i}: blame(path: ${quote(path)}) { ranges { startingLine endingLine commit { author { email } } } }`)
+    .map((path, i) => `b${i}: blame(path: ${quote(path)}) { ranges { startingLine endingLine commit { oid author { email } } } }`)
     .join("\n");
-  const data = await graphql<{ repository: { object: Record<string, { ranges: { startingLine: number; endingLine: number; commit: { author: { email: string | null } } }[] } | null> } }>(
+  const data = await graphql<{
+    repository: {
+      object: Record<
+        string,
+        { ranges: { startingLine: number; endingLine: number; commit: { oid: string; author: { email: string | null } } }[] } | null
+      >;
+    };
+  }>(
     token,
     `query($owner: String!, $name: String!, $oid: GitObjectID!) { repository(owner: $owner, name: $name) { object(oid: $oid) { ... on Commit { ${fields} } } } }`,
     { owner, name: repo, oid: head },
@@ -80,11 +96,13 @@ async function blameAll(
   paths.forEach((path, i) => {
     const blame = data.repository.object[`b${i}`];
     if (!blame) throw new Unreadable("authors-unavailable");
-    const lines: Record<string, string> = {};
+    const lines: Snapshot["confirmationAuthors"][string] = {};
     for (const range of blame.ranges) {
       const email = range.commit.author.email;
       if (!email) continue;
-      for (let line = range.startingLine; line <= range.endingLine; line++) lines[String(line)] = email;
+      for (let line = range.startingLine; line <= range.endingLine; line++) {
+        lines[String(line)] = { email, revision: range.commit.oid };
+      }
     }
     authors[path] = lines;
   });
@@ -155,7 +173,12 @@ async function recordFacts(
     if (introducing) {
       const commit = await api<{ files?: { filename: string }[] }>(`/repos/${owner}/${repo}/commits/${introducing.oid}`, { token });
       coModified = (commit.files ?? []).map((file) => file.filename);
-      const listed = record.touched.filter((path) => typeof path === "string" && path.startsWith("context/"));
+      // base_reader._context_paths_of: context files, standards and the source map.
+      const listed = record.touched.filter((path) => {
+        if (typeof path !== "string") return false;
+        const kind = classify(path);
+        return path.startsWith("context/") || kind === "standard" || kind === "stack";
+      });
       if (listed.length) {
         try {
           const texts = await Promise.all(
@@ -180,9 +203,47 @@ async function recordFacts(
       hashAtCommit,
       mergedBy: merged?.author.email ?? null,
       mergedOn: day && /^\d{4}-\d{2}-\d{2}$/.test(day) ? day : null,
+      mergedIn: merged?.oid ?? null,
     } satisfies CorrectionFacts;
   }
   return facts;
+}
+
+// --- The map and documents as each revision saved them -----------------------------
+
+async function savedRevisions(
+  token: string,
+  owner: string,
+  repo: string,
+  revisions: string[],
+  documents: string[],
+): Promise<Snapshot["revisions"]> {
+  const saved: Snapshot["revisions"] = {};
+  const paths = ["context/map.md", ...documents];
+  const blob = (path: string, i: number) => `f${i}: file(path: ${quote(path)}) { object { ... on Blob { text } } }`;
+  for (let at = 0; at < revisions.length; at += 10) {
+    const batch = revisions.slice(at, at + 10);
+    const fields = batch
+      .map((oid, j) => `c${j}: object(oid: ${quote(oid)}) { ... on Commit { ${paths.map(blob).join(" ")} } }`)
+      .join("\n");
+    const data = await graphql<{
+      repository: Record<string, Record<string, { object: { text: string | null } | null } | null> | null>;
+    }>(token, `query($owner: String!, $name: String!) { repository(owner: $owner, name: $name) { ${fields} } }`, {
+      owner,
+      name: repo,
+    });
+    batch.forEach((oid, j) => {
+      const commit = data.repository[`c${j}`];
+      if (!commit) throw new Unreadable("authority-unavailable");
+      const text = (i: number) => commit[`f${i}`]?.object?.text ?? null;
+      const entry: SavedRevision = { map: text(0), documents: {} };
+      documents.forEach((path, i) => {
+        entry.documents[path] = text(i + 1);
+      });
+      saved[oid] = entry;
+    });
+  }
+  return saved;
 }
 
 // --- The whole snapshot -----------------------------------------------------------
@@ -236,7 +297,22 @@ export async function snapshotOf(
     blameAll(token, owner, repo, head, confirmations),
     recordFacts(token, owner, repo, head, records),
   ]);
-  return { today, files, confirmationAuthors, corrections, branch: info.default_branch };
+  // Every revision a confirmation or an acceptance came from, with the map
+  // and every document as that revision held them.
+  const revisions = new Set<string>();
+  for (const lines of Object.values(confirmationAuthors)) for (const { revision } of Object.values(lines)) revisions.add(revision);
+  for (const facts of Object.values(corrections)) if (facts.mergedIn) revisions.add(facts.mergedIn);
+  const documents = [
+    ...new Set([
+      ...Object.keys(files).filter((path) => {
+        const kind = classify(path);
+        return kind === "context" || kind === "standard" || kind === "stack";
+      }),
+      ...records.flatMap((record) => record.touched.filter((path) => typeof path === "string")),
+    ]),
+  ].sort();
+  const saved = await savedRevisions(token, owner, repo, [...revisions].sort(), documents);
+  return { today, files, confirmationAuthors, corrections, revisions: saved, branch: info.default_branch };
 }
 
 // An open proposal, prepared for this change and touching this document,

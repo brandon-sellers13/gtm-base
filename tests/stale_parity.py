@@ -27,7 +27,7 @@ import subprocess
 import sys
 import tempfile
 
-from gtmbase import base_reader, ids, moment, stale
+from gtmbase import authority, base_reader, ids, moment, stale
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 OUT = os.path.join(ROOT, "web", "scripts", "fixtures", "stale-parity.json")
@@ -41,7 +41,10 @@ BASE_ID = "0123456789abcdef0123456789abcdef"
 A = "stg-aaaaaaaaaaaaaaaa"
 B = "stg-bbbbbbbbbbbbbbbb"
 RUN = "run-2026-11-01-abcdef12"
-FOLDERS = ("context/", "learning/changes/", "learning/corrections/", "work/confirmations/")
+FOLDERS = ("context/", "learning/changes/", "learning/corrections/", "work/confirmations/", "standards/", "access/")
+ADMIN = "admin@example.com"
+FORMER = "former@example.com"
+NEWCOMER = "newcomer@example.com"
 
 
 def git(args, cwd, author=OWNER, day=None):
@@ -68,6 +71,14 @@ def write(root, path, text):
     os.makedirs(os.path.dirname(full), exist_ok=True)
     with open(full, "w", encoding="utf-8") as handle:
         handle.write(text)
+
+
+def map_doc(owner=OWNER, administrators=None):
+    admins = "administrators: [%s]\n" % ", ".join(administrators) if administrators else ""
+    return (
+        "---\nkind: map\nowner: %s\n%ssources: []\nstatus: draft\n---\n\n# Map\n\n"
+        "## Settings\n\nconfirmation_threshold_days: 30\nnot_now_days: 7\n" % (owner, admins)
+    )
 
 
 def doc(kind, owner, title, body="Companies of any size.", status="draft"):
@@ -125,14 +136,14 @@ def corrections_record(entry_id, staging_id, content_hash, touched):
 class Base(object):
     """One scenario's repository, built commit by commit."""
 
-    def __init__(self):
+    def __init__(self, map_text=None):
         self.root = tempfile.mkdtemp(prefix="gtm-parity-")
         git(["init", "-b", "main", "-q"], cwd=self.root)
         git(["config", "--local", "user.email", OWNER], cwd=self.root)
         git(["config", "--local", "user.name", "Owner"], cwd=self.root)
         self.save(
             {
-                "context/map.md": doc("map", OWNER, "Map"),
+                "context/map.md": map_text or map_doc(),
                 "context/icps.md": doc("icp", OWNER, "Customer profile"),
                 "context/positioning.md": doc("positioning", OWNER, "Positioning"),
                 "context/messaging.md": doc("messaging", "[%s, %s]" % (OWNER, SECOND), "Messaging"),
@@ -153,21 +164,23 @@ class Base(object):
     def confirm(self, text, path="context/positioning.md", author=OWNER):
         self.save({confirmations_path(path): text}, author=author, append=True)
 
-    def accept_record(self, entry_id, merged_by, merged_on, good_hash=True, change_doc=True):
+    def accept_record(self, entry_id, merged_by, merged_on, good_hash=True, change_doc=True,
+                      path="context/positioning.md", owner=OWNER, extra=""):
         """A proposal written by a teammate on a side branch, merged onto main."""
         staging = "stg-cccccccccccccccc"
         git(["checkout", "-q", "-b", "proposal"], cwd=self.root)
-        new_text = doc("positioning", OWNER, "Positioning", body="Companies over 50 people.")
+        new_text = doc("doc", owner, "Fixed", body="Companies over 50 people.")
         files = {}
         if change_doc:
-            files["context/positioning.md"] = new_text
+            files[path] = new_text
         current = new_text if change_doc else open(
-            os.path.join(self.root, "context/positioning.md"), encoding="utf-8"
+            os.path.join(self.root, path), encoding="utf-8"
         ).read()
         digest = ids.content_hash(current) if good_hash else "0" * 64
-        files["learning/corrections/%s.md" % staging] = corrections_record(
-            entry_id, staging, digest, ["context/positioning.md"]
-        )
+        record = corrections_record(entry_id, staging, digest, [path])
+        if extra:
+            record = record.replace("marker:", extra + "marker:", 1)
+        files["learning/corrections/%s.md" % staging] = record
         self.save(files, author=TEAMMATE, day="2026-11-08")
         git(["checkout", "-q", "main"], cwd=self.root)
         git(
@@ -187,10 +200,14 @@ class Base(object):
                     files[path] = handle.read()
         runner = base_reader.runner_or_default(None)
         authors = {}
+        revisions = set()
         for path in sorted(files):
             if path.startswith("work/confirmations/") and path.endswith(".md"):
-                found = base_reader.line_authors(self.root, path, runner)
-                authors[path] = dict((str(k), v) for k, v in found.items())
+                found = base_reader.line_authors_and_revisions(self.root, path, runner)
+                authors[path] = dict(
+                    (str(k), {"email": email, "revision": revision}) for k, (email, revision) in found.items()
+                )
+                revisions.update(revision for _email, revision in found.values() if revision)
         corrections = {}
         paths = [p for p in base_reader.correction_files(self.root)]
         records = base_reader.corrections(self.root, runner, "main")
@@ -209,12 +226,30 @@ class Base(object):
                 "hashAtCommit": record.content_hash_at_commit,
                 "mergedBy": record.merged_by_email,
                 "mergedOn": record.merged_on.isoformat() if record.merged_on else None,
+                "mergedIn": base_reader.accepted_at(self.root, path, "main", runner)[2],
+            }
+            if corrections[path]["mergedIn"]:
+                revisions.add(corrections[path]["mergedIn"])
+        # The map and every document as each revision above saved them, which
+        # is what the plugin's authority check reads (authority.at).
+        documents = sorted(
+            set(p for p in files if p.startswith(("context/", "standards/", "access/")))
+            | set(t for r in records for t in (r.file.touched_paths or []) if isinstance(t, str))
+        )
+        saved = {}
+        for revision in sorted(revisions):
+            saved[revision] = {
+                "map": authority._saved(self.root, revision, "context/map.md", runner),
+                "documents": dict(
+                    (d, authority._saved(self.root, revision, d, runner)) for d in documents
+                ),
             }
         snapshot = {
             "today": TODAY.isoformat(),
             "files": files,
             "confirmationAuthors": authors,
             "corrections": corrections,
+            "revisions": saved,
         }
         try:
             inputs = base_reader.read_base(
@@ -379,6 +414,75 @@ def scenarios():
     def several(b):
         b.save({"learning/changes/%s.md" % A: change(A, "2026-11-01", "2026-11-02", POS + ["context/icps.md", "context/icps/enterprise.md"])})
     yield s("one change naming several documents", several)
+
+    VOICE = ["context/voice.md"]
+
+    def voice_base(admins=None, map_owner=OWNER):
+        def make():
+            b = Base(map_doc(map_owner, admins))
+            b.save({"context/voice.md": doc("voice", SECOND, "Voice")})
+            b.save({"learning/changes/%s.md" % A: change(A, "2026-11-01", "2026-11-02", VOICE)})
+            return b
+        return make
+
+    def scenario_with(name, make, then):
+        base = make()
+        try:
+            then(base)
+            snapshot, verdict, words = base.snapshot_and_verdict()
+        finally:
+            base.close()
+        return {"name": name, "snapshot": snapshot, "expected": verdict, "words": words}
+
+    yield scenario_with("the base owner confirms a document someone else owns", voice_base(),
+                        lambda b: b.confirm(line("2026-11-03", path="context/voice.md"), path="context/voice.md", author=OWNER))
+    yield scenario_with("an administrator confirms", voice_base(admins=[ADMIN]),
+                        lambda b: b.confirm(line("2026-11-03", path="context/voice.md"), path="context/voice.md", author=ADMIN))
+    yield scenario_with("a teammate who is no administrator confirms", voice_base(admins=[ADMIN]),
+                        lambda b: b.confirm(line("2026-11-03", path="context/voice.md"), path="context/voice.md", author=TEAMMATE))
+    yield scenario_with("a map naming two owners names no base owner", voice_base(map_owner="[%s, %s]" % (OWNER, TEAMMATE)),
+                        lambda b: b.confirm(line("2026-11-03", path="context/voice.md"), path="context/voice.md", author=OWNER))
+
+    def former(b):
+        b.save({"context/voice.md": doc("voice", FORMER, "Voice")})
+        b.confirm(line("2026-11-03", path="context/voice.md"), path="context/voice.md", author=FORMER)
+        b.save({"context/voice.md": doc("voice", SECOND, "Voice")})
+    yield scenario_with("an owner at the time who no longer owns it", voice_base(), former)
+
+    def newcomer(b):
+        b.confirm(line("2026-11-03", path="context/voice.md"), path="context/voice.md", author=NEWCOMER)
+        b.save({"context/voice.md": doc("voice", NEWCOMER, "Voice")})
+    yield scenario_with("an owner today who did not own it then", voice_base(), newcomer)
+
+    def role_token(b):
+        b.confirm(line("2026-11-03", path="context/voice.md").replace("run=-", "run=- role=owner"), path="context/voice.md", author=SECOND)
+    yield scenario_with("a confirmation line carrying its role", voice_base(), role_token)
+
+    yield scenario_with("the base owner accepts a fix to a document someone else owns", voice_base(),
+                        lambda b: b.accept_record(A, OWNER, "2026-11-10", path="context/voice.md", owner=SECOND))
+    yield scenario_with("a record carrying approved roles and hashes", voice_base(),
+                        lambda b: b.accept_record(A, SECOND, "2026-11-10", path="context/voice.md", owner=SECOND,
+                                                  extra="approved_roles: [context/voice.md=owner]\napproved_hashes: [context/voice.md=%s]\n" % ("a" * 64)))
+
+    def standard(b):
+        b.save({"standards/cold-email.md": doc("standard", OWNER, "Cold email standard")})
+        b.save({"learning/changes/%s.md" % A: change(A, "2026-11-01", "2026-11-02", ["standards/cold-email.md"])})
+    yield s("a change naming a standard", standard)
+
+    def standard_confirmed(b):
+        standard(b)
+        b.confirm(line("2026-11-03", path="standards/cold-email.md"), path="standards/cold-email.md")
+    yield s("a standard its owner confirmed", standard_confirmed)
+
+    def stack(b):
+        b.save({"access/stack.md": doc("stack", OWNER, "Source map")})
+        b.save({"learning/changes/%s.md" % A: change(A, "2026-11-01", "2026-11-02", ["access/stack.md"])})
+    yield s("a change naming the source map", stack)
+
+    def not_a_standard(b):
+        b.save({"standards/Bad_Name.md": doc("standard", OWNER, "Not a standard")})
+        b.save({"learning/changes/%s.md" % A: change(A, "2026-11-01", "2026-11-02", ["standards/Bad_Name.md"])})
+    yield s("a file in standards whose name is not a job", not_a_standard)
 
     def bad_id(b):
         b.save({"learning/changes/stg-short.md": change("stg-short", "2026-11-01", "2026-11-02", POS)})

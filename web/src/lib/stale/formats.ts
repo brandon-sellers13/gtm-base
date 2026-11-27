@@ -220,6 +220,41 @@ export function checkRepoPathSyntax(candidate: unknown, prefixes: readonly strin
 
 export const checkContextPathSyntax = (candidate: unknown) => checkRepoPathSyntax(candidate, ["context/"]);
 
+// docpaths.py: since Plan 1's Unit 4.2a a standard (standards/<job>.md) and
+// the source map (access/stack.md) are documents too, wherever a record names one.
+const JOB_NAME = "[a-z0-9]+(?:-[a-z0-9]+)*";
+const STANDARD_RE = new RegExp(`^standards/(${JOB_NAME})\\.md$`);
+export const STACK_PATH = "access/stack.md";
+const DOC_PREFIXES = ["context/", "standards/", "access/", "skills/", "learning/lessons/"];
+
+export type DocKind = "context" | "standard" | "stack" | "other";
+
+// docpaths.classify, for the kinds the moment of use reads.
+export function classify(candidate: unknown): DocKind | null {
+  let text: string;
+  try {
+    text = checkRepoPathSyntax(candidate, DOC_PREFIXES);
+  } catch (error) {
+    if (error instanceof Refused) return null;
+    throw error;
+  }
+  if (text.startsWith("context/")) return text === "context/map.md" || !text.endsWith(".md") ? null : "context";
+  if (text === STACK_PATH) return "stack";
+  if (STANDARD_RE.test(text)) return "standard";
+  return "other";
+}
+
+// docpaths.check_syntax: the context folder's check, widened to a standard and the source map.
+export function checkDocumentPathSyntax(candidate: unknown): string {
+  try {
+    return checkContextPathSyntax(candidate);
+  } catch (error) {
+    const kind = classify(candidate);
+    if (kind === "standard" || kind === "stack") return checkRepoPathSyntax(candidate, DOC_PREFIXES);
+    throw error;
+  }
+}
+
 const EMAIL_RE =
   /^[A-Za-z0-9!#$%&'*+/=?^_`{|}~.-]{1,64}@[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?(?:\.[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?)+$/;
 
@@ -328,7 +363,7 @@ export function validateChangeEntry(entry: ChangeEntry, today: string): ChangeEn
   inVocabulary(entry.origin, LEDGER_ORIGINS);
   inVocabulary(entry.status, LEDGER_STATUSES);
   if (entry.runId !== null) checkRunId(entry.runId);
-  for (const path of entry.affects) checkContextPathSyntax(path);
+  for (const path of entry.affects) checkDocumentPathSyntax(path);
   if (!strip(entry.body)) throw new Refused("missing-body");
   return entry;
 }
@@ -346,15 +381,19 @@ export type ConfirmationLine = {
   entry: string | null;
   question: string | null;
   run: string | null;
+  role: string | null;
 };
 
 export function parseConfirmationLine(line: string): ConfirmationLine {
   const parts = strip(line)
     .split(" ")
     .filter((part) => part);
-  if (parts.length !== CONFIRMATION_TOKENS.length) throw new Refused("wrong-token-count");
+  // An eighth value, the role that allowed it, may follow (Plan 1, Unit 4.2a).
+  const expectedTokens =
+    parts.length === CONFIRMATION_TOKENS.length + 1 ? [...CONFIRMATION_TOKENS, "role"] : CONFIRMATION_TOKENS;
+  if (parts.length !== expectedTokens.length) throw new Refused("wrong-token-count");
   const values: Record<string, string> = {};
-  CONFIRMATION_TOKENS.forEach((expected, index) => {
+  expectedTokens.forEach((expected, index) => {
     const part = parts[index];
     const at = part.indexOf("=");
     if (at < 0 || part.slice(0, at) !== expected) throw new Refused("wrong-token-order");
@@ -368,6 +407,7 @@ export function parseConfirmationLine(line: string): ConfirmationLine {
     entry: optional(values.entry),
     question: optional(values.question),
     run: optional(values.run),
+    role: "role" in values ? values.role : null,
   });
 }
 
@@ -375,7 +415,7 @@ export function validateConfirmationLine(line: ConfirmationLine): ConfirmationLi
   if (!DATE_RE.test(line.date)) throw new Refused("bad-date");
   asDate(line.date);
   if (!TIME_RE.test(line.time)) throw new Refused("bad-time");
-  checkContextPathSyntax(line.file);
+  checkDocumentPathSyntax(line.file);
   inVocabulary(line.trigger, CONFIRMATION_TRIGGERS);
   if (line.entry !== null) checkStagingId(line.entry);
   if (line.question !== null && !QUESTION_RE.test(line.question)) throw new Refused("bad-question-id");
@@ -400,7 +440,17 @@ const CORRECTIONS_FIELDS = [
   "touched_paths",
   "correction_class",
   "marker",
+  "approved_roles",
+  "approved_hashes",
 ];
+
+// formats._pairs: a list of path=value items.
+function pairs(value: Value | undefined): void {
+  for (const item of asList(value ?? [])) {
+    const at = item.lastIndexOf("=");
+    if (at < 0 || !item.slice(0, at) || !item.slice(at + 1)) throw new Refused("bad-pair");
+  }
+}
 
 export type CorrectionsFile = { entryId: string | null; contentHash: string; touchedPaths: string[] };
 
@@ -414,10 +464,13 @@ export function parseCorrectionsFile(text: string): CorrectionsFile {
   }
   if (!("third_party" in fields)) throw new Refused("missing-field");
   asBool(fields.third_party);
+  const touchedPaths = asList(fields.touched_paths ?? []);
+  pairs(fields.approved_roles);
+  pairs(fields.approved_hashes);
   return {
     entryId: optional(fields.entry_id),
     contentHash: strip(pyStr(fields.content_hash)),
-    touchedPaths: asList(fields.touched_paths ?? []),
+    touchedPaths,
   };
 }
 

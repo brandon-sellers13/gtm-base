@@ -2,7 +2,7 @@ import "server-only";
 import { randomBytes } from "node:crypto";
 import { GitHubError, api } from "../github";
 import {
-  checkContextPathSyntax,
+  checkDocumentPathSyntax,
   parseChangeEntry,
   parseConfirmationLine,
   parseCorrectionsFile,
@@ -50,7 +50,7 @@ export function changeEntryText(options: {
   why: string;
 }): string {
   for (const path of options.affects) {
-    checkContextPathSyntax(path);
+    checkDocumentPathSyntax(path);
     if (path.includes(",")) throw new Error("A document path with a comma cannot be listed.");
   }
   const text =

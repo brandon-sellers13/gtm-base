@@ -34,13 +34,14 @@ export async function confirmOffer(
   const entry = verdict.overtakenBy.get(path);
   const info = verdict.documents.get(path);
   if (!entry || entry.id !== entryId || !info) return null;
-  const owners = info.owners.map((e) => e.toLowerCase());
-  // The rules match the line's author exactly as the map writes it, so the
-  // line is written with the owner address as the map spells it.
+  // Anyone in its authority set may confirm it: its owners, the base owner and
+  // the administrators. The rules match a line's author exactly as the
+  // document or the map spells the address, so the line is written that way.
+  const authority = info.authority.map((e) => e.toLowerCase());
   const mine = verifiedEmails.map((e) => e.toLowerCase());
-  const index = owners.findIndex((email) => mine.includes(email));
+  const index = authority.findIndex((email) => mine.includes(email));
   if (index < 0) return null;
-  return { entry, email: info.owners[index] };
+  return { entry, email: info.authority[index] };
 }
 
 export class ConfirmRefused extends Error {}

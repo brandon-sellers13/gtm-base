@@ -14,7 +14,9 @@ import {
   type ConfirmationLine,
   Refused,
   Unreadable,
-  checkContextPathSyntax,
+  STACK_PATH,
+  checkDocumentPathSyntax,
+  classify,
   holdsAnOpenQuestion,
   parseChangeEntry,
   parseConfirmationLine,
@@ -37,17 +39,28 @@ export type CorrectionFacts = {
   // Who brought the record onto the main line (first parent), and the day.
   mergedBy: string | null;
   mergedOn: string | null;
+  // The commit that brought it onto the main line, whose saved map and
+  // documents decide whether that person could accept it then.
+  mergedIn: string | null;
 };
+
+export type LineAuthor = { email: string; revision: string };
+
+// One saved revision: the map and the documents as that commit held them, a
+// null for one it did not hold.
+export type SavedRevision = { map: string | null; documents: Record<string, string | null> };
 
 export type Snapshot = {
   today: string; // YYYY-MM-DD
-  // Text of every file under context/, learning/changes/, learning/corrections/
-  // and work/confirmations/ on the default branch.
+  // Text of every file under context/, standards/, access/, learning/changes/,
+  // learning/corrections/ and work/confirmations/ on the default branch.
   files: Record<string, string>;
-  // For each confirmations file, the author email of each line, by line number.
-  confirmationAuthors: Record<string, Record<string, string>>;
+  // For each confirmations file, who added each line and in which revision.
+  confirmationAuthors: Record<string, Record<string, LineAuthor>>;
   // For each records file under learning/corrections/.
   corrections: Record<string, CorrectionFacts>;
+  // Every revision a line or an acceptance came from.
+  revisions: Record<string, SavedRevision>;
 };
 
 export const CHANGES_DIR = "learning/changes";
@@ -73,6 +86,8 @@ const LEGACY_SEGMENTS_DIR = "context/strategy/segments";
 export type DocumentInfo = {
   path: string;
   owners: string[];
+  // Who may confirm it today: its owners, the base owner and the administrators.
+  authority: string[];
   present: boolean;
   isMap: boolean;
   openQuestion: boolean;
@@ -126,10 +141,68 @@ function sortedPaths(snapshot: Snapshot, folder: string): string[] {
     .sort();
 }
 
+// --- Who may confirm (authority.py) ----------------------------------------------
+
+function settingsOf(text: string | null): Record<string, Value> | null {
+  try {
+    return parseFrontmatter(splitDocument(text ?? "").block);
+  } catch (error) {
+    if (error instanceof Refused) return null;
+    throw error;
+  }
+}
+
+function addresses(value: Value | undefined): string[] | null {
+  if (value === undefined || (Array.isArray(value) && value.length === 0) || value === "") return [];
+  try {
+    return validateOwner(value);
+  } catch (error) {
+    if (error instanceof Refused) return null;
+    throw error;
+  }
+}
+
+// authority.authority_from: the document's owners, the map's one owner, and
+// the map's administrators, as one saved version of each names them.
+export function authorityFrom(documentText: string | null, mapText: string | null): string[] {
+  const owners = addresses(settingsOf(documentText)?.owner) ?? [];
+  const map = settingsOf(mapText);
+  let baseOwner: string | null = null;
+  let administrators: string[] = [];
+  if (map) {
+    const named = addresses(map.owner);
+    if (named && named.length === 1) baseOwner = named[0];
+    administrators = addresses(map.administrators) ?? [];
+  }
+  const found: string[] = [];
+  for (const address of [...owners, baseOwner, ...administrators]) if (address && !found.includes(address)) found.push(address);
+  return found;
+}
+
+// base_reader._allowed_then: whether an address was in a document's authority
+// set at the revision that added a line or accepted a record. Fails closed.
+function allowedThen(snapshot: Snapshot, path: string, address: string | null, revision: string | null): boolean {
+  if (!address || !revision || /^0+$/.test(revision)) return false;
+  const saved = snapshot.revisions[revision];
+  if (!saved) throw new Unreadable("authority-unavailable");
+  return authorityFrom(saved.documents[path] ?? null, saved.map).includes(address);
+}
+
+function documentPaths(snapshot: Snapshot): string[] {
+  // os.walk of context/ (each folder's files sorted, folders sorted, depth
+  // first), then the standards in name order, then the source map.
+  const context = walkOrder(Object.keys(snapshot.files).filter((path) => path.startsWith("context/") && path.endsWith(".md")));
+  const standards = Object.keys(snapshot.files)
+    .filter((path) => path.startsWith("standards/") && !path.slice(10).includes("/"))
+    .sort((a, b) => cmp(a, b))
+    .filter((path) => classify(path) === "standard");
+  const stack = STACK_PATH in snapshot.files ? [STACK_PATH] : [];
+  return [...context, ...standards, ...stack];
+}
+
 function contextDocuments(snapshot: Snapshot): DocumentInfo[] {
-  // os.walk of context/: each folder's files sorted, folders sorted, depth first.
-  const paths = Object.keys(snapshot.files).filter((path) => path.startsWith("context/") && path.endsWith(".md"));
-  return walkOrder(paths).map((path) => {
+  const mapText = snapshot.files["context/map.md"] ?? null;
+  return documentPaths(snapshot).map((path) => {
     const text = snapshot.files[path];
     let fields: Record<string, Value> = {};
     try {
@@ -150,6 +223,7 @@ function contextDocuments(snapshot: Snapshot): DocumentInfo[] {
     return {
       path,
       owners,
+      authority: authorityFrom(text, mapText),
       present: status !== "skipped",
       isMap: kind.trim().toLowerCase() === "map",
       openQuestion: holdsAnOpenQuestion(text),
@@ -198,7 +272,7 @@ function readEntries(snapshot: Snapshot): ChangeEntry[] {
     for (const affected of entry.affects) {
       const where = whereItLives(snapshot, affected);
       try {
-        kept.push(checkContextPathSyntax(where));
+        kept.push(checkDocumentPathSyntax(where));
       } catch (error) {
         if (!(error instanceof Refused)) throw error;
       }
@@ -210,8 +284,8 @@ function readEntries(snapshot: Snapshot): ChangeEntry[] {
 
 type OwnedLine = { file: string; date: string; trigger: string; entry: string | null; run: string | null };
 
-function readConfirmations(snapshot: Snapshot): { line: ConfirmationLine; author: string | null }[] {
-  const records: { line: ConfirmationLine; author: string | null }[] = [];
+function readConfirmations(snapshot: Snapshot): { line: ConfirmationLine; allowed: boolean }[] {
+  const records: { line: ConfirmationLine; allowed: boolean }[] = [];
   for (const path of sortedPaths(snapshot, CONFIRMATIONS_DIR)) {
     const authors = snapshot.confirmationAuthors[path];
     if (!authors) throw new Unreadable("authors-unavailable");
@@ -226,7 +300,8 @@ function readConfirmations(snapshot: Snapshot): { line: ConfirmationLine; author
         throw error;
       }
       line = { ...line, file: whereItLives(snapshot, line.file) };
-      records.push({ line, author: authors[String(index + 1)] ?? null });
+      const author = authors[String(index + 1)];
+      records.push({ line, allowed: allowedThen(snapshot, line.file, author?.email ?? null, author?.revision ?? null) });
     });
   }
   return records;
@@ -253,7 +328,7 @@ export function verdictOf(snapshot: Snapshot): Verdict {
   const documents = new Map<string, DocumentInfo>();
   for (const info of contextDocuments(snapshot)) {
     try {
-      documents.set(checkContextPathSyntax(info.path), info);
+      documents.set(checkDocumentPathSyntax(info.path), info);
     } catch (error) {
       if (!(error instanceof Refused)) throw error;
     }
@@ -272,7 +347,7 @@ export function verdictOf(snapshot: Snapshot): Verdict {
 
   // _index_confirmations
   const ownerLines = new Map<string, OwnedLine[]>();
-  for (const { line, author } of readConfirmations(snapshot)) {
+  for (const { line, allowed } of readConfirmations(snapshot)) {
     try {
       validateConfirmationLine(line);
     } catch (error) {
@@ -281,7 +356,8 @@ export function verdictOf(snapshot: Snapshot): Verdict {
     }
     const info = documents.get(line.file);
     if (!info) continue;
-    if (author !== null && info.owners.includes(author)) {
+    // Counted when its author could confirm this document when they saved it.
+    if (allowed) {
       const list = ownerLines.get(line.file) ?? [];
       list.push(line);
       ownerLines.set(line.file, list);
@@ -304,6 +380,8 @@ export function verdictOf(snapshot: Snapshot): Verdict {
     if (!record.entryId) continue;
     const touched = record.touchedPaths.map((p) => whereItLives(snapshot, p));
     const coModified = facts.coModified.map((p) => whereItLives(snapshot, p));
+    // Whether whoever accepted it could do so then, for each document it touched.
+    const mergedAllowed = new Map(touched.map((p) => [p, allowedThen(snapshot, p, facts.mergedBy, facts.mergedIn)]));
     for (const touchedPath of touched) {
       const info = documents.get(touchedPath);
       if (!info) continue;
@@ -311,7 +389,7 @@ export function verdictOf(snapshot: Snapshot): Verdict {
       if (!facts.hashAtCommit || facts.hashAtCommit !== record.contentHash) continue;
       settled.add(`${record.entryId}\n${touchedPath}`);
       if (!facts.mergedOn || !facts.mergedBy || !/^\d{4}-\d{2}-\d{2}$/.test(facts.mergedOn)) continue;
-      if (!info.owners.includes(facts.mergedBy)) continue;
+      if (!mergedAllowed.get(touchedPath)) continue;
       const standing = accepted.get(touchedPath);
       if (!standing || facts.mergedOn > standing) accepted.set(touchedPath, facts.mergedOn);
     }
