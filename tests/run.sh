@@ -116,6 +116,7 @@ python3 -m unittest -v \
   test_segment_names.TestAnUpgradedBase \
   test_locks.TestTheQuestionsUnderTheLockFile \
   test_inventory.TestTheScript \
-  test_operations_script.TestTheScript
+  test_operations_script.TestTheScript \
+  test_runner_contract.TestTheScript
 nothing_written_to_a_seat_nobody_made
 rm -rf "$UNOWNED_SEAT"

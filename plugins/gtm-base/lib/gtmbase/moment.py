@@ -601,6 +601,7 @@ def check(
     session_id: Optional[str] = None,
     runner: Optional[GitRunner] = None,
     now: Optional[datetime.date] = None,
+    saved: bool = False,
 ) -> Moment:
     """Whether an open context change has overtaken this document.
 
@@ -608,6 +609,10 @@ def check(
     one thing it writes is the single-use question this session would need to
     record a confirmation, and it writes that only when the document is flagged
     and the caller said which session this is.
+
+    The runner asks about documents as last saved (Plan 1, Unit 3.1, CS3), so
+    the check is made against the same saved version it hands on, and an
+    unsaved edit on the disk changes nothing it finds.
     """
     git = runner_or_default(runner)
     today = now or state.today()
@@ -623,7 +628,7 @@ def check(
 
     try:
         inputs = base_reader.read_base(
-            base_root, base_id, runner=git, today=today, record_dropped=False
+            base_root, base_id, runner=git, today=today, record_dropped=False, saved=saved
         )
         report = stale.compute(
             today=today,

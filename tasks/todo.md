@@ -1889,8 +1889,8 @@ Step 2 of `docs/plans/2026-11-26-003-roadmap-to-full-experience.md`. The plannin
 - [x] Unit 2.1. The base inventory.
 - [x] Unit 2.5a. The source map parser.
 - [x] Unit 4.2a. One authority rule, one path rule, approvals bound to bytes, and the refusal in an unattended run.
-- [ ] Unit 3.1. The thin runner, its contract test, and atlas figure 9. (next; installing a skill runs its check)
-- [ ] Unit 4.2b. The skills folder. (after 3.1; connector unit C3 and drift grade wait on both)
+- [x] Unit 3.1. The thin runner, its contract test, and atlas figure 9. Built 2026-11-27 on `claude/plan-1-runner`: `runner.py`, the use-skill skill, `docs/thin-runner.md`, `tests/test_runner_contract.py`, figure 9. A skill's own text names no runner command (the Track 4 plan). The moment-of-use check reads documents as last saved when the runner asks. Outside review (Astra security and correctness) still owed before Release C.
+- [ ] Unit 4.2b. The skills folder. (next; connector unit C3 and drift grade wait on both; needs its own security pass before it merges)
 - [ ] Unit 2.4a. Metric definitions and goals, the driver-app half.
 - [ ] Unit 3.5. The creative-testing standard.
 - [ ] Unit 3.6. The Meta ads skill running through the runner.
