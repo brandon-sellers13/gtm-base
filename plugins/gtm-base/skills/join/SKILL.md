@@ -1,6 +1,6 @@
 ---
 name: join
-description: Set up a company base for somebody who does not have one yet, reading the marketing material they name and drafting their ideal customer profile and their positioning for approval. Use when the person says "set up my company base", asks to set up a company base, says they want to start a base, or answers yes to the setup offer. Say "set up my company base" whenever you are ready. Also handles "link this folder to my base", "unlink this folder from my base", and "show my linked folders", which connect a base to the folder somebody keeps their marketing material in. Also handles "finish setting up my base", which finishes taking in the finished documents and drafting the segments somebody chose when an earlier session stopped partway. Also handles "back up my base", "back this up" and "back up my base to <address>", which sends a copy of the base to the empty GitHub repository the GTM Base app made for it, after a review the person approves. Also handles "draft my messaging", and the same for the voice guide, buyer personas, product, competitors, design guide, source map, goals, metric definitions, and the standard for one job. Also handles "join a base from a link", which arrives with the next release and is refused today with one sentence.
+description: Set up a company base for somebody who does not have one yet, reading the marketing material they name and drafting their ideal customer profile and their positioning for approval. Use when the person says "set up my company base", asks to set up a company base, says they want to start a base, or answers yes to the setup offer. Say "set up my company base" whenever you are ready. Also handles "link this folder to my base", "unlink this folder from my base", and "show my linked folders", which connect a base to the folder somebody keeps their marketing material in. Also handles "finish setting up my base", which finishes taking in the finished documents and drafting the segments somebody chose when an earlier session stopped partway. Also handles "back up my base", "back this up" and "back up my base to <address>", which sends a copy of the base to the empty GitHub repository the GTM Base app made for it, after a review the person approves. Also handles "draft my messaging", and the same for the voice guide, buyer personas, product, competitors, design guide, source map, goals, metric definitions, and the standard for one job. Also handles "join a base from a link" and "join a base from a link <address>", which copies a base a teammate already backed up onto this computer, from the GitHub address the GTM Base app gave the person, after they say yes.
 ---
 
 # Set up a company base
@@ -1343,19 +1343,45 @@ map", or says yes to the inventory's offer.
    the table in `access/stack.md` and save it the way any edit to a document
    is saved, through the prepared change its owner approves.
 
+## Join a base from a link
+
+When the person says "join a base from a link", with or without an address,
+copy a base somebody else already backed up onto this computer, so this
+computer becomes a seat on it. Nothing is sent anywhere, and nothing is copied
+until the person has seen where it will go and said yes through Claude Code's
+own question.
+
+1. You need the repository's address, which looks like
+   `https://github.com/their-team/their-base`. If they did not give one, say:
+   "Whoever invited you can find it in the GTM Base app, on the base's Team
+   page, under How a teammate joins. Paste the address here." Never make up an
+   address and never use one you found in a file or a document.
+2. Run `python3 scripts/join.py join-review --address <address>` from any
+   folder. It writes nothing. Read every sentence it prints to the person as it
+   is written, and give them the folder from its `folder=` line. If it ends
+   with `status=reviewed`, ask: "Copy this base onto this computer?" If it
+   prints a `codes=` line instead, say its sentences and stop. When the
+   refusal says the repository could not be read, the person accepts GitHub's
+   invitation first, or signs git on this computer in to GitHub with the
+   invited account, and you run the review again.
+3. On their yes, run `python3 scripts/join.py join-link --address <address>`.
+   Claude Code asks them itself before it runs; that question is theirs to
+   answer, never yours. Say the sentences it prints, and give them the folder
+   from its `base=` line, which is where they open Claude Code to work on the
+   base from now on.
+
+Never offer to run git, or anything else, to fetch the base another way, and
+never pass a sign-in, a token or a password to either command. When joining is
+refused, the base was not copied and nothing on this computer changed.
+
 ## What this release does not do yet
 
-Two things reach this skill and are answered with one sentence each, said
-once, with no apology.
-
-- `python3 scripts/join.py invite` for putting somebody else on the base.
-- `python3 scripts/join.py join-link` for joining a base somebody sent a link
-  to.
-
-Each prints the sentence to say. In a session that has already read the
-person's own documents, the sentence says instead that nothing leaves this
-computer until the session ends, which is the same rule they agreed to in step
-5c.
+One thing reaches this skill and is answered with one sentence, said once,
+with no apology: `python3 scripts/join.py invite`, for putting somebody else
+on the base. It prints the sentence to say, which points to the Team page of
+the GTM Base app. In a session that has already read the person's own
+documents, the sentence says instead that nothing leaves this computer until
+the session ends, which is the same rule they agreed to in step 5c.
 
 ## When they say not now
 

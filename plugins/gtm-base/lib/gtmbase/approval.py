@@ -130,6 +130,11 @@ SAYS_BACKUP = (
     "Allowing it sends a copy of your base, as the review just showed it, to "
     "its GitHub repository."
 )
+SAYS_JOIN = (
+    "Allowing it copies the base from the GitHub repository on this command "
+    "onto this computer and makes this computer a seat on it. Nothing is sent "
+    "anywhere."
+)
 SAYS_STILL_RIGHT = (
     "Allowing it records that the document you were just asked about is still "
     "right."
@@ -299,6 +304,7 @@ SENTENCE_NAMES = (
     "ASK_CLOSING",
     "SAYS_APPROVE_CHANGE",
     "SAYS_DROP_CHANGE",
+    "SAYS_JOIN",
     "SAYS_STILL_RIGHT",
     "SAYS_NO_LONGER_RIGHT",
     "SAYS_PUT_OFF",
@@ -455,6 +461,8 @@ def _what(script: str, options) -> Optional[Tuple[str, Tuple[str, ...]]]:
         mode = get("mode")
         if mode == "backup":
             found = (SAYS_BACKUP, ("backup.send",))
+        elif mode == "join-link":
+            found = (SAYS_JOIN, ("join_link.join",))
         elif mode == "approve":
             found = (SAYS_SAVE_DRAFT, ("join_flow.approve_step",))
         elif mode == "adopt":

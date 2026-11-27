@@ -283,10 +283,27 @@ class DestinationTests(BackupCase):
 
         self.sent()
         head = head_of(self.root)
-        line = "refs/heads/main %s refs/heads/main %s\n" % (head, "0" * 40)
+        line = "refs/heads/main %s refs/heads/proposal/stg-0123456789abcdef %s\n" % (
+            head,
+            "0" * 40,
+        )
         self.assertIsNone(gate.check_git_hook(line, self.root, None, "origin", ADDRESS + ".git"))
         refused = gate.check_git_hook(line, self.root, None, "x", "https://anon-git.attacker.example/x.git")
         self.assertEqual(refused, gate.sentence_for(gate.REASON_FIRST_PUSH))
+
+    def test_after_the_backup_the_shared_line_takes_proposals_only(self):
+        from gtmbase import gate
+
+        self.sent()
+        sent = head_of(self.root)
+        write(os.path.join(self.root, "context", "later.md"), "# Later\n")
+        git(["add", "-A"], cwd=self.root)
+        git(["commit", "-q", "-m", "straight onto main"], cwd=self.root)
+        line = "refs/heads/main %s refs/heads/main %s\n" % (head_of(self.root), sent)
+        self.assertEqual(
+            gate.check_git_hook(line, self.root, None, "origin", ADDRESS + ".git"),
+            gate.sentence_for(gate.REASON_SHARED_LINE),
+        )
 
     def test_a_push_address_setting_cannot_redirect_the_backup(self):
         from gtmbase import gate

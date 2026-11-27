@@ -66,7 +66,9 @@ from gtmbase import (  # noqa: E402
     digests,
     drafting,
     folder_identity,
+    install_git_hook,
     join_flow,
+    join_link,
     location,
     machine,
     moment,
@@ -381,7 +383,8 @@ def build_parser():
     parser.add_argument("--run", help="the identifier of this setup run")
     parser.add_argument(
         "--address",
-        help="backup-review and backup: the GitHub repository the GTM Base app made for this base",
+        help="backup-review and backup: the GitHub repository the GTM Base app made for this base; "
+        "join-review and join-link: the GitHub repository of the base to join",
     )
     parser.add_argument(
         "--step",
@@ -2662,6 +2665,66 @@ def run_backup(options, out):
     return EXIT_DONE
 
 
+def run_join_review(options, out):
+    """Check a link to a base and say where it would go; writes nothing."""
+    try:
+        found = join_link.review(options.address or "")
+    except GtmBaseError as refusal:
+        out.write(str(refusal) + "\n")
+        line(out, "codes", refusal.code)
+        _where_it_already_is(options, refusal, out)
+        return EXIT_REFUSED
+    for sentence in join_link.describe(found):
+        out.write(sentence + "\n")
+    line(out, "address", found.address[: -len(".git")])
+    line(out, "folder", found.target)
+    line(out, "status", "reviewed")
+    return EXIT_DONE
+
+
+def _where_it_already_is(options, refusal, out):
+    """The folder named by a refusal that says the base or its folder is already here."""
+    try:
+        if refusal.code == join_link.CODE_ALREADY_HERE:
+            line(out, "base", join_link.already_here(backup.parse_address(options.address or "")))
+        elif refusal.code == join_link.CODE_FOLDER_TAKEN:
+            line(out, "folder", join_link.place_parent(options.address or ""))
+    except GtmBaseError:
+        pass
+
+
+def run_join_link(options, out):
+    """Copy the base at the reviewed address onto this computer (an approval)."""
+    try:
+        joined = join_link.join(options.address or "", drafting.plugin_root_default())
+    except GtmBaseError as refusal:
+        out.write(str(refusal) + "\n")
+        line(out, "codes", refusal.code)
+        _where_it_already_is(options, refusal, out)
+        return EXIT_REFUSED
+    out.write(
+        "You have joined the base. It is in the folder on the base line below, "
+        "and opening Claude Code in that folder brings it along.\n"
+    )
+    out.write(
+        "Any change you make to it goes to the owner of that document as a "
+        "proposal, and nothing changes in the shared base until they accept it.\n"
+    )
+    if joined.hook_code not in (
+        install_git_hook.CODE_OK,
+        install_git_hook.CODE_CHAINED,
+        install_git_hook.CODE_RENAMED,
+    ):
+        out.write(
+            "GTM Base could not put its check on sends from a terminal in place "
+            "for this base. Sends from Claude Code are still checked.\n"
+        )
+    line(out, "base", joined.root)
+    line(out, "address", joined.address[: -len(".git")])
+    line(out, "status", "joined")
+    return EXIT_DONE
+
+
 def run_not_now(options, out):
     return offer_answer.main(["--answer", offer_answer.NOT_NOW])
 
@@ -2725,7 +2788,8 @@ MODES = {
     "backup-review": run_backup_review,
     "backup": run_backup,
     "invite": run_refusal(join_flow.MODE_INVITE),
-    "join-link": run_refusal(join_flow.MODE_JOIN_LINK),
+    "join-review": run_join_review,
+    "join-link": run_join_link,
 }
 
 

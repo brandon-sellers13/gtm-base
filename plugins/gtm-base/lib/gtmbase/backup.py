@@ -182,6 +182,10 @@ def review(root: str, base_id: str, address_text: str, runner: Optional[GitRunne
     git = runner_or_default(runner)
     address = parse_address(address_text)
     existing = _origin(git, root)
+    if _joined_record(base_id) is not None:
+        # A seat joined from a link is a copy of a base that is already backed
+        # up, and it never sends its whole history anywhere.
+        raise _refuse(CODE_ALREADY if _same_place(existing, address) else CODE_OTHER_REMOTE)
     if existing:
         seat, _problems = state.load_seat(base_id)
         record = seat.get("first_backup") or {}
@@ -303,17 +307,44 @@ def _record(base_id: str) -> Optional[dict]:
     return record
 
 
+def _joined_record(base_id: str) -> Optional[str]:
+    """The repository a seat joined from a link was copied from, or None."""
+    from . import join_link
+
+    return join_link.joined_address(base_id)
+
+
+def shared_address(base_id: str) -> Optional[str]:
+    """The one GitHub repository this base's sends may go to, or None.
+
+    The repository a first backup went to, or the one a seat joined from a
+    link was copied from. Before either, there is none.
+    """
+    joined = _joined_record(base_id)
+    if joined:
+        return joined
+    record = _record(base_id)
+    if record is not None and record.get("sent_at"):
+        return record.get("address")
+    return None
+
+
 def first_push_unreviewed(base_id: str, root: Optional[str], runner: Optional[GitRunner] = None) -> bool:
     """Whether sends from this base are still held back for want of a first backup.
 
     Answered from what the record says was sent, read against the base: the
-    base's own shared copy must be the address the backup went to. Where each
-    send goes is checked on its own by `destination_allowed`. Anything that
-    cannot be read is answered yes.
+    base's own shared copy must be the address the backup went to. A seat
+    joined from a link has nothing to back up, so its record of where it was
+    copied from stands in for the backup's, read against the base the same way.
+    Where each send goes is checked on its own by `destination_allowed`.
+    Anything that cannot be read is answered yes.
     """
     if not root:
         return True
     try:
+        joined = _joined_record(base_id)
+        if joined is not None:
+            return not _same_place(_origin(runner_or_default(runner), root), joined)
         record = _record(base_id)
         if record is None or not record.get("sent_at"):
             return True
@@ -340,6 +371,9 @@ def destination_allowed(
     if not root or not destination:
         return False
     try:
+        joined = _joined_record(base_id)
+        if joined is not None:
+            return _same_place(destination, joined)
         record = _record(base_id)
         if record is None or not _same_place(destination, record.get("address")):
             return False

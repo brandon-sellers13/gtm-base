@@ -101,8 +101,22 @@ REASON_SKILLS_FILE = "a-file-in-the-skills-folder"
 # A command that sets, reads or clears the ticket an allowed approval carries
 # (Unit 1.7e). Only `approval` may put one on a command.
 REASON_APPROVAL_TICKET = "names-the-approval-ticket"
+# A send straight to the line of work the team shares, from a base that has a
+# shared copy, carrying more than confirmation lines (P2). Every other change
+# from a seat goes to its owner as a proposal.
+REASON_SHARED_LINE = "straight-to-the-shared-line"
+
+# What a seat may still send straight to the shared line: the confirmation
+# lines an owner writes when they say a document is still right, which the app
+# counts as bookkeeping (web/src/lib/unapproved.ts) for the same reason.
+BOOKKEEPING_PREFIX = "work/confirmations/"
 
 SENTENCES = {
+    REASON_SHARED_LINE: (
+        "GTM Base stopped this because it sends a change straight to the base "
+        "everyone shares. A change goes to its owner as a proposal instead, "
+        "and nothing changes in the shared base until they accept it."
+    ),
     REASON_UNTOKENIZABLE: (
         "GTM Base could not tell what this command does with the shared copy, "
         "so it was not run."
@@ -1615,6 +1629,97 @@ def send_from_a_base_allowed(
     )
 
 
+def shared_line_is_held(cwd: str, git: Optional[GitRunner] = None) -> bool:
+    """Whether this base's shared line takes proposals only: yes once it has a shared copy.
+
+    A base has one once its first backup went, or when this seat was joined
+    from a link. Before that the only send there is the first backup itself,
+    which `send_from_a_base_allowed` already holds to the one reviewed
+    version. A question that cannot be answered is answered yes, which only
+    ever holds a send back.
+    """
+    from . import backup
+
+    try:
+        if not _looks_like_a_base(cwd, git):
+            return False
+        resolution = paths.resolve_base(
+            cwd, machine.load_machine_state(runner=git), runner=git
+        )
+        return backup.shared_address(resolution.base_id or "") is not None
+    except Exception:
+        return True
+
+
+def shared_line_names(git: GitRunner, cwd: str, remote: str = "origin") -> List[str]:
+    """Every name the line of work the team shares could go by here."""
+    names = ["main", "master"]
+    found = default_branch(git, cwd, remote)
+    if found and found not in names:
+        names.append(found)
+    return names
+
+
+def only_bookkeeping(git: GitRunner, cwd: str, start: Optional[str], end: str) -> bool:
+    """Whether every piece of work from `start` to `end` touches confirmation lines only.
+
+    Each piece of work is read on its own, as the app reads the shared line, so
+    a change undone by a later one is still seen. A merge, a range that cannot
+    be read, and a range with no starting point all answer no.
+    """
+    if not start or start == EMPTY_TREE or _ZERO_SHA.match(start):
+        return False
+    if not git.run(["merge-base", "--is-ancestor", start, end], cwd=cwd).ok:
+        return False
+    listed = git.run(["rev-list", "--parents", "%s..%s" % (start, end)], cwd=cwd)
+    if not listed.ok:
+        return False
+    for line in listed.out().splitlines():
+        shas = line.split()
+        if len(shas) != 2:
+            return False
+        touched = git.run(
+            ["diff-tree", "--no-commit-id", "--name-only", "-r", "-z", "--no-renames", shas[0]],
+            cwd=cwd,
+        )
+        if not touched.ok:
+            return False
+        for name in touched.stdout.split("\0"):
+            if name and not name.startswith(BOOKKEEPING_PREFIX):
+                return False
+    return True
+
+
+def _reaches_the_shared_line(git: GitRunner, cwd: str, push, branch_now) -> bool:
+    """Whether a send typed on a command line would change the shared line with more than bookkeeping."""
+    if not shared_line_is_held(cwd, git):
+        return False
+    remote = push.remote or "origin"
+    names = shared_line_names(git, cwd, remote)
+    if push.all_refs:
+        return True
+    for spec in push.refspecs or ["HEAD"]:
+        text = spec[1:] if spec.startswith("+") else spec
+        source, colon, target = text.partition(":")
+        if not colon:
+            target = source
+        if target in ("", "HEAD"):
+            target = branch_now or ""
+        target_name = target.rsplit("/", 1)[-1]
+        if target_name not in names:
+            continue
+        if push.delete or not source:
+            return True
+        upstream = "refs/remotes/%s/%s" % (remote, target_name)
+        start = git.run(["rev-parse", "--verify", "--quiet", upstream + "^{commit}"], cwd=cwd)
+        end = git.run(
+            ["rev-parse", "--verify", "--quiet", (source or "HEAD") + "^{commit}"], cwd=cwd
+        )
+        if not (start.ok and end.ok) or not only_bookkeeping(git, cwd, start.out(), end.out()):
+            return True
+    return False
+
+
 def push_destinations(git: GitRunner, cwd: str, push) -> Optional[List[str]]:
     """Every address a send would actually go to, as git would resolve it, or None.
 
@@ -2103,12 +2208,22 @@ def check_command(
         # because knowing what it would undo takes nothing being read.
         if _forces_default_branch(runner, where, push, branch_now):
             return sentence_for(REASON_FORCE_DEFAULT)
+        # Straight onto the shared line from a base with a shared copy. Asked
+        # after the content is read, so a send carrying a key or an address is
+        # refused for that, which is the more useful thing to hear first.
+        held = _looks_like_a_base(where, runner) and _reaches_the_shared_line(
+            runner, where, push, branch_now
+        )
         if push.delete or not reads_this_one:
+            if held:
+                return sentence_for(REASON_SHARED_LINE)
             continue
         for start, end in ranges_for_push(runner, where, push):
             reason = scan_range(runner, where, start, end, allowlist)
             if reason:
                 return reason
+        if held:
+            return sentence_for(REASON_SHARED_LINE)
     return None
 
 
@@ -2174,6 +2289,12 @@ def check_git_hook(
         return sentence_for(REASON_FIRST_PUSH)
     allowlist, _code = scan.load_allowlist(base_root_for(cwd, git=runner))
     shared = shared_branch_ref(runner, cwd, remote_name or "origin")
+    # Once the base has a shared copy, its shared line takes nothing straight
+    # from this computer but confirmation lines: every other change goes as a
+    # proposal. Asked here too, because a send from a plain terminal or from a
+    # script never passes the check on commands. It is answered after the
+    # content is read, as on the command line, so a send carrying a key is
+    # refused for that first.
     for parts in lines:
         local_ref, local_sha, _remote_ref, remote_sha = parts[:4]
         if _ZERO_SHA.match(local_sha):
@@ -2190,6 +2311,19 @@ def check_git_hook(
         reason = scan_range(runner, cwd, start, local_ref or local_sha, allowlist)
         if reason:
             return reason
+    if lines and shared_line_is_held(cwd, runner):
+        held = set(
+            "refs/heads/%s" % name
+            for name in shared_line_names(runner, cwd, remote_name or "origin")
+        )
+        for parts in lines:
+            _local_ref, local_sha, remote_ref, remote_sha = parts[:4]
+            if remote_ref not in held:
+                continue
+            if _ZERO_SHA.match(local_sha) or not only_bookkeeping(
+                runner, cwd, remote_sha, local_sha
+            ):
+                return sentence_for(REASON_SHARED_LINE)
     return None
 
 

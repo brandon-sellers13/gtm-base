@@ -3,7 +3,7 @@
      block carries one placeholder, {{offer_script}}, which the hook fills with
      the full path of the script that writes a "not now" answer down.
      Setting a base up is the join skill, which ships in 0.2.0. Joining a base
-     from a link somebody sent still arrives with a later release. -->
+     from a link somebody sent is the same skill since P2. -->
 
 [[block: visible]]
 GTM Base is installed. It can set up a company base for you, which is one
@@ -33,10 +33,11 @@ decides what to do.
   you, because the order it sets out is the whole of how a person is told what
   is about to happen. If they stop partway through, say this sentence:
   Say "set up my company base" whenever you are ready.
-- "join" means someone sent them a link to a base that already exists. Joining
-  a base from a link is not part of this release yet. Tell them that plainly,
-  tell them that nothing on their computer has been changed, and then say this
-  sentence:
+- "join", or a link to a GitHub repository, means someone invited them to a
+  base that already exists. Use the join skill and follow its section "Join a
+  base from a link" from its first step, with the address if they gave one.
+  Do not copy, fetch or open anything before that skill is open in front of
+  you. If they decide not to join after all, say this sentence:
   Say "set up my company base" whenever you are ready.
 - Anything else (a greeting, a question, ordinary work) means they have not
   answered the offer yet. Say these three things, in this order, and then help

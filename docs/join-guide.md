@@ -1,11 +1,9 @@
 # Joining GTM Base
 
-Status: as of version 0.2.6 the offer, setting a base up, and linking a base to
-the folder your material lives in are all live.
-Backing a base up somewhere off your computer, inviting a teammate, and joining
-a base from a link arrive with the next release, so those sections below
-describe what is coming rather than what works today. This guide is updated as
-each piece lands.
+Status: the offer, setting a base up, and linking a base to the folder your
+material lives in are live. Backing a base up to GitHub and inviting a teammate
+happen in the GTM Base app, and joining a base a teammate invited you to is
+described in its own section below. This guide is updated as each piece lands.
 
 ## What you need before you start
 
@@ -180,6 +178,30 @@ Until you give one of those three answers, the offer appears again at the top
 of the first reply in each new session, wherever you are working. That is
 deliberate. Your app shows you nothing before your first message, so an offer
 you never read is an offer you were never really given.
+
+## Join a base a teammate invited you to
+
+When the owner of a base invites you in the GTM Base app, GitHub sends you an
+invitation to the base's private repository. Accept it first, from the email or
+from the repository's page, with the GitHub account you were invited with, and
+make sure git on your computer is signed in to GitHub with that same account.
+GTM Base uses that sign-in and never asks you for a password or a token.
+
+Then say the line the app shows on the base's Team page, which is "join a base
+from a link" followed by the base's GitHub address. GTM Base checks that your
+computer can read the repository, tells you the folder the base will go in,
+which is a folder for that base inside the folder kept for bases in your home
+folder, and asks whether to copy it. Claude Code asks you itself before
+anything is copied. Everything copied is read before it is kept, and a
+repository holding anything a company base never holds, such as instructions an
+assistant would follow on its own or code, is removed again without a trace.
+
+From then on your computer is a seat on that base. Open Claude Code in the
+base's folder to work with it. Any change you make, such as a fix to a document,
+goes to the owner of the document as a proposal, and nothing changes in
+the shared base until they accept it in the app or in Claude Code. Nothing you
+do sends a change straight to the shared base, apart from the confirmation you
+give when you are asked whether a document you own is still right.
 
 ## What setting up does
 

@@ -610,12 +610,8 @@ BACKUP_NOT_IN_THIS_RELEASE = (
     "next release, so there is nothing to run for it today."
 )
 INVITE_NOT_IN_THIS_RELEASE = (
-    "Inviting somebody else onto your base arrives with the next release, so "
-    "there is nothing to run for it today."
-)
-JOIN_LINK_NOT_IN_THIS_RELEASE = (
-    "Joining a base from a link somebody sent you arrives with the next "
-    "release, so there is nothing to run for it today."
+    "Inviting somebody onto your base happens in the GTM Base app, on your "
+    "base's Team page, so there is nothing to run for it here."
 )
 # What GTM Base says when it is asked to send something in a session that has
 # already read the person's own documents.

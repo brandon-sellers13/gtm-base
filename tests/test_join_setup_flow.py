@@ -3563,14 +3563,16 @@ class TestWhatThisReleaseWillNotDo(unittest.TestCase):
     def test_backing_up_is_no_longer_a_mode_that_is_refused(self):
         self.assertNotIn(join_flow.MODE_BACKUP, join_flow.NOT_IN_THIS_RELEASE)
 
-    def test_inviting_somebody_and_joining_by_link_are_refused_either_way(self):
+    def test_inviting_somebody_is_refused_either_way(self):
         with support.Sandbox():
             for session in ("another-session", SESSION):
                 marker.write_sources_read_marker(SESSION)
-                for mode in (join_flow.MODE_INVITE, join_flow.MODE_JOIN_LINK):
-                    said = join_flow.refuse_mode(mode, session)
-                    self.assertTrue(said.endswith("."), said)
-                    self.assertEqual([], plain_language.find_banned(said))
+                said = join_flow.refuse_mode(join_flow.MODE_INVITE, session)
+                self.assertTrue(said.endswith("."), said)
+                self.assertEqual([], plain_language.find_banned(said))
+
+    def test_joining_by_link_is_no_longer_a_mode_that_is_refused(self):
+        self.assertNotIn(join_flow.MODE_JOIN_LINK, join_flow.NOT_IN_THIS_RELEASE)
 
 
 # --- The skill itself --------------------------------------------------------
@@ -3836,7 +3838,6 @@ class TestTheSkillIsPlainAndSaysWhatWillHappen(unittest.TestCase):
             constants.SOURCES_READ_REFUSAL,
             constants.BACKUP_NOT_IN_THIS_RELEASE,
             constants.INVITE_NOT_IN_THIS_RELEASE,
-            constants.JOIN_LINK_NOT_IN_THIS_RELEASE,
         ):
             self.assertEqual([], plain_language.find_banned(sentence), sentence)
             self.assertEqual([], plain_language.find_dashes(sentence), sentence)
