@@ -16,6 +16,15 @@
 - What is left: the record of what was backed up lives in a file on this computer. A record somebody wrote by hand can only ever name a GitHub repository, and git still needs your own account's permission to write there, but the record itself is not signed.
 - Joining a base from a link and inviting somebody still answer with one sentence; they arrive next.
 
+Plan 1, Unit 3.1, the thin runner:
+
+- A skill kept in a base now runs through the runner, with the new use-skill skill: `use_skill.py --start <job>` reads the whole skill once, checks that this computer trusts exactly that version, reads each document the skill declares as the base last saved it, runs the moment-of-use check on each, and hands back one named outcome (refused, not checked, flagged, ready with gaps, or ready). The seven steps run in a fixed order and the first that fails decides. `docs/thin-runner.md` and figure 9 of the logic atlas describe it.
+- A run started with `--unattended` marks its conversation in the command check before it runs, so every approval in it is refused from the first line; a flagged document is reported first and what depends on it is held, and no question is asked. A later start in the same conversation stays unattended.
+- `use_skill.py --finish` refuses work that holds contact details or keys, a money figure or percentage found in none of the files it was built from (a lint, which cannot tell whether a figure belongs to the right measure), or a marked engine block that is not quoted line for line from the file it names. Each run writes a started line and a completed line in the plugin's records, never in the base.
+- `use_skill.py --check <job>` is the contract check over a skill's written examples: the approved output must meet its expectations and every deliberately wrong output must fail, with no model called. It also refuses a skill whose own text names the runner's commands, because in a chat the connector serves the skill instead.
+- The moment-of-use check can now be asked about documents as last saved, so an unsaved edit on the disk changes nothing it finds.
+- What the tests prove is the contract. Whether a skill does good work is Brandon's replay of real runs, and nothing here claims otherwise. Writing a skill into a base stays refused until Unit 4.2b.
+
 ## 0.5.0 (not yet released)
 
 Release B: Units 1.5b, 1.6, 1.7a to 1.7e and 1.8, call 29, calls 57 to 60, and the live-check follow-up, with 0.3.3 to 0.3.10 and 0.4.0 carried. Prepared on 2026-10-10 as 0.4.0; main shipped 0.4.0 on 2026-10-21 first, so Release B ships as 0.5.0, and the date is set on the day it ships.

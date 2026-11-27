@@ -1052,3 +1052,51 @@ def prepared_draft(run, step, text, segment=None, base_root=None):
         if reviewed.ready:
             support_checked(run, step, segment=segment, base_root=base_root)
     return path
+
+
+# --- Plan 1, Unit 3.1: a base holding named documents and one trusted skill ----
+
+
+SKILL_DOCUMENT = """---
+kind: %(kind)s
+owner: owner@example.com
+last_confirmed: 2026-01-01
+sources: []
+status: draft
+---
+
+# %(title)s
+
+%(body)s
+"""
+
+
+def skill_document(kind, title="A document", body="Words the team wrote."):
+    """One base document of the given kind, owned by the test owner."""
+    return SKILL_DOCUMENT % {"kind": kind, "title": title, "body": body}
+
+
+def skill_base(sandbox, documents=None, skill="weekly-readout", files=None, trust=True, name="skills"):
+    """A local base holding named documents and one skill, saved, and trusted here.
+
+    `documents` and `files` map base paths to text. `files` holds the skill's
+    own files, its `SKILL.md` included. The skill is trusted on this seat as
+    its owner approved it, unless the test says not to.
+    """
+    from gtmbase import authority, ids, machine, state
+
+    root = os.path.join(sandbox.path, name)
+    base_id = ids.base_id_random()
+    make_base(root, base_id=base_id)
+    for path, text in sorted((documents or {}).items()):
+        write(os.path.join(root, path), text)
+    for path, text in sorted((files or {}).items()):
+        write(os.path.join(root, path), text)
+    git(["add", "-A"], cwd=root)
+    git(["commit", "-q", "-m", "documents and a skill"], cwd=root)
+    machine.append_joined(root=root, base_id=base_id, remote=None)
+    state.update_seat(base_id, first_push_reviewed=False)
+    if trust:
+        manifest = authority.manifest_of(root, base_id, skill)
+        authority.trust(base_id, manifest, "owner@example.com", authority.ROLE_OWNER)
+    return root, base_id

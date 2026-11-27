@@ -42,6 +42,8 @@ SCRIPTS = {
         SKILLS_DIR, "stale-check", "scripts", "stale_check.py"
     ),
     "moment.py": os.path.join(support.PLUGIN_DIR, "scripts", "moment.py"),
+    # Plan 1, Unit 3.1.
+    "use_skill.py": os.path.join(SKILLS_DIR, "use-skill", "scripts", "use_skill.py"),
 }
 
 # A command line, wherever it appears: inside a fenced block or in backticks.

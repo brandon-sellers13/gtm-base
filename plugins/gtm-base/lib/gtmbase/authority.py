@@ -32,7 +32,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Tuple
 
 from . import constants, docpaths, formats, layout, paths, validate
 from .errors import GtmBaseError, PathError, ValidationError
@@ -320,18 +320,29 @@ class Manifest(object):
 
 
 def manifest_of(base_root: str, base_id: str, skill: str) -> Optional[Manifest]:
-    """The manifest of one skill as it sits on the disk, or None when it cannot be one.
+    """The manifest of one skill as it sits on the disk, or None when it cannot be one."""
+    read = read_skill(base_root, base_id, skill)
+    return read[0] if read is not None else None
+
+
+def read_skill(
+    base_root: str, base_id: str, skill: str
+) -> Optional[Tuple[Manifest, Dict[str, bytes]]]:
+    """One skill read off the disk once: its manifest and the exact bytes hashed.
 
     Every file in the skill's folder has to be one of the skill's three shapes
     and a plain file. A link, a script, a hidden file or anything deeper means
     there is no skill here to trust, which is refused rather than skipped,
-    because a file skipped is a file that runs unseen.
+    because a file skipped is a file that runs unseen. The bytes come back
+    beside the manifest so a caller hands on exactly what was hashed and
+    nothing read a second time (CS12).
     """
     skills = os.path.join(base_root, constants.SKILLS_DIR)
     folder = os.path.join(skills, skill)
     if os.path.islink(skills) or os.path.islink(folder) or not os.path.isdir(folder):
         return None
     files: Dict[str, str] = {}
+    contents: Dict[str, bytes] = {}
     unreadable: List[OSError] = []
     for dirpath, dirnames, filenames in os.walk(folder, onerror=unreadable.append):
         for name in list(dirnames):
@@ -343,13 +354,33 @@ def manifest_of(base_root: str, base_id: str, skill: str) -> Optional[Manifest]:
             found = docpaths.classify(relative)
             if found is None or found.kind != docpaths.KIND_SKILL or found.skill != skill:
                 return None
-            hashed = file_hash(base_root, relative)
-            if hashed is None:
+            if os.path.islink(full) or not os.path.isfile(full):
                 return None
-            files[relative] = hashed
+            try:
+                with open(full, "rb") as handle:
+                    data = handle.read()
+            except OSError:
+                return None
+            files[relative] = bytes_hash(data)
+            contents[relative] = data
     if unreadable or constants.SKILLS_DIR + "/" + skill + "/SKILL.md" not in files:
         return None
-    return Manifest(base_id, skill, files)
+    return Manifest(base_id, skill, files), contents
+
+
+def saved_file(
+    base_root: str, relative: str, revision: str = "HEAD", runner: Optional[GitRunner] = None
+) -> Optional[str]:
+    """One file as a saved revision holds it, None when it holds no such file.
+
+    A base that has saved nothing yet holds no file at all. A read that fails
+    raises `AuthorityUnavailable` rather than answering, so a caller never
+    takes a failed read for a missing document.
+    """
+    git = runner_or_default(runner)
+    if revision == "HEAD" and not _has_history(base_root, git):
+        return None
+    return _saved(base_root, revision, relative, git)
 
 
 # --- What this seat trusts ------------------------------------------------------

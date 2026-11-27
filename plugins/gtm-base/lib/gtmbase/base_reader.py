@@ -150,8 +150,44 @@ def newest_date_in(value) -> Optional[str]:
     return max(found) if found else None
 
 
+def saved_document_paths(root: str, git: GitRunner) -> List[str]:
+    """Every document the last saved revision holds, in the order `context_files` reads them.
+
+    A base that has saved nothing holds none. A read that fails raises
+    `authority.AuthorityUnavailable`, never an empty answer.
+    """
+    if not authority._has_history(root, git):
+        return []
+    listed = git.run(
+        [
+            "ls-tree", "-r", "-z", "--name-only", "HEAD", "--",
+            constants.CONTEXT_DIR, constants.STANDARDS_DIR, constants.STACK_PATH,
+        ],
+        cwd=root,
+        timeout=LOCAL_TIMEOUT_SECONDS,
+    )
+    if not listed.ok:
+        raise authority.AuthorityUnavailable(
+            "the saved documents could not be listed", code="unreadable"
+        )
+    names = [name for name in listed.stdout.split("\x00") if name]
+    inside = sorted(
+        name for name in names
+        if name.startswith(constants.CONTEXT_DIR + "/") and name.endswith(".md")
+    )
+    outside = sorted(
+        name for name in names
+        if not name.startswith(constants.CONTEXT_DIR + "/")
+        and docpaths.classify(name) is not None
+        and docpaths.classify(name).kind == docpaths.KIND_STANDARD
+    )
+    if constants.STACK_PATH in names:
+        outside.append(constants.STACK_PATH)
+    return inside + outside
+
+
 def context_files(
-    root: str, git: Optional[GitRunner] = None
+    root: str, git: Optional[GitRunner] = None, saved: bool = False
 ) -> "List[stale.ContextFileInfo]":
     """Every document the base holds, with its owners and its dates.
 
@@ -163,8 +199,18 @@ def context_files(
     Asked with a runner, each file also carries its authority set as the base
     last saved it: its owners, the base owner and the administrators. Without
     one, the owners are all there is, as before.
+
+    Asked for what is saved (Plan 1, Unit 3.1, CS3), every document is read as
+    the last saved revision holds it, and a file only on the disk is not one.
     """
     files: List[stale.ContextFileInfo] = []
+    if saved:
+        git = runner_or_default(git)
+        for relative in saved_document_paths(root, git):
+            info = _file_info(root, relative, git, saved=True)
+            if info is not None:
+                files.append(info)
+        return files
     context_root = os.path.join(root, constants.CONTEXT_DIR)
     for dirpath, dirnames, filenames in os.walk(context_root):
         dirnames[:] = sorted(dirnames)
@@ -210,9 +256,12 @@ def _items(value) -> List[str]:
     return []
 
 
-def _file_info(root: str, relative: str, git: Optional[GitRunner]):
+def _file_info(root: str, relative: str, git: Optional[GitRunner], saved: bool = False):
     """One document as the stale library wants it, or None when it cannot be read."""
-    text = read_text(os.path.join(root, relative.replace("/", os.sep)))
+    if saved:
+        text = authority.saved_file(root, relative, runner=git)
+    else:
+        text = read_text(os.path.join(root, relative.replace("/", os.sep)))
     if text is None:
         return None
     try:
@@ -931,12 +980,14 @@ def read_base(
     runner: Optional[GitRunner] = None,
     today: Optional[datetime.date] = None,
     record_dropped: bool = True,
+    saved: bool = False,
 ) -> BaseInputs:
     """Read one base into the values the stale library works on.
 
     Reading normally records a refused path in this seat's own files. A caller
     that is only looking asks for that not to happen, and gets the refusals
-    back on the result instead.
+    back on the result instead. A caller that asks for what is saved gets the
+    documents as the last saved revision holds them (`context_files`).
     """
     git = runner_or_default(runner)
     day = today or state.today()
@@ -958,7 +1009,7 @@ def read_base(
 
     return BaseInputs(
         settings=settings,
-        files=context_files(base_root, git),
+        files=context_files(base_root, git, saved=saved),
         ledger=ledger(base_root, base_id, day, collect=dropped),
         confirmations=confirmations(base_root, git),
         corrections=corrections(base_root, git, default),

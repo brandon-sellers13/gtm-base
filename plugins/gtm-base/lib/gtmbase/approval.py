@@ -242,6 +242,13 @@ UNATTENDED = (
     "GTM Base did not run this, because this conversation is a run nobody is "
     "watching, and nothing is approved in one."
 )
+# Plan 1, Unit 3.1: a run said to be unattended starts only once its
+# conversation is marked, so no approval in it is ever asked about.
+NOT_MARKED = (
+    "GTM Base did not start this run, because it could not record that nobody "
+    "is watching it, and a run nobody watches starts only once that is "
+    "recorded."
+)
 NOT_ASKED = (
     "Nothing was written, because GTM Base could not match this approval to a "
     "yes you gave in Claude Code's own question. That happens when it was run "
@@ -306,6 +313,7 @@ SENTENCE_NAMES = (
     "SAYS_SET_ADMINISTRATORS",
     "SAYS_SET_BUSINESSES",
     "UNATTENDED",
+    "NOT_MARKED",
     "SAYS_SKIP",
     "SAYS_SKIP_CLOSING",
     "SAYS_CLOSE_NOTE",
@@ -863,6 +871,13 @@ def _verdict(decision: str, reason: str, updated: Optional[dict] = None) -> dict
     return {"hookSpecificOutput": output}
 
 
+def _starts_unattended(command: str) -> bool:
+    """Whether this line starts the runner as unattended (`runner.starts_unattended`)."""
+    from . import runner
+
+    return runner.starts_unattended(command)
+
+
 def _unattended(session: str) -> bool:
     """Whether the runner marked this conversation unattended, read from its record."""
     from . import authority
@@ -908,6 +923,17 @@ def decide(payload: dict, client: str = CLIENT_CLAUDE) -> Optional[dict]:
         return None
     session = payload.get("session_id")
     session = session if isinstance(session, str) else None
+    # Plan 1, Unit 3.1 (CS30): the runner started as unattended marks its
+    # conversation here, before the command runs, so the refusal below holds
+    # from the runner's first line. A mark that cannot be written stops the
+    # start, because an unmarked run nobody watches could be asked to approve.
+    if session and _starts_unattended(command):
+        try:
+            from . import authority
+
+            authority.mark_unattended(session)
+        except Exception:
+            return _verdict("deny", NOT_MARKED)
     # The first test, before any ticket is taken or made and whatever the
     # permission mode (Plan 1, Unit 4.2a, CS30): in a conversation the runner
     # marked unattended, every approval is refused and nothing is asked.
