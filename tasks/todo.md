@@ -1877,7 +1877,7 @@ The order across every track is in `docs/plans/2026-11-26-003-roadmap-to-full-ex
 - [x] C2. Reading documents, with the moment-of-use flag in the answer. (PR #23, merged as 429da77 and deployed to the live site on 2026-11-26 as deploy 6b08e688339d2aae566195f8; the one before it, for a rollback, is C1's 6b08b757ddcfc03acda297a1. The ChatGPT run passed end to end on the test site, the security review found nothing at the bar, and on the live site the home page, sign-in and the 19 public connector checks pass. The Claude half waits for Simona's invite.)
 - [ ] C3. Skills served live. (waits on Plan 1's runner 3.1 and skills folder 4.2b, and on Track 4's drift grade T4.8)
 - [x] C4. Proposing a context change from chat. (shipped with C2 in PR #23)
-- [ ] C5. The setup guide and a Project instruction for each base. (nothing blocks it)
+- [x] C5. The setup guide and a Project instruction for each base, shown on each base's page when the connector is on. (branch `claude/c5-setup-guide`; web build, lint, type check and the 69 stale-parity checks pass; deployed to the test site gtm-base-connector-spike on 2026-11-26 as deploy 6b08e9a83a9d29a0988fe498 and checked there on the gtm-base-test page, including the copy button. Not deployed to the live site.)
 - [ ] Carried over from C1 and C2, all needing Simona's account: the Claude half of the run, the refusal of a second base in one conversation, and the sign-in test with two GitHub accounts.
 - [ ] Brandon: decide the borderline proposal pattern from C2's security review, once for the plugin and the connector.
 - [ ] Take down the connector's test site once the Claude half has passed.

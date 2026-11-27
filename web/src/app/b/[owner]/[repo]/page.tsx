@@ -1,6 +1,8 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { Header } from "@/components/Header";
+import { SetupGuide } from "@/components/SetupGuide";
+import { connectorEnabled, resourceUrl } from "@/lib/connector/config";
 import { readForPage } from "@/lib/pageData";
 import { listProposals } from "@/lib/proposals";
 import { listUnapproved } from "@/lib/unapproved";
@@ -17,6 +19,7 @@ export default async function BasePage({ params }: { params: Promise<{ owner: st
 
   const openChanges = base.changes.filter((c) => c.status === "open");
   const parts = [...PARTS, { key: "other", title: "Other documents", blurb: "" }];
+  const showGuide = connectorEnabled();
 
   return (
     <div className="mx-auto max-w-3xl px-4 sm:px-6">
@@ -48,6 +51,15 @@ export default async function BasePage({ params }: { params: Promise<{ owner: st
           <a href={base.htmlUrl} className="underline-offset-4 hover:underline">
             Open on GitHub
           </a>
+          {showGuide && (
+            <>
+              {" "}
+              ·{" "}
+              <a href="#use-in-chat" className="underline-offset-4 hover:underline">
+                Use in Claude or ChatGPT
+              </a>
+            </>
+          )}
         </p>
 
         {unapproved.length > 0 && (
@@ -107,6 +119,8 @@ export default async function BasePage({ params }: { params: Promise<{ owner: st
             </section>
           );
         })}
+
+        {showGuide && <SetupGuide owner={base.owner} repo={base.repo} connectorUrl={resourceUrl()} />}
       </main>
     </div>
   );
