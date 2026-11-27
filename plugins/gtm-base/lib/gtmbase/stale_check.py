@@ -31,6 +31,7 @@ import re
 from typing import List, Optional, Tuple
 
 from . import (
+    docpaths,
     approval,
     base_reader,
     callmarkers,
@@ -1355,7 +1356,7 @@ def _owns_nothing(report, email) -> bool:
     if not email:
         return True
     for info in report.files.values():
-        if getattr(info, "present", False) and email in (info.owners or []):
+        if getattr(info, "present", False) and email in (info.authority or []):
             return False
     return True
 
@@ -1414,7 +1415,7 @@ def _review_documents(
             continue
         if stale.is_map(info):
             continue
-        if email is not None and email not in (info.owners or []):
+        if email is not None and email not in (info.authority or []):
             continue
         if report.suppressions and flag.path in report.suppressions:
             if state.is_suppressed(base_id, flag.path, today):
@@ -1424,7 +1425,7 @@ def _review_documents(
             # a question nobody answered; that question is listed instead.
             continue
         try:
-            path = paths.canonical_context_path(base_root, flag.path)
+            path = docpaths.canonical(base_root, flag.path)
         except (PathError, ValidationError):
             if not dry_run:
                 entry_id = flag.entry_ids[0] if flag.entry_ids else None
@@ -1460,7 +1461,7 @@ def _review_open_questions(report, base_root, base_id, email, today) -> List["Re
     lines: List[ReviewLine] = []
     for path in report.open_question_paths():
         info = report.files.get(path)
-        if email is not None and email not in (info.owners or []):
+        if email is not None and email not in (info.authority or []):
             continue
         # A document set aside for now is still asked its open questions,
         # because the closing sends the person to the review to answer them
@@ -1468,7 +1469,7 @@ def _review_open_questions(report, base_root, base_id, email, today) -> List["Re
         # the unit's correctness review). Setting a question about a change
         # aside is not setting these aside.
         try:
-            path = paths.canonical_context_path(base_root, path)
+            path = docpaths.canonical(base_root, path)
         except (PathError, ValidationError):
             continue
         text = read_text(os.path.join(base_root, path.replace("/", os.sep))) or ""
@@ -1640,7 +1641,7 @@ def answer_a_question(
     by mistake is refused rather than written into the base.
     """
     try:
-        relative = paths.canonical_context_path(
+        relative = docpaths.canonical(
             base_root, layout.where_it_lives(base_root, path)
         )
     except (PathError, ValidationError):

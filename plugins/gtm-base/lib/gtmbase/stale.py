@@ -29,7 +29,7 @@ from typing import Any, Dict, List, Optional, Sequence
 
 from . import constants
 from .errors import PathError, ValidationError
-from .paths import check_context_path_syntax
+from .docpaths import check_syntax as check_context_path_syntax
 from .validate import read_map_settings
 
 # --- The fixed codes this module reports ------------------------------------
@@ -181,6 +181,7 @@ class ContextFileInfo(object):
         "status",
         "kind",
         "open_questions",
+        "authority",
     )
 
     def __init__(
@@ -192,9 +193,14 @@ class ContextFileInfo(object):
         status: str = "",
         kind: str = "",
         open_questions: Optional[Sequence[str]] = None,
+        authority: Optional[Sequence[str]] = None,
     ):
         self.path = path
         self.owners = list(owners or [])
+        # Every address that may confirm this file today: its owners, the
+        # base owner and the administrators (Plan 1, Unit 4.2a). A caller that
+        # read no map hands in none, and then the owners are all there is.
+        self.authority = list(authority) if authority is not None else list(self.owners)
         self.exists = bool(exists)
         self.sources_date = _as_date(sources_date)
         self.status = status or ""
@@ -239,12 +245,19 @@ class ConfirmationRecord(object):
     nothing, and a line with no author never counts as an owner's yes.
     """
 
-    __slots__ = ("line", "author_email", "commit")
+    __slots__ = ("line", "author_email", "commit", "allowed")
 
-    def __init__(self, line, author_email: Optional[str] = None, commit=None):
+    def __init__(
+        self, line, author_email: Optional[str] = None, commit=None, allowed=None
+    ):
         self.line = line
         self.author_email = author_email
         self.commit = commit
+        # Whether the author was in the file's authority set at the revision
+        # that added the line (Plan 1, Unit 4.2a, CS4), as the caller judged
+        # it from the saved history. None means nobody judged it, and the
+        # file's owners today decide, as they always did.
+        self.allowed = allowed
 
     def __repr__(self) -> str:
         return "ConfirmationRecord(file=%r, author_email=%r)" % (
@@ -278,6 +291,7 @@ class CorrectionRecord(object):
         "content_hash_at_commit",
         "merged_by_email",
         "merged_on",
+        "merged_allowed",
     )
 
     def __init__(
@@ -288,7 +302,12 @@ class CorrectionRecord(object):
         content_hash_at_commit: Optional[str] = None,
         merged_by_email: Optional[str] = None,
         merged_on=None,
+        merged_allowed=None,
     ):
+        # Keyed by path: whether whoever accepted the record was in that
+        # file's authority set when they accepted it (CS4). None means nobody
+        # judged it, and the file's owners today decide.
+        self.merged_allowed = merged_allowed
         self.file = file
         self.introducing_commit = introducing_commit
         self.co_modified_paths = list(co_modified_paths or [])
@@ -483,7 +502,7 @@ class StaleReport(object):
                 continue
             if is_map(info):
                 continue
-            if owner_email is not None and owner_email not in info.owners:
+            if owner_email is not None and owner_email not in info.authority:
                 continue
             if self._suppressed(flag.path):
                 continue
@@ -899,7 +918,13 @@ def _index_confirmations(known, confirmations, malformed):
         info = known.get(line.file)
         if info is None:
             continue
-        if record.author_email is not None and record.author_email in info.owners:
+        if record.author_email is None:
+            counts = False
+        elif record.allowed is not None:
+            counts = bool(record.allowed)
+        else:
+            counts = record.author_email in info.owners
+        if counts:
             owner_lines.setdefault(line.file, []).append(line)
         else:
             non_owner_counts[line.file] = non_owner_counts.get(line.file, 0) + 1
@@ -957,7 +982,11 @@ def _corrections_confirmations(known, corrections, malformed):
             merged_by = record.merged_by_email
             if merged_on is None or not merged_by:
                 continue
-            if merged_by not in known[path].owners:
+            judged = getattr(record, "merged_allowed", None)
+            if judged is not None:
+                if not judged.get(path):
+                    continue
+            elif merged_by not in known[path].owners:
                 continue
             standing = accepted.get(path)
             if standing is None or merged_on > standing.date:
@@ -1079,7 +1108,7 @@ def _file_flags(
             continue
         if is_map(info):
             continue
-        if owner_email is not None and owner_email not in info.owners:
+        if owner_email is not None and owner_email not in info.authority:
             continue
         lines = _lines_for(path, owner_lines, accepted)
         newest = confirmed_on.get(path)
@@ -1102,6 +1131,13 @@ def _file_flags(
             )
             continue
         if newest is None:
+            if not path.startswith(constants.CONTEXT_DIR + "/"):
+                # A standard or the source map joins the review's clock the
+                # first time someone in its authority set says it is right
+                # (Plan 1, Unit 4.2a). Before that it is a starter nobody has
+                # written in, or one nobody has looked at, and only a context
+                # change naming it flags it.
+                continue
             flags.append(
                 FileFlag(
                     path, REASON_UNCONFIRMED, TRIGGER_THRESHOLD, [], None, non_owner

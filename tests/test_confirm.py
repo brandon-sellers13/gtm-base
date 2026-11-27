@@ -343,6 +343,13 @@ class TestSomebodyElseSavedTheLine(unittest.TestCase):
     """Identity comes from the saved work, so a stranger's line counts for nothing."""
 
     def test_the_line_is_written_but_the_rules_ignore_it(self):
+        """Since Plan 1's Unit 4.2a it is not even written (CS3).
+
+        Every way GTM Base saves anything checks the authority set first, so
+        an address outside it is refused before a line exists. The rules
+        would still ignore such a line, which tests/test_authority_everywhere
+        .py holds for a line saved some other way.
+        """
         with support.Sandbox() as sandbox:
             base = builders.BaseFixture(sandbox)
             base.add_entry()
@@ -354,9 +361,8 @@ class TestSomebodyElseSavedTheLine(unittest.TestCase):
 
             result = answer(base, question, "yes")
 
-            self.assertEqual(confirm.STATUS_RECORDED, result.status, result.reasons)
-            lines, _bad = formats.parse_confirmations_file(shared_file(base))
-            self.assertEqual(1, len(lines))
+            self.assertEqual(confirm.STATUS_REFUSED, result.status, result.reasons)
+            self.assertEqual([confirm.CODE_NOT_AN_OWNER], result.codes)
 
             folder = fresh_copy(sandbox, base)
             report = report_for(folder, base.base_id, owner=OWNER)

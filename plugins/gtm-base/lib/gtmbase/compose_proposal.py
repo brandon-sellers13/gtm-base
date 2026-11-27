@@ -28,6 +28,7 @@ from typing import Dict, List, Optional, Tuple
 from . import (
     base_reader,
     constants,
+    docpaths,
     duplicate_check,
     formats,
     gate,
@@ -364,13 +365,14 @@ def check_edits(base_root: str, staging) -> List[Tuple[str, str]]:
         )
     for edit in staging.edits:
         try:
-            relative = paths.canonical_context_path(base_root, edit.path)
+            relative = docpaths.canonical(base_root, edit.path)
         except PathError:
             reasons.append(
                 (
                     CODE_OUTSIDE_CONTEXT,
-                    "A proposal may only change files in the context folder, and "
-                    "this one names a file outside it.",
+                    "A proposal may only change your context files, your "
+                    "standards and your source map, and this one names a file "
+                    "outside them.",
                 )
             )
             continue
@@ -655,7 +657,7 @@ def content_hash_for(worktree_path: str, ordered_paths: List[str]) -> str:
     """
     parts = []
     for relative in ordered_paths:
-        checked = paths.canonical_context_path(worktree_path, relative)
+        checked = docpaths.canonical(worktree_path, relative)
         text = read_text(os.path.join(worktree_path, checked))
         if text is None:
             raise ValidationError(
@@ -1302,7 +1304,7 @@ def _prepare(
         # Checked here and not only against the clone, because the same name
         # can be an ordinary file in one copy of a base and a link pointing
         # somewhere else entirely in another.
-        checked = paths.canonical_context_path(worktree_path, edit.path)
+        checked = docpaths.canonical(worktree_path, edit.path)
         target = os.path.join(worktree_path, checked)
         text = read_text(target)
         if text is None:
@@ -1592,6 +1594,7 @@ CODE_LOCAL_MAP = "hand-edit-touches-the-map"
 CODE_LOCAL_TOO_LONG = "hand-edit-too-long"
 CODE_LOCAL_NOTHING = "no-hand-edit"
 CODE_LOCAL_NO_SECTION = "hand-edit-outside-any-heading"
+CODE_LOCAL_SETTINGS = "hand-edit-moves-the-owner-or-business"
 
 
 def _changed_files(base_root: str, git: GitRunner) -> Tuple[List[str], str]:
@@ -1876,7 +1879,7 @@ def _documents_it_also_affects(base_root: str, named: List[str]) -> List[str]:
     found: List[str] = []
     for given in named:
         try:
-            relative = paths.canonical_context_path(base_root, str(given))
+            relative = docpaths.canonical(base_root, str(given))
         except (PathError, ValidationError):
             raise ValidationError(NOT_A_DOCUMENT_HERE, code=CODE_NOT_A_DOCUMENT_HERE)
         full = os.path.join(base_root, relative.replace("/", os.sep))
@@ -1987,12 +1990,27 @@ def stage_local_edit(
                 "The map is not a file a proposal may change.", code=CODE_LOCAL_MAP
             )
         try:
-            paths.canonical_context_path(base_root, relative)
+            docpaths.canonical(base_root, relative)
         except PathError:
             raise ValidationError(
-                "Only files in the context folder can be proposed this way, and "
-                "this one is not in it.",
+                "Only your documents can be proposed this way, and this file is "
+                "not one of them.",
                 code=CODE_LOCAL_OUTSIDE,
+            )
+        # Who owns a document and which business it is for change only
+        # through their own operations (Plan 1, Unit 4.2a, CS15 and CS17).
+        from . import operations
+
+        head = git.run(["show", "HEAD:" + relative], cwd=base_root)
+        now = read_text(os.path.join(base_root, relative.replace("/", os.sep)))
+        if head.ok and now is not None and operations.authority_lines_changed(
+            head.stdout, now
+        ):
+            raise ValidationError(
+                "That edit changes who owns a document or which business it is "
+                "for, and those change only through their own step, which shows "
+                "the change and records why.",
+                code=CODE_LOCAL_SETTINGS,
             )
     if _added_characters(diff) > constants.LOCAL_EDIT_MAX_CHARS:
         raise ValidationError(

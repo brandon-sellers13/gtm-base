@@ -15,6 +15,9 @@ places and tools, and it never holds a password, a key, or a token.
 For each kind of material, where it lives and which connected tool reads it.
 For example, sales calls in your call recorder, and deals in your CRM.
 
+| Kind of data | Business | Where it lives | What reads it | If that is not connected |
+|---|---|---|---|---|
+
 ## Where the work goes
 
 For each kind of output, where it is saved. For example, email drafts in your

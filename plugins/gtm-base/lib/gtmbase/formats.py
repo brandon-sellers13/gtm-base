@@ -17,7 +17,11 @@ from typing import Any, Dict, List, Optional, Tuple
 
 from . import constants
 from .errors import PathError, ValidationError
-from .paths import check_context_path_syntax, check_repo_path_syntax, PROPOSAL_PATH_PREFIXES
+from .paths import check_repo_path_syntax
+# The one rule for which paths are base documents (Plan 1, Unit 4.2a). Every
+# record keeps taking what the context folder's check took, and a standard and
+# the source map besides.
+from .docpaths import check_record_path, check_syntax as check_context_path_syntax
 from .validate import (
     check_content_hash,
     check_run_id,
@@ -265,6 +269,25 @@ def _as_list(value: Any, name: str, kind: str) -> List[str]:
     raise ValidationError(
         "the %s field %s is not a list" % (kind, name), code="not-a-list"
     )
+
+
+def _pairs(value: Any, name: str) -> Dict[str, str]:
+    """A list of `path=value` items, read into a mapping from path to value."""
+    found: Dict[str, str] = {}
+    for item in _as_list(value, name, "corrections file"):
+        path, separator, written = str(item).rpartition("=")
+        if not separator or not path or not written:
+            raise ValidationError(
+                "the corrections file field %s holds an item that is not path=value"
+                % name,
+                code="bad-pair",
+            )
+        found[path] = written
+    return found
+
+
+def _as_pairs(mapping: Dict[str, str]) -> List[str]:
+    return ["%s=%s" % (path, mapping[path]) for path in sorted(mapping)]
 
 
 def _as_bool(value: Any, name: str, kind: str) -> bool:
@@ -797,6 +820,13 @@ def rewritten_safely(text: str) -> str:
 # --- The confirmation line ---------------------------------------------------
 
 CONFIRMATION_TOKENS = ("date", "time", "file", "trigger", "entry", "question", "run")
+# The value a confirmation line carries since Plan 1's Unit 4.2a: the role
+# that let whoever confirmed it do so (the signed company-skills requirements,
+# CS9). Who confirmed it is the author of the saved line, as it always has
+# been, and is never written into the line: an address in a line is refused
+# by the check before a send unless it is the base owner's. A line written
+# before this carries no role and is judged by the owner line, as before.
+CONFIRMATION_ROLE_TOKENS = ("role",)
 
 # The line separates its values with spaces, so a document whose name holds any
 # whitespace can never be written onto one. Until the record changes shape in a
@@ -820,7 +850,17 @@ def name_has_a_space(path) -> bool:
 class ConfirmationLine(object):
     """One line saying an owner confirmed one file on one day."""
 
-    def __init__(self, date, time, file, trigger, entry=None, question=None, run=None):
+    def __init__(
+        self,
+        date,
+        time,
+        file,
+        trigger,
+        entry=None,
+        question=None,
+        run=None,
+        role=None,
+    ):
         self.date = date
         self.time = time
         self.file = file
@@ -828,6 +868,7 @@ class ConfirmationLine(object):
         self.entry = entry
         self.question = question
         self.run = run
+        self.role = role
 
     def values(self) -> Dict[str, str]:
         return {
@@ -848,7 +889,17 @@ class ConfirmationLine(object):
                     "the confirmation value for %s is empty or holds a space" % name,
                     code="bad-token",
                 )
-        return " ".join("%s=%s" % (name, values[name]) for name in CONFIRMATION_TOKENS)
+        rendered = " ".join(
+            "%s=%s" % (name, values[name]) for name in CONFIRMATION_TOKENS
+        )
+        if self.role is not None:
+            if not self.role or " " in self.role or "=" in self.role:
+                raise ValidationError(
+                    "the confirmation role is empty or holds a space",
+                    code="bad-token",
+                )
+            rendered += " role=%s" % self.role
+        return rendered
 
     @classmethod
     def parse(cls, line: str) -> "ConfirmationLine":
@@ -857,19 +908,21 @@ class ConfirmationLine(object):
             raise ValidationError("this line is not text", code="not-text")
         parts = line.strip().split(" ")
         parts = [part for part in parts if part]
-        if len(parts) != len(CONFIRMATION_TOKENS):
+        expected = CONFIRMATION_TOKENS
+        if len(parts) == len(CONFIRMATION_TOKENS) + len(CONFIRMATION_ROLE_TOKENS):
+            expected = CONFIRMATION_TOKENS + CONFIRMATION_ROLE_TOKENS
+        if len(parts) != len(expected):
             raise ValidationError(
-                "a confirmation line carries exactly %d values"
-                % len(CONFIRMATION_TOKENS),
+                "a confirmation line carries %d values, or %d with its role"
+                % (len(CONFIRMATION_TOKENS), len(CONFIRMATION_TOKENS) + 1),
                 code="wrong-token-count",
             )
         values = {}
-        for expected, part in zip(CONFIRMATION_TOKENS, parts):
+        for position, (wanted, part) in enumerate(zip(expected, parts), start=1):
             name, separator, value = part.partition("=")
-            if not separator or name != expected:
+            if not separator or name != wanted:
                 raise ValidationError(
-                    "a confirmation line names %s in position %d"
-                    % (expected, CONFIRMATION_TOKENS.index(expected) + 1),
+                    "a confirmation line names %s in position %d" % (wanted, position),
                     code="wrong-token-order",
                 )
             values[name] = value
@@ -881,6 +934,7 @@ class ConfirmationLine(object):
             entry=_optional(values["entry"]),
             question=_optional(values["question"]),
             run=_optional(values["run"]),
+            role=values.get("role"),
         )
         entry.validate()
         return entry
@@ -981,6 +1035,15 @@ CORRECTIONS_FIELDS = (
     "touched_paths",
     "correction_class",
     "marker",
+    # Since Plan 1's Unit 4.2a, every approval is recorded with the role that
+    # allowed it for each document and the hash of each document's exact
+    # approved bytes (the signed company-skills requirements, CS9). Who
+    # approved it is the author of the saved record, never written into it,
+    # because an address in it is refused by the check before a send unless
+    # it is the base owner's. A record written before carries neither and
+    # reads as it always did.
+    "approved_roles",
+    "approved_hashes",
 )
 
 WHAT_CHANGED = "What changed"
@@ -1006,7 +1069,11 @@ class CorrectionsFile(object):
         touched_paths=None,
         what_changed="",
         why="",
+        approved_roles=None,
+        approved_hashes=None,
     ):
+        self.approved_roles = dict(approved_roles or {})
+        self.approved_hashes = dict(approved_hashes or {})
         self.kind = kind
         self.date = date
         self.staging_id = staging_id
@@ -1062,9 +1129,18 @@ class CorrectionsFile(object):
             marker=str(fields["marker"]).strip(),
             what_changed=sections.get(WHAT_CHANGED, ""),
             why=sections.get(WHY, ""),
+            approved_roles=_pairs(fields.get("approved_roles"), "approved_roles"),
+            approved_hashes=_pairs(fields.get("approved_hashes"), "approved_hashes"),
         )
 
     def frontmatter(self) -> Dict[str, Any]:
+        fields = self._frontmatter_before_roles()
+        if self.approved_roles or self.approved_hashes:
+            fields["approved_roles"] = _as_pairs(self.approved_roles)
+            fields["approved_hashes"] = _as_pairs(self.approved_hashes)
+        return fields
+
+    def _frontmatter_before_roles(self) -> Dict[str, Any]:
         return {
             "kind": self.kind,
             "date": self.date,
@@ -1114,7 +1190,7 @@ class CorrectionsFile(object):
             "corrections file",
         )
         for path in self.touched_paths:
-            check_repo_path_syntax(path, PROPOSAL_PATH_PREFIXES)
+            check_record_path(path)
         if "<!--" in self.marker or "-->" in self.marker:
             raise ValidationError(
                 "the marker is written as a hidden comment, and hidden content is refused",

@@ -163,6 +163,13 @@ SKILLS_REFUSED = (
 )
 # What a person reads when a write would put a key or a token in the source
 # map. It names no file and repeats nothing that was found.
+# What a person reads when a file tool would write into a base in a
+# conversation marked unattended (Plan 1, Unit 4.2a, CS30). Nobody is there to
+# be asked, so nothing is written into a base until somebody is.
+UNATTENDED_REFUSED = (
+    "This conversation is a run nobody is watching, so GTM Base writes nothing "
+    "into a base in it, and nothing was written."
+)
 STACK_REFUSED = (
     "The source map says where things live and never holds a password, a key, "
     "or a token, and this would have written something shaped like one into "
@@ -895,11 +902,14 @@ def run(payload: Dict[str, Any]) -> Optional[Dict[str, Any]]:
     asking = False
     cwd = payload.get("cwd")
     cwd = cwd if isinstance(cwd, str) and os.path.isabs(cwd) else None
+    unattended = _marked_unattended(payload.get("session_id"))
     for named in named_files(payload):
         try:
             real_file = os.path.realpath(named)
         except Exception:
             real_file = named
+        if unattended and _into_any_base(named, real_file):
+            return _answer("deny", UNATTENDED_REFUSED)
         found = problem_with(named, real_file, cwd)
         if found == CODE_CLIENT_SETTINGS:
             asking = True
@@ -914,6 +924,29 @@ def run(payload: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         if written == CODE_STACK_SECRET:
             return _answer("deny", STACK_REFUSED)
     return question() if asking else None
+
+
+def _marked_unattended(session) -> bool:
+    """Whether the runner marked this conversation unattended (CS30).
+
+    Read only when the request names its conversation, and from the record
+    `authority` keeps, which answers yes when it cannot be read.
+    """
+    if not isinstance(session, str) or not session:
+        return False
+    from . import authority
+
+    return authority.is_unattended(session)
+
+
+def _into_any_base(named: str, real_file: str) -> bool:
+    """Whether a write lands in a base, by its own name or where it really goes."""
+    if _base_above(named) is not None or _base_above(real_file) is not None:
+        return True
+    for root in _joined_roots():
+        if _reaches(named, real_file, root):
+            return True
+    return False
 
 
 def refusal() -> Dict[str, Any]:

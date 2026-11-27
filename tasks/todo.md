@@ -1879,3 +1879,82 @@ The order across every track is in `docs/plans/2026-11-26-003-roadmap-to-full-ex
 - [ ] C4. Proposing a context change from chat.
 - [ ] C5. The setup guide and a Project instruction for each base.
 - [ ] The security review, then the end-to-end run in Claude and ChatGPT across two Projects.
+
+## Plan 1, company skills and the Meta ads skill (plan: docs/plans/2026-10-10-002-feat-plan-1-company-skills-and-meta-skill-plan.md)
+Step 2 of `docs/plans/2026-11-26-003-roadmap-to-full-experience.md`. The planning documents and the four built units were brought up to date with main on 2026-11-26 (branch `claude/plan-1-catchup`), keeping every Release B and backup rule (full suite on the merge 5e80a5b: 3323 tests OK, then 223 OK from a linked folder). The sections below are the original build records from 2026-10-10.
+- [x] Unit 4.1. The company-skills requirements, signed by Brandon on 2026-10-10.
+- [x] Unit 2.1. The base inventory.
+- [x] Unit 2.5a. The source map parser.
+- [x] Unit 4.2a. One authority rule, one path rule, approvals bound to bytes, and the refusal in an unattended run.
+- [ ] Unit 4.2b. The skills folder. (next; connector unit C3 waits on it)
+- [ ] Unit 3.1. The thin runner, its contract test, and atlas figure 9.
+- [ ] Unit 2.4a. Metric definitions and goals, the driver-app half.
+- [ ] Unit 3.5. The creative-testing standard.
+- [ ] Unit 3.6. The Meta ads skill running through the runner.
+- [ ] Brandon: review and merge the catch-up pull request.
+
+### 2026-10-10, Plan 1 of Phases 2 and 3 (branch claude/plan-1-meta-skill-3d436e)
+Plan: `docs/plans/2026-10-10-002-feat-plan-1-company-skills-and-meta-skill-plan.md`. Planning only; no product code.
+- [x] Read the decisions brief (D1 to D10, M6, M7, M8, M12), the roadmap on release-b, the build plan through call 59 on the finish branch, and the Meta skill as it runs today (read only)
+- [x] Write revision 1: Units 4.1, 4.2, 2.1, 3.1, 2.4a, 2.5a, 3.5, 3.6 in two releases; SC-M proposed; seven calls for Brandon
+- [x] Astra reviews the plan read only (brief: docs/reviews/2026-10-10-plan-1-review-brief.md); fix and confirm until ready.
+      r1 not ready (16 findings, 2 blockers on the ownership proof) -> r2 not ready (9 narrower) -> r2.1 ready with 2 changes
+      -> r2.2 ready with 1 change -> r2.3 ready to build as written (docs/reviews/2026-10-10-plan-1-verify-4-astra.md)
+- [x] Rebuilt this branch from origin/main with a cleaned decisions brief (no goal figures, pipeline figure or workbook name);
+      the six Plan 1 commits replayed on top. Local backup ref plan-1-backup-before-rebuild still holds the old history:
+      delete it once checked, and never push it
+- [x] Local main reset to origin/main (3c2c377), dropping the uncleaned decisions commit
+- [x] This repository's git address set to Brandon's personal one (repo config, all worktrees); the branch rebased onto
+      origin/main and every commit re-authored under it. 120 older commits already on the public main carry the Gridwise
+      address; changing those means rewriting the public main, which is Brandon's call
+- [x] Brandon answered the seven calls on 2026-10-10, all as recommended (1 two businesses, 2 SC-M, 3 unattended flag, 4 old skill copy, 5 releases, 6 ownership guarantee, 7 lessons)
+- [x] Unit 4.1 written: docs/brainstorms/2026-10-10-company-skills-requirements.md, revision 3. Astra and Fable 5.1 said
+      not ready on r1 (Astra 8 findings; Fable 1 blocker, 3 high, 9 medium, 8 low); r2 ready with 3 changes; r3 ready for
+      signature (docs/reviews/2026-10-10-company-skills-verify-2-astra.md). Plan 1 kept in step, now revision 2.6
+- [x] Corrected for Release B's call 60 (approvals go through unasked in bypassPermissions and dontAsk): requirements
+      revision 6, Plan 1 revision 2.9; Astra ready for signature again (docs/reviews/2026-10-10-company-skills-verify-5-astra.md)
+- [x] Brandon signs Unit 4.1 (covers scripts, the extra yes for creating a skill, and the guarantee in CS13 and CS14); signed 2026-10-10;
+      Unit 4.2a is not briefed before he signs
+
+#### Review (Plan 1)
+Nine units in two releases (C: 4.2a, 2.1, 2.5a, 3.1, 4.2b, 2.4a, 3.5; D: 3.6), plus 4.1 first. The hard part was D5's
+"provable": history fields prove nothing on one computer, so the plan binds each approval to exact bytes and a seat runs a
+skill only as a whole manifest it approved or accepted, with the guarantee stated exactly as call 6. Planning only; no code.
+
+### 2026-10-10, Plan 1 read side: Unit 2.1's inventory and Unit 2.5a's parser (branch claude/plan-1-read-side-6c5559, from the Release B finish branch)
+Built ahead of Release B shipping and ahead of Unit 4.2a, as the plan's "dependency on Release B" paragraph allows: nothing here writes, approves, or touches a base's `skills/` folder. New files wherever possible; shared files touched only append-only (`constants.py`, `names.py`, `tests/plain_language.py`) or by one small read-only flag (the stale-check script and its skill).
+- [x] `businesses.py` (new): the map's `businesses:` setting and a document's `business:` line, read only. Provisional grammar; Unit 4.2a owns it and adopts or replaces this reader.
+- [x] `BASE_KINDS` (constants, appended) and `base-kinds.md` (stale-check reference), every entry with a section and every section with an entry.
+- [x] `inventory.py` (new): the table per business, business not stated, documents for a business the map does not list, the scope finding against the customer profile, drafting offered only for what this release drafts (nothing yet).
+- [x] `--inventory` on the stale-check script and one section in its skill; the documented command walked by the existing test.
+- [x] `truth_map.py` (new): the source map's five-column table parsed and validated, screened, never calling anything; the template's empty table.
+- [x] Tests first: `tests/test_inventory.py`, `tests/test_stack.py`; watch them fail, then build.
+- [x] Full suite, correctness review subagent, findings fixed, suite again.
+- [x] Commit 977cf64 (suite 2918 OK, then 217 OK from a linked folder); hand-over note in the shared notes folder.
+Deferred, with the reason (they need Unit 4.2a's path rule or its operations): a standard flagged and blocked at the moment of use; a skill past its threshold due in the review; reading the base at its last saved revision for the runner; the inventory inside the review; human names for business-folder documents in sentences; a prepared change adding a source map row; the drafting prompt for source map rows.
+
+#### Review (Plan 1 read side)
+- Built test-first: `tests/test_inventory.py` and `tests/test_stack.py` failed on import before any code existed; 80 tests then passed. Mutation check: eight guards (not-stated counting, unreadable not missing, the key screen, an incomplete row, folder and setting disagreeing, a profile that states its business, reserved names, the source map's own password screen) each fail when their code is removed. The first password-screen test passed without proving its claim (the email screen caught the row too) and was replaced.
+- Correctness review subagent: one high finding and nine lower, all fixed with a test that failed first. High: the screens split lines by a wider rule than the parser, so a page break or line separator above the table moved the refusal onto the wrong row and let a key row through; screening is now one line at a time. Others: a short name or a name ending in a full stop in `covers:` read as leaving a business out; a negation reached across a full stop; a document at both its older and current path counted twice; with no businesses listed, a subfolder was reported as an unlisted business (now ignored, "exactly as before"); a four-cell row was malformed rather than incomplete; a dash counted as a fallback; several documents claimed "not all confirmed" when confirmations could not be read; a linked context or access folder was followed; "nothing missing" was said over a skipped kind. Also from its residual list: a heading inside a block of code no longer ends the table's section, a row's business is not judged when the map's list cannot be read, and a `business:` line may give the name the map gives.
+- Recorded for Brandon (the review's "decision" item): for a kind one document serves the whole company (voice, design, source map, standard, skill), a flat document with no `business:` line counts for the whole company. Requirement P40 says such a document "counts for no business"; read literally, every base that lists its businesses would show its voice guide, source map and standards as missing. Brandon to confirm or overrule.
+- Not done here, each waiting on Unit 4.2a: a standard flagged and blocked at the moment of use; a skill past its threshold due in the review; the base read at its last saved revision for the runner; the inventory inside the review; names for business-folder documents in sentences; a prepared change adding a source map row; the drafting prompt for rows. No CHANGELOG entry and no version change (both belong to the release that ships this). The map's `businesses:` grammar is provisional and Unit 4.2a's to settle.
+- Follow-up: Astra's outside review of this branch (Codex is rate-limited until 2026-10-14).
+
+### 2026-10-10, Plan 1 Unit 4.2a: one authority rule, one path rule, approvals bound to bytes (same branch)
+Briefed by the orchestrating session after Brandon signed the company-skills requirements (commit 80378c6 on claude/plan-1-meta-skill-3d436e). Built from CS1 to CS18 and CS30 and the plan's Unit 4.2a text. The two `approval.py` edits were cleared by the orchestrating session first and sit in commits of their own.
+- [x] The map's settings block (CS2): one `owner:`, `administrators:` (may be empty), `businesses:`; 2.1's reader moved to the block.
+- [x] `docpaths.py`: which paths may be a base document, of what kind, and which operation may write each; every module that answered part of that asks it.
+- [x] `authority.py`: the authority set as of a saved revision (CS3, CS4), failing closed when the history cannot be read; a skill's manifest (CS10); this seat's trusted manifests (CS11); one file per conversation marked unattended (CS30).
+- [x] Approve, confirm, the stale computation, the review, the moment of use and setup's closing ask `authority` only. Records carry roles and byte hashes; confirmation lines carry the role; no new field writes an address.
+- [x] Creation, absent-only in either layout and all or nothing, with the creator's confirmation; a lesson at `learning/lessons/<slug>.md`.
+- [x] The five settings operations, each shown with the one line before and after, bound, re-worked out from the base at approval, recorded with the reason; a hand edit may not move an owner or business line.
+- [x] Prepared changes reach standards and the source map; every way into the source map runs its credential screen, the send check included.
+- [x] `approval.py` (own commits): CS30 refusal as `decide()`'s first test in every mode; create and the five settings operations in the table, each with its own sentence.
+- [x] Tests first; correctness and security review subagents (2 high and 9 lower, and 1 high and 5 lower), every finding fixed with a test that failed first.
+- [ ] The propose-change skill text for `operations.py` (needs the skill-walk test's placeholders), before live session C.
+- [ ] Astra's outside review of all four commits (Codex rate-limited until 2026-10-14).
+
+#### Review (Unit 4.2a)
+- Commits 94aa730, a523d9a (approval.py), 16fd6a4 (review fixes), db647ab (approval.py). Suites: 94aa730 3018 OK then 217 OK; db647ab 3063 OK then 223 OK from a linked folder, exit 0.
+- Deviations recorded for Brandon: (1) CS9's address is the author of the saved record or line, not text in it, because the check before a send refuses any address but the base owner's; (2) a standard or the source map joins the time-based review only once first confirmed; (3) CS3 changed three older tests' premises (a document with no owner is the base owner's to approve; the base owner's confirmation counts anywhere; a stranger's yes is refused before it is written); (4) CS9 records are written on approvals made on this computer, not yet on the shared-copy path, which the backup plan decides.
+- The security review's high finding: a prepared operation kept on the seat was trusted at approval, so a rewritten file could pass the map's owner role through a "creation" question. Approval now works every change out again from the base and refuses anything that differs from what was shown.

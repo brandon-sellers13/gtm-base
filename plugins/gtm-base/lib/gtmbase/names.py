@@ -245,3 +245,38 @@ def _first_sentence(body: Optional[str]) -> str:
             cut = cut[: cut.rindex(" ")].rstrip()
         return cut + "..."
     return ""
+
+
+# What each kind a base can hold is called in the inventory's table (Unit 2.1
+# of Plan 1), keyed as `constants.BASE_KINDS` keys them. A standard and a
+# skill are named by their kind and counted, never by the job in their file
+# name.
+KIND_LABELS = {
+    "goals": "Goals",
+    "product": "Product",
+    "icps": "Customer profile",
+    "buyer-personas": "Buyer personas",
+    "positioning": "Positioning",
+    "messaging": "Messaging",
+    "voice": "Voice guide",
+    "design": "Design guide",
+    "metrics": "Metric definitions",
+    "stack": "Source map",
+    "standard": "Standards",
+    "skill": "Skills",
+}
+# What each kind is called inside a sentence, as "your goals" is.
+KIND_IN_A_SENTENCE = {
+    "goals": KNOWN_DOCUMENTS["context/goals.md"],
+    "product": KNOWN_DOCUMENTS["context/product.md"],
+    "icps": KNOWN_DOCUMENTS["context/icps.md"],
+    "buyer-personas": KNOWN_DOCUMENTS["context/buyer-personas.md"],
+    "positioning": KNOWN_DOCUMENTS["context/positioning.md"],
+    "messaging": KNOWN_DOCUMENTS["context/messaging.md"],
+    "voice": KNOWN_DOCUMENTS["context/voice.md"],
+    "design": KNOWN_DOCUMENTS["context/design.md"],
+    "metrics": KNOWN_DOCUMENTS["context/metrics.md"],
+    "stack": KNOWN_DOCUMENTS[constants.STACK_PATH],
+    "standard": "a standard for a job",
+    "skill": "a skill",
+}

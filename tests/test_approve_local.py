@@ -659,6 +659,13 @@ class TestOnlyAnOwnerMayApprove(unittest.TestCase):
             self.assertEqual([], corrections_in(root))
 
     def test_a_file_that_says_nobody_owns_it_cannot_be_approved(self):
+        """Since Plan 1's Unit 4.2a, only when the map names no base owner either.
+
+        A document with no owner line still has the base owner and the
+        administrators in its authority set (CS3); tests/test_authority_
+        everywhere.py holds that. With a map whose owner line names nobody,
+        there is nobody at all, and the refusal says so.
+        """
         with support.Sandbox() as sandbox:
             root, base_id = local_base(sandbox)
             staged = stage(root)
@@ -667,6 +674,11 @@ class TestOnlyAnOwnerMayApprove(unittest.TestCase):
                 support.read(os.path.join(root, ICP)).replace(
                     "owner: %s" % OWNER, "owner: []"
                 ),
+            )
+            map_path = os.path.join(root, constants.MAP_PATH)
+            support.write(
+                map_path,
+                support.read(map_path).replace("owner: %s" % OWNER, "owner: []", 1),
             )
             support.git(["add", "-A"], cwd=root)
             support.git(["commit", "-q", "-m", "took the owner off"], cwd=root)
