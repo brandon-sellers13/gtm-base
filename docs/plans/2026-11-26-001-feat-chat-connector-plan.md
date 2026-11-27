@@ -169,7 +169,7 @@ The units stand, with these changes:
 - [ ] **C2. Reading documents,** with the moment-of-use flag and the three choices in the answer. Technical plan: `docs/plans/2026-11-26-004-feat-connector-c2-plan.md` (written and approved 2026-11-26, with the recommended answer to all five decisions).
 - [ ] **C3. Skills:** the index in the connector's instructions, and a skill served with the documents it needs. Depends on where approved skills live in a base: the plan for company skills (Plan 1, Unit 4.2b, `skills/`) settles the folder and the trust rules; the connector serves only skills approved on the main branch, as instructions, never code.
 - [ ] **C4. Proposing a context change** from chat, as a proposal the owner accepts in the web app or in Claude Code. Brandon decided on 2026-11-26 to ship it in the same release as C2, so "fix it first" works in chat from the start (decision 4 of the C2 plan).
-- [ ] **C5. Setting it up for a client:** a short guide and a copyable Project instruction per base, shown on each base's page in the web app.
+- [x] **C5. Setting it up for a client:** a short guide and a copyable Project instruction per base, shown on each base's page in the web app.
 
 ## Review standard
 
