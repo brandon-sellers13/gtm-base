@@ -1,63 +1,248 @@
 @import "tailwindcss";
 
-/* GTM Base tokens, from brandkit/approve-palette.json and the one-ink ramp. */
+/*
+ * GTM Base design tokens. Every colour, shadow, line and size the app uses is
+ * defined once here, from the design system's tokens.json (the workshop look
+ * shared by the GTM Base and MCW systems). Change a value here and every page
+ * follows. The system defines a light theme only, so there is no dark palette.
+ */
 :root {
-  --ground: #fafaf8;
+  /* Colour */
+  --ground: #faf9f6;
+  --ground-nav: rgba(250, 249, 246, 0.94);
   --surface: #ffffff;
-  --line: #e8e6e1;
-  --ink: #1a1a1a;
-  --ink-mid: #4a4a4a;
-  --ink-quiet: #6a6a6a;
-  --signal-source: #3d63dd;
-  --signal-resolved: #7c3aed;
-  --notice: #f3f1ec;
-}
+  --band-cool: #e9edf8;
+  --band-warm: #efece5;
+  --rule: #d9d6ce;
+  --ink: #151515;
+  --ink-mid: #45443f;
+  --ink-quiet: #6b6a64;
+  --ink-disabled: #8b8b8b;
+  --on-ink-mid: #c9c6bd;
+  --source: #3d63dd;
+  --source-mid: #9db0ee;
+  --source-tint: #dfe6fb;
+  --resolved: #7c3aed;
+  --resolved-tint: #eee6fd;
+  --ok: #24733a;
+  --ok-tint: #e3f1e6;
+  --due: #8a5a00;
+  --due-tint: #f6ecd6;
+  --state-error: #d52424;
+  --focus-ring: var(--source);
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --ground: #141414;
-    --surface: #1c1c1c;
-    --line: #2e2d2a;
-    --ink: #edebe6;
-    --ink-mid: #bdb9b1;
-    --ink-quiet: #8a8780;
-    --signal-source: #6f8ff0;
-    --signal-resolved: #a07bf5;
-    --notice: #23221f;
-  }
+  /* Lines and depth: solid offset shadows, never a blur */
+  --edge-width: 1.5px;
+  --line: var(--edge-width) solid var(--ink);
+  --hairline: 1px solid var(--rule);
+  --hairline-dashed: 1px dashed var(--rule);
+  --shadow: 4px 4px 0 var(--ink);
+  --shadow-lift: 6px 6px 0 var(--ink);
+  --shadow-press: 1px 1px 0 var(--ink);
+  --shadow-sm: 3px 3px 0 var(--ink);
+  --shadow-xs: 2px 2px 0 var(--ink);
+  --focus-width: 3px;
+  --focus-offset: 3px;
+
+  /* Layout */
+  --page-max: 820px;
+  --reading-max: 660px;
+  --gutter: 16px;
+  --target-min: 44px;
+  --band-pad: clamp(56px, 8vw, 104px);
+  --motion-fast: 0.12s;
+
+  /* Type scale */
+  --text-display: clamp(40px, 6.5vw, 70px);
+  --text-h1: clamp(32px, 4vw, 50px);
+  --text-step: clamp(26px, 3vw, 34px); /* in documents, h2 and h3 step down below it */
+  --text-h2: 28px;
+  --text-h3: 20px;
+  --text-lead: clamp(18px, 1.6vw, 21px);
+  --text-reading: 20px;
+}
+@media (min-width: 760px) {
+  :root { --gutter: 40px; }
+}
+@media (max-width: 599px) {
+  :root { --text-reading: 18px; }
 }
 
 @theme inline {
   --color-ground: var(--ground);
   --color-surface: var(--surface);
-  --color-line: var(--line);
+  --color-band-cool: var(--band-cool);
+  --color-band-warm: var(--band-warm);
+  --color-rule: var(--rule);
   --color-ink: var(--ink);
   --color-ink-mid: var(--ink-mid);
   --color-ink-quiet: var(--ink-quiet);
-  --color-source: var(--signal-source);
-  --color-resolved: var(--signal-resolved);
-  --color-notice: var(--notice);
+  --color-source: var(--source);
+  --color-source-tint: var(--source-tint);
+  --color-resolved: var(--resolved);
+  --color-resolved-tint: var(--resolved-tint);
+  --color-ok: var(--ok);
+  --color-ok-tint: var(--ok-tint);
+  --color-due: var(--due);
+  --color-due-tint: var(--due-tint);
+  --color-state-error: var(--state-error);
   --font-sans: var(--font-dm-sans), "Helvetica Neue", Helvetica, Arial, sans-serif;
-  --font-mono: var(--font-jetbrains-mono), ui-monospace, monospace;
+  --font-reading: var(--font-newsreader), Georgia, serif;
+  --font-mono: var(--font-jetbrains-mono), ui-monospace, "SF Mono", Menlo, monospace;
 }
 
 body {
   background: var(--ground);
   color: var(--ink);
+  font-size: 17px;
+  line-height: 1.6;
+}
+h1, h2, h3 { text-wrap: balance; }
+
+/* Every control shows one ring on keyboard focus. */
+a:focus-visible,
+button:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible,
+summary:focus-visible {
+  outline: var(--focus-width) solid var(--focus-ring);
+  outline-offset: var(--focus-offset);
 }
 
-/* Rendered base documents: plain, readable, no plugin. */
-.doc { line-height: 1.7; }
-.doc h1 { font-size: 1.9rem; font-weight: 700; letter-spacing: -0.035em; line-height: 1.2; margin: 0 0 1rem; }
-.doc h2 { font-size: 1.3rem; font-weight: 700; letter-spacing: -0.02em; margin: 2.2rem 0 0.6rem; }
-.doc h3 { font-size: 1.05rem; font-weight: 700; margin: 1.6rem 0 0.4rem; }
-.doc p, .doc ul, .doc ol, .doc table, .doc blockquote, .doc pre { margin: 0 0 1rem; }
-.doc ul { list-style: disc; padding-left: 1.4rem; }
-.doc ol { list-style: decimal; padding-left: 1.4rem; }
-.doc a { color: var(--signal-source); text-decoration: underline; text-underline-offset: 3px; }
-.doc code { font-family: var(--font-mono); font-size: 0.85em; background: var(--notice); padding: 0.1em 0.3em; border-radius: 4px; }
-.doc pre { background: var(--notice); padding: 0.8rem 1rem; border-radius: 8px; overflow-x: auto; }
-.doc pre code { background: none; padding: 0; }
-.doc blockquote { border-left: 3px solid var(--line); padding-left: 1rem; color: var(--ink-mid); }
-.doc table { border-collapse: collapse; display: block; overflow-x: auto; }
-.doc th, .doc td { border: 1px solid var(--line); padding: 0.35rem 0.6rem; text-align: left; }
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+  }
+  .btn:hover, .btn:active { transform: none !important; }
+}
+
+@layer components {
+  /* Page frame */
+  .page { width: min(100% - 2 * var(--gutter), var(--page-max)); margin: 0 auto; padding: 48px 0 64px; }
+
+  .site-nav {
+    position: sticky; top: 0; z-index: 10;
+    display: flex; align-items: center; justify-content: space-between; gap: 16px;
+    height: 60px; padding: 0 var(--gutter);
+    background: var(--ground-nav);
+    backdrop-filter: blur(16px);
+    border-bottom: var(--line);
+  }
+
+  /* Type */
+  .display { font-size: var(--text-display); font-weight: 900; letter-spacing: -0.045em; line-height: 1.02; }
+  .title { font-size: var(--text-h1); font-weight: 850; letter-spacing: -0.04em; line-height: 1.05; }
+  .heading { font-size: var(--text-h2); font-weight: 800; letter-spacing: -0.03em; line-height: 1.15; }
+  .heading-tile { font-size: var(--text-h3); font-weight: 800; letter-spacing: -0.03em; line-height: 1.15; }
+  .lede { max-width: 36em; color: var(--ink-mid); font-size: var(--text-lead); line-height: 1.6; }
+  .label-mono {
+    font-family: var(--font-mono); font-size: 11.5px; font-weight: 700; line-height: 1.5;
+    letter-spacing: 0.05em; text-transform: uppercase; color: var(--ink-quiet);
+  }
+  .meta-mono { font-family: var(--font-mono); font-size: 12.5px; font-weight: 500; line-height: 1.5; color: var(--ink-quiet); }
+  .link {
+    color: var(--source); font-weight: 700;
+    text-decoration: underline; text-decoration-thickness: 1.5px; text-underline-offset: 0.18em;
+    transition: color var(--motion-fast);
+  }
+  .link:hover { color: var(--ink); }
+  .link-quiet { text-decoration: underline; text-decoration-color: var(--rule); text-decoration-thickness: 1.5px; text-underline-offset: 0.18em; }
+  .link-quiet:hover { text-decoration-color: currentColor; }
+
+  /* Buttons: square, ink-edged, a solid shadow that lifts and presses. */
+  .btn {
+    display: inline-flex; align-items: center; justify-content: center;
+    min-height: var(--target-min); padding: 12px 18px;
+    border: var(--line); border-radius: 0;
+    background: var(--source); color: var(--surface);
+    font-size: 16px; font-weight: 800; line-height: 1.2; text-align: center;
+    box-shadow: var(--shadow); cursor: pointer;
+    transition: transform var(--motion-fast) ease, box-shadow var(--motion-fast) ease;
+  }
+  .btn:hover:not(:disabled) { transform: translate(-2px, -2px); box-shadow: var(--shadow-lift); }
+  .btn:active:not(:disabled) { transform: translate(2px, 2px); box-shadow: var(--shadow-press); }
+  .btn-secondary { background: var(--surface); color: var(--ink); }
+  .btn-sm { padding: 8px 14px; font-size: 14px; box-shadow: var(--shadow-sm); }
+  .btn:disabled {
+    border-color: var(--ink-disabled); background: var(--band-warm); color: var(--ink-mid);
+    box-shadow: none; cursor: wait;
+  }
+
+  /* Fields */
+  .field-label { display: block; font-size: 15px; font-weight: 700; line-height: 1.5; }
+  .field {
+    display: block; width: 100%; min-height: 48px; margin-top: 8px; padding: 10px 14px;
+    border: var(--line); border-radius: 0;
+    background: var(--surface); color: var(--ink); font: inherit;
+  }
+  .help { margin-top: 8px; font-size: 13px; line-height: 1.6; color: var(--ink-mid); }
+
+  /* Surfaces */
+  .panel { border: var(--line); background: var(--surface); box-shadow: var(--shadow); padding: 16px; }
+  @media (min-width: 600px) { .panel { padding: 24px; } }
+  .rows { border: var(--line); background: var(--surface); box-shadow: var(--shadow); }
+  .rows > li + li { border-top: var(--hairline); }
+  .rows > li { padding: 14px 16px; }
+
+  /* A notice says what happened; a problem says what failed and what to do. */
+  .notice { border: var(--line); background: var(--surface); padding: 14px 16px; font-size: 15px; line-height: 1.5; }
+  .notice-problem { color: var(--state-error); font-weight: 700; }
+  .notice-flag { background: var(--resolved-tint); }
+  /* On a tint, text and links stay ink: source and ink-quiet fall below 4.5:1 there. */
+  .notice-flag .link, .bg-source-tint .link, .bg-resolved-tint .link { color: var(--ink); }
+  .bg-source-tint .meta-mono, .bg-resolved-tint .meta-mono, .notice-flag .meta-mono { color: var(--ink-mid); }
+
+  /* Empty states: a sentence on a dashed hairline. */
+  .empty { border-top: var(--hairline-dashed); padding-top: 12px; font-size: 15px; color: var(--ink-quiet); }
+
+  .section-label { margin-top: 48px; margin-bottom: 12px; }
+
+  .avatar { flex: none; border: var(--line); background: var(--band-warm); }
+
+  .tag {
+    display: inline-block; padding: 1px 6px; border: var(--line);
+    font-family: var(--font-mono); font-size: 11.5px; font-weight: 700; line-height: 1.5;
+  }
+
+  /* The welcome band on the signed-out home page. */
+  .band { background: var(--band-cool); border-bottom: var(--line); padding: var(--band-pad) var(--gutter); }
+
+  /* The rotated-square dot. */
+  .dot::before {
+    content: ""; display: inline-block; flex: none; width: 12px; height: 12px;
+    background: var(--source); border: var(--line); transform: rotate(45deg);
+  }
+}
+
+/* Rendered base documents and proposal descriptions: long reading in Newsreader,
+   headings back in DM Sans, code and tables in ink-edged boxes. */
+.doc { max-width: var(--reading-max); font-family: var(--font-reading); font-size: var(--text-reading); line-height: 1.7; overflow-wrap: break-word; }
+.doc > :first-child { margin-top: 0; }
+.doc h1, .doc h2, .doc h3, .doc h4 { font-family: var(--font-sans); color: var(--ink); }
+.doc h1 { font-size: var(--text-step); font-weight: 850; letter-spacing: -0.035em; line-height: 1.15; margin: 48px 0 16px; }
+.doc h2 { font-size: clamp(22px, 2.6vw, 28px); font-weight: 800; letter-spacing: -0.03em; line-height: 1.15; margin: 48px 0 12px; }
+.doc h3 { font-size: clamp(18px, 2vw, 20px); font-weight: 800; letter-spacing: -0.03em; line-height: 1.15; margin: 32px 0 8px; }
+.doc h4 { font-size: 17px; font-weight: 800; margin: 24px 0 8px; }
+.doc p, .doc ul, .doc ol, .doc table, .doc blockquote, .doc pre { margin: 0 0 20px; }
+.doc ul { list-style: square; padding-left: 1.4em; }
+.doc ol { list-style: decimal; padding-left: 1.4em; }
+.doc li + li { margin-top: 6px; }
+.doc a { color: var(--source); text-decoration: underline; text-decoration-thickness: 1.5px; text-underline-offset: 0.18em; }
+.doc a:hover { color: var(--ink); }
+.doc strong { font-weight: 700; }
+.doc hr { border: 0; border-top: var(--hairline); margin: 32px 0; }
+.doc code { font-family: var(--font-mono); font-size: 0.8em; background: var(--band-warm); padding: 0.1em 0.3em; }
+.doc pre { background: var(--ground); border: var(--line); padding: 12px 14px; overflow-x: auto; font-size: 15px; line-height: 1.6; }
+.doc pre code { background: none; padding: 0; font-size: 13px; }
+.doc blockquote { border-left: 3px solid var(--ink); padding-left: 16px; font-style: italic; color: var(--ink-mid); }
+.doc table {
+  display: block; max-width: 100%; overflow-x: auto; border-collapse: collapse;
+  border: var(--line); background: var(--surface); font-family: var(--font-sans); font-size: 15px; line-height: 1.5;
+}
+.doc th {
+  background: var(--ground); border-bottom: var(--line); padding: 8px 12px; text-align: left; white-space: nowrap;
+  font-family: var(--font-mono); font-size: 11.5px; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase; color: var(--ink-quiet);
+}
+.doc td { padding: 8px 12px; border-top: var(--hairline); vertical-align: top; }

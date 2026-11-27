@@ -2,19 +2,25 @@ import Link from "next/link";
 import { Wordmark } from "./Mark";
 import type { Session } from "@/lib/session";
 
-export function Header({ session }: { session: Session | null }) {
+// The bar at the top of every page. `linked` is off on pages that sit inside a
+// flow (setup, the connector consent page), where the mark was never a link.
+export function Header({ session, linked = true }: { session: Session | null; linked?: boolean }) {
   return (
-    <header className="flex items-center justify-between py-6">
-      <Link href="/">
+    <header className="site-nav">
+      {linked ? (
+        <Link href="/" className="-m-1 p-1">
+          <Wordmark />
+        </Link>
+      ) : (
         <Wordmark />
-      </Link>
+      )}
       {session && (
-        <div className="flex items-center gap-3">
+        <div className="flex min-w-0 items-center gap-3">
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={session.avatarUrl} alt="" className="h-7 w-7 rounded-full border border-line" />
-          <span className="hidden font-mono text-xs text-ink-mid sm:inline">{session.login}</span>
+          <img src={session.avatarUrl} alt="" width={28} height={28} className="avatar h-7 w-7" />
+          <span className="meta-mono hidden truncate text-ink-mid sm:inline">{session.login}</span>
           <form action="/api/auth/logout" method="post">
-            <button className="text-sm text-ink-quiet underline-offset-4 hover:underline">Sign out</button>
+            <button className="label-mono min-h-[44px] px-1 transition-colors hover:text-state-error">Sign out</button>
           </form>
         </div>
       )}
