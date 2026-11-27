@@ -160,8 +160,8 @@ export default async function TeamPage({
             {hidden}
             <button className="gb-btn primary">Protect the main line</button>
             <p className="gb-help">
-              GitHub will then refuse any change to the main line that is not an accepted proposal, and refuse
-              overwriting or deleting it. GTM Base and the repository&apos;s admins can still write to it, which is how
+              GitHub will then refuse any change to the main line that is not an accepted proposal, from anyone,
+              you included, and refuse overwriting or deleting it. Only GTM Base can still write to it, which is how
               accepting, keeping and undoing work.
             </p>
           </form>

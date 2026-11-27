@@ -57,7 +57,7 @@ export default async function UnapprovedPage({
         </p>
         <p className="gb-help mt-3">
           {rule === "on"
-            ? "The main line of this base is protected, so only GTM Base and the repository's admins can write to it directly. Anything listed here came from one of them."
+            ? "The main line of this base is protected, so only GTM Base can write to it directly. Anything listed here arrived before it was protected."
             : rule === "off"
               ? "The main line of this base is not protected yet. Its owner can protect it on the Team page, and then GitHub refuses changes that skip approval."
               : rule === "needs-paid-plan"

@@ -8,10 +8,15 @@ import { validRepo } from "./reader";
 // Teammates get GitHub's "push" permission so their Claude Code can open
 // proposals on branches of their own, and on its own that permission also lets
 // them write to the main line from a plain terminal. A repository ruleset on the
-// default branch closes that: every change reaches it through a pull request,
-// nobody can force a push over it or delete it, and only GTM Base itself and
-// the repository's admins can bypass it, which keeps the app's accept, keep,
-// undo and confirm working.
+// default branch closes that on GitHub's side, whatever a computer's own checks
+// miss: every change reaches it through a pull request a code owner approved,
+// nobody can force a push over it or delete it, and only GTM Base itself can
+// bypass it, which is how the app's accept, keep, undo and confirm land.
+//
+// Not verified yet, because no base GTM Base can reach is on a plan that
+// enforces rulesets: that GitHub counts a write the app makes with a person's
+// own sign-in as the app's, for the bypass. If it does not, those writes are
+// refused while the rule is on, and the app says it could not finish.
 //
 // GitHub only enforces rulesets on a private repository when its account is on
 // a paid plan (GitHub Pro for a person, GitHub Team for an organization). On a
@@ -20,9 +25,6 @@ import { validRepo } from "./reader";
 // undo.
 
 export const RULE_NAME = "GTM Base: the main line takes accepted proposals only";
-
-// GitHub's built-in "admin" repository role, as a ruleset's bypass list names it.
-const ADMIN_ROLE_ID = 5;
 
 export type MainRuleState =
   | "on" // the rule is in place and enforced
@@ -41,11 +43,14 @@ function rulesetBody(appId: number) {
     conditions: { ref_name: { include: ["~DEFAULT_BRANCH"], exclude: [] } },
     rules: [
       {
+        // A pull request, approved by a code owner (the base's CODEOWNERS file
+        // names its owner), so a teammate cannot merge their own proposal on
+        // GitHub or move the main line through GitHub's interface.
         type: "pull_request",
         parameters: {
-          required_approving_review_count: 0,
-          dismiss_stale_reviews_on_push: false,
-          require_code_owner_review: false,
+          required_approving_review_count: 1,
+          dismiss_stale_reviews_on_push: true,
+          require_code_owner_review: true,
           require_last_push_approval: false,
           required_review_thread_resolution: false,
         },
@@ -53,12 +58,10 @@ function rulesetBody(appId: number) {
       { type: "non_fast_forward" },
       { type: "deletion" },
     ],
-    bypass_actors: [
-      // GTM Base itself, so the app's own accept, keep, undo and confirm land.
-      { actor_id: appId, actor_type: "Integration", bypass_mode: "always" },
-      // The repository's admins: the base owner on a personal account.
-      { actor_id: ADMIN_ROLE_ID, actor_type: "RepositoryRole", bypass_mode: "always" },
-    ],
+    // GTM Base alone, so the app's own accept, keep, undo and confirm land and
+    // nothing else does. Nobody's own push to the main line is let through,
+    // the repository's admins included.
+    bypass_actors: [{ actor_id: appId, actor_type: "Integration", bypass_mode: "always" }],
   };
 }
 
@@ -113,7 +116,7 @@ export async function applyMainRule(token: string, owner: string, repo: string):
 export const MAIN_RULE_SENTENCES: Record<MainRuleState, string> = {
   on:
     "The main line of this base is protected. Changes reach it only as proposals accepted in GTM Base, nobody " +
-    "can overwrite or delete it, and only GTM Base and the repository's admins can write to it directly.",
+    "can overwrite or delete it, and nobody can write to it directly, its owner included.",
   off:
     "The main line of this base is not protected yet, so a teammate could write to it directly from a terminal. " +
     "Protecting it means changes reach it only as accepted proposals.",

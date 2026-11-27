@@ -51,12 +51,17 @@ export async function createBaseAction(formData: FormData) {
     back(error instanceof CreateBaseError ? error.code : "failed");
     return;
   }
-  // Protect the new base's main line straight away. On a plan where GitHub will
-  // not, the page that follows says so, and the base works as before.
-  try {
-    await applyMainRule(session.token, created.owner, created.name);
-  } catch {
-    // The base exists; its page reads the rule's state again and says what it is.
+  // Protect a new base's main line straight away. On a plan where GitHub will
+  // not, the page that follows says so, and the base works as before. An empty
+  // repository for a backup is protected only once the backup has arrived,
+  // from the base's Team page, because nobody but GTM Base may write to a
+  // protected main line, and the backup is the person's own first send.
+  if (!forBackup) {
+    try {
+      await applyMainRule(session.token, created.owner, created.name);
+    } catch {
+      // The base exists; its page reads the rule's state again and says what it is.
+    }
   }
   if (forBackup) redirect(`/new?ready=${encodeURIComponent(`${created.owner}/${created.name}`)}`);
   redirect(`/?notice=base-created&base=${encodeURIComponent(`${created.owner}/${created.name}`)}`);
