@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { Header } from "@/components/Header";
 import { TEMPLATE_SOURCE } from "@/lib/bases";
 import { api, listInstallations } from "@/lib/github";
+import { MAIN_RULE_SENTENCES, mainRuleState } from "@/lib/mainRule";
 import { currentSession } from "@/lib/session";
 import { createBaseAction } from "./actions";
 
@@ -46,6 +47,10 @@ export default async function NewBase({
       readyFor = null;
     }
   }
+  // Whether the new repository's main line is protected, read from GitHub.
+  const readyRule = readyFor
+    ? await mainRuleState(session.token, readyFor.split("/")[0], readyFor.split("/")[1])
+    : null;
   const installations = await listInstallations(session.token);
   const usable = installations.filter(
     (i) => i.account.type === "Organization" || i.account.login.toLowerCase() === session.login.toLowerCase(),
@@ -75,6 +80,7 @@ export default async function NewBase({
                 GTM Base shows you what would be sent and asks before anything leaves your computer. Once it is sent, the
                 base appears on your home page here.
               </p>
+              {readyRule && <p className="gb-help">{MAIN_RULE_SENTENCES[readyRule]}</p>}
             </div>
           </div>
         )}

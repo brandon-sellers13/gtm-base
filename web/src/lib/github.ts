@@ -11,10 +11,17 @@ export class GitHubError extends Error {
     // Set when GitHub's sign-in service itself refused (for example
     // bad_refresh_token): a definite answer, unlike a network failure or an outage.
     readonly oauthError: string | null = null,
+    // Set when GitHub refused because the account's plan does not include the
+    // feature (for example rulesets on a private repository on a free plan).
+    // Only this yes or no is kept from the body, never its text.
+    readonly needsPaidPlan: boolean = false,
   ) {
     super(message);
   }
 }
+
+// GitHub's own words when a feature needs a paid plan on this repository.
+const PAID_PLAN = /upgrade to github|make this repository public/i;
 
 export async function api<T>(path: string, init: RequestInit & { token?: string } = {}): Promise<T> {
   const headers = new Headers(init.headers);
@@ -23,8 +30,23 @@ export async function api<T>(path: string, init: RequestInit & { token?: string 
   if (init.token) headers.set("Authorization", `Bearer ${init.token}`);
   const response = await fetch(`${API}${path}`, { ...init, headers, cache: "no-store" });
   if (!response.ok) {
-    // The body can echo request details, so only the status is kept.
-    throw new GitHubError(`GitHub answered ${response.status} for ${path.split("?")[0]}`, response.status);
+    // The body can echo request details, so only the status is kept, and for a
+    // refusal whether it was about the plan.
+    let needsPaidPlan = false;
+    if (response.status === 403) {
+      try {
+        const body = (await response.json()) as { message?: unknown };
+        needsPaidPlan = typeof body.message === "string" && PAID_PLAN.test(body.message);
+      } catch {
+        // No readable body: an ordinary refusal.
+      }
+    }
+    throw new GitHubError(
+      `GitHub answered ${response.status} for ${path.split("?")[0]}`,
+      response.status,
+      null,
+      needsPaidPlan,
+    );
   }
   // 204 No Content (an invitation cancelled, a collaborator already there) has no body.
   const text = await response.text();

@@ -2,7 +2,8 @@
 
 import { redirect } from "next/navigation";
 import { GitHubError } from "@/lib/github";
-import { cancelInvitation, invite, TeamError } from "@/lib/team";
+import { applyMainRule } from "@/lib/mainRule";
+import { cancelInvitation, invite, isBaseOwner, TeamError } from "@/lib/team";
 import { currentSession } from "@/lib/session";
 
 // Next checks that a server action comes from this site's own pages. Whether the
@@ -33,6 +34,27 @@ export async function inviteAction(formData: FormData) {
     outcome = error instanceof TeamError ? error.code : "failed";
   }
   redirect(`${page}?notice=${outcome}&who=${encodeURIComponent(username)}`);
+}
+
+// Protect an existing base's main line. Only the base's owner may, worked out
+// again from GitHub here, and GitHub itself also requires a repository admin.
+export async function protectAction(formData: FormData) {
+  const session = await currentSession();
+  if (!session) redirect("/");
+  const { owner, repo } = base(formData);
+  let outcome: string;
+  try {
+    if (!(await isBaseOwner(session.token, owner, repo, session.emails))) {
+      outcome = "not-owner";
+    } else {
+      const state = await applyMainRule(session.token, owner, repo);
+      outcome = state === "on" ? "protected" : `rule-${state}`;
+    }
+  } catch (error) {
+    if (error instanceof GitHubError && error.status === 401) redirect("/api/auth/expired");
+    outcome = "failed";
+  }
+  redirect(`/b/${owner}/${repo}/team?notice=${outcome}`);
 }
 
 export async function cancelAction(formData: FormData) {

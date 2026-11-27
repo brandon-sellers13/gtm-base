@@ -3,9 +3,12 @@ import { api, GitHubError } from "./github";
 import { frontMatter, validRepo } from "./reader";
 import { baseOwnerEmails } from "./team";
 
-// Changes that reached a base without an approval. On GitHub's free plan
-// anyone with push access can commit straight to the main branch; this finds
-// those commits so the base's owner can keep or undo each one.
+// Changes that reached a base without an approval. A base whose main line is
+// protected (mainRule.ts) refuses them at GitHub, apart from what the
+// repository's admins write directly. On a private repository on a free plan,
+// where GitHub will not protect it, anyone with push access can commit
+// straight to the main branch; this finds those commits so the base's owner
+// can keep or undo each one.
 //
 // A commit on the main line (first parents only) is fine when it is:
 // - the merge of a GTM Base proposal (GitHub records the accept commit as the
@@ -19,8 +22,9 @@ import { baseOwnerEmails } from "./team";
 //   owner as the base stood just before it;
 // - already answered (kept or undone) in that record.
 // Everything else is listed. This catches mistakes; it is not a lock, because
-// a teammate with push access could also write the record. The real lock is
-// branch protection, which GitHub sells on its paid plans.
+// a teammate with push access could also write the record. The lock is the
+// protection mainRule.ts puts on the main line, which GitHub enforces on a
+// private repository only on its paid plans.
 
 export const REVIEW_FILE = "work/reviewed-changes.md";
 const REVIEW_HEADER =

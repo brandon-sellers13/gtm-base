@@ -5,6 +5,7 @@ import { githubApp, isDevelopment } from "@/lib/config";
 import { CleanUrl } from "@/components/CleanUrl";
 import { type Base, listBases } from "@/lib/bases";
 import { GitHubError, type Installation, listInstallations } from "@/lib/github";
+import { MAIN_RULE_SENTENCES, mainRuleState } from "@/lib/mainRule";
 import { currentSession } from "@/lib/session";
 
 const NOTICES: Record<string, string> = {
@@ -24,6 +25,10 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ n
   const { notice, base } = await searchParams;
   const app = githubApp();
   const session = app ? await currentSession() : null;
+  // A base just created: say whether its main line is protected, read from GitHub.
+  const [createdOwner, createdRepo] = (notice === "base-created" && base ? base : "").split("/");
+  const createdRule =
+    session && createdOwner && createdRepo ? await mainRuleState(session.token, createdOwner, createdRepo) : null;
 
   return (
     <div className="flex min-h-screen flex-col">
@@ -34,6 +39,7 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ n
           <div className="gb-page pb-0">
             <p className={`gb-notice ${FAILED.has(notice) ? "problem" : ""}`} role="status">
               {NOTICES[notice]}
+              {createdRule && createdRule !== "unknown" ? ` ${MAIN_RULE_SENTENCES[createdRule]}` : ""}
             </p>
           </div>
         )}

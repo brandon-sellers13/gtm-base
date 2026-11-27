@@ -1819,6 +1819,8 @@ Brandon decided to build the web app now and productize from the start. No revie
 - [x] W4. Proposals inbox: accept (owner only, records the confirmation) or discard. (done 2026-11-24)
 - [ ] W5. Invite a teammate and give them the line to join from Claude Code. (built and live 2026-11-25, PR #13; the real invite test waits for Simona's GitHub username and the Administration approval on the dev install)
 - [x] W6. Changes that skipped approval: Keep or Undo. (done 2026-11-25)
+- [x] Protect each base's main line with a GitHub ruleset (built 2026-11-27 on `claude/base-main-ruleset`): applied on create and backup, a button on the Team page for an existing base, and a plain refusal with today's behaviour where GitHub's plan does not allow it.
+  - [ ] Verified live only once a base is on a plan that enforces rulesets (GitHub Pro or Team) or public: a seat's direct push to main is refused, and accept, keep, undo and confirm still land, including for a document owner who is not a repository admin.
 - [x] P1. Back up a base to its repository. (done 2026-11-26, PR #16; the approval question is seen live once Brandon updates the installed plugin)
 - [x] P2. Join a base from a link. (built 2026-11-27 on `claude/p2-join-from-link`: `join.py join-review` and `join-link`, the seat record, and no straight send to main from a base with a shared copy beyond confirmation lines; not merged)
   - [ ] The one-pass security review of P2 (what joining writes onto a teammate's computer, the sign-in it relies on, and the shared-line rule), before P2 ships.

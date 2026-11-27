@@ -6,8 +6,9 @@ import { appUrl } from "@/lib/config";
 import { readForPage } from "@/lib/pageData";
 import { readBase } from "@/lib/reader";
 import { currentSession } from "@/lib/session";
+import { MAIN_RULE_SENTENCES, mainRuleState } from "@/lib/mainRule";
 import { isBaseOwner, listTeam, validUsername } from "@/lib/team";
-import { cancelAction, inviteAction } from "./actions";
+import { cancelAction, inviteAction, protectAction } from "./actions";
 
 const NOTICES: Record<string, (who: string) => string> = {
   invited: (who) => `${who} is invited. GitHub has emailed them; once they accept, they appear under People.`,
@@ -20,7 +21,23 @@ const NOTICES: Record<string, (who: string) => string> = {
   refused: () =>
     "GitHub refused the invitation. Only an admin of the repository can invite, and GitHub limits how many invitations a repository can have open.",
   failed: () => "GitHub did not finish that. Nothing was changed; please try again.",
+  protected: () => MAIN_RULE_SENTENCES.on,
+  "rule-off": () => "GitHub did not put the protection in place. Nothing was changed; please try again.",
+  "rule-needs-paid-plan": () => MAIN_RULE_SENTENCES["needs-paid-plan"],
+  "rule-no-permission": () => MAIN_RULE_SENTENCES["no-permission"],
+  "rule-unknown": () => MAIN_RULE_SENTENCES.unknown,
 };
+const PROBLEM_NOTICES = [
+  "not-owner",
+  "bad-username",
+  "no-such-user",
+  "refused",
+  "failed",
+  "rule-off",
+  "rule-needs-paid-plan",
+  "rule-no-permission",
+  "rule-unknown",
+];
 
 export default async function TeamPage({
   params,
@@ -36,6 +53,7 @@ export default async function TeamPage({
   const base = await readForPage(() => readBase(session.token, owner, repo));
   const team = await readForPage(() => listTeam(session.token, base.owner, base.repo));
   const owner_ = await readForPage(() => isBaseOwner(session.token, base.owner, base.repo, session.emails));
+  const rule = await mainRuleState(session.token, base.owner, base.repo);
   const shownWho = who && validUsername(who) ? who : "They";
   const hidden = (
     <>
@@ -63,7 +81,7 @@ export default async function TeamPage({
 
         {notice && NOTICES[notice] && (
           <p
-            className={`gb-notice mt-8 ${["not-owner", "bad-username", "no-such-user", "refused", "failed"].includes(notice) ? "problem" : ""}`}
+            className={`gb-notice mt-8 ${PROBLEM_NOTICES.includes(notice) ? "problem" : ""}`}
             role="status"
           >
             {NOTICES[notice](shownWho)}
@@ -125,13 +143,28 @@ export default async function TeamPage({
               <button className="gb-btn primary min-h-[48px] shrink-0 sm:min-w-[120px]">Invite</button>
             </div>
             <p className="gb-help">
-              They can read the base and propose changes. On GitHub&apos;s free plan they could also push a change
-              straight to the base without a proposal; GTM Base will flag any change that skipped approval so it can be
-              kept or undone.
+              They can read the base and propose changes.{" "}
+              {rule === "on"
+                ? "The main line is protected, so their changes reach it only as proposals you accept."
+                : "Until the main line is protected they could also write to it directly from a terminal; GTM Base lists any change that skipped approval so you can keep or undo it."}
             </p>
           </form>
         ) : (
           <p className="gb-empty mt-12">Only the owner of this base can invite people.</p>
+        )}
+
+        <h2 className="gb-heading gb-section">The main line</h2>
+        <p className="gb-ask mt-3">{MAIN_RULE_SENTENCES[rule]}</p>
+        {owner_ && rule === "off" && (
+          <form action={protectAction} className="mt-4">
+            {hidden}
+            <button className="gb-btn primary">Protect the main line</button>
+            <p className="gb-help">
+              GitHub will then refuse any change to the main line that is not an accepted proposal, and refuse
+              overwriting or deleting it. GTM Base and the repository&apos;s admins can still write to it, which is how
+              accepting, keeping and undoing work.
+            </p>
+          </form>
         )}
 
         <h2 className="gb-heading gb-section">How a teammate joins</h2>
@@ -153,7 +186,7 @@ export default async function TeamPage({
           <li>
             To work on it from Claude Code, with the GTM Base plugin installed, say:{" "}
             <span className="font-mono text-[14px] break-words text-ink">join a base from a link https://github.com/{base.owner}/{base.repo}</span>.
-            Joining from Claude Code arrives with the next plugin release; until then the base is readable here.
+            Joining from Claude Code needs the plugin release that adds it; until then the base is readable here.
           </li>
         </ol>
       </main>

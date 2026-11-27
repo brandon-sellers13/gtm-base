@@ -52,7 +52,7 @@ Private repositories on GitHub's free plan cannot enforce branch protection, so 
 
 Version one handles this by catching and undoing. A change that skipped approval is visible in the app and one click reverses it, and git keeps the full history either way. For a small team that trusts each other, the realistic risk is a mistake, not misconduct.
 
-Later, the app should not rebuild what GitHub already sells. When the repository's plan supports protection, the app offers to turn it on with one click. When it does not, the app says plainly which upgrade turns it on. A second option, where teammates get read-only access and the GitHub App is the only thing that writes, may work on the free plan but is not verified and would change how Claude Code sessions send their proposals. It stays a later decision.
+Later, the app should not rebuild what GitHub already sells. When the repository's plan supports protection, the app offers to turn it on with one click. When it does not, the app says plainly which upgrade turns it on. *Built 2026-11-27 on `claude/base-main-ruleset`: the app puts a repository ruleset on each base's default branch when it creates or backs one up, and the Team page offers it for an existing base. On a private repository on a free plan GitHub refuses it, which the app says and falls back to the list of changes that skipped approval.* A second option, where teammates get read-only access and the GitHub App is the only thing that writes, may work on the free plan but is not verified and would change how Claude Code sessions send their proposals. It stays a later decision.
 
 ## How it is built
 

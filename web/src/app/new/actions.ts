@@ -3,6 +3,7 @@
 import { redirect } from "next/navigation";
 import { CreateBaseError, createBase } from "@/lib/bases";
 import { listInstallations } from "@/lib/github";
+import { applyMainRule } from "@/lib/mainRule";
 import { currentSession } from "@/lib/session";
 
 const REPO_NAME = /^[A-Za-z0-9._-]{1,100}$/;
@@ -49,6 +50,13 @@ export async function createBaseAction(formData: FormData) {
   } catch (error) {
     back(error instanceof CreateBaseError ? error.code : "failed");
     return;
+  }
+  // Protect the new base's main line straight away. On a plan where GitHub will
+  // not, the page that follows says so, and the base works as before.
+  try {
+    await applyMainRule(session.token, created.owner, created.name);
+  } catch {
+    // The base exists; its page reads the rule's state again and says what it is.
   }
   if (forBackup) redirect(`/new?ready=${encodeURIComponent(`${created.owner}/${created.name}`)}`);
   redirect(`/?notice=base-created&base=${encodeURIComponent(`${created.owner}/${created.name}`)}`);
