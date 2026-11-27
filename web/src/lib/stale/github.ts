@@ -241,16 +241,23 @@ async function recordFacts(
         }
       }
     }
-    // What the commit that brought it onto the main line changed, compared
-    // with its first parent (base_reader: git show --diff-merges=first-parent).
-    // A list GitHub cuts short counts as changing nothing, so the record then
-    // settles nothing.
+    // What the commit that first brought it onto the main line changed,
+    // compared with its first parent (base_reader: the oldest first-parent
+    // commit that added it, then git show --diff-merges=first-parent). A list
+    // GitHub cuts short counts as changing nothing, so the record then settles
+    // nothing.
     let acceptedPaths: string[] | null = null;
     if (merged) {
-      const first = merged.parents.nodes[0]?.oid;
+      let firstIn: HistoryNode = merged;
+      for (let node = nodes.get(head); node; ) {
+        const parent = node.parents.nodes[0] ? nodes.get(node.parents.nodes[0].oid) : undefined;
+        if (fileAt(node, i) && !fileAt(parent, i)) firstIn = node; // newest first; keep the oldest
+        node = parent;
+      }
+      const first = firstIn.parents.nodes[0]?.oid;
       const shown = first
-        ? await api<{ files?: { filename: string }[] }>(`/repos/${owner}/${repo}/compare/${first}...${merged.oid}`, { token })
-        : await api<{ files?: { filename: string }[] }>(`/repos/${owner}/${repo}/commits/${merged.oid}`, { token });
+        ? await api<{ files?: { filename: string }[] }>(`/repos/${owner}/${repo}/compare/${first}...${firstIn.oid}`, { token })
+        : await api<{ files?: { filename: string }[] }>(`/repos/${owner}/${repo}/commits/${firstIn.oid}`, { token });
       const names = (shown.files ?? []).map((file) => file.filename);
       acceptedPaths = names.length >= 300 ? [] : names;
     }

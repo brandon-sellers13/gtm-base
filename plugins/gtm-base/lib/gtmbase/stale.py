@@ -289,7 +289,7 @@ class CorrectionRecord(object):
     affected file's owners, accepting the change is that owner saying the file
     is right, which is Brandon's rule of 2026-09-05.
 
-    `accepted_paths` are the files the change that brought the record onto
+    `accepted_paths` are the files the change that first brought the record onto
     that line changed, compared with its first parent. A record settles a file
     only when that change changed the file too, so a proposal that edits a
     document, adds its record and then undoes the edit is accepted as records

@@ -42,7 +42,8 @@ export type CorrectionFacts = {
   // The commit that brought it onto the main line, whose saved map and
   // documents decide whether that person could accept it then.
   mergedIn: string | null;
-  // The files that commit changed, compared with its first parent. A record
+  // The files the commit that first brought it onto the main line changed,
+  // compared with its first parent. A record
   // settles a document only when this lists it, so a proposal that edits a
   // document, adds its record and undoes the edit settles nothing (C2's
   // security review, closed 2026-11-27). Null means it was not worked out.
