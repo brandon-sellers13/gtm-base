@@ -143,6 +143,11 @@ REFUSED_UNTRUSTED_SAYS = (
     "GTM Base did not run %s, because this computer has not approved or "
     "accepted the skill exactly as it stands now."
 )
+OFFER_SHOWING = (
+    "Somebody with authority over it approved this version, so you can be shown "
+    "who, in which role, and what changed, and choose whether this computer "
+    "runs it."
+)
 REFUSED_NO_SKILL = (
     "GTM Base did not run %s, because this base holds no skill by that name "
     "that it can read whole."
@@ -485,6 +490,15 @@ def _work(result, base_root, base_id, skill, conversation, git, today) -> None:
     # Step 2: the skill as it stands is one this seat trusts (CS10, CS11).
     if not authority.trusts(base_id, manifest):
         _refuse(result, REFUSED_UNTRUSTED, REFUSED_UNTRUSTED_SAYS % skill)
+        if result.attended:
+            # Attended, the person is offered the showing of Unit 4.2b, which
+            # only a version somebody with authority approved can pass.
+            from . import skill_install
+
+            showing = skill_install.approval_of(base_root, base_id, skill, runner_=git)
+            result.sentences.append(
+                OFFER_SHOWING if showing.acceptable else skill_install.NO_APPROVAL
+            )
         return
 
     # Step 3: the base can be read for the check.

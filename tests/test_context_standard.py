@@ -1140,7 +1140,10 @@ class TestTheSkillsFolderIsRefused(unittest.TestCase):
 
     def test_by_the_update_from_the_shared_copy(self):
         refused = session_start._is_refused_path
-        self.assertTrue(refused("skills/outbound/SKILL.md"))
+        # Plan 1, Unit 4.2b admits a skill's own shapes by name; what such a
+        # file holds is read separately (tests/test_skills_folder.py).
+        self.assertFalse(refused("skills/outbound/SKILL.md"))
+        self.assertTrue(refused("skills/outbound/run.py"))
         self.assertTrue(refused("skills/notes.md"))
         self.assertTrue(refused("Skills/notes.md"))
         self.assertFalse(refused("skills/" + constants.PLACEHOLDER_NAME))

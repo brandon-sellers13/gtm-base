@@ -171,16 +171,22 @@ def follow_the_move(root: Optional[str], staging) -> None:
 def is_refused_in_skills(parts: Sequence[str], is_dir: bool = False) -> bool:
     """Whether one path under the base's own skills folder must be refused.
 
-    Until the company-skills brainstorm settles who may approve a change to a
-    skill (Brandon's call 13), the folder exists and holds nothing but its
-    placeholder. Any other file, and any folder inside it, is refused by every
-    path that can put one there: an update from the shared copy, a file on the
-    disk when the base is opened, a file-writing tool, and a send.
+    Since Plan 1's Unit 4.2b the folder admits exact shapes (`skillshape`):
+    the placeholder, `<job>/SKILL.md`, `<job>/references/<name>.md`, and
+    `<job>/examples/<example>/<name>.md` or `.txt`, and the folders that hold
+    them. Anything else is refused by every path that can put one there: an
+    update from the shared copy, a file on the disk when the base is opened,
+    and a send. A file tool writing into the folder is refused by its own
+    rule (`skillshape.written_only_by_gtm_base`), because admitting a file and
+    writing one are separate questions.
 
     `parts` are the path's names from the top of the base, already compared the
-    way the caller compares names. The folder itself is allowed, and so is its
-    one placeholder file.
+    way the caller compares names. The checks that read a file also ask
+    `skillshape.file_problem`, which reads its exact case, mode, size and
+    settings.
     """
+    from . import skillshape
+
     names = [part for part in parts if part not in ("", ".")]
     if not names or names[0] != constants.SKILLS_DIR:
         return False
@@ -188,9 +194,7 @@ def is_refused_in_skills(parts: Sequence[str], is_dir: bool = False) -> bool:
         # The folder on its own. A file named `skills` at the top is not a
         # folder of skills and holds nothing, so it is allowed as well.
         return False
-    if len(names) == 2 and not is_dir and names[1] == constants.PLACEHOLDER_NAME:
-        return False
-    return True
+    return not skillshape.admitted_shape(names, is_dir)
 
 
 def is_the_skills_placeholder(relative) -> bool:

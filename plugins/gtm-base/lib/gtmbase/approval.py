@@ -223,6 +223,15 @@ SAYS_SET_BUSINESSES = (
     "Allowing it changes the list of businesses your base covers to the one "
     "you were just shown, and records why."
 )
+# Plan 1, Unit 4.2b: installing or changing a skill, and accepting one here.
+SAYS_INSTALL_SKILL = (
+    "Allowing it gives your yes to the skill you were just shown, and writes "
+    "it into your base once every yes it needs is given."
+)
+SAYS_ACCEPT_SKILL = (
+    "Allowing it lets this computer run the version of the skill you were just "
+    "shown, which somebody with authority over it already approved."
+)
 # Each settings operation has its own sentence, keyed by the operation the
 # approving command names, because one sentence for all five would ask about
 # handing the base to somebody with the words for a business line.
@@ -312,6 +321,8 @@ SENTENCE_NAMES = (
     "SAYS_SET_MAP_OWNER",
     "SAYS_SET_ADMINISTRATORS",
     "SAYS_SET_BUSINESSES",
+    "SAYS_INSTALL_SKILL",
+    "SAYS_ACCEPT_SKILL",
     "UNATTENDED",
     "NOT_MARKED",
     "SAYS_SKIP",
@@ -355,6 +366,8 @@ SCRIPTS = {
     "seat.py": ("scripts", "seat.py"),
     # Plan 1, Unit 4.2a.
     "operations.py": ("skills", "propose-change", "scripts", "operations.py"),
+    # Plan 1, Unit 4.2b.
+    "use_skill.py": ("skills", "use-skill", "scripts", "use_skill.py"),
 }
 
 _PYTHON_RE = re.compile(r"\Apython(?:3(?:\.\d+)?)?\Z")
@@ -393,6 +406,10 @@ _ACTIONS = {
     "seat.py": ("weekly_line", "quiet", "speak"),
     "operations.py": (
         "new_words_file", "create", "set", "approve_creation", "approve_setting",
+    ),
+    "use_skill.py": (
+        "start", "finish", "check", "incomplete", "new_words_file",
+        "prepare_install", "approve_install", "show", "accept",
     ),
 }
 
@@ -501,6 +518,13 @@ def _what(script: str, options) -> Optional[Tuple[str, Tuple[str, ...]]]:
             if says is None:
                 raise Unreadable()
             found = (says, ("operations.approve",))
+    elif script == "use_skill.py":
+        # Starting, finishing, checking and showing write nothing into a base;
+        # only these two are approvals.
+        if get("approve_install"):
+            found = (SAYS_INSTALL_SKILL, ("skill_install.approve",))
+        elif get("accept"):
+            found = (SAYS_ACCEPT_SKILL, ("skill_install.accept",))
     if found is not None:
         chosen = [name for name in _ACTIONS[script] if get(name)]
         if len(chosen) > 1:

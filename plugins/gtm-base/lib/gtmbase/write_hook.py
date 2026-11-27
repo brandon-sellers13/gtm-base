@@ -87,9 +87,9 @@ CODE_SEAT_FOLDER = "in-the-records-folder"
 CODE_BASE_REPOSITORY = "in-a-bases-own-repository-folder"
 CODE_BASE_ASSISTANT_FOLDER = "in-a-bases-assistant-folder"
 CODE_PLUGIN_CODE = "in-the-plugins-own-folder"
-# A file inside a base's own skills folder, which is kept empty until the
-# company-skills brainstorm settles who may approve a change to a skill
-# (Unit 1.5b, Brandon's call 13). Its placeholder is allowed.
+# A file inside a base's own skills folder. Since Plan 1's Unit 4.2b the
+# folder admits a skill's files, but only GTM Base's install and change
+# operations write them (CS22). Its placeholder is allowed.
 CODE_SKILLS_FILE = "in-a-bases-skills-folder"
 # A write that would put something the check before a send refuses, such as a
 # key or a token, into a base's source map (Astra's review of Unit 1.5b,
@@ -158,8 +158,8 @@ COULD_NOT_RUN = 70
 # says why, because the folder is theirs and not GTM Base's, and a refusal
 # with no reason reads as a fault.
 SKILLS_REFUSED = (
-    "A base keeps its skills folder empty until your team has settled who may "
-    "approve a change to a skill, so nothing was written there."
+    "A skill is written into a base only when it is installed or changed "
+    "through GTM Base, with the yeses it needs, so nothing was written there."
 )
 # What a person reads when a write would put a key or a token in the source
 # map. It names no file and repeats nothing that was found.
@@ -683,9 +683,16 @@ def _in_a_base(named: str, real_file: str, folder: str):
 
 
 def _into_a_bases_skills(named: str, real_file: str) -> Optional[str]:
-    """Whether a write lands in a base's own skills folder beyond its placeholder."""
+    """Whether a write lands in a base's own skills folder beyond its placeholder.
+
+    A skill is written only through GTM Base's own install and change
+    operations (CS22), so a file tool is refused here even for a shape the
+    folder admits.
+    """
+    from . import skillshape
+
     for side, parts in _in_a_base(named, real_file, constants.SKILLS_DIR):
-        if layout.is_refused_in_skills(parts, os.path.isdir(side)):
+        if skillshape.written_only_by_gtm_base(parts, os.path.isdir(side)):
             return CODE_SKILLS_FILE
     return None
 
