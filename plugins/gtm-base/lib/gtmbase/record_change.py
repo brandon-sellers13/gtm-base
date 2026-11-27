@@ -182,6 +182,13 @@ ASK_SHORT = (
     "checked against it. What changed, why, and where did it come from?"
 )
 DOCUMENTS_INTRO = "These are the documents in your base, by number."
+# Said after the list when what changed points somewhere (Track 4, Unit
+# T4.1). The documents are suggestions, and the person still chooses.
+SUGGESTED_INTRO = (
+    "From what changed, these are the documents it probably affects, together "
+    "with the ones usually built on them. They are suggestions, and you choose "
+    "which ones it affects."
+)
 NO_DOCUMENTS = (
     "Your base holds no documents yet besides its map, so there is nothing a "
     "context change could affect. Set up your company base first."
@@ -544,6 +551,25 @@ def documents(base_root: str) -> List[Tuple[int, str, str]]:
             continue
         found.append((len(found) + 1, path, name_of(path)))
     return found
+
+
+def suggestions(
+    base_root: str, listed: Sequence[Tuple[int, str, str]], words: str
+) -> List[Tuple[int, str, str]]:
+    """The documents on the list a change in these words probably affects.
+
+    The documents its words point at, or the customer profile and the
+    positioning when they point at nothing, and then every document the base
+    holds that usually follows from those (`constants.KIND_FOLLOWS`). Only
+    documents on the list are suggested, in the list's own order and numbers,
+    and nothing is chosen for the person (Track 4, Unit T4.1, call 8).
+    """
+    if not str(words or "").strip():
+        return []
+    files = base_reader.context_files(base_root)
+    mentioned, following = stale.suggested_paths(files, words)
+    wanted = set(mentioned) | set(following)
+    return [(number, path, name) for number, path, name in listed if path in wanted]
 
 
 def _lists(base_id: str) -> dict:

@@ -1771,6 +1771,152 @@ def adoption_file(run_id: str, slug: str) -> str:
     return os.path.join(drafts_dir(run_id), "adopt-%s.md" % slug)
 
 
+def document_adoption_file(run_id: str, step: str) -> str:
+    """Where a finished document of one kind is kept for the person to read."""
+    if step not in drafting.LATER_STEPS:
+        raise adopt.AdoptionRefused(adopt.CODE_NOT_TO_ADOPT)
+    return os.path.join(drafts_dir(run_id), "adopt-document-%s.md" % step)
+
+
+def _document_key(step: str) -> str:
+    return "document-%s" % step
+
+
+def _cleaned_document(run_id, step, source, root, address, day):
+    """Run the adoption contract on one finished document of one kind.
+
+    The same contract a finished segment goes through (Unit 1.7c), on a file
+    from the list this run agreed to, read through the same check every read
+    in setup goes through. Its own settings are set aside, and the saved file
+    says it is the kind it is being taken in as (Track 4, Units T4.2 and
+    T4.3). A base that already holds one is never written over.
+    """
+    if os.path.lexists(os.path.join(root, drafting.LATER_PATHS[step].replace("/", os.sep))):
+        raise adopt.AdoptionRefused(adopt.CODE_FILE_TAKEN)
+    consent = load_consent(run_id)
+    try:
+        real = sources_module.read_allowed(consent, source)
+    except ConsentError:
+        raise adopt.AdoptionRefused(adopt.CODE_UNREADABLE)
+    if not adopt.is_markdown(real):
+        raise adopt.AdoptionRefused(adopt.CODE_NOT_MARKDOWN)
+    try:
+        raw, notes = extract.extract(real, "markdown")
+    except SourceRejected:
+        raise adopt.AdoptionRefused(adopt.CODE_UNREADABLE)
+    if extract.NOTE_CHARACTERS_REPLACED in notes:
+        raise adopt.AdoptionRefused(adopt.CODE_UNREADABLE)
+    when = sources_module.date_for_file(real, today=day).date
+    label = _label_for(real)
+    return adopt.clean(
+        raw,
+        label,
+        day,
+        address,
+        adopt.source_line_for(label, when),
+        kind=drafting.KINDS[step],
+    )
+
+
+def document_adoption_show(
+    run_id: str,
+    step: str,
+    source: str,
+    base_root: Optional[str],
+    email: Optional[str] = None,
+    runner: Optional[GitRunner] = None,
+    today=None,
+):
+    """Clean one finished document and keep it for the person to read first.
+
+    Nothing is written into the base. The whole cleaned document is kept in
+    the run's own folder, and the hash of exactly those bytes beside the day,
+    which is what a later yes is bound to.
+    """
+    if step not in drafting.LATER_STEPS:
+        raise adopt.AdoptionRefused(adopt.CODE_NOT_TO_ADOPT)
+    runs = runner_or_default(runner)
+    root, _base_id = _adoption_base(base_root, runs)
+    day = today or state.today()
+    address = _owner_address(root, email, runs)
+    path = document_adoption_file(run_id, step)
+    try:
+        cleaned = _cleaned_document(run_id, step, source, root, address, day)
+    except adopt.AdoptionRefused:
+        if os.path.lexists(path):
+            os.remove(path)
+        raise
+    atomic_write_text(path, cleaned.text, inside=drafts_dir(run_id))
+    adopt.record_shown(
+        scratch_dir(run_id),
+        _document_key(step),
+        cleaned.digest,
+        day.isoformat() if hasattr(day, "isoformat") else str(day),
+        paths.seat_home(),
+    )
+    _remember(run_id, "document-adoptions", step, source)
+    return cleaned
+
+
+def document_adoption_approve(
+    run_id: str,
+    step: str,
+    base_root: Optional[str],
+    shown_digest: str,
+    questions_open: bool = False,
+    email: Optional[str] = None,
+    runner: Optional[GitRunner] = None,
+    now: Optional[datetime.datetime] = None,
+):
+    """Write one finished document the person said yes to, exactly as shown.
+
+    The contract is run again from the original on the day it was shown, and
+    the cleaned file the person could read is read again, and both have to
+    come out to the hash they said yes to, so anything that changed after the
+    showing is asked about again rather than written.
+    """
+    # Only a command the person allowed through Claude Code's own question
+    # writes an approval (Unit 1.7e, Brandon's call 57).
+    approval.require("join_flow.document_adoption_approve")
+    if step not in drafting.LATER_STEPS:
+        raise adopt.AdoptionRefused(adopt.CODE_NOT_TO_ADOPT)
+    runs = runner_or_default(runner)
+    root, base_id = _adoption_base(base_root, runs)
+    record = adopt.shown(scratch_dir(run_id), _document_key(step))
+    source = _recalled(run_id, "document-adoptions", step)
+    if record is None or not source:
+        raise adopt.AdoptionRefused(adopt.CODE_NOT_SHOWN)
+    given = str(shown_digest or "")
+    if not adopt.is_a_digest(given) or not hmac.compare_digest(given, record["shown"]):
+        raise adopt.AdoptionRefused(adopt.CODE_CHANGED)
+    try:
+        day = datetime.date.fromisoformat(record["day"])
+    except (TypeError, ValueError):
+        raise adopt.AdoptionRefused(adopt.CODE_NOT_SHOWN)
+    address = _owner_address(root, email, runs)
+    cleaned = _cleaned_document(run_id, step, source, root, address, day)
+    on_disk = read_bytes(document_adoption_file(run_id, step))
+    if (
+        cleaned.digest != record["shown"]
+        or on_disk is None
+        or hashlib.sha256(on_disk).hexdigest() != record["shown"]
+    ):
+        raise adopt.AdoptionRefused(adopt.CODE_CHANGED)
+    if cleaned.questions and not questions_open:
+        raise adopt.AdoptionRefused(adopt.CODE_QUESTIONS_OPEN)
+    return review.approve_adopted(
+        root,
+        base_id,
+        drafting.LATER_PATHS[step],
+        cleaned.text,
+        record["shown"],
+        run_id,
+        runner=runs,
+        now=now,
+        email=address,
+    )
+
+
 def _adoption_base(base_root: Optional[str], git: GitRunner):
     """The base a page is taken into, once both required documents are in it.
 
@@ -3959,6 +4105,15 @@ def assemble_step(
         scratch_dir(run_id), "%s-prompt.md" % _file_stem(step, settled)
     )
     atomic_write_text(path, assembly.text, inside=paths.seat_home())
+    if step in drafting.LATER_STEPS:
+        # Every figure the material this request carries, which is what the
+        # draft's own figures are checked against at review (Track 4).
+        _remember(
+            run_id,
+            "figures",
+            _file_stem(step, settled),
+            drafting.figures_in(assembly.material),
+        )
     return Assembled(
         path,
         step,
@@ -4912,10 +5067,11 @@ def review_step(
     settled = None
     if run_id:
         settled = _step_is_this_runs(run_id, step, segment)
-    elif step in NOTES_STEPS:
+    elif step in NOTES_STEPS or step in drafting.LATER_STEPS:
         # The umbrella and a segment are measured against the run's own
-        # inventory, and every step written from the notes against the
-        # run's notes, so none of them can be checked without the run.
+        # inventory, every step written from the notes against the run's
+        # notes, and a document drafted after setup against the figures its
+        # request carried, so none of them can be checked without the run.
         raise ReviewError(CODE_NO_RUN, code=CODE_NO_RUN)
     if settled is not None and os.path.basename(draft_file) != os.path.basename(
         draft_path(run_id, step, settled)
@@ -4933,6 +5089,12 @@ def review_step(
     codes = review.screen(draft, _address_for(base_root, email, git))
     if step == drafting.STEP_UMBRELLA:
         codes.extend(drafting.check_umbrella(draft, several_segments(run_id)))
+    if step in drafting.LATER_STEPS:
+        allowed = _recalled(run_id, "figures", _file_stem(step, settled))
+        if allowed is None or drafting.figures_beyond(draft.body, allowed):
+            # A figure none of the material carried, or a draft with no
+            # request behind it, is refused rather than shown (Track 4).
+            codes.append(drafting.CODE_FIGURE_NOT_IN_SOURCES)
     taken_out = 0
     named = []
     stem = _file_stem(step, settled)
@@ -5413,9 +5575,13 @@ def approve_step(
         # they have been asked and chose to leave it open. The third real run
         # saved one nobody had looked at twice (requirement P27).
         raise ReviewError(CODE_QUESTIONS_OPEN, code=CODE_QUESTIONS_OPEN)
-    if reviewed.draft.step == drafting.STEP_SEGMENT and not base_root:
+    if (
+        reviewed.draft.step == drafting.STEP_SEGMENT
+        or reviewed.draft.step in drafting.LATER_STEPS
+    ) and not base_root:
         # A segment goes into a base the umbrella and the positioning already
-        # made, and never makes one.
+        # made, and never makes one; neither does a document drafted after
+        # setup (Track 4).
         raise ReviewError(review.CODE_NO_BASE, code=review.CODE_NO_BASE)
     if reviewed.draft.step == drafting.STEP_SEGMENT:
         written = _approve_a_segment(

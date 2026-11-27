@@ -15,10 +15,19 @@ counts for no business when the kind differs by business, and the inventory
 lists it once so the owner can say which. A base whose map lists no business
 is read for the whole company, exactly as before.
 
-Nothing on this list can be drafted from the inventory yet. Units 2.4a and 3.5
-of Plan 1 make the goals, the metric definitions and a standard draftable, and
-Unit 2.5a's prompt does the same for rows of the source map, each in its own
-release. Until then the inventory says drafting arrives later.
+The messaging, the voice guide, the buyer personas and the product can be
+drafted on request from material the person names, or taken in as they stand
+when a finished one exists. The source map's rows can be drafted from what the
+person says. Units 2.4a and 3.5 of Plan 1 make the goals, the metric
+definitions and a standard draftable in their own release, and until then the
+inventory says drafting arrives later for the rest.
+
+A context change recorded against one document usually makes others out of
+date too. Each kind below that has one says what overtakes it, and the line
+"Usually also overtakes" names the kinds GTM Base suggests alongside it when a
+change is recorded. Those are suggestions only: the person chooses every
+document a change affects, and nothing is flagged that they did not choose. A
+test holds these lines and the table in the plugin's settings in step.
 
 ## Goals (`goals`)
 
@@ -26,10 +35,22 @@ What the business is trying to reach, each as a figure the owner stated, with
 its unit and where its actual value is measured. Kept at `context/goals.md`,
 or in a business's folder. Each business has its own.
 
+Overtaken by a change of plan: a new quarter, a board reset, a budget
+change, or a target moved.
+
+Usually also overtakes: standards (only a standard whose own sources name the goals).
+
 ## Product (`product`)
 
-What the business sells, in its own words. Kept at `context/product.md`, or in
-a business's folder. Each business has its own.
+What the business sells, in its own words, with what has shipped kept apart
+from what is planned, and a pointer to where pricing lives rather than the
+prices themselves. Kept at `context/product.md`, or in a business's folder.
+Each business has its own. GTM Base can draft it, or take in a finished one.
+
+Overtaken when a feature ships or is dropped, a plan or price changes, or
+something planned is cancelled.
+
+Usually also overtakes: messaging, buyer personas.
 
 ## Customer profile (`icps`)
 
@@ -38,11 +59,22 @@ Kept at `context/icps.md`, or in a business's folder. Each business has its
 own. Setup drafts it, and can take in a finished page for one segment as it
 stands.
 
+Overtaken when the business changes who it sells to, such as a move up-market
+or a segment added or dropped.
+
+Usually also overtakes: positioning, messaging, buyer personas.
+
 ## Buyer personas (`buyer-personas`)
 
 Who inside each segment buys, kept apart from the segments themselves. Kept at
-`context/buyer-personas.md`, or in a business's folder. Each business has its
-own.
+`context/buyer-personas.md`, or in a business's folder, and never in the
+segments' folder. Each business has its own. GTM Base can draft it, or take in
+a finished one.
+
+Overtaken when a new buying role shows up in deals, or a product change brings
+in a new user.
+
+Usually also overtakes: messaging.
 
 ## Positioning (`positioning`)
 
@@ -50,22 +82,45 @@ How the business describes itself against the alternatives, with its
 competitors folded in. Kept at `context/positioning.md`, or in a business's
 folder. Each business has its own. Setup drafts it.
 
+Overtaken when the business changes how it describes itself or which
+alternatives it is compared with.
+
+Usually also overtakes: messaging.
+
 ## Messaging (`messaging`)
 
 What the business claims, to whom, and with what proof. Kept at
 `context/messaging.md`, or in a business's folder. Each business has its own.
+GTM Base can draft it, reading the profile and the positioning first, or take
+in a finished one.
+
+Overtaken when a claim changes, such as legal flagging one or a customer
+withdrawing permission to be named.
+
+Usually also overtakes: nothing else.
 
 ## Voice guide (`voice`)
 
-How the company sounds in writing. Kept at `context/voice.md`. One serves the
+How the company sounds in writing, each principle shown with a sentence quoted
+from the company's own writing. Kept at `context/voice.md`. One serves the
 whole company, so it needs no `business:` line, though a business may keep its
-own in its folder.
+own in its folder. GTM Base can draft it, or take in a finished one.
+
+Overtaken only by a change to the voice itself, such as a new style rule or a
+word the company stops using. A strategy change does not overtake it.
+
+Usually also overtakes: nothing else.
 
 ## Design guide (`design`)
 
 How the company looks: colour by named role, type, and the rules for its
 logo. Kept at `context/design.md`. One serves the whole company, so it needs
 no `business:` line, though a business may keep its own in its folder.
+
+Overtaken only by a change to the brand itself, such as a new logo or a
+colour retired. A strategy change does not overtake it.
+
+Usually also overtakes: nothing else.
 
 ## Metric definitions (`metrics`)
 
@@ -78,7 +133,8 @@ folder, or in a business's folder. Each business has its own.
 For each kind of data a job needs, where it lives, which connected tool reads
 it, and what to do when that tool is not connected, in one table whose rows
 each say which business they are for. Kept at `access/stack.md`. One serves the
-whole company. It never holds a password, a key or a token.
+whole company. It never holds a password, a key or a token. GTM Base can draft
+its rows from what the person says, and a tool nobody named is never a row.
 
 ## Standards (`standard`)
 

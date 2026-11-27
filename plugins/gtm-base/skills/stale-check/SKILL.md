@@ -251,13 +251,17 @@ so this step settles which ones they are.
 
    Write into each the part of their answer it is for, in their own words,
    and leave out a part they did not give.
-2. Run `python3 scripts/stale_check.py --record-change documents`. It prints
-   the documents in the base by number and name, held apart as data because
-   the names come from file names, and never a map. Read the list back as it
-   stands. Keep the list token from the line marked for you: the numbers
-   mean that list and no other, so if the base changes before they choose,
-   show it again.
-3. Say which of them you think the change affects, by name, and ask:
+2. Run `python3 scripts/stale_check.py --record-change documents --what-changed-file <the path it printed> --reason-file <the path it printed>`,
+   leaving off `--reason-file` when they gave no reason. It only looks at the
+   two files, so they are still there for the next step.
+3. It prints the documents by number and name, held apart as data, and never
+   a map. Read the list back as it stands, and keep the list token from the
+   line marked for you: the numbers mean that list and no other, so show it
+   again if the base changes before they choose.
+4. It may also print the documents the change probably affects, with the ones
+   usually built on them. Read those out by name as suggestions, and add any
+   other you think it affects. A document is affected only when they say so.
+   Then ask:
 
 <!-- ask -->
 Does it affect those, or which numbers should it be?

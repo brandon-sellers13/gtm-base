@@ -1,6 +1,6 @@
 ---
 name: join
-description: Set up a company base for somebody who does not have one yet, reading the marketing material they name and drafting their ideal customer profile and their positioning for approval. Use when the person says "set up my company base", asks to set up a company base, says they want to start a base, or answers yes to the setup offer. Say "set up my company base" whenever you are ready. Also handles "link this folder to my base", "unlink this folder from my base", and "show my linked folders", which connect a base to the folder somebody keeps their marketing material in. Also handles "finish setting up my base", which finishes taking in the finished documents and drafting the segments somebody chose when an earlier session stopped partway. Also handles "back up my base", "back this up" and "back up my base to <address>", which sends a copy of the base to the empty GitHub repository the GTM Base app made for it, after a review the person approves. Also handles "join a base from a link", which arrives with the next release and is refused today with one sentence.
+description: Set up a company base for somebody who does not have one yet, reading the marketing material they name and drafting their ideal customer profile and their positioning for approval. Use when the person says "set up my company base", asks to set up a company base, says they want to start a base, or answers yes to the setup offer. Say "set up my company base" whenever you are ready. Also handles "link this folder to my base", "unlink this folder from my base", and "show my linked folders", which connect a base to the folder somebody keeps their marketing material in. Also handles "finish setting up my base", which finishes taking in the finished documents and drafting the segments somebody chose when an earlier session stopped partway. Also handles "back up my base", "back this up" and "back up my base to <address>", which sends a copy of the base to the empty GitHub repository the GTM Base app made for it, after a review the person approves. Also handles "draft my messaging", and the same for the voice guide, buyer personas, product and source map. Also handles "join a base from a link", which arrives with the next release and is refused today with one sentence.
 ---
 
 # Set up a company base
@@ -1210,6 +1210,87 @@ The review is good only for the version it showed. If they save another change
 first, or the send says to review again, run the review again. In a session that has already
 read the person's own documents, both commands say that nothing leaves this
 computer until the session ends, which is the rule they agreed to in step 5c.
+
+## Drafting another document after setup
+
+A base can hold more than the two documents setup drafts. When the person asks
+for their messaging, their voice guide, their buyer personas or their product
+document, or says yes to the inventory's offer to draft one, this section
+drafts it from material they name, or takes in a finished one as it stands.
+It writes only into a base that already exists, and only where nothing of that
+kind is kept yet. The step names are `messaging`, `voice`, `buyer-personas`
+and `product`; the commands below are written for two of them, and any of the
+four goes in their place.
+
+1. Start a run of its own and agree the material, the way setup does. For the
+   messaging, name the base's own customer profile and positioning as well,
+   because the messaging follows the strategy the base already holds.
+
+   ```
+   python3 scripts/join.py new-run
+   python3 scripts/join.py list-sources --folder-file <a fresh folder file> --run <run identifier>
+   python3 scripts/join.py freeze-sources --folder-file <a fresh folder file> --session <session id> --run <run identifier>
+   ```
+
+2. When one of their files is already a finished document of that kind, offer
+   to take it in as it stands rather than draft it. This prints the whole
+   document as it would be saved, held apart as data, and the one ask:
+
+   ```
+   python3 scripts/join.py adopt-document-show --run <run identifier> --step buyer-personas --from <a finished document> --base <base folder>
+   ```
+
+   On a yes, in a later turn:
+
+   ```
+   python3 scripts/join.py adopt-document --run <run identifier> --step buyer-personas --hash <hash> --base <base folder>
+   ```
+
+3. Otherwise draft it. Ask for a file for the company's name, write the name
+   into it, build the request, write the draft to the file it names, and have
+   it read back. A figure the material does not carry is refused, and so is a
+   part left empty; write it again from the same request.
+
+   ```
+   python3 scripts/join.py words-file --for company --run <run identifier>
+   python3 scripts/join.py assemble --run <run identifier> --step product --company-file <the path it printed>
+   python3 scripts/join.py review --run <run identifier> --step product --draft <draft file> --base <base folder>
+   ```
+
+4. When it prints `ready`, show the whole draft and ask whether to save it. On
+   a yes, save it; when they would rather not have it, write it down as
+   skipped, which the inventory says from then on:
+
+   ```
+   python3 scripts/join.py approve --run <run identifier> --step <step> --draft <draft file> --base <base folder>
+   python3 scripts/join.py skip --step <step> --base <base folder>
+   ```
+
+## Drafting the source map
+
+The source map says where each kind of data lives and which connected tool
+reads it, so a skill can find its data and say plainly when it cannot. Every
+base already holds the file with an empty table, so this section drafts rows
+for it and never a new file. Use it when the person says "draft my source
+map", or says yes to the inventory's offer.
+
+1. Read `references/prompts/draft-stack-rows.md` and ask its one question.
+   Write their answer, word for word, into a file from the first command
+   below, and the rows the prompt describes into a file from the second.
+2. Check the rows against what they said. It refuses a row naming a place or
+   a tool they did not name, a row missing a column, and anything shaped like
+   a key or a token, each with one sentence. Each file is read once, so ask
+   for new files before running it again.
+
+   ```
+   python3 scripts/join.py words-file --for answer --run <run identifier>
+   python3 scripts/join.py words-file --for document --run <run identifier>
+   python3 scripts/join.py stack-rows-check --run <run identifier> --from <the path it printed> --answer-file <the path it printed> --base <base folder>
+   ```
+
+3. When it prints `ready`, show the rows and, on their yes, write them into
+   the table in `access/stack.md` and save it the way any edit to a document
+   is saved, through the prepared change its owner approves.
 
 ## What this release does not do yet
 

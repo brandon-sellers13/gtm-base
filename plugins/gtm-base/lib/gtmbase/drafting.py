@@ -50,6 +50,19 @@ CONTEXT_STEPS = (STEP_ICP, STEP_POSITIONING, STEP_UMBRELLA, STEP_SEGMENT)
 # the one that carries what the base covers.
 PROFILE_STEPS = (STEP_ICP, STEP_UMBRELLA)
 
+# Track 4, Units T4.2 and T4.3: the documents drafted after setup, on
+# request, into a base that already exists. Each reads the material the
+# person names directly, as the context change does, rather than through the
+# notes setup takes, and each is written to its one fixed path and nowhere
+# else. A buyer persona is never written under the segments' folder.
+STEP_MESSAGING = "messaging"
+STEP_VOICE = "voice"
+STEP_BUYER_PERSONAS = "buyer-personas"
+STEP_PRODUCT = "product"
+LATER_STEPS = (STEP_MESSAGING, STEP_VOICE, STEP_BUYER_PERSONAS, STEP_PRODUCT)
+STEPS = STEPS + LATER_STEPS
+CONTEXT_STEPS = CONTEXT_STEPS + LATER_STEPS
+
 # What this step was called before the rename. A setup run somebody left
 # halfway through may have saved that name, and coming back to it has to work.
 LEGACY_STEP_CHANGE = "ledger-entry"
@@ -71,6 +84,15 @@ PROMPT_FILES = {
     STEP_UMBRELLA: "draft-umbrella.md",
     STEP_SEGMENT: "draft-segment.md",
 }
+
+PROMPT_FILES.update(
+    {
+        STEP_MESSAGING: "draft-messaging.md",
+        STEP_VOICE: "draft-voice.md",
+        STEP_BUYER_PERSONAS: "draft-buyer-personas.md",
+        STEP_PRODUCT: "draft-product.md",
+    }
+)
 
 # Where in the plugin the prompt files live.
 PROMPTS_DIR = os.path.join("skills", "join", "references", "prompts")
@@ -94,6 +116,15 @@ KINDS = {
     # rule that knows the profile by its kind knows the umbrella the same way.
     STEP_UMBRELLA: "icp",
     STEP_SEGMENT: constants.SEGMENT_KIND,
+}
+
+# Each document drafted after setup calls itself by its kind's own key, and
+# is written where the list of kinds keeps it.
+KINDS.update({step: step for step in LATER_STEPS})
+LATER_PATHS = {
+    kind.key: kind.pattern
+    for kind in constants.BASE_KINDS
+    if kind.key in LATER_STEPS
 }
 
 # The settings every context file this unit writes has to carry.
@@ -121,7 +152,43 @@ UMBRELLA_SEGMENTS_SECTION = constants.UMBRELLA_SECTIONS[1]
 SKIPPED_HEADINGS = {
     STEP_ICP: "Ideal customer profile",
     STEP_POSITIONING: "Positioning",
+    STEP_MESSAGING: "Messaging",
+    STEP_VOICE: "Voice guide",
+    STEP_BUYER_PERSONAS: "Buyer personas",
+    STEP_PRODUCT: "Product",
 }
+
+# The section every document drafted after setup ends with: what the material
+# did not show, so a gap is named rather than filled (Track 4).
+GAPS_SECTION = "What the material does not show"
+# The one sentence a section holds when the material says nothing about it.
+# It is the same sentence the documents drafted from the notes write.
+NOT_COVERED = "Nothing in the material covers this."
+# The sections each one always carries, in this order.
+LATER_SECTIONS = {
+    STEP_MESSAGING: (
+        "Core message",
+        "Proof points",
+        "Objections and answers",
+        "Words we use and avoid",
+        GAPS_SECTION,
+    ),
+    STEP_VOICE: (
+        "Principles",
+        "Words we use and avoid",
+        "By channel",
+        GAPS_SECTION,
+    ),
+    STEP_BUYER_PERSONAS: ("Personas", GAPS_SECTION),
+    STEP_PRODUCT: (
+        "What has shipped",
+        "What is planned",
+        "Where pricing lives",
+        GAPS_SECTION,
+    ),
+}
+# The part that holds one level three heading per principle or per persona.
+LATER_ITEMS_SECTION = {STEP_VOICE: "Principles", STEP_BUYER_PERSONAS: "Personas"}
 
 # --- The codes a refusal carries ---------------------------------------------
 
@@ -168,6 +235,15 @@ CODE_SEGMENT_NOT_SETTLED = "segment-not-settled"
 CODE_SEGMENT_NOT_PENDING = "segment-not-pending:%s"
 CODE_SEGMENT_SAID_PENDING = "segment-said-pending:%s"
 
+# A principle of the voice guide with no sentence quoted from the company's
+# own writing, a section meant to hold one heading per principle or persona
+# that holds none, and prices written into the product rather than pointed at.
+CODE_PRINCIPLE_UNQUOTED = "principle-without-a-quote"
+CODE_NO_ITEMS = "no-items:%s"
+CODE_PRICING_RESTATED = "pricing-restated"
+# A figure the draft writes that none of the material it was handed carries.
+CODE_FIGURE_NOT_IN_SOURCES = "figure-not-in-sources"
+
 # The long dashes, written as escapes so this file holds neither of them.
 EM_DASH = "\u2014"
 EN_DASH = "\u2013"
@@ -200,6 +276,10 @@ PROGRESS = {
     STEP_POSITIONING: "Drafting your positioning.",
     STEP_UMBRELLA: "Drafting your customer profile across your segments.",
     STEP_SEGMENT: "Drafting that segment.",
+    STEP_MESSAGING: "Drafting your messaging.",
+    STEP_VOICE: "Drafting your voice guide.",
+    STEP_BUYER_PERSONAS: "Drafting your buyer personas.",
+    STEP_PRODUCT: "Drafting your product document.",
     "saving": "Saving that into the base.",
 }
 
@@ -216,6 +296,7 @@ class Assembly(object):
         "included_labels",
         "dropped_labels",
         "ordered_labels",
+        "material",
     )
 
     def __init__(
@@ -225,8 +306,12 @@ class Assembly(object):
         included_labels=None,
         dropped_labels=None,
         ordered_labels=None,
+        material="",
     ):
         self.text = text
+        # The fenced material alone, without the prompt around it, which is
+        # what a draft's figures are checked against (Track 4).
+        self.material = material
         self.codes = list(codes or [])
         self.included_labels = list(included_labels or [])
         self.dropped_labels = list(dropped_labels or [])
@@ -507,7 +592,12 @@ def assemble(
         text = text.replace("{{%s}}" % field, value)
 
     return Assembly(
-        text, plan.codes, included, plan.dropped_labels, plan.ordered_labels
+        text,
+        plan.codes,
+        included,
+        plan.dropped_labels,
+        plan.ordered_labels,
+        material="\n".join(plan.fences),
     )
 
 
@@ -637,6 +727,8 @@ class Draft(object):
             return POSITIONING_PATH
         if self.step == STEP_SEGMENT and self.destination:
             return self.destination
+        if self.step in LATER_PATHS:
+            return LATER_PATHS[self.step]
         raise DraftError(self.step, "no-fixed-path")
 
     def __repr__(self) -> str:
@@ -894,8 +986,99 @@ def parse(step: str, model_text: str) -> Draft:
                 raise DraftError(step, CODE_EMPTY_SECTION % heading)
         if _holds_a_link(without_setup_sections(body)):
             raise DraftError(step, CODE_LINK)
+    if step in LATER_STEPS:
+        check_later_shape(step, body)
 
     return Draft(step, text, fields, body, [], present)
+
+
+# A sentence quoted from somebody's own writing: a quoted line, or words in
+# quotation marks, straight or curly, at least three words long.
+_QUOTE_RE = re.compile(
+    r'(?m)^\s*>\s*\S|"[^"\n]*\S\s+\S+\s+\S[^"\n]*"|\u201c[^\u201d\n]*\S\s+\S+\s+\S[^\u201d\n]*\u201d'
+)
+# A price written out: a currency sign and a digit.
+_PRICE_RE = re.compile(r"[$\u20ac\u00a3]\s?\d")
+
+
+def _level_three(text: str) -> List[tuple]:
+    """Each level three heading in a part, with the text under it."""
+    found: List[tuple] = []
+    heading = None
+    lines: List[str] = []
+    for line in str(text or "").split("\n"):
+        match = re.match(r"^\s{0,3}###\s+(.*?)\s*#*\s*$", line)
+        if match:
+            if heading is not None:
+                found.append((heading, "\n".join(lines)))
+            heading, lines = match.group(1), []
+        elif heading is not None:
+            lines.append(line)
+    if heading is not None:
+        found.append((heading, "\n".join(lines)))
+    return found
+
+
+def check_later_shape(step: str, body: str) -> None:
+    """The parts a document drafted after setup always carries, and their rules.
+
+    Every part is there and holds something, if only the sentence saying the
+    material covers none of it. The voice guide's principles each carry a
+    sentence quoted from the company's own writing, because a voice guide
+    written in the assistant's voice is worse than none. The principles and
+    the personas each sit under a heading of their own. The product says
+    where pricing lives and never writes a price.
+    """
+    sections = {
+        name.strip().lower(): value
+        for name, value in formats.split_sections(body).items()
+    }
+    for heading in LATER_SECTIONS[step]:
+        if not sections.get(heading.lower(), "").strip():
+            raise DraftError(step, CODE_EMPTY_SECTION % heading)
+    items_heading = LATER_ITEMS_SECTION.get(step)
+    if items_heading is not None:
+        part = sections.get(items_heading.lower(), "")
+        if part.strip() != NOT_COVERED:
+            items = _level_three(part)
+            if not items:
+                raise DraftError(step, CODE_NO_ITEMS % items_heading)
+            if step == STEP_VOICE and any(
+                not _QUOTE_RE.search(text) for _heading, text in items
+            ):
+                raise DraftError(step, CODE_PRINCIPLE_UNQUOTED)
+    if step == STEP_PRODUCT and _PRICE_RE.search(
+        sections.get("where pricing lives", "")
+    ):
+        raise DraftError(step, CODE_PRICING_RESTATED)
+
+
+def figures_in(text: str) -> List[str]:
+    """Every figure the text carries, evened out the way a quote is matched."""
+    from . import citations, notes as notes_module
+
+    found = []
+    for figure in citations._figures(str(text or "")):
+        evened = notes_module.even_out(figure)
+        if evened and evened not in found:
+            found.append(evened)
+    return found
+
+
+def figures_beyond(body: str, allowed: Sequence[str]) -> List[str]:
+    """The figures a draft's body writes that none of its material carries.
+
+    A figure matches only whole, unit and all, so 14 never stands for 14% and
+    a price never stands for a count (the same rule the notes are held to).
+    """
+    from . import citations
+
+    pool = " ; ".join(str(one) for one in (allowed or ()))
+    return [
+        figure
+        for figure in citations._figures(_without_source_labels(str(body or "")))
+        if not citations._figure_in(figure, pool)
+    ]
 
 
 # Anything a reader could follow: a link written the usual way, a link in angle

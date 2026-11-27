@@ -24,7 +24,7 @@ import unittest
 
 import support
 
-from gtmbase import join_flow
+from gtmbase import drafting, join_flow
 
 SKILLS_DIR = os.path.join(support.PLUGIN_DIR, "skills")
 
@@ -604,9 +604,11 @@ class TestTheSkillsAsTheyAreWritten(unittest.TestCase):
             os.path.join(folder, "positioning", "icp-savings-banks.md"),
             "# Savings banks\n\n## Firmographics\n\nSavings banks in one state.\n",
         )
+        # A finished document with a part of its own, so the step that takes
+        # one in as it stands has one to take (Track 4).
         support.write(
             os.path.join(folder, "customers", "personas.md"),
-            "# Buyer personas\n\nThe head of marketing.\n",
+            "# Buyer personas\n\n## Who buys\n\nThe head of marketing.\n",
         )
         support.write(
             os.path.join(folder, "positioning", "messaging.md"),
@@ -877,6 +879,10 @@ class TestTheSkillsAsTheyAreWritten(unittest.TestCase):
         "<the document it printed>": lambda self, state, command: state.get(
             "recorded_document"
         ),
+        # Track 4: a finished document on the list the run agreed to.
+        "<a finished document>": lambda self, state, command: os.path.join(
+            state["material"], "customers", "personas.md"
+        ),
     }
 
     # --- what each command needs before it, and what it leaves behind ------
@@ -938,6 +944,23 @@ class TestTheSkillsAsTheyAreWritten(unittest.TestCase):
         if mode == "add-paste":
             state["paste"] = os.path.join(state["cwd"], "pasted.txt")
             support.write(state["paste"], "We win on setup time.\n")
+        if mode == "stack-rows-check":
+            # The rows the assistant drafts from what the person said, and
+            # what they said, each in the file the skill handed out for it.
+            handed = state.get("handed") or {}
+            support.write(
+                handed["answer"],
+                "Our ad spend is in Google Ads and the Google Ads connector "
+                "reads it.",
+            )
+            support.write(
+                handed["document"],
+                "## Where the material lives\n\n"
+                "| Kind of data | Business | Where it lives | What reads it | "
+                "If that is not connected |\n|---|---|---|---|---|\n"
+                "| Ad spend | whole company | Google Ads | the Google Ads "
+                "connector | ask for the export |\n",
+            )
         if mode == "notes-check":
             # The notes a subagent writes from the request, for every batch.
             support.take_notes(state["run"])
@@ -1104,7 +1127,7 @@ class TestTheSkillsAsTheyAreWritten(unittest.TestCase):
             later = self.value_of(printed, "to-draft")
             if later:
                 state["segment"] = later
-        if mode == "adopt-show":
+        if mode in ("adopt-show", "adopt-document-show"):
             digest = self.value_of(printed, "hash")
             if digest:
                 state["hash"] = digest
@@ -1147,6 +1170,8 @@ class TestTheSkillsAsTheyAreWritten(unittest.TestCase):
                     left_out=("Regional banks",),
                 )
             return umbrella.segment_text("Fintech lenders")
+        if step in drafting.LATER_STEPS:
+            return flow.captured(step + ".md")
         return flow.captured("icp.md" if step == "icp" else "positioning.md")
 
     # --- the walk itself ---------------------------------------------------
@@ -1364,6 +1389,18 @@ class TestTheSkillsAsTheyAreWritten(unittest.TestCase):
 
         return ran
 
+    # The one documented command that reads words files without taking them
+    # away (Track 4, Unit T4.1).
+    ONLY_LOOKS = ("--record-change", "documents")
+
+    def _only_looks(self, filled):
+        words = shlex.split(filled)
+        first, second = self.ONLY_LOOKS
+        return any(
+            words[index] == first and words[index + 1] == second
+            for index in range(len(words) - 1)
+        )
+
     def run_one(self, line_number, command, mode, state):
         """Run one command line of a walk and keep what it leaves behind."""
         self.before(mode, state, command)
@@ -1405,7 +1442,15 @@ class TestTheSkillsAsTheyAreWritten(unittest.TestCase):
                 ["checkout", "HEAD", "--", state["document"]],
                 cwd=state["base"],
             )
-        if any(flag in shlex.split(filled) for flag in CONSUMES_WORDS):
+        if self._only_looks(filled):
+            # Track 4, Unit T4.1: the documents step reads what changed to
+            # suggest documents and leaves the files for the showing, so the
+            # walk keeps them, and checks that they really are still there.
+            for kind in ("what-changed", "reason"):
+                path = (state.get("handed") or {}).get(kind)
+                if path and path in shlex.split(filled):
+                    self.assertTrue(os.path.exists(path), path)
+        elif any(flag in shlex.split(filled) for flag in CONSUMES_WORDS):
             # A words file is read once and taken away, so the next
             # step has to ask for one of its own.
             state.pop("words", None)

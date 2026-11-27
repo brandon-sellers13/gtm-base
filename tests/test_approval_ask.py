@@ -116,6 +116,7 @@ APPROVALS = (
     ("python3 %s approve --step icp --draft d.md --run r --base b" % JOIN, "SAYS_SAVE_DRAFT"),
     ("python3 %s backup --address https://github.com/acme-co/acme-base" % JOIN, "SAYS_BACKUP"),
     ("python3 %s adopt --run r --segment s --hash h --base b" % JOIN, "SAYS_ADOPT_PAGE"),
+    ("python3 %s adopt-document --run r --step product --hash h --base b" % JOIN, "SAYS_ADOPT_PAGE"),
     ("python3 %s adopt-leave --run r --segment s --base b" % JOIN, "SAYS_LEAVE_PAGE_OUT"),
     ("python3 %s draft-leave --segment s --base b" % JOIN, "SAYS_LEAVE_SEGMENT_OUT"),
     ("python3 %s reconcile-answer --entry e --file f --answer yes --base b" % JOIN, "SAYS_ALREADY_SAYS"),

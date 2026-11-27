@@ -1104,3 +1104,93 @@ BASE_KINDS = (
     BaseKind("standard", STANDARDS_DIR + "/<job>.md", False, False, False),
     BaseKind("skill", SKILLS_DIR + "/<job>/SKILL.md", False, False, False),
 )
+
+# --- What a base holds (added by Track 4, Units T4.1 to T4.6) ---------------
+
+# Which kinds a recorded context change usually also overtakes, by the kind of
+# a document it names or mentions (Unit T4.1). A row reads: a change that
+# affects a document of the kind on the left usually also overtakes the
+# documents of the kinds on the right. It is read one step deep and only ever
+# suggests; the person still chooses every document a change affects, and
+# nothing is flagged that they did not choose (Brandon's call 8 of the Track 4
+# plan). Voice, design and messaging overtake nothing else on purpose: a flag
+# raised on every strategy change teaches people to ignore the flag. A
+# standard follows a goals change only when its own settings name a goals
+# document among its sources, so the table never guesses which standards care.
+# The competitors row arrives with the competitors kind (Unit T4.4).
+KIND_FOLLOWS = {
+    "icps": ("positioning", "messaging", "buyer-personas"),
+    "positioning": ("messaging",),
+    "product": ("messaging", "buyer-personas"),
+    "buyer-personas": ("messaging",),
+    "goals": ("standard",),
+    "messaging": (),
+    "voice": (),
+    "design": (),
+}
+
+# The kinds this release can draft on request, and take in as they stand
+# (Units T4.2, T4.3 and T4.6). The messaging, the voice guide, the buyer
+# personas and the product are drafted from material the person names and
+# can be adopted when a finished one exists; the source map's rows are
+# drafted from what the person says, into the file every base already holds,
+# so there is nothing to adopt.
+_TRACK_4_KINDS = {
+    "messaging": (True, True),
+    "voice": (True, True),
+    "buyer-personas": (True, True),
+    "product": (True, True),
+    "stack": (False, True),
+}
+BASE_KINDS = tuple(
+    kind._replace(
+        adoptable=_TRACK_4_KINDS[kind.key][0], draftable=_TRACK_4_KINDS[kind.key][1]
+    )
+    if kind.key in _TRACK_4_KINDS
+    else kind
+    for kind in BASE_KINDS
+)
+
+# What each document drafted after setup wants to read first. The messaging
+# reads the approved strategy before anything the website says.
+DRAFT_RELEVANCE["messaging"] = (
+    "positioning",
+    "icp",
+    "ideal customer",
+    "messaging",
+    "message",
+    "pitch",
+    "deck",
+    "one-pager",
+    "launch",
+)
+DRAFT_RELEVANCE["voice"] = (
+    "voice",
+    "style",
+    "tone",
+    "blog",
+    "post",
+    "email",
+    "newsletter",
+    "help",
+)
+DRAFT_RELEVANCE["buyer-personas"] = (
+    "persona",
+    "interview",
+    "call",
+    "transcript",
+    "won",
+    "deal",
+    "buyer",
+    "icp",
+)
+DRAFT_RELEVANCE["product"] = (
+    "product",
+    "pricing",
+    "feature",
+    "roadmap",
+    "release",
+    "launch",
+    "changelog",
+    "docs",
+)

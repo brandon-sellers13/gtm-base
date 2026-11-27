@@ -171,9 +171,12 @@ class TestTheListOfKinds(unittest.TestCase):
             with self.subTest(kind=key):
                 self.assertIn(key, WHOLE)
 
-    def test_nothing_is_draftable_until_its_unit_ships(self):
-        """Units 2.4a, 3.5 and 2.5a's prompt each flip their own kind."""
-        self.assertEqual([], [kind.key for kind in constants.BASE_KINDS if kind.draftable])
+    def test_only_the_kinds_whose_unit_shipped_are_draftable(self):
+        """Track 4's T4.2, T4.3 and T4.6 flipped theirs; 2.4a and 3.5 flip the rest."""
+        self.assertEqual(
+            ["product", "buyer-personas", "messaging", "voice", "stack"],
+            [kind.key for kind in constants.BASE_KINDS if kind.draftable],
+        )
 
     def test_every_kind_has_a_section_in_the_reference_and_every_section_a_kind(self):
         text = support.read(BASE_KINDS_REFERENCE)
@@ -670,7 +673,8 @@ class TestTheScopeFinding(unittest.TestCase):
         with support.Sandbox() as sandbox:
             found = self.base_with_profile(sandbox, body="Who we sell to.").take()
             self.assertEqual([], found.scope_left_out)
-            self.assertIsNone(found.ask())
+            # What is asked is the offer to draft, never the scope's offer.
+            self.assertNotEqual(inventory.SCOPE_OFFER, found.ask())
 
     def test_a_profile_that_says_its_business_raises_nothing(self):
         with support.Sandbox() as sandbox:
@@ -695,12 +699,16 @@ class TestTheScopeFinding(unittest.TestCase):
 class TestWhatItOffers(unittest.TestCase):
     """It offers only what this release can draft, and says the rest arrives later."""
 
-    def test_nothing_is_offered_for_drafting_yet(self):
+    def test_what_this_release_drafts_is_offered_and_the_rest_arrives_later(self):
+        """Track 4's T4.2, T4.3 and T4.6 made five kinds draftable."""
         with support.Sandbox() as sandbox:
             found = Base(sandbox, setup_business=INSIGHTS).take()
-            self.assertEqual([], found.draftable_missing)
-            self.assertIn(inventory.DRAFTING_LATER, found.sentences())
-            self.assertIsNone(found.ask())
+            self.assertEqual(
+                ["product", "buyer-personas", "messaging", "voice", "stack"],
+                list(dict.fromkeys(kind for kind, _column in found.draftable_missing)),
+            )
+            self.assertIn(inventory.DRAFTING_LATER_REST, found.sentences())
+            self.assertTrue(found.ask().startswith("Shall I draft"))
 
     def test_a_kind_this_release_drafts_is_offered(self):
         from unittest import mock

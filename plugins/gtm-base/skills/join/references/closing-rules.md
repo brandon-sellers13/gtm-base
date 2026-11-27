@@ -125,6 +125,11 @@ Open that folder the next time you want to work on your base. On recent
 versions of Claude Code you can move there right now by typing:
 /cd {{folder}}
 
+Your base can also say where your data lives and which tool reads it, which
+is what lets a skill find its data and say plainly when it cannot reach it.
+Say "draft my source map" whenever you want that; nothing about it is
+needed today.
+
 When you want a copy of your base kept somewhere off this computer, or you want
 somebody else on your team to work in it with you, say so and GTM Base will
 walk you through it. Both of those arrive with the next release, so today the
@@ -142,6 +147,11 @@ else. Nothing in it has left this machine.
 Open the folder you named, {{content}}, and your base will be there; you can
 also open the base's own folder at {{folder}}. Nothing was written into the
 folder you named and nothing in it was changed.
+
+Your base can also say where your data lives and which tool reads it, which
+is what lets a skill find its data and say plainly when it cannot reach it.
+Say "draft my source map" whenever you want that; nothing about it is
+needed today.
 
 When you want a copy of your base kept somewhere off this computer, or you want
 somebody else on your team to work in it with you, say so and GTM Base will

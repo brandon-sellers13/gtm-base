@@ -294,6 +294,26 @@ def _claim(path, base_id, claims):
     return claim.text
 
 
+def _peek(options, base_id):
+    """What changed and why, read without taking the files away.
+
+    The same files are taken by the showing on the next step, so they are
+    only looked at here, and a path this script did not hand out is read as
+    nothing rather than refused: suggesting documents is never a reason to
+    stop (Track 4, Unit T4.1).
+    """
+    said = []
+    for path in (options.what_changed_file, options.reason_file):
+        if not path:
+            continue
+        claim = wordsfile.claim_words(path, base_id)
+        if claim is None:
+            continue
+        said.append(claim.text)
+        wordsfile.release_words(claim)
+    return " ".join(said)
+
+
 def record_a_change(options, resolution):
     """One step of recording a context change, from the folder the person is in.
 
@@ -330,6 +350,21 @@ def record_a_change(options, resolution):
         )
         # The token the numbers are read against on the next step.
         sys.stdout.write("   [for the assistant] list=%s\n" % token)
+        suggested = record_change.suggestions(
+            root, listed, _peek(options, base_id)
+        )
+        if suggested:
+            sys.stdout.write(record_change.SUGGESTED_INTRO + "\n")
+            sys.stdout.write(
+                moment.fenced(
+                    "\n".join("%d. %s" % (number, name) for number, _path, name in suggested)
+                )
+                + "\n"
+            )
+            sys.stdout.write(
+                "   [for the assistant] suggested=%s\n"
+                % ",".join(str(number) for number, _path, _name in suggested)
+            )
         return EXIT_DONE
 
     if step == "show":

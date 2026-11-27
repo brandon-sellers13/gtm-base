@@ -78,6 +78,7 @@ from gtmbase import (  # noqa: E402
     review,
     segments,
     sources,
+    truth_map,
     wordsfile,
 )
 from gtmbase.errors import (  # noqa: E402
@@ -375,7 +376,9 @@ def build_parser():
         help="backup-review and backup: the GitHub repository the GTM Base app made for this base",
     )
     parser.add_argument(
-        "--step", help="icp, umbrella, segment, change-entry, or positioning"
+        "--step",
+        help="icp, umbrella, segment, change-entry, positioning, messaging, "
+        "voice, buyer-personas, or product",
     )
     parser.add_argument(
         "--segment",
@@ -2047,6 +2050,111 @@ def run_adopt(options, out):
     return EXIT_DONE
 
 
+# What is said about a finished document of one kind before a yes (Track 4).
+DOCUMENT_SHOWN = (
+    "This is your finished document as it will be saved into your base, with "
+    "its own settings set aside and nothing else changed."
+)
+DOCUMENT_ASK = (
+    "Shall I take this document into your base as it stands, or leave it out?"
+)
+
+
+def run_adopt_document_show(options, out):
+    """Clean one finished messaging, voice, personas or product document and show it."""
+    run_id = need(options, "run", out)
+    step = need(options, "step", out)
+    source = options.from_file
+    if not run_id or not step or not source:
+        if not source:
+            out.write("This step needs --from.\n")
+        return EXIT_ERROR
+    root = base_folder(options, out)
+    if root is None:
+        return EXIT_REFUSED
+    try:
+        cleaned = join_flow.document_adoption_show(
+            run_id, step, source, root, email=options.email
+        )
+    except adopt.AdoptionRefused as refusal:
+        return an_adoption_refusal(refusal, out)
+    line(out, "hash", cleaned.digest)
+    if cleaned.questions:
+        line(out, "questions", cleaned.questions)
+    out.write(DOCUMENT_SHOWN + "\n")
+    # The whole document is the person's own writing, so it is held apart as
+    # data, however it is fenced itself.
+    out.write(moment.fenced(cleaned.text.rstrip("\n")) + "\n")
+    out.write(DOCUMENT_ASK + "\n")
+    return EXIT_DONE
+
+
+def run_adopt_document(options, out):
+    """Write one finished document the person said yes to, bound to its hash."""
+    run_id = need(options, "run", out)
+    step = need(options, "step", out)
+    digest = need(options, "hash", out)
+    if not run_id or not step or not digest:
+        return EXIT_ERROR
+    root = base_folder(options, out)
+    if root is None:
+        return EXIT_REFUSED
+    try:
+        result = join_flow.document_adoption_approve(
+            run_id,
+            step,
+            root,
+            digest,
+            questions_open=options.questions_open,
+            email=options.email,
+        )
+    except adopt.AdoptionRefused as refusal:
+        return an_adoption_refusal(refusal, out)
+    except (ReviewError, PathError) as refusal:
+        return an_adoption_base_refusal(refusal, out)
+    line(out, "base", result.root)
+    line(out, "file", result.path)
+    out.write(adopt.TAKEN_IN + "\n")
+    return EXIT_DONE
+
+
+# What is said when drafted rows of the source map hold up (Track 4, T4.6).
+STACK_ROWS_READY = (
+    "Every drafted row names only places and tools you named, carries all five "
+    "columns, and holds nothing shaped like a key or a token."
+)
+
+
+def run_stack_rows_check(options, out):
+    """Check drafted source map rows against what the person said, and say so."""
+    if not options.from_file or not options.answer_file:
+        out.write("This step needs --from and --answer-file.\n")
+        return EXIT_ERROR
+    root = base_folder(options, out)
+    if root is None:
+        return EXIT_REFUSED
+    drafted = words_from(options.from_file, options, out)
+    if drafted is None:
+        return EXIT_REFUSED
+    answers = words_from(options.answer_file, options, out)
+    if answers is None:
+        return EXIT_REFUSED
+    found = truth_map.check_drafted_in(root, drafted, answers)
+    line(out, "rows", len(found.rows))
+    if not found.problems:
+        out.write("ready\n")
+        out.write(STACK_ROWS_READY + "\n")
+        return EXIT_DONE
+    line(out, "codes", ",".join(sorted(set(problem.code for problem in found.problems))))
+    said = []
+    for problem in found.problems:
+        if problem.sentence() not in said:
+            said.append(problem.sentence())
+    for sentence in said:
+        out.write(sentence + "\n")
+    return EXIT_REFUSED
+
+
 def run_adopt_leave(options, out):
     """Write down that the person left one finished page out."""
     run_id = need(options, "run", out)
@@ -2555,6 +2663,9 @@ MODES = {
     "adopt-read": run_adopt_read,
     "adopt": run_adopt,
     "adopt-leave": run_adopt_leave,
+    "adopt-document-show": run_adopt_document_show,
+    "adopt-document": run_adopt_document,
+    "stack-rows-check": run_stack_rows_check,
     "resume": run_resume,
     "draft-list": run_draft_list,
     "draft-freeze": run_draft_freeze,
