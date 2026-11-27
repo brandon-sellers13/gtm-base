@@ -1873,10 +1873,10 @@ The lean plan Brandon approved on 2026-11-25: merge main, rehearse case three al
 ## 2026-11-26, the connector for Claude chat, Cowork and ChatGPT (plan: docs/plans/2026-11-26-001-feat-chat-connector-plan.md)
 The order across every track is in `docs/plans/2026-11-26-003-roadmap-to-full-experience.md`. No review per unit; one security review before anyone but Brandon connects.
 - [x] S0. The spike: what Claude and ChatGPT accept from a remote connector. (done 2026-11-26, PR #17)
-- [ ] C1. The endpoint, GitHub sign-in and one base per conversation. (in review, PR #18)
-- [ ] C2. Reading documents, with the moment-of-use flag in the answer.
+- [x] C1. The endpoint, GitHub sign-in and one base per conversation. (merged and live, PR #18)
+- [ ] C2. Reading documents, with the moment-of-use flag in the answer. (built with C4 on `claude/connector-c2-plan`; ChatGPT run passed end to end on the test site 2026-11-26; in review)
 - [ ] C3. Skills served live. (waits on Plan 1's skills folder, unit 4.2b)
-- [ ] C4. Proposing a context change from chat.
+- [ ] C4. Proposing a context change from chat. (ships with C2, same pull request)
 - [ ] C5. The setup guide and a Project instruction for each base.
 - [ ] The security review, then the end-to-end run in Claude and ChatGPT across two Projects.
 
