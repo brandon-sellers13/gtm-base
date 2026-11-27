@@ -4,8 +4,8 @@ import { frontMatter, validRepo } from "./reader";
 import { baseOwnerEmails } from "./team";
 
 // Changes that reached a base without an approval. A base whose main line is
-// protected (mainRule.ts) refuses them at GitHub, from everyone but GTM Base
-// itself. On a private repository on a free plan,
+// protected (mainRule.ts) refuses them at GitHub, apart from what GTM Base and
+// the repository's admins write directly. On a private repository on a free plan,
 // where GitHub will not protect it, anyone with push access can commit
 // straight to the main branch; this finds those commits so the base's owner
 // can keep or undo each one.

@@ -10,13 +10,17 @@ import { validRepo } from "./reader";
 // them write to the main line from a plain terminal. A repository ruleset on the
 // default branch closes that on GitHub's side, whatever a computer's own checks
 // miss: every change reaches it through a pull request a code owner approved,
-// nobody can force a push over it or delete it, and only GTM Base itself can
-// bypass it, which is how the app's accept, keep, undo and confirm land.
+// nobody can force a push over it or delete it, and only GTM Base and the
+// repository's admins can bypass it. The base owner is the admin and teammates
+// only get push, so the owner's accept, keep, undo and confirm in the app, the
+// owner's confirmation lines and the backup all land, and a teammate's direct
+// writes do not.
 //
 // Not verified yet, because no base GTM Base can reach is on a plan that
-// enforces rulesets: that GitHub counts a write the app makes with a person's
-// own sign-in as the app's, for the bypass. If it does not, those writes are
-// refused while the rule is on, and the app says it could not finish.
+// enforces rulesets: whether GitHub counts a write the app makes with a
+// teammate's own sign-in (a teammate who owns a document and accepts a
+// proposal to it) as the app's, for the bypass. If it does not, that one write
+// is refused while the rule is on, and the app says it could not finish.
 //
 // GitHub only enforces rulesets on a private repository when its account is on
 // a paid plan (GitHub Pro for a person, GitHub Team for an organization). On a
@@ -25,6 +29,9 @@ import { validRepo } from "./reader";
 // undo.
 
 export const RULE_NAME = "GTM Base: the main line takes accepted proposals only";
+
+// GitHub's built-in "admin" repository role, as a ruleset's bypass list names it.
+const ADMIN_ROLE_ID = 5;
 
 export type MainRuleState =
   | "on" // the rule is in place and enforced
@@ -58,10 +65,15 @@ function rulesetBody(appId: number) {
       { type: "non_fast_forward" },
       { type: "deletion" },
     ],
-    // GTM Base alone, so the app's own accept, keep, undo and confirm land and
-    // nothing else does. Nobody's own push to the main line is let through,
-    // the repository's admins included.
-    bypass_actors: [{ actor_id: appId, actor_type: "Integration", bypass_mode: "always" }],
+    // GTM Base, and the repository's admins. The base owner is the
+    // repository's admin and teammates only get push, so everything the owner
+    // does still lands (the app's accept, keep, undo and confirm with the
+    // owner's own sign-in, the owner's confirmation lines and the backup from
+    // Claude Code), and nothing a teammate does reaches the main line directly.
+    bypass_actors: [
+      { actor_id: appId, actor_type: "Integration", bypass_mode: "always" },
+      { actor_id: ADMIN_ROLE_ID, actor_type: "RepositoryRole", bypass_mode: "always" },
+    ],
   };
 }
 
@@ -116,7 +128,7 @@ export async function applyMainRule(token: string, owner: string, repo: string):
 export const MAIN_RULE_SENTENCES: Record<MainRuleState, string> = {
   on:
     "The main line of this base is protected. Changes reach it only as proposals accepted in GTM Base, nobody " +
-    "can overwrite or delete it, and nobody can write to it directly, its owner included.",
+    "can overwrite or delete it, and only GTM Base and the repository's admins can write to it directly.",
   off:
     "The main line of this base is not protected yet, so a teammate could write to it directly from a terminal. " +
     "Protecting it means changes reach it only as accepted proposals.",

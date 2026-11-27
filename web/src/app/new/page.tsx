@@ -80,13 +80,7 @@ export default async function NewBase({
                 GTM Base shows you what would be sent and asks before anything leaves your computer. Once it is sent, the
                 base appears on your home page here.
               </p>
-              {readyRule && readyRule !== "needs-paid-plan" && (
-                <p className="gb-help">
-                  Once the backup has arrived, protect the base&apos;s main line from its Team page, so changes reach
-                  it only as proposals you accept.
-                </p>
-              )}
-              {readyRule === "needs-paid-plan" && <p className="gb-help">{MAIN_RULE_SENTENCES[readyRule]}</p>}
+              {readyRule && <p className="gb-help">{MAIN_RULE_SENTENCES[readyRule]}</p>}
             </div>
           </div>
         )}
