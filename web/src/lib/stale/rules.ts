@@ -42,6 +42,11 @@ export type CorrectionFacts = {
   // The commit that brought it onto the main line, whose saved map and
   // documents decide whether that person could accept it then.
   mergedIn: string | null;
+  // The files that commit changed, compared with its first parent. A record
+  // settles a document only when this lists it, so a proposal that edits a
+  // document, adds its record and undoes the edit settles nothing (C2's
+  // security review, closed 2026-11-27). Null means it was not worked out.
+  acceptedPaths?: string[] | null;
 };
 
 export type LineAuthor = { email: string; revision: string };
@@ -397,6 +402,7 @@ export function verdictOf(snapshot: Snapshot): Verdict {
     if (!record.entryId) continue;
     const touched = record.touchedPaths.map((p) => whereItLives(snapshot, p));
     const coModified = facts.coModified.map((p) => whereItLives(snapshot, p));
+    const acceptedPaths = facts.acceptedPaths == null ? null : facts.acceptedPaths.map((p) => whereItLives(snapshot, p));
     // Whether whoever accepted it could do so then, for each document it touched.
     const mergedAllowed = new Map(touched.map((p) => [p, allowedThen(snapshot, p, facts.mergedBy, facts.mergedIn)]));
     for (const touchedPath of touched) {
@@ -404,6 +410,7 @@ export function verdictOf(snapshot: Snapshot): Verdict {
       if (!info) continue;
       if (!coModified.includes(touchedPath)) continue;
       if (!facts.hashAtCommit || facts.hashAtCommit !== record.contentHash) continue;
+      if (acceptedPaths && !acceptedPaths.includes(touchedPath)) continue;
       settled.add(`${record.entryId}\n${touchedPath}`);
       if (!facts.mergedOn || !facts.mergedBy || !/^\d{4}-\d{2}-\d{2}$/.test(facts.mergedOn)) continue;
       if (!mergedAllowed.get(touchedPath)) continue;

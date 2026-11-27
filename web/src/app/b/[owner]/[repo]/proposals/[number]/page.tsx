@@ -160,6 +160,12 @@ export default async function ProposalPage({
               GTM Base or Claude Code runs on every teammate&apos;s computer, so they cannot come in through an accept
               here. Review it on GitHub instead.
             </p>
+          ) : blocked === "edits-undone" ? (
+            <p className="text-ink-mid">
+              This proposal ends up changing only records, but one of its steps changed another file and a later step
+              undid it. A record accepted that way could mark a document as up to date when it never changed, so it
+              cannot be accepted here. Review it on GitHub instead.
+            </p>
           ) : blocked === "too-large" ? (
             <p className="text-ink-mid">
               This proposal changes too many files to check here. Review it on GitHub instead.

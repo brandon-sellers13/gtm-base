@@ -200,6 +200,8 @@ The one-pass review of C3 found four problems, fixed in the plugin and the conne
 
 The connector reads what these rules need from the history walk it already made: the main line and, for the map and each skill's folder, every change along it.
 
+The same change closes the borderline pattern from C2's security review, which Brandon decided on 2026-11-27 to close in the plugin and the connector together. A proposal whose commits edit a document, add a record for it, and then undo the edit changes records only, so the base owner could accept it and the document would count as settled. Two rules now stop it. The web app refuses a records-only accept when any commit in the proposal touched a file that is not a record. And wherever a proposal is accepted, including on GitHub itself, a record settles a document only when the change that brought it onto the main line also changed that document, which the plugin's `stale` rule and the connector's port now both require.
+
 ## Review standard
 
 Units get no review of their own; the end-to-end run below is the main check. One security review (one pass) before anyone but Brandon connects: the sign-in, the tokens the products hold, the one-base rules, and what a crafted document or skill could make a conversation do.

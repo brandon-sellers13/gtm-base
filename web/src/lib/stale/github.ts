@@ -241,8 +241,22 @@ async function recordFacts(
         }
       }
     }
+    // What the commit that brought it onto the main line changed, compared
+    // with its first parent (base_reader: git show --diff-merges=first-parent).
+    // A list GitHub cuts short counts as changing nothing, so the record then
+    // settles nothing.
+    let acceptedPaths: string[] | null = null;
+    if (merged) {
+      const first = merged.parents.nodes[0]?.oid;
+      const shown = first
+        ? await api<{ files?: { filename: string }[] }>(`/repos/${owner}/${repo}/compare/${first}...${merged.oid}`, { token })
+        : await api<{ files?: { filename: string }[] }>(`/repos/${owner}/${repo}/commits/${merged.oid}`, { token });
+      const names = (shown.files ?? []).map((file) => file.filename);
+      acceptedPaths = names.length >= 300 ? [] : names;
+    }
     const day = merged?.author.date?.slice(0, 10) ?? null;
     facts[record.path] = {
+      acceptedPaths,
       coModified,
       hashAtCommit,
       mergedBy: merged?.author.email ?? null,
