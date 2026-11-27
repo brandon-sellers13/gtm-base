@@ -1880,6 +1880,19 @@ The order across every track is in `docs/plans/2026-11-26-003-roadmap-to-full-ex
 - [ ] C5. The setup guide and a Project instruction for each base.
 - [ ] The security review, then the end-to-end run in Claude and ChatGPT across two Projects.
 
+## Plan 1, company skills and the Meta ads skill (plan: docs/plans/2026-10-10-002-feat-plan-1-company-skills-and-meta-skill-plan.md)
+Step 2 of `docs/plans/2026-11-26-003-roadmap-to-full-experience.md`. The planning documents and the four built units were brought up to date with main on 2026-11-26 (branch `claude/plan-1-catchup`), keeping every Release B and backup rule (full suite on the merge 5e80a5b: 3323 tests OK, then 223 OK from a linked folder). The sections below are the original build records from 2026-10-10.
+- [x] Unit 4.1. The company-skills requirements, signed by Brandon on 2026-10-10.
+- [x] Unit 2.1. The base inventory.
+- [x] Unit 2.5a. The source map parser.
+- [x] Unit 4.2a. One authority rule, one path rule, approvals bound to bytes, and the refusal in an unattended run.
+- [ ] Unit 4.2b. The skills folder. (next; connector unit C3 waits on it)
+- [ ] Unit 3.1. The thin runner, its contract test, and atlas figure 9.
+- [ ] Unit 2.4a. Metric definitions and goals, the driver-app half.
+- [ ] Unit 3.5. The creative-testing standard.
+- [ ] Unit 3.6. The Meta ads skill running through the runner.
+- [ ] Brandon: review and merge the catch-up pull request.
+
 ### 2026-10-10, Plan 1 of Phases 2 and 3 (branch claude/plan-1-meta-skill-3d436e)
 Plan: `docs/plans/2026-10-10-002-feat-plan-1-company-skills-and-meta-skill-plan.md`. Planning only; no product code.
 - [x] Read the decisions brief (D1 to D10, M6, M7, M8, M12), the roadmap on release-b, the build plan through call 59 on the finish branch, and the Meta skill as it runs today (read only)
