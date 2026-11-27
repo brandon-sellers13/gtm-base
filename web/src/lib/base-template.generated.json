@@ -1,7 +1,7 @@
 {
   "source": {
-    "ref": "summarize-first",
-    "commit": "712601c61bd195ee975aacfd26da85acc1be34d3",
+    "ref": "HEAD",
+    "commit": "4e10ddb9f104d8293189384d4370b29eb7c6a374",
     "folder": "plugins/gtm-base/templates/company-base/"
   },
   "files": [
@@ -19,7 +19,7 @@
     },
     {
       "path": "access/stack.md",
-      "content": "---\nkind: stack\nowner: owner@example.com\nsources: []\nstatus: draft\n---\n\n# Stack\n\nThis file tells the AI where the work comes from and where it goes. It names\nplaces and tools, and it never holds a password, a key, or a token.\n\n## Where the material lives\n\nFor each kind of material, where it lives and which connected tool reads it.\nFor example, sales calls in your call recorder, and deals in your CRM.\n\n## Where the work goes\n\nFor each kind of output, where it is saved. For example, email drafts in your\nemail tool, and ad drafts in your ad account.\n\n## What is missing\n\nAnything the AI cannot reach yet, so nobody assumes it can.\n"
+      "content": "---\nkind: stack\nowner: owner@example.com\nsources: []\nstatus: draft\n---\n\n# Stack\n\nThis file tells the AI where the work comes from and where it goes. It names\nplaces and tools, and it never holds a password, a key, or a token.\n\n## Where the material lives\n\nFor each kind of material, where it lives and which connected tool reads it.\nFor example, sales calls in your call recorder, and deals in your CRM.\n\n| Kind of data | Business | Where it lives | What reads it | If that is not connected |\n|---|---|---|---|---|\n\n## Where the work goes\n\nFor each kind of output, where it is saved. For example, email drafts in your\nemail tool, and ad drafts in your ad account.\n\n## What each skill needs installed\n\nFor each skill this base holds, the tools a person needs installed to run it.\nFor example, a reporting skill that needs the ad platform's connector.\n\n## What is missing\n\nAnything the AI cannot reach yet, so nobody assumes it can.\n"
     },
     {
       "path": "context/icps.md",
@@ -31,7 +31,7 @@
     },
     {
       "path": "context/map.md",
-      "content": "---\nkind: map\nowner: owner@example.com\nsources: []\nstatus: draft\n---\n\n# Map\n\n## Settings\n\nconfirmation_threshold_days: 30\nnot_now_days: 7\n\n## Where things live\n\nThis base is laid out by the five parts of the CLASS framework. The `context`\nfolder holds what is true about the business, one file for each subject:\n`goals.md`, `product.md`, `icps.md`, `buyer-personas.md`, `positioning.md`,\n`messaging.md`, `voice.md`, `design.md`, and `metrics.md`, with one file for\neach customer segment in `context/icps`. The `learning` folder holds how the\nbase gets better, with one dated entry for each context change in\n`learning/changes` and what each approved fix changed in `learning/corrections`.\nThe `access` folder holds `stack.md`, which says where the work comes from and\nwhere it goes. The `skills` folder is kept empty for now, and the `standards`\nfolder holds what good work looks like for each job. The `work` folder holds\nthe approvals, with the owner's confirmations in `work/confirmations`.\n"
+      "content": "---\nkind: map\nowner: owner@example.com\nsources: []\nstatus: draft\n---\n\n# Map\n\n## Settings\n\nconfirmation_threshold_days: 30\nnot_now_days: 7\n\n## Where things live\n\nThis base is laid out by the five parts of the CLASS framework. The `context`\nfolder holds what is true about the business, one file for each subject:\n`goals.md`, `product.md`, `icps.md`, `buyer-personas.md`, `positioning.md`,\n`competitors.md`, `messaging.md`, `voice.md`, `design.md`, and `metrics.md`,\nwith one file for each customer segment in `context/icps`. The `learning`\nfolder holds how the base gets better, with one dated entry for each context\nchange in `learning/changes` and what each approved fix changed in\n`learning/corrections`.\nThe `access` folder holds `stack.md`, which says where the work comes from and\nwhere it goes. The `skills` folder is kept empty for now, and the `standards`\nfolder holds what good work looks like for each job. The `work` folder holds\nthe approvals, with the owner's confirmations in `work/confirmations`.\n"
     },
     {
       "path": "gate-allowlist.txt",
