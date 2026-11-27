@@ -1246,3 +1246,21 @@ DRAFT_RELEVANCE["design"] = (
     "type",
     "readme",
 )
+
+# --- Goals, metric definitions and a standard (Plan 1, Units 2.4a and 3.5) ---
+
+# Drafted on request after setup, from what the person says and the material
+# they name; none is adopted as it stands, because each is written to ask
+# rather than infer. Each kind's own unit flips it here, as the list says.
+BASE_KINDS = tuple(
+    kind._replace(draftable=True)
+    if kind.key in ("goals", "metrics", "standard")
+    else kind
+    for kind in BASE_KINDS
+)
+# What each wants to read first. The goals and the definitions ask the
+# person, so their own words come first; a standard reads the goals and the
+# rules the job already follows.
+DRAFT_RELEVANCE["goals"] = ("goal", "target", "okr", "plan", "budget", "forecast", "board")
+DRAFT_RELEVANCE["metrics"] = ("metric", "definition", "kpi", "dashboard", "report", "goal")
+DRAFT_RELEVANCE["standard"] = ("goal", "rule", "standard", "skill", "checklist", "policy")

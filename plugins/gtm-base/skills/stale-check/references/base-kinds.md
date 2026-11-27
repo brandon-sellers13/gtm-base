@@ -18,9 +18,11 @@ is read for the whole company, exactly as before.
 The messaging, the voice guide, the buyer personas, the product, the
 competitors and the design guide can be drafted on request from material the person names, or taken in as they stand
 when a finished one exists. The source map's rows can be drafted from what the
-person says. Units 2.4a and 3.5 of Plan 1 make the goals, the metric
-definitions and a standard draftable in their own release, and until then the
-inventory says drafting arrives later for the rest.
+person says. The goals, the metric definitions and a standard can be drafted
+on request too, from the person's own answers and any material they name; each
+is asked for rather than inferred, so a figure only the person can give comes
+from them or is left as a question. The inventory says drafting arrives later
+for the rest.
 
 A context change recorded against one document usually makes others out of
 date too. Each kind below that has one says what overtakes it, and the line
@@ -33,7 +35,8 @@ test holds these lines and the table in the plugin's settings in step.
 
 What the business is trying to reach, each as a figure the owner stated, with
 its unit and where its actual value is measured. Kept at `context/goals.md`,
-or in a business's folder. Each business has its own.
+or in a business's folder. Each business has its own. GTM Base can draft it
+from the owner's answers, and a target nobody stated stays a question.
 
 Overtaken by a change of plan: a new quarter, a board reset, a budget
 change, or a target moved.
@@ -148,7 +151,9 @@ Usually also overtakes: nothing else.
 
 What each number the team uses counts and where it lives, such as what counts
 as a trial or a paying subscriber. Kept as `metrics.md` in the context
-folder, or in a business's folder. Each business has its own.
+folder, or in a business's folder. Each business has its own. GTM Base can
+draft it from the owner's answers, and it names the counts a platform reports
+that are different numbers and never to be mixed with these.
 
 ## Source map (`stack`)
 
@@ -163,7 +168,9 @@ its rows from what the person says, and a tool nobody named is never a row.
 One for each job: its goal, what is unacceptable, what needs approval, the
 checks before work is handed back, and how any threshold set somewhere else
 relates to a goal. Kept at `standards/<job>.md`. Each serves the whole
-company, and the inventory counts them rather than naming them.
+company, and the inventory counts them rather than naming them. GTM Base can
+draft one for a named job. It holds no figure: a number lives in the goals or
+in a tool's own settings, and the standard says which.
 
 ## Skills (`skill`)
 

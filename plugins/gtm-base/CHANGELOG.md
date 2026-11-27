@@ -51,6 +51,14 @@ Plan 1, Unit 3.6, the repository side of a nightly skill on the runner:
 - The start of a session in a base now lists, in one line each, the skills kept in the base that this computer trusts exactly as they stand, by name and what each is for, held apart as data and pointing at the use-skill skill. A skill this computer does not trust is not named.
 - A made-up nightly ad creative skill, written from scratch for a made-up courier app, now sits in the tests as the worked example of a skill on the runner: its examples pass the contract check, a made-up pause or figure fails it, a flagged goals document is reported first while the engine check still runs, a missing standard means nothing runs that night, missing goals leave a named gap, and the runner command in a scheduled prompt runs exactly as written. The real skill, its engine and its nights are Brandon's live session D, outside this repository.
 
+Plan 1, Units 2.4a and 3.5, the goals, the metric definitions and a standard:
+
+- The goals, the metric definitions and a standard for one job can now be drafted after setup, from the owner's own answers and any material they name, with `join.py assemble --step goals`, `--step metrics` or `--step standard`. Each is asked for rather than inferred: the owner's answers travel as pasted text, and a figure that neither they nor the named material carry is refused, as for Track 4's documents.
+- A goal carries a `Target:` line and a `Measured in:` line, and a definition a `Counts:` line and a `Where the number lives:` line. A target or a place nobody stated stays a question in the draft, never a guess. The definitions also name the counts a platform reports that are different numbers, never to be mixed with these, and both end with what is not decided yet.
+- Goals and metric definitions go in the folder of the business they are for when one the map lists is named (`--business`), and at `context/goals.md` and `context/metrics.md` for the whole company. A standard goes at `standards/<job>.md` (`--job`).
+- A standard has five parts (the job's goal, what is unacceptable, what needs approval, the checks before work is handed back, and how each threshold relates to a goal) and no digit in its body except inside a date, because a number lives in the goals or in a tool's own settings. An empty "what needs approval" is kept as a real answer. A standard whose sources name the goals is suggested when the goals change.
+- The inventory now offers to draft the goals, the metric definitions and a standard. None of the three is taken in as it stands.
+
 ## 0.5.0 (not yet released)
 
 Release B: Units 1.5b, 1.6, 1.7a to 1.7e and 1.8, call 29, calls 57 to 60, and the live-check follow-up, with 0.3.3 to 0.3.10 and 0.4.0 carried. Prepared on 2026-10-10 as 0.4.0; main shipped 0.4.0 on 2026-10-21 first, so Release B ships as 0.5.0, and the date is set on the day it ships.

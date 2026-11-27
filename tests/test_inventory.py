@@ -177,7 +177,10 @@ class TestTheListOfKinds(unittest.TestCase):
     def test_only_the_kinds_whose_unit_shipped_are_draftable(self):
         """Track 4's T4.2 to T4.6 flipped theirs; 2.4a and 3.5 flip the rest."""
         self.assertEqual(
-            ["product", "buyer-personas", "competitors", "messaging", "voice", "design", "stack"],
+            [
+                "goals", "product", "buyer-personas", "competitors", "messaging",
+                "voice", "design", "metrics", "stack", "standard",
+            ],
             [kind.key for kind in constants.BASE_KINDS if kind.draftable],
         )
 
@@ -703,11 +706,14 @@ class TestWhatItOffers(unittest.TestCase):
     """It offers only what this release can draft, and says the rest arrives later."""
 
     def test_what_this_release_drafts_is_offered_and_the_rest_arrives_later(self):
-        """Track 4's T4.2 to T4.6 made seven kinds draftable."""
+        """Track 4's T4.2 to T4.6 made seven kinds draftable, and Plan 1's 2.4a and 3.5 three more."""
         with support.Sandbox() as sandbox:
             found = Base(sandbox, setup_business=INSIGHTS).take()
             self.assertEqual(
-                ["product", "buyer-personas", "competitors", "messaging", "voice", "design", "stack"],
+                [
+                    "goals", "product", "buyer-personas", "competitors", "messaging",
+                    "voice", "design", "metrics", "stack", "standard",
+                ],
                 list(dict.fromkeys(kind for kind, _column in found.draftable_missing)),
             )
             self.assertIn(inventory.DRAFTING_LATER_REST, found.sentences())

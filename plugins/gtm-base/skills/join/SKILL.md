@@ -1,6 +1,6 @@
 ---
 name: join
-description: Set up a company base for somebody who does not have one yet, reading the marketing material they name and drafting their ideal customer profile and their positioning for approval. Use when the person says "set up my company base", asks to set up a company base, says they want to start a base, or answers yes to the setup offer. Say "set up my company base" whenever you are ready. Also handles "link this folder to my base", "unlink this folder from my base", and "show my linked folders", which connect a base to the folder somebody keeps their marketing material in. Also handles "finish setting up my base", which finishes taking in the finished documents and drafting the segments somebody chose when an earlier session stopped partway. Also handles "back up my base", "back this up" and "back up my base to <address>", which sends a copy of the base to the empty GitHub repository the GTM Base app made for it, after a review the person approves. Also handles "draft my messaging", and the same for the voice guide, buyer personas, product, competitors, design guide and source map. Also handles "join a base from a link", which arrives with the next release and is refused today with one sentence.
+description: Set up a company base for somebody who does not have one yet, reading the marketing material they name and drafting their ideal customer profile and their positioning for approval. Use when the person says "set up my company base", asks to set up a company base, says they want to start a base, or answers yes to the setup offer. Say "set up my company base" whenever you are ready. Also handles "link this folder to my base", "unlink this folder from my base", and "show my linked folders", which connect a base to the folder somebody keeps their marketing material in. Also handles "finish setting up my base", which finishes taking in the finished documents and drafting the segments somebody chose when an earlier session stopped partway. Also handles "back up my base", "back this up" and "back up my base to <address>", which sends a copy of the base to the empty GitHub repository the GTM Base app made for it, after a review the person approves. Also handles "draft my messaging", and the same for the voice guide, buyer personas, product, competitors, design guide, source map, goals, metric definitions, and the standard for one job. Also handles "join a base from a link", which arrives with the next release and is refused today with one sentence.
 ---
 
 # Set up a company base
@@ -1268,6 +1268,51 @@ goes in their place.
    python3 scripts/join.py approve --run <run identifier> --step <step> --draft <draft file> --base <base folder>
    python3 scripts/join.py skip --step <step> --base <base folder>
    ```
+
+## Drafting the goals, the metric definitions, or a standard
+
+The goals, the metric definitions and a standard are asked for rather than
+inferred. A goal is a figure the owner states and a definition is a rule they
+state, so these come from their own answers first and any material they name
+second, and a figure neither carries is refused. A standard holds the rules of
+one job in words and no figures at all. Use this when the person asks for one
+of them or says yes to the inventory's offer. The step names are `goals`,
+`metrics` and `standard`.
+
+1. Start a run of its own. When they name material, such as a plan, a board
+   deck or the rules a job follows today, agree it the way setup does, as in
+   the section above. For a standard, name the base's own goals and metric
+   definitions as well.
+2. Ask them, in plain words and one question at a time, what the prompt for
+   that step needs: each goal with its target and where the actual number is
+   counted, each number with what counts toward it and where it lives, or for
+   a standard the job's rules and why each threshold is set where it is. Never
+   suggest a figure. Write their answers, word for word, into a file and hold
+   it for the run as pasted text:
+
+   ```
+   python3 scripts/join.py words-file --run <run identifier> --for label
+   python3 scripts/join.py add-paste --run <run identifier> --label-file <the path it printed> --session <session id> --from <file you wrote it to>
+   ```
+
+3. Build the request with their answers, write the draft to the file it
+   names, and have it read back. The commands below draft the goals for the
+   whole company; any of the three step names goes in their place:
+
+   ```
+   python3 scripts/join.py words-file --for company --run <run identifier>
+   python3 scripts/join.py assemble --run <run identifier> --step goals --company-file <the path it printed> --paste-file <the path add-paste printed>
+   python3 scripts/join.py review --run <run identifier> --step goals --draft <draft file> --base <base folder>
+   ```
+
+   For goals or metric definitions for one business the base's map lists, add
+   the business option, --business, with that business's short name to the
+   request. A standard always takes the job option, --job, with the job's name
+   in lower case words joined by hyphens. A target or a place of measurement
+   nobody stated stays as a question in the draft, never a guess, and each
+   question is asked before it is saved.
+4. When it prints `ready`, show the whole draft and ask whether to save it,
+   then save it or write it down as skipped, as in the section above.
 
 ## Drafting the source map
 

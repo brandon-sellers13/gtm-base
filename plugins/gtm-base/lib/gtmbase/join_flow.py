@@ -4031,8 +4031,13 @@ def assemble_step(
     only_folder=None,
     only_index=None,
     segment: Optional[str] = None,
+    destination: Optional[str] = None,
 ) -> Assembled:
     """Build the request for one step and write it into the run's own folder.
+
+    Goals, metric definitions and a standard are handed the destination
+    `drafting.later_destination` worked out (Plan 1, Units 2.4a and 3.5), and
+    the run remembers it, so the draft is written there and nowhere else.
 
     A refusal carries the labels of the sources that could not be used, so the
     person still hears which of their own documents was left out and why even
@@ -4105,7 +4110,7 @@ def assemble_step(
         scratch_dir(run_id), "%s-prompt.md" % _file_stem(step, settled)
     )
     atomic_write_text(path, assembly.text, inside=paths.seat_home())
-    if step in drafting.LATER_STEPS:
+    if step in drafting.DRAFTED_LATER:
         # Every figure the material this request carries, which is what the
         # draft's own figures are checked against at review (Track 4).
         _remember(
@@ -4114,6 +4119,11 @@ def assemble_step(
             _file_stem(step, settled),
             drafting.figures_in(assembly.material),
         )
+    if step in drafting.DESTINED_STEPS:
+        where = destination or drafting.LATER_PATHS.get(step)
+        if not drafting.valid_destination(step, where):
+            raise DraftError(step, drafting.CODE_NOT_A_DESTINATION)
+        _remember(run_id, "destinations", _file_stem(step, settled), where)
     return Assembled(
         path,
         step,
@@ -5067,7 +5077,7 @@ def review_step(
     settled = None
     if run_id:
         settled = _step_is_this_runs(run_id, step, segment)
-    elif step in NOTES_STEPS or step in drafting.LATER_STEPS:
+    elif step in NOTES_STEPS or step in drafting.DRAFTED_LATER:
         # The umbrella and a segment are measured against the run's own
         # inventory, every step written from the notes against the run's
         # notes, and a document drafted after setup against the figures its
@@ -5086,10 +5096,17 @@ def review_step(
     draft = _parse_draft(step, text)
     if settled is not None:
         draft.destination = settled.destination
+    if step in drafting.DESTINED_STEPS:
+        # Where its request said it goes, checked again, because the run's
+        # memory is a file on this computer (Plan 1, Units 2.4a and 3.5).
+        where = _recalled(run_id, "destinations", _file_stem(step, settled)) if run_id else None
+        if not drafting.valid_destination(step, where):
+            return Reviewed(step, False, [drafting.CODE_NOT_A_DESTINATION])
+        draft.destination = where
     codes = review.screen(draft, _address_for(base_root, email, git))
     if step == drafting.STEP_UMBRELLA:
         codes.extend(drafting.check_umbrella(draft, several_segments(run_id)))
-    if step in drafting.LATER_STEPS:
+    if step in drafting.DRAFTED_LATER:
         allowed = _recalled(run_id, "figures", _file_stem(step, settled))
         if allowed is None or drafting.figures_beyond(draft.body, allowed):
             # A figure none of the material carried, or a draft with no
@@ -5577,7 +5594,7 @@ def approve_step(
         raise ReviewError(CODE_QUESTIONS_OPEN, code=CODE_QUESTIONS_OPEN)
     if (
         reviewed.draft.step == drafting.STEP_SEGMENT
-        or reviewed.draft.step in drafting.LATER_STEPS
+        or reviewed.draft.step in drafting.DRAFTED_LATER
     ) and not base_root:
         # A segment goes into a base the umbrella and the positioning already
         # made, and never makes one; neither does a document drafted after

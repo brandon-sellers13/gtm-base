@@ -378,7 +378,15 @@ def build_parser():
     parser.add_argument(
         "--step",
         help="icp, umbrella, segment, change-entry, positioning, messaging, "
-        "voice, buyer-personas, or product",
+        "voice, buyer-personas, product, goals, metrics, or standard",
+    )
+    parser.add_argument(
+        "--business",
+        help="with goals or metrics: the business, as the map lists it, they are for",
+    )
+    parser.add_argument(
+        "--job",
+        help="with standard: the job, in lower case words joined by hyphens, it is for",
     )
     parser.add_argument(
         "--segment",
@@ -1512,6 +1520,20 @@ def run_assemble(options, out):
     only, only_folder, read = narrowing(options, out)
     if not read:
         return EXIT_REFUSED
+    destination = None
+    if step in drafting.DESTINED_STEPS:
+        # Goals and metric definitions go in the named business's folder, and
+        # a standard is for one job (Plan 1, Units 2.4a and 3.5).
+        root = base_folder(options, out)
+        if root is None:
+            return EXIT_REFUSED
+        try:
+            destination = drafting.later_destination(
+                step, root, business=options.business, job=options.job
+            )
+        except DraftError:
+            out.write(NOT_A_DESTINATION + "\n")
+            return EXIT_REFUSED
     try:
         assembled = join_flow.assemble_step(
             step,
@@ -1522,6 +1544,7 @@ def run_assemble(options, out):
             only_index=only,
             only_folder=only_folder,
             segment=options.segment,
+            destination=destination,
         )
     except ConsentError as refusal:
         if not a_reading_refusal(refusal, out):
@@ -2048,6 +2071,15 @@ def run_adopt(options, out):
     line(out, "file", result.path)
     out.write(adopt.TAKEN_IN + "\n")
     return EXIT_DONE
+
+
+# Plan 1, Units 2.4a and 3.5: goals or metric definitions named for a business
+# the map does not list, or a standard with no job.
+NOT_A_DESTINATION = (
+    "That is not a place this document can go, because goals and metric "
+    "definitions are for the whole company or for a business your base lists, "
+    "and a standard is for one job."
+)
 
 
 # What is said about a finished document of one kind before a yes (Track 4).
