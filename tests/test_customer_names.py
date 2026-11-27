@@ -17,6 +17,7 @@ too, but the refusal now says "QA", so only that word is rewritten. Every
 name here is made up.
 """
 
+import importlib.util
 import os
 import subprocess
 import sys
@@ -53,6 +54,16 @@ FOUND = [
     fake("n10", "Globex Ltd moved its fleet over.", kind="customer", customer="Globex Ltd"),
     fake("n11", "Send renewals to procurement@globex.com before June, or see globex.com/terms."),
 ]
+def join_script():
+    """The setup script itself, for the sentences it prints."""
+    spec = importlib.util.spec_from_file_location("gtm_base_join_names", SHIM)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+JOIN = join_script()
+
 READABLE = dict((item.id, item) for item in FOUND)
 
 
@@ -183,6 +194,9 @@ class TestTheReviewNamesTheMatch(Run):
         codes = [line for line in printed.split("\n") if line.startswith("codes=")]
         self.assertEqual(1, len(codes), printed)
         self.assertNotIn("Harbor", codes[0])
+        # The refusal says how to fix it, for a name the draft needed as a
+        # place (Brandon's decision of 2026-11-27, the Denver case).
+        self.assertIn(JOIN.CITE_AGAIN + "\n" + JOIN.CUSTOMER_NAME_FIX + "\n", printed)
 
 
 class TestTheDigestScriptNamesTheMatch(ThroughSetup):

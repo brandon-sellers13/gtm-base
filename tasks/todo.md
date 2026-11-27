@@ -1867,7 +1867,7 @@ The lean plan Brandon approved on 2026-11-25: merge main, rehearse case three al
 - [x] Case two resumes from its kept notes on a plugin copy of the new commit (done 2026-11-25, above).
 - [x] Brandon scores cases one and three, and case two once it is run (done 2026-11-25, above).
 - [x] The scored re-run of all three cases (done 2026-11-25). The gate passes.
-- [x] Customer-name check fix: it went into Release B and is on main as 990e1a9 (PR #15). Whether a draft may keep a city's name when the notes record a customer by it is still Brandon's call.
+- [x] Customer-name check fix: it went into Release B and is on main as 990e1a9 (PR #15). Brandon decided on 2026-11-27 that a city's name recorded as a customer's name stays refused, and the refusal now says how to fix it: record that customer under a fuller name, such as the company's full name (branch `claude/decisions-1127`).
 - [x] Brandon: review and merge Release B (0.5.0) into main. (merged 2026-11-25, PR #15)
 
 ## 2026-11-26, the connector for Claude chat, Cowork and ChatGPT (plan: docs/plans/2026-11-26-001-feat-chat-connector-plan.md)
@@ -1879,10 +1879,18 @@ The order across every track is in `docs/plans/2026-11-26-003-roadmap-to-full-ex
 - [x] C4. Proposing a context change from chat. (shipped with C2 in PR #23)
 - [x] C5. The setup guide and a Project instruction for each base, shown on each base's page when the connector is on. (branch `claude/c5-setup-guide`; web build, lint, type check and the 69 stale-parity checks pass; deployed to the test site gtm-base-connector-spike on 2026-11-26 as deploy 6b08e9a83a9d29a0988fe498 and checked there on the gtm-base-test page, including the copy button. Not deployed to the live site.)
 - [ ] Carried over from C1 and C2, all needing Simona's account: the Claude half of the run, the refusal of a second base in one conversation, and the sign-in test with two GitHub accounts.
-- [ ] Brandon: decide the borderline proposal pattern from C2's security review, once for the plugin and the connector.
+- [x] Brandon: decide the borderline proposal pattern from C2's security review, once for the plugin and the connector. (decided 2026-11-27: it is closed in C3's security pull request, for both together)
 - [ ] Take down the connector's test site once the Claude half has passed.
 - [ ] The security review of C3, then the end-to-end run in Claude and ChatGPT across two Projects.
-- [ ] When Track 4's runner reads `reads_optional: [context/icps/]`, add `context/icps/` to `FOLDER_DECLARATIONS` in `web/src/lib/stale/skills.ts` and regenerate the skill parity fixtures (`tests/skill_parity.py`).
+- [x] When Track 4's runner reads `reads_optional: [context/icps/]`, add `context/icps/` to `FOLDER_DECLARATIONS` in `web/src/lib/stale/skills.ts` and regenerate the skill parity fixtures (`tests/skill_parity.py`). (PR #36, merged as 4e10ddb)
+
+## 2026-11-27, Brandon's decisions on the roadmap (`docs/plans/2026-11-26-003-roadmap-to-full-experience.md`)
+- [x] The borderline proposal pattern: closed in C3's security pull request, for the plugin and the connector together.
+- [x] Denver: the customer-name check keeps refusing a city's name that the notes record as a customer's name, and the refusal now says how to fix it (record that customer under a fuller name, such as the company's full name).
+- [x] Simona's GitHub username: on hold, by Brandon's choice. The invite test (W5) and the two-person end-to-end runs wait with it.
+- [x] Sign-up: opens only after C3's security fixes are confirmed, P2's security review is done and both end-to-end runs pass, and then by invitation to a short list before anything is public.
+- [x] Pricing: GTM Base stays 100 percent free and may be open-sourced. Step 6 of the roadmap is now sign-up and a domain, with no pricing or billing work. The plugin already declares the MIT license.
+- [ ] Brandon: buy the domain on Monday, 2026-11-30. It blocks nothing before sign-up.
 
 ## Plan 1, company skills and the Meta ads skill (plan: docs/plans/2026-10-10-002-feat-plan-1-company-skills-and-meta-skill-plan.md)
 Step 2 of `docs/plans/2026-11-26-003-roadmap-to-full-experience.md`. The planning documents and the four built units were brought up to date with main on 2026-11-26 (branch `claude/plan-1-catchup`), keeping every Release B and backup rule (full suite on the merge 5e80a5b: 3323 tests OK, then 223 OK from a linked folder). The sections below are the original build records from 2026-10-10.
