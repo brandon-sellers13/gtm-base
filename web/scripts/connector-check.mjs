@@ -341,7 +341,21 @@ if (secret) {
   check("a 2026-07-28 server/discover is answered", discover.status === 200 && !!discover.body?.result, JSON.stringify(discover.body).slice(0, 160));
   const tools = await mcp(token, { method: "tools/list" }, { protocol: "2025-11-25" });
   const names = (tools.body?.result?.tools ?? []).map((t) => t.name).sort().join(",");
-  check("the tools are list_bases, list_documents, propose_change, propose_fix and read_document", names === "list_bases,list_documents,propose_change,propose_fix,read_document", names);
+  check(
+    "the tools are list_bases, list_documents, propose_change, propose_fix, read_document and use_skill",
+    names === "list_bases,list_documents,propose_change,propose_fix,read_document,use_skill",
+    names,
+  );
+  const skillTool = (tools.body?.result?.tools ?? []).find((t) => t.name === "use_skill");
+  check(
+    "use_skill is titled Use a company skill, read only, and says how to find the skills",
+    skillTool?.title === "Use a company skill" && skillTool?.annotations?.readOnlyHint === true && /list_documents names them/.test(skillTool?.description ?? ""),
+    skillTool?.description?.slice(0, 120),
+  );
+  check(
+    "the instructions say how skills are used, with no base's skills when none can be tied to the call",
+    /call use_skill before doing the work/.test(init.body?.result?.instructions ?? ""),
+  );
 
   const noConversation = await callTool(token, "list_bases", {}, null);
   check("a call with no conversation id is refused", /could not tell which conversation/.test(toolText(noConversation)));
@@ -409,6 +423,35 @@ if (secret) {
     check("without a conversation id, the minted session id binds instead", /now uses the base/.test(toolText(s1)) && /uses the base/.test(toolText(s2)) && toolText(s2).includes(baseA));
   } else {
     console.log("skip  the one-base checks (set GITHUB_TOKEN, BASE_A and BASE_B)");
+  }
+
+  // C3: a base holding an approved drift grade.
+  const skillBase = process.env.SKILL_BASE;
+  if (github && skillBase) {
+    const real = await access({ aud: resource, cid, chain: "x", grant: { gh: github, login, team: false } });
+    const conv = `v1.check-skills-${randomBytes(6).toString("hex")}`;
+    const listed = toolText(await callTool(real, "list_documents", { base: skillBase }, conv));
+    check("list_documents ends with the approved skills, drift grade among them", /approved skills, each with when to use it:\n(?:.*\n)*- drift-grade: /.test(listed), listed.slice(-300));
+    const [served, ms] = await timed(callTool(real, "use_skill", { base: skillBase, skill: "drift-grade" }, conv));
+    const text = toolText(served);
+    const flaggedFirst = /a document it reads needs a choice from you/.test(text);
+    check(
+      "use_skill serves drift grade's approved instructions with its documents, or the flag first",
+      !served.body?.result?.isError &&
+        (flaggedFirst ||
+          (text.includes("The approved instructions for drift-grade follow.") &&
+            text.includes("[for the assistant] instructions=skills/drift-grade/SKILL.md") &&
+            text.includes("[for the assistant] document=standards/drift-grade.md") &&
+            !text.includes("/examples/"))),
+      `${ms} ms; ${text.slice(0, 200)}`,
+    );
+    const unknown = toolText(await callTool(real, "use_skill", { base: skillBase, skill: "no-such-skill" }, conv));
+    check("a skill the base does not hold is refused, naming the ones it does", /holds no skill by that name/.test(unknown) && /- drift-grade: /.test(unknown));
+    const listing = await mcp(real, { method: "tools/list", params: { _meta: { "com.anthropic/session": conv } } }, { protocol: "2025-11-25" });
+    const description = (listing.body?.result?.tools ?? []).find((t) => t.name === "use_skill")?.description ?? "";
+    check("once the conversation uses that base, the tool list carries its skill index", description.includes(`The base ${skillBase} holds these approved skills`) && description.includes("- drift-grade: "), description.slice(-200));
+  } else {
+    console.log("skip  the skill checks (set GITHUB_TOKEN and SKILL_BASE, a base holding an approved drift grade)");
   }
 } else {
   console.log("skip  the token and protocol checks (set CONNECTOR_SECRET, for a copy on this computer)");

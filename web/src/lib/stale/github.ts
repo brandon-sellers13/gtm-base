@@ -35,7 +35,7 @@ const MAX_COMMITS = 2000;
 
 export class BaseUnavailable extends Error {}
 
-type Tree = { tree: { path: string; type: string; sha: string }[]; truncated: boolean };
+type Tree = { tree: { path: string; mode: string; type: string; sha: string }[]; truncated: boolean };
 
 async function graphql<T>(token: string, query: string, variables: Record<string, unknown>): Promise<T> {
   const response = await fetch("https://api.github.com/graphql", {
@@ -118,12 +118,18 @@ type HistoryNode = {
   [file: `f${number}`]: { oid: string } | null;
 };
 
+// Each commit's parents, for every commit the history walk saw; null for a
+// commit with more parents than the walk read (an octopus merge), which a
+// caller treats as history it cannot read.
+export type Parents = Record<string, string[] | null>;
+
 async function recordFacts(
   token: string,
   owner: string,
   repo: string,
   head: string,
   records: { path: string; touched: string[] }[],
+  parents: Parents,
 ): Promise<Snapshot["corrections"]> {
   const facts: Snapshot["corrections"] = {};
   if (!records.length) return facts;
@@ -144,6 +150,9 @@ async function recordFacts(
     if (!history.pageInfo.hasNextPage) break;
     if (seen >= MAX_COMMITS) throw new Unreadable("history-too-long");
     after = history.pageInfo.endCursor;
+  }
+  for (const node of nodes.values()) {
+    parents[node.oid] = node.parents.totalCount > node.parents.nodes.length ? null : node.parents.nodes.map((p) => p.oid);
   }
 
   const fileAt = (node: HistoryNode | undefined, i: number) => (node ? (node[`f${i}`]?.oid ?? null) : null);
@@ -248,12 +257,14 @@ async function savedRevisions(
 
 // --- The whole snapshot -----------------------------------------------------------
 
-export async function snapshotOf(
-  token: string,
-  owner: string,
-  repo: string,
-  today: string,
-): Promise<Snapshot & { branch: string }> {
+// One entry of the main line's tree under `skills/`, as GitHub lists it: the
+// mode tells a plain file (100644, 100755) from a link (120000), and the type
+// a folder ("tree") from a file ("blob") or another repository ("commit").
+export type TreeEntry = { path: string; mode: string; type: string; sha: string };
+
+export type BaseSnapshot = Snapshot & { branch: string; head: string; skillTree: TreeEntry[]; parents: Parents; links: string[] };
+
+export async function snapshotOf(token: string, owner: string, repo: string, today: string): Promise<BaseSnapshot> {
   if (!validRepo(owner, repo)) throw new BaseUnavailable();
   let info: { default_branch: string };
   try {
@@ -293,10 +304,19 @@ export async function snapshotOf(
     }
   }
 
+  const parents: Parents = {};
   const [confirmationAuthors, corrections] = await Promise.all([
     blameAll(token, owner, repo, head, confirmations),
-    recordFacts(token, owner, repo, head, records),
+    recordFacts(token, owner, repo, head, records, parents),
   ]);
+  // The skills folder is only listed here; a skill's files are read when a
+  // skill is served (connector/skills.ts), never as documents.
+  const skillTree = tree.tree
+    .filter((entry) => entry.path === "skills" || entry.path.startsWith("skills/"))
+    .map(({ path, mode, type, sha }) => ({ path, mode, type, sha }));
+  // Links among the files read above, which a skill's folder declaration never
+  // hands on (the plugin's runner follows no link).
+  const links = wanted.filter((entry) => entry.mode === "120000").map((entry) => entry.path);
   // Every revision a confirmation or an acceptance came from, with the map
   // and every document as that revision held them.
   const revisions = new Set<string>();
@@ -312,7 +332,18 @@ export async function snapshotOf(
     ]),
   ].sort();
   const saved = await savedRevisions(token, owner, repo, [...revisions].sort(), documents);
-  return { today, files, confirmationAuthors, corrections, revisions: saved, branch: info.default_branch };
+  return {
+    today,
+    files,
+    confirmationAuthors,
+    corrections,
+    revisions: saved,
+    branch: info.default_branch,
+    head,
+    skillTree,
+    parents,
+    links,
+  };
 }
 
 // An open proposal, prepared for this change and touching this document,

@@ -1875,13 +1875,14 @@ The order across every track is in `docs/plans/2026-11-26-003-roadmap-to-full-ex
 - [x] S0. The spike: what Claude and ChatGPT accept from a remote connector. (done 2026-11-26, PR #17)
 - [x] C1. The endpoint, GitHub sign-in and one base per conversation. (merged and live, PR #18)
 - [x] C2. Reading documents, with the moment-of-use flag in the answer. (PR #23, merged as 429da77 and deployed to the live site on 2026-11-26 as deploy 6b08e688339d2aae566195f8; the one before it, for a rollback, is C1's 6b08b757ddcfc03acda297a1. The ChatGPT run passed end to end on the test site, the security review found nothing at the bar, and on the live site the home page, sign-in and the 19 public connector checks pass. The Claude half waits for Simona's invite.)
-- [ ] C3. Skills served live. (waits on Plan 1's runner 3.1 and skills folder 4.2b, and on Track 4's drift grade T4.8)
+- [x] C3. Skills served live: `use_skill` ("Use a company skill"), the skill index in the instructions and at the end of `list_documents`, only versions another computer would accept, each declared document through the moment-of-use check, no write into `skills/`, and a tested seam for Track 4's `context/icps/` folder declaration. (branch `claude/connector-c3`; built 2026-11-27; deployed to the test site only)
 - [x] C4. Proposing a context change from chat. (shipped with C2 in PR #23)
 - [x] C5. The setup guide and a Project instruction for each base, shown on each base's page when the connector is on. (branch `claude/c5-setup-guide`; web build, lint, type check and the 69 stale-parity checks pass; deployed to the test site gtm-base-connector-spike on 2026-11-26 as deploy 6b08e9a83a9d29a0988fe498 and checked there on the gtm-base-test page, including the copy button. Not deployed to the live site.)
 - [ ] Carried over from C1 and C2, all needing Simona's account: the Claude half of the run, the refusal of a second base in one conversation, and the sign-in test with two GitHub accounts.
 - [ ] Brandon: decide the borderline proposal pattern from C2's security review, once for the plugin and the connector.
 - [ ] Take down the connector's test site once the Claude half has passed.
 - [ ] The security review of C3, then the end-to-end run in Claude and ChatGPT across two Projects.
+- [ ] When Track 4's runner reads `reads_optional: [context/icps/]`, add `context/icps/` to `FOLDER_DECLARATIONS` in `web/src/lib/stale/skills.ts` and regenerate the skill parity fixtures (`tests/skill_parity.py`).
 
 ## Plan 1, company skills and the Meta ads skill (plan: docs/plans/2026-10-10-002-feat-plan-1-company-skills-and-meta-skill-plan.md)
 Step 2 of `docs/plans/2026-11-26-003-roadmap-to-full-experience.md`. The planning documents and the four built units were brought up to date with main on 2026-11-26 (branch `claude/plan-1-catchup`), keeping every Release B and backup rule (full suite on the merge 5e80a5b: 3323 tests OK, then 223 OK from a linked folder). The sections below are the original build records from 2026-10-10.

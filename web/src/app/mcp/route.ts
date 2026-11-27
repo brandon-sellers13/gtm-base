@@ -3,13 +3,22 @@ import { stillAllowed } from "@/lib/access";
 import { SCOPE, connectorEnabled, notFound, resourceMetadataUrl, resourceUrl } from "@/lib/connector/config";
 import { openAccess } from "@/lib/connector/grants";
 import { open, randomId, seal } from "@/lib/connector/seal";
+import { conversationFrom } from "@/lib/connector/bindings";
+import { indexForListing } from "@/lib/connector/skills";
 import { type CallFacts, connectorServer } from "@/lib/connector/tools";
 
 // The GTM Base connector's MCP endpoint, on the official MCP library (version
 // two). It answers 2026-07-28 clients (`server/discover`) and, statelessly,
 // 2025-era clients (`initialize`). Nothing is held between requests.
 
-const handler = createMcpHandler(() => connectorServer(), { responseMode: "json" });
+const handler = createMcpHandler(
+  (ctx) => connectorServer((ctx.authInfo?.extra?.facts as CallFacts | undefined)?.skillIndex ?? null),
+  { responseMode: "json" },
+);
+
+// The requests that hand the product the instructions or the tool list, which
+// carry the skill index of the one base the request can be tied to (C3).
+const LISTING = ["initialize", "server/discover", "tools/list"];
 
 const MAX_BODY = 1024 * 1024;
 const SESSION_SECONDS = 24 * 60 * 60;
@@ -51,6 +60,11 @@ async function serve(request: Request): Promise<Response> {
   // fallback conversation key when a product sends no conversation id of its own.
   const session = await open<{ id: string }>("session", request.headers.get("mcp-session-id"));
   const facts: CallFacts = { access, sessionId: session?.id ?? null, githubRefused: false };
+  const message = parsedBody && typeof parsedBody === "object" ? (parsedBody as { method?: unknown; params?: { _meta?: unknown } }) : null;
+  if (message && typeof message.method === "string" && LISTING.includes(message.method)) {
+    const meta = message.params?._meta && typeof message.params._meta === "object" ? (message.params._meta as Record<string, unknown>) : undefined;
+    facts.skillIndex = await indexForListing(access.grant.gh, access.grant.login, conversationFrom(meta, facts.sessionId));
+  }
 
   const answer = await handler.fetch(request, {
     parsedBody,

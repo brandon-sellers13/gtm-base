@@ -7,10 +7,12 @@ import { type Choice, Refusal as DocumentRefusal, listDocuments, proposeChange, 
 import { validRepo } from "../reader";
 import { type Conversation, bindOrCheck, boundBase, conversationFrom } from "./bindings";
 import type { AccessBody } from "./grants";
+import { indexForInstructions, useSkill } from "./skills";
 
 // The connector's tools, made fresh for every request by the MCP library:
 // list my bases (C1), list documents and read a document with the
-// moment-of-use flag (C2), and propose a change or a fix (C4). C3 adds skills.
+// moment-of-use flag (C2), propose a change or a fix (C4), and use one of the
+// base's own approved skills (C3).
 
 // Per-request facts the endpoint verified before the library ran.
 export type CallFacts = {
@@ -19,9 +21,12 @@ export type CallFacts = {
   // Set when GitHub refuses the person's token, so the endpoint answers 401
   // and the product signs in again.
   githubRefused: boolean;
+  // When the tools are being listed: the skill index of the one base this
+  // request can be tied to, for the instructions and use_skill's description.
+  skillIndex?: { base: string; lines: string } | null;
 };
 
-const INSTRUCTIONS =
+const BASE_INSTRUCTIONS =
   "GTM Base holds a company's approved marketing context (its base), kept in a GitHub repository. " +
   "Each conversation works with exactly one base, named as owner/repo. Use the base the person or the Project's " +
   "instructions name, exactly as written; never guess one or recall one from memory. If no base is named, ask the " +
@@ -109,8 +114,12 @@ async function guarded(facts: CallFacts, work: () => Promise<ReturnType<typeof t
 }
 
 
-export function connectorServer(): McpServer {
-  const server = new McpServer({ name: "gtm-base", title: "GTM Base", version: "1.0.0" }, { instructions: INSTRUCTIONS });
+export function connectorServer(skillIndex: CallFacts["skillIndex"] = null): McpServer {
+  const skills = indexForInstructions(skillIndex ?? null);
+  const server = new McpServer(
+    { name: "gtm-base", title: "GTM Base", version: "1.0.0" },
+    { instructions: `${BASE_INSTRUCTIONS}\n\n${skills}` },
+  );
 
   server.registerTool(
     "list_bases",
@@ -165,7 +174,8 @@ export function connectorServer(): McpServer {
       title: "List documents",
       description:
         "Call this first in a conversation: the base's documents (context, standards, source map), with each one's path, title and owner, " +
-        "and which are behind a recorded context change. Use these paths with read_document; never guess a path.",
+        "and which are behind a recorded context change, then the base's approved skills with when to use each. Use these paths " +
+        "with read_document and these skill names with use_skill; never guess either.",
       inputSchema: z.object({ base: BASE_FIELD }),
       annotations: { readOnlyHint: true, openWorldHint: false },
     },
@@ -192,6 +202,31 @@ export function connectorServer(): McpServer {
     },
     withBase((facts, owner, repo, args: { base: string; path: string; choice?: Choice }) =>
       readDocument(facts.access.grant.gh, owner, repo, args.path, args.choice),
+    ),
+  );
+
+  server.registerTool(
+    "use_skill",
+    {
+      title: "Use a company skill",
+      description:
+        "Fetch one of the base's own approved skills, with the documents it reads, before doing the work it is for, and follow " +
+        "what it returns. If a document it reads is behind a recorded context change, the first answer is only the flag: tell " +
+        "the person, wait for their choice, and call again as the answer says. " +
+        skills,
+      inputSchema: z.object({
+        base: BASE_FIELD,
+        skill: z.string().max(80).describe("The skill's name, as the base's list of approved skills gives it, such as drift-grade."),
+        use_as_is: z
+          .array(z.string().max(300))
+          .max(20)
+          .optional()
+          .describe("Only after the person has chosen, in answer to a flag: the paths of the documents they chose to use as they stand."),
+      }),
+      annotations: { readOnlyHint: true, openWorldHint: false },
+    },
+    withBase((facts, owner, repo, args: { base: string; skill: string; use_as_is?: string[] }) =>
+      useSkill(facts.access.grant.gh, owner, repo, args.skill, args.use_as_is),
     ),
   );
 

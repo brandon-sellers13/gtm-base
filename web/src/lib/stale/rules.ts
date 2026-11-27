@@ -164,7 +164,9 @@ function addresses(value: Value | undefined): string[] | null {
 
 // authority.authority_from: the document's owners, the map's one owner, and
 // the map's administrators, as one saved version of each names them.
-export function authorityFrom(documentText: string | null, mapText: string | null): string[] {
+export type Roles = { owners: string[]; baseOwner: string | null; administrators: string[] };
+
+export function rolesFrom(documentText: string | null, mapText: string | null): Roles {
   const owners = addresses(settingsOf(documentText)?.owner) ?? [];
   const map = settingsOf(mapText);
   let baseOwner: string | null = null;
@@ -174,6 +176,21 @@ export function authorityFrom(documentText: string | null, mapText: string | nul
     if (named && named.length === 1) baseOwner = named[0];
     administrators = addresses(map.administrators) ?? [];
   }
+  return { owners, baseOwner, administrators };
+}
+
+// AuthoritySet.role_of: the most particular role an address holds, compared
+// letter for letter, or null.
+export function roleOf(roles: Roles, address: string | null): "owner" | "base-owner" | "administrator" | null {
+  if (!address) return null;
+  if (roles.owners.includes(address)) return "owner";
+  if (address === roles.baseOwner) return "base-owner";
+  if (roles.administrators.includes(address)) return "administrator";
+  return null;
+}
+
+export function authorityFrom(documentText: string | null, mapText: string | null): string[] {
+  const { owners, baseOwner, administrators } = rolesFrom(documentText, mapText);
   const found: string[] = [];
   for (const address of [...owners, baseOwner, ...administrators]) if (address && !found.includes(address)) found.push(address);
   return found;
