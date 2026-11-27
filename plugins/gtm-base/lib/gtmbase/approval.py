@@ -410,6 +410,8 @@ _ACTIONS = {
     "use_skill.py": (
         "start", "finish", "check", "incomplete", "new_words_file",
         "prepare_install", "approve_install", "show", "accept",
+        # Track 4, Unit T4.8: a skill GTM Base ships, and its standard.
+        "prepare_starter", "approve_standard",
     ),
 }
 
@@ -525,6 +527,8 @@ def _what(script: str, options) -> Optional[Tuple[str, Tuple[str, ...]]]:
             found = (SAYS_INSTALL_SKILL, ("skill_install.approve",))
         elif get("accept"):
             found = (SAYS_ACCEPT_SKILL, ("skill_install.accept",))
+        elif get("approve_standard"):
+            found = (SAYS_CREATE, ("operations.approve",))
     if found is not None:
         chosen = [name for name in _ACTIONS[script] if get(name)]
         if len(chosen) > 1:

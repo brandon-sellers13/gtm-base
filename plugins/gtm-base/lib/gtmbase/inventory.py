@@ -267,6 +267,8 @@ class Inventory(object):
         self.businesses_unreadable = False
         self.confirmations_unreadable = False
         self.draftable_missing: List[Tuple[str, str]] = []
+        # The skills GTM Base ships that this base could take (Track 4, T4.8).
+        self.starter_offers: List[str] = []
 
     def _column_heading(self, column: str) -> str:
         for business in self.businesses:
@@ -336,6 +338,7 @@ class Inventory(object):
             said.append(DRAFTING_LATER)
         elif self._missing_beyond_what_drafts():
             said.append(DRAFTING_LATER_REST)
+        said.extend(self.starter_offers)
         return said
 
     def _missing_beyond_what_drafts(self) -> bool:
@@ -732,4 +735,7 @@ def take(
         and answer.cells.get((kind, column)) is not None
         and answer.cells[(kind, column)].state == STATE_MISSING
     ]
+    from . import starter
+
+    answer.starter_offers = starter.offer_sentences(base_root)
     return answer

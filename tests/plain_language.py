@@ -1209,6 +1209,10 @@ PYTHON_SENTENCES = (
     ("truth_map", "NO_ROWS"),
     ("record_change", "SUGGESTED_INTRO"),
     ("drafting", "NOT_COVERED"),
+    # Track 4, Unit T4.8: drift grade.
+    ("starter", "NOT_A_STARTER"),
+    ("starter", "STANDARD_KEPT"),
+    ("starter", "OFFER"),
 )
 
 # Constants that read like a sentence but that no person ever reads. Each one
