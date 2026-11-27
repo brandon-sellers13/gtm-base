@@ -197,8 +197,9 @@ repository holding anything a company base never holds, such as instructions an
 assistant would follow on its own or code, is removed again without a trace.
 
 From then on your computer is a seat on that base. Open Claude Code in the
-base's folder to work with it. Any change you make, such as a fix to a document,
-goes to the owner of the document as a proposal, and nothing changes in
+base's folder to work with it. Any change you make, such as recording a context
+change or fixing a document, goes to the owner of the document as a proposal,
+and nothing changes in
 the shared base until they accept it in the app or in Claude Code. Nothing you
 do sends a change straight to the shared base, apart from the confirmation you
 give when you are asked whether a document you own is still right.

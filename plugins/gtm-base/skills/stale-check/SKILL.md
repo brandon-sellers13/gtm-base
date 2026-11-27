@@ -242,8 +242,8 @@ It is for "record a context change", "something changed", "note that we now
 - Make each step's one ask and nothing else. Any observation about what they
   said waits until the steps are over, as one short note.
 - Nothing is written into the base before they say to record it.
-- On a base with a shared copy every step refuses with one sentence. Say it
-  and stop.
+- On a base a team shares, the steps are the same, and the yes sends the
+  change to the base's owner as a proposal rather than writing it in.
 
 Run `python3 scripts/stale_check.py --record-change ask` and say what it
 prints. The first three times a person records one on this computer it
@@ -310,6 +310,10 @@ Record this context change, or leave it?
 
 - Record it, in a later turn than the showing and never the same one:
   `python3 scripts/stale_check.py --record-change record --shown <the shown value>`.
+  On a base a team shares, it is sent to the base's owner as a proposal
+  instead of written straight in, and it prints `status=proposed` on the line
+  marked for you. Say the sentence it prints and stop there: no document is
+  asked about until the owner accepts it.
 - Leave it: `python3 scripts/stale_check.py --record-change leave`. Nothing
   is written.
 - A correction: ask for new files, write the corrected words into them, and

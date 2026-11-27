@@ -31,6 +31,7 @@ from typing import List, Optional
 
 from . import (
     base_reader,
+    compose_proposal,
     confirm,
     constants,
     create_base,
@@ -40,14 +41,16 @@ from . import (
     fsutil,
     ids,
     layout,
+    names,
     paths,
     redaction_patterns,
     scan,
     segments,
+    shared_send,
     state,
     unsaved,
 )
-from .errors import PathError, ReviewError
+from .errors import GtmBaseError, PathError, ReviewError
 from .gitcmd import GitRunner, runner_or_default
 
 # What the screen reads a draft for. A share link and a path from inside a home
@@ -1010,13 +1013,28 @@ def approve(
     if codes:
         raise ReviewError(CODE_SCREENED, codes=codes)
 
+    # A base a team shares takes nothing straight onto its shared line, so the
+    # file and the line recording the yes go to its owner as one proposal
+    # (P3). Not being able to tell is its own answer and writes nothing.
+    shared = False
+    if not first_file:
+        found = compose_proposal.shared_copy_state(base_root, runner=git)
+        if found not in (compose_proposal.SHARED_COPY_PRESENT, compose_proposal.SHARED_COPY_ABSENT):
+            raise ReviewError(compose_proposal.CODE_CANNOT_TELL, code=compose_proposal.CODE_CANNOT_TELL)
+        shared = found == compose_proposal.SHARED_COPY_PRESENT
+
     if draft.step == drafting.STEP_CHANGE:
         # No run is written onto it. See `stamp_entry` for why. The identifier
         # is the first one no folder of this base already holds, because the
         # closing can be answered more than once and two changes under one
-        # name is the state nothing here can resolve.
+        # name is the state nothing here can resolve. On a shared base it is a
+        # fresh random one instead, because a change another seat proposed and
+        # nobody accepted yet is not in this copy to be counted.
         draft = stamp_entry(
-            draft, None, address, entry_name=free_entry_id(base_root)
+            draft,
+            None,
+            address,
+            entry_name=shared_send.new_staging_id() if shared else free_entry_id(base_root),
         )
         try:
             canonical_affects(draft, base_root)
@@ -1048,6 +1066,12 @@ def approve(
             relative, head, list(result.codes or []), result.root, result.base_id
         )
 
+    if shared:
+        if _already_there(base_root, relative):
+            raise ReviewError(CODE_FILE_EXISTS)
+        return _propose_and_save(
+            base_root, base_id, relative, draft, run_id, moment, git
+        )
     ready_to_write(base_root, git)
     if draft.step == drafting.STEP_SEGMENT:
         _segment_file_is_free(base_root, relative)
@@ -1056,6 +1080,67 @@ def approve(
     return _write_and_save(
         base_root, base_id, relative, draft.text, run_id, moment, git
     )
+
+
+# Recorded on the result when an approved draft went as a proposal (P3).
+CODE_SENT_AS_PROPOSAL = "sent-as-proposal"
+
+
+def _propose_and_save(base_root, base_id, relative, draft, run_id, moment, git):
+    """Send an approved draft, with the line recording the yes, as one proposal.
+
+    The same two writes `_write_and_save` makes into the base are made in a
+    working folder of this seat's own, made from the shared copy's latest
+    line, and go to the base's owner to accept. The person's own folder is
+    not touched.
+    """
+
+    def write(folder: str) -> List[str]:
+        if draft.step == drafting.STEP_SEGMENT:
+            _segment_file_is_free(folder, relative)
+        if _already_there(folder, relative):
+            raise ReviewError(CODE_FILE_EXISTS)
+        _write(folder, relative, draft.text)
+        _stage(git, folder, relative)
+        if relative.startswith(constants.CONTEXT_DIR + "/"):
+            result = confirm.drafted(folder, base_id, relative, run_id, now=moment, runner=git)
+            if result.status != confirm.STATUS_RECORDED:
+                raise ReviewError(
+                    (result.codes or [CODE_CONFIRMATION_REFUSED])[0],
+                    codes=list(result.codes or []),
+                )
+        return [relative]
+
+    if draft.step == drafting.STEP_CHANGE:
+        entry = formats.ChangeEntry.parse(draft.text)
+        what, _blank, why = entry.body.strip().partition("\n\n")
+        title = "Context change: %s" % " ".join(what.split())[:80]
+        fields = {
+            "before": "Not recorded yet.",
+            "after": " ".join(what.split()) or "A context change.",
+            "why": " ".join(why.split()) or "Recorded at the end of setting the base up.",
+            "evidence": "Approved by %s in Claude Code at the end of setting the base up." % entry.noted_by,
+            "confidence": "medium",
+        }
+        entry_id = entry.id
+    else:
+        named = names.document_name(relative)
+        title = "New document: %s" % named
+        fields = {
+            "before": "The base does not hold %s yet." % named,
+            "after": "%s%s, drafted from the material its author named and approved by them."
+            % (named[:1].upper(), named[1:]),
+            "why": "Its author approved this draft in Claude Code.",
+            "evidence": "The draft was shown whole and approved in Claude Code.",
+            "confidence": "medium",
+        }
+        entry_id = None
+    # A refusal from the send itself (`shared_send.Refused`) carries the one
+    # sentence the person is told, and reaches the script as it is.
+    shared_send.send(
+        base_root, base_id, write, title, fields, entry_id=entry_id, runner=git
+    )
+    return ApproveResult(relative, None, [CODE_SENT_AS_PROPOSAL], base_root, base_id)
 
 
 def approve_adopted(

@@ -935,7 +935,9 @@ through `review` and `preview-change` before it is shown again. Approving is
 
 Approving the change says what happened, and it does not say whether either
 document has caught up with it, so that will be asked here rather than assumed.
-Run:
+On a base a team shares, the approve printed `status=proposed` instead: the
+change went to the base's owner as a proposal, so say the sentence it printed,
+skip this step, and go on to the closing. Otherwise run:
 
 ```
 python3 scripts/join.py reconcile --base <base folder> --entry <the id the approve printed>

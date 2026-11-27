@@ -6315,18 +6315,52 @@ def write_onboarding_note(
     if codes:
         return None, codes
 
-    from . import formats
-
-    try:
-        review.ready_to_write(base_root, git)
-    except GtmBaseError:
-        return None, [NOTE_NOT_SAVED]
+    from . import compose_proposal, formats, shared_send
 
     relative = onboarding_note_path(base_root, day)
     document = formats.render_document(
         {"kind": ONBOARDING_NOTE_KIND, "date": day.isoformat(), "run_id": run_id},
         "## %s\n\n%s\n" % (ONBOARDING_NOTE_HEADING, body),
     )
+
+    # A base a team shares takes nothing straight onto its shared line, so the
+    # note goes to the base's owner as a proposal of its own (P3).
+    shared = compose_proposal.shared_copy_state(base_root, runner=git)
+    if shared != compose_proposal.SHARED_COPY_ABSENT:
+        if shared != compose_proposal.SHARED_COPY_PRESENT:
+            return None, [NOTE_NOT_SAVED]
+        resolution = paths.resolve_base(base_root, machine.load_machine_state(), git)
+
+        def write(folder: str) -> List[str]:
+            where = os.path.join(folder, relative.replace("/", os.sep))
+            os.makedirs(os.path.dirname(where), exist_ok=True)
+            with open(where, "w", encoding="utf-8", newline="\n") as handle:
+                handle.write(document)
+            return [relative]
+
+        try:
+            shared_send.send(
+                base_root,
+                resolution.base_id or "",
+                write,
+                ONBOARDING_NOTE_MESSAGE,
+                {
+                    "before": "No note.",
+                    "after": "A note on what got in the way of setting the base up.",
+                    "why": "Its author wrote it at the end of setting the base up.",
+                    "evidence": "Written in Claude Code at the closing of setup.",
+                    "confidence": "medium",
+                },
+                runner=git,
+            )
+        except GtmBaseError:
+            return None, [NOTE_NOT_SAVED]
+        return relative, []
+
+    try:
+        review.ready_to_write(base_root, git)
+    except GtmBaseError:
+        return None, [NOTE_NOT_SAVED]
     full = os.path.join(base_root, relative.replace("/", os.sep))
     folder = os.path.dirname(full)
     if folder and not os.path.isdir(folder):

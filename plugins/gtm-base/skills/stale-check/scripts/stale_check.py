@@ -324,8 +324,10 @@ def _peek(options, base_id):
 def record_a_change(options, resolution):
     """One step of recording a context change, from the folder the person is in.
 
-    Every step refuses a base with a shared copy first, so nobody is asked a
-    question whose answer could not be written down.
+    Every step first asks whether the base has a shared copy, and stops when
+    that cannot be told, so nobody is asked a question whose answer could not
+    be written down. On a base with one, the yes sends the change as a
+    proposal (P3).
     """
     root, base_id = resolution.root, resolution.base_id
     step = options.record_change
@@ -333,7 +335,7 @@ def record_a_change(options, resolution):
         # Before anything else, so a showing refused for any reason, a words
         # file included, never leaves the one before it to be recorded.
         record_change.forget_showing(base_id)
-    record_change.refuse_a_shared_copy(root)
+    record_change.shared_copy(root)
 
     if step == "ask":
         for sentence in record_change.ask(long=options.long):
@@ -407,6 +409,10 @@ def record_a_change(options, resolution):
 
     if step == "record":
         done = record_change.record(root, base_id, options.shown or "")
+        if done.proposal is not None:
+            sys.stdout.write(record_change.PROPOSED + "\n")
+            sys.stdout.write("   [for the assistant] status=proposed\n")
+            return EXIT_DONE
         sys.stdout.write(record_change.RECORDED + "\n")
         asked = []
         for path, question in zip(done.plan.ask_about, done.plan.questions()):
