@@ -1891,10 +1891,12 @@ Step 2 of `docs/plans/2026-11-26-003-roadmap-to-full-experience.md`. The plannin
 - [x] Unit 4.2a. One authority rule, one path rule, approvals bound to bytes, and the refusal in an unattended run.
 - [x] Unit 3.1. The thin runner, its contract test, and atlas figure 9. Built 2026-11-27 on `claude/plan-1-runner`: `runner.py`, the use-skill skill, `docs/thin-runner.md`, `tests/test_runner_contract.py`, figure 9. A skill's own text names no runner command (the Track 4 plan). The moment-of-use check reads documents as last saved when the runner asks. Outside review (Astra security and correctness) still owed before Release C.
 - [x] Unit 4.2b. The skills folder. Built 2026-11-27 on `claude/plan-1-skills-folder` (cut from the 3.1 branch): `skillshape.py` (what the folder admits, asked by the trust check, the update and the send), `skill_install.py` (install with both yeses, change, accept), the write check still refusing file tools, the runner's attended showing. Needs its own security pass before it merges.
-- [ ] Unit 4.2b follow-ups: a skill listed by the review when it goes stale (CS28), the session start naming trusted skills (CS25), and the map paragraph in `changes.py` that still says the skills folder is kept empty.
+- [ ] Unit 4.2b follow-ups: a skill listed by the review when it goes stale (CS28), and the map paragraph in `changes.py` that still says the skills folder is kept empty. (The session start naming trusted skills, CS25, is built with Unit 3.6.)
 - [ ] Unit 2.4a. Metric definitions and goals, the driver-app half.
 - [ ] Unit 3.5. The creative-testing standard.
-- [ ] Unit 3.6. The Meta ads skill running through the runner.
+- [x] Unit 3.6, the repository side. Built 2026-11-27 on `claude/plan-1-meta-skill-shape`: the session start lists trusted base skills (CS25), and a made-up nightly ad skill in `tests/fixtures/base-skills/meta-ads/` is tested on the runner.
+- [ ] Brandon: live session D for Unit 3.6, outside this repository. Move the real Meta ads skill into the Gridwise base through the install, after the migration checklist; check the scheduled task before the move; approve its new prompt and tool list; watch the first night attended.
+- [ ] Brandon: the SC-M window and its walkthrough (`docs/walkthroughs/2026-10-meta-skill-on-the-base.md`), written from real nights only.
 - [x] Brandon: review and merge the catch-up pull request. (merged 2026-11-26, PR #22)
 
 ## Track 4, what a base holds (plan: docs/plans/2026-11-27-001-feat-track-4-base-contents-plan.md)

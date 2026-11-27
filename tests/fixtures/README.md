@@ -35,3 +35,8 @@ The two identifiers that run through the whole set are the source,
 `src-f9b4fc4d3b3d46561948ee51`, and the proposal, `stg-0d15637d82690cc7`. The
 folders named in `machine.json` do not exist, because that file is only used to
 check the shape of the record.
+
+`base-skills/meta-ads/` is a made-up skill shaped like a nightly ad creative
+check (Plan 1, Unit 3.6), written from scratch for a made-up courier app.
+Every name, identifier and figure in it is invented; nothing is copied from a
+real skill, engine or account.
