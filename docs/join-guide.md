@@ -69,6 +69,12 @@ claude plugin marketplace add brandon-sellers13/gtm-base
 claude plugin install gtm-base@gtm-base
 ```
 
+The plugin does not update itself. To see which version you have and how to
+update it, say "update GTM Base" in Claude Code. It names the version and the
+commands to run, and it also says what your base can now take that it did not
+before, such as a new kind of document or a skill. Nothing is added to your
+base until you say yes to each one.
+
 ## Open Claude Code and answer the offer
 
 Open Claude Code in any folder and type anything at all, even hello. The reply

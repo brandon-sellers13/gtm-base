@@ -1,6 +1,6 @@
 ---
 name: join
-description: Set up a company base for somebody who does not have one yet, reading the marketing material they name and drafting their ideal customer profile and their positioning for approval. Use when the person says "set up my company base", asks to set up a company base, says they want to start a base, or answers yes to the setup offer. Say "set up my company base" whenever you are ready. Also handles "link this folder to my base", "unlink this folder from my base", and "show my linked folders", which connect a base to the folder somebody keeps their marketing material in. Also handles "finish setting up my base", which finishes taking in the finished documents and drafting the segments somebody chose when an earlier session stopped partway. Also handles "back up my base", "back this up" and "back up my base to <address>", which sends a copy of the base to the empty GitHub repository the GTM Base app made for it, after a review the person approves. Also handles "draft my messaging", and the same for the voice guide, buyer personas, product and source map. Also handles "join a base from a link", which arrives with the next release and is refused today with one sentence.
+description: Set up a company base for somebody who does not have one yet, reading the marketing material they name and drafting their ideal customer profile and their positioning for approval. Use when the person says "set up my company base", asks to set up a company base, says they want to start a base, or answers yes to the setup offer. Say "set up my company base" whenever you are ready. Also handles "link this folder to my base", "unlink this folder from my base", and "show my linked folders", which connect a base to the folder somebody keeps their marketing material in. Also handles "finish setting up my base", which finishes taking in the finished documents and drafting the segments somebody chose when an earlier session stopped partway. Also handles "back up my base", "back this up" and "back up my base to <address>", which sends a copy of the base to the empty GitHub repository the GTM Base app made for it, after a review the person approves. Also handles "draft my messaging", and the same for the voice guide, buyer personas, product, competitors, design guide and source map. Also handles "join a base from a link", which arrives with the next release and is refused today with one sentence.
 ---
 
 # Set up a company base
@@ -1214,17 +1214,20 @@ computer until the session ends, which is the rule they agreed to in step 5c.
 ## Drafting another document after setup
 
 A base can hold more than the two documents setup drafts. When the person asks
-for their messaging, their voice guide, their buyer personas or their product
-document, or says yes to the inventory's offer to draft one, this section
-drafts it from material they name, or takes in a finished one as it stands.
-It writes only into a base that already exists, and only where nothing of that
-kind is kept yet. The step names are `messaging`, `voice`, `buyer-personas`
-and `product`; the commands below are written for two of them, and any of the
-four goes in their place.
+for their messaging, their voice guide, their buyer personas, their product
+document, their competitors or their design guide, or says yes to the
+inventory's offer to draft one, this section drafts it from material they
+name, or takes in a finished one as it stands. It writes only into a base that
+already exists, and only where nothing of that kind is kept yet. The step names
+are `messaging`, `voice`, `buyer-personas`, `product`, `competitors` and
+`design`; the commands below are written for two of them, and any of the six
+goes in their place.
 
 1. Start a run of its own and agree the material, the way setup does. For the
-   messaging, name the base's own customer profile and positioning as well,
-   because the messaging follows the strategy the base already holds.
+   messaging or the competitors, name the base's own customer profile and
+   positioning as well, because both follow the strategy the base already
+   holds. For the design guide, name the brand guide as text; a guide kept
+   only as pictures cannot be read.
 
    ```
    python3 scripts/join.py new-run

@@ -329,6 +329,10 @@ class AfterSetup(unittest.TestCase):
         self.base = moment_tests.Base(self.sandbox)
         self.content = os.path.join(os.environ["HOME"], "larkspur")
         support.write(os.path.join(self.content, "larkspur-site.md"), SITE)
+        # The day the fixtures say the material was written, which a
+        # competitor fact carries as its date (Unit T4.4).
+        written = datetime.datetime(2026, 11, 2, 12, 0, 0).timestamp()
+        os.utime(os.path.join(self.content, "larkspur-site.md"), (written, written))
         self.run_id = join_flow.new_run()
         join_flow.list_sources(self.content, self.run_id)
         join_flow.freeze_sources(self.content, SESSION, self.run_id)
@@ -512,7 +516,9 @@ class TestTheInventoryOffersThem(AfterSetup):
         self.assertEqual(inventory.STATE_PRESENT, cell("messaging").state)
         offered = sorted(kind for kind, _column in answer.draftable_missing)
         # This base predates the source map's starter, so it is offered too.
-        self.assertEqual(["buyer-personas", "product", "stack"], offered)
+        self.assertEqual(
+            ["buyer-personas", "competitors", "design", "product", "stack"], offered
+        )
         self.assertIn("buyer personas", answer.ask().lower())
         self.assertEqual(2, len(constants.REQUIRED_CONTEXT_FILES))
 

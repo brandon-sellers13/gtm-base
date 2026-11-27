@@ -1194,3 +1194,55 @@ DRAFT_RELEVANCE["product"] = (
     "changelog",
     "docs",
 )
+
+# --- Competitors and the design guide (Track 4, Units T4.4 and T4.5) ---------
+
+# Competitors are their own document again (Brandon's call 2 of the Track 4
+# plan, reversing call 10 of 2026-09-25), kept after the positioning and
+# differing by business, because competitor facts change far more often than
+# the positioning: a competitor's price change flags this document only. The
+# positioning keeps a short list of the alternatives and points here.
+COMPETITORS_PATH = "context/competitors.md"
+_COMPETITORS_KIND = BaseKind("competitors", COMPETITORS_PATH, True, True, True)
+BASE_KINDS = tuple(
+    one
+    for kind in BASE_KINDS
+    for one in ((kind, _COMPETITORS_KIND) if kind.key == "positioning" else (kind,))
+)
+# The design guide is drafted from a brand guide read as text, and taken in
+# as it stands when a finished one exists (call 3).
+BASE_KINDS = tuple(
+    kind._replace(adoptable=True, draftable=True) if kind.key == "design" else kind
+    for kind in BASE_KINDS
+)
+
+# The follow-through table's rows for competitors (Unit T4.1's table, as the
+# plan writes it). A competitors change suggests the positioning, whose short
+# list of alternatives changes only when an alternative is added or dropped;
+# it is a suggestion like every other row, and the person still chooses.
+KIND_FOLLOWS = dict(KIND_FOLLOWS)
+KIND_FOLLOWS["icps"] = KIND_FOLLOWS["icps"] + ("competitors",)
+KIND_FOLLOWS["positioning"] = KIND_FOLLOWS["positioning"] + ("competitors",)
+KIND_FOLLOWS["product"] = KIND_FOLLOWS["product"] + ("competitors",)
+KIND_FOLLOWS["competitors"] = ("positioning",)
+
+DRAFT_RELEVANCE["competitors"] = (
+    "positioning",
+    "competitor",
+    "battle",
+    "win",
+    "loss",
+    "lost",
+    "call",
+    "pricing",
+)
+DRAFT_RELEVANCE["design"] = (
+    "brand",
+    "design",
+    "style",
+    "logo",
+    "colour",
+    "color",
+    "type",
+    "readme",
+)

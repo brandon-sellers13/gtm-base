@@ -88,7 +88,10 @@ The body carries these level two headings, in this order:
 2. **Who it is for.** One paragraph, pointing at the ideal customer profile
    rather than repeating it.
 3. **What makes it different.** The claims the sources actually support, each
-   one with the quote it came from.
+   one with the quote it came from. When the sources name the alternatives a
+   buyer considers, list each one in a single line with why this company is
+   different from it, and stop there: the detail about each competitor belongs
+   in the competitors document, not here.
 4. **Their own words.** The sentences and phrases worth keeping, quoted exactly
    as they were written, one per line. If the material carries none, write one
    sentence saying so.

@@ -15,8 +15,8 @@ counts for no business when the kind differs by business, and the inventory
 lists it once so the owner can say which. A base whose map lists no business
 is read for the whole company, exactly as before.
 
-The messaging, the voice guide, the buyer personas and the product can be
-drafted on request from material the person names, or taken in as they stand
+The messaging, the voice guide, the buyer personas, the product, the
+competitors and the design guide can be drafted on request from material the person names, or taken in as they stand
 when a finished one exists. The source map's rows can be drafted from what the
 person says. Units 2.4a and 3.5 of Plan 1 make the goals, the metric
 definitions and a standard draftable in their own release, and until then the
@@ -50,7 +50,7 @@ Each business has its own. GTM Base can draft it, or take in a finished one.
 Overtaken when a feature ships or is dropped, a plan or price changes, or
 something planned is cancelled.
 
-Usually also overtakes: messaging, buyer personas.
+Usually also overtakes: messaging, buyer personas, competitors.
 
 ## Customer profile (`icps`)
 
@@ -62,7 +62,7 @@ stands.
 Overtaken when the business changes who it sells to, such as a move up-market
 or a segment added or dropped.
 
-Usually also overtakes: positioning, messaging, buyer personas.
+Usually also overtakes: positioning, messaging, buyer personas, competitors.
 
 ## Buyer personas (`buyer-personas`)
 
@@ -78,14 +78,32 @@ Usually also overtakes: messaging.
 
 ## Positioning (`positioning`)
 
-How the business describes itself against the alternatives, with its
-competitors folded in. Kept at `context/positioning.md`, or in a business's
-folder. Each business has its own. Setup drafts it.
+How the business describes itself against the alternatives, with a short
+list of those alternatives and one line on why it is different from each. The
+detail about each competitor is kept in the competitors document. Kept at
+`context/positioning.md`, or in a business's folder. Each business has its
+own. Setup drafts it.
 
 Overtaken when the business changes how it describes itself or which
 alternatives it is compared with.
 
-Usually also overtakes: messaging.
+Usually also overtakes: messaging, competitors.
+
+## Competitors (`competitors`)
+
+The alternatives the buyer actually considers, doing nothing and building it
+in house included, with what each is for, what it claims, where it wins,
+where the business wins and its public price. Every fact carries the date and
+the material it came from, because a fact without a date cannot be judged out
+of date. Kept at `context/competitors.md`, or in a business's folder. Each
+business has its own. GTM Base can draft it, or take in a finished one.
+
+Overtaken by a competitor's move, such as a launch, a price change, a new
+claim or an acquisition, and by a deal won or lost that shows a comparison is
+wrong. Recording a competitor's price change flags this document and not the
+positioning, which is why the two are kept apart.
+
+Usually also overtakes: positioning (only when an alternative is added or dropped).
 
 ## Messaging (`messaging`)
 
@@ -113,9 +131,13 @@ Usually also overtakes: nothing else.
 
 ## Design guide (`design`)
 
-How the company looks: colour by named role, type, and the rules for its
-logo. Kept at `context/design.md`. One serves the whole company, so it needs
-no `business:` line, though a business may keep its own in its folder.
+How the company looks: colour by named role, type, the rules for its logo,
+and the devices a piece of work must never use, written as sentences a person
+can confirm. Tone is left to the voice guide. No picture, font or other file
+is ever kept in the base. Kept at `context/design.md`. One serves the whole
+company, so it needs no `business:` line, though a business may keep its own
+in its folder. GTM Base can draft it from a brand guide read as text, or take
+in a finished one.
 
 Overtaken only by a change to the brand itself, such as a new logo or a
 colour retired. A strategy change does not overtake it.

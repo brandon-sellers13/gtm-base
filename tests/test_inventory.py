@@ -154,13 +154,16 @@ class TestTheListOfKinds(unittest.TestCase):
     """The named list the inventory reads against, in its fixed order."""
 
     def test_the_nine_kinds_of_the_context_standard_come_first_in_order(self):
-        paths = [kind.pattern for kind in constants.BASE_KINDS[:9]]
-        self.assertEqual(list(constants.CONTEXT_STANDARD_FILES), paths)
+        """With the competitors after the positioning since Track 4's T4.4 (call 2)."""
+        paths = [kind.pattern for kind in constants.BASE_KINDS[:10]]
+        expected = list(constants.CONTEXT_STANDARD_FILES)
+        expected.insert(expected.index("context/positioning.md") + 1, constants.COMPETITORS_PATH)
+        self.assertEqual(expected, paths)
 
     def test_then_the_source_map_the_standard_and_the_skill(self):
         self.assertEqual(
             [constants.STACK_PATH, "standards/<job>.md", "skills/<job>/SKILL.md"],
-            [kind.pattern for kind in constants.BASE_KINDS[9:]],
+            [kind.pattern for kind in constants.BASE_KINDS[10:]],
         )
 
     def test_the_two_kinds_call_one_puts_in_a_business_folder_differ(self):
@@ -172,9 +175,9 @@ class TestTheListOfKinds(unittest.TestCase):
                 self.assertIn(key, WHOLE)
 
     def test_only_the_kinds_whose_unit_shipped_are_draftable(self):
-        """Track 4's T4.2, T4.3 and T4.6 flipped theirs; 2.4a and 3.5 flip the rest."""
+        """Track 4's T4.2 to T4.6 flipped theirs; 2.4a and 3.5 flip the rest."""
         self.assertEqual(
-            ["product", "buyer-personas", "messaging", "voice", "stack"],
+            ["product", "buyer-personas", "competitors", "messaging", "voice", "design", "stack"],
             [kind.key for kind in constants.BASE_KINDS if kind.draftable],
         )
 
@@ -700,11 +703,11 @@ class TestWhatItOffers(unittest.TestCase):
     """It offers only what this release can draft, and says the rest arrives later."""
 
     def test_what_this_release_drafts_is_offered_and_the_rest_arrives_later(self):
-        """Track 4's T4.2, T4.3 and T4.6 made five kinds draftable."""
+        """Track 4's T4.2 to T4.6 made seven kinds draftable."""
         with support.Sandbox() as sandbox:
             found = Base(sandbox, setup_business=INSIGHTS).take()
             self.assertEqual(
-                ["product", "buyer-personas", "messaging", "voice", "stack"],
+                ["product", "buyer-personas", "competitors", "messaging", "voice", "design", "stack"],
                 list(dict.fromkeys(kind for kind, _column in found.draftable_missing)),
             )
             self.assertIn(inventory.DRAFTING_LATER_REST, found.sentences())

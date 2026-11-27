@@ -1213,6 +1213,12 @@ PYTHON_SENTENCES = (
     ("starter", "NOT_A_STARTER"),
     ("starter", "STANDARD_KEPT"),
     ("starter", "OFFER"),
+    # Track 4, Unit T4.7: update GTM Base.
+    ("update_check", "INSTALLED"),
+    ("update_check", "UNREADABLE"),
+    ("update_check", "CAN_TAKE"),
+    ("update_check", "TAKES_EVERYTHING"),
+    ("alternatives", "MOVE_OFFER"),
 )
 
 # Constants that read like a sentence but that no person ever reads. Each one
