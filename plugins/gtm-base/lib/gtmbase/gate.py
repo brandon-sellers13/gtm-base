@@ -63,7 +63,19 @@ import shlex
 import sys
 from typing import Any, Dict, List, Optional, Sequence, Tuple
 
-from . import approval, constants, layout, machine, marker, paths, scan, state, trust_surface
+from . import (
+    approval,
+    constants,
+    ids,
+    install_git_hook,
+    layout,
+    machine,
+    marker,
+    paths,
+    scan,
+    state,
+    trust_surface,
+)
 from .errors import GitError
 from .gitcmd import GitRunner, runner_or_default
 
@@ -108,6 +120,11 @@ REASON_SHARED_LINE = "straight-to-the-shared-line"
 # A send that takes away or writes over a proposal waiting on the shared copy
 # (the security review of P2 and P3, finding 3).
 REASON_PROPOSAL_REWRITE = "rewrites-a-proposal"
+# A setting given for one command that decides where a send goes or which
+# settings load, and a send from a shared base whose own check before a send
+# is not where git looks for it (the second security review of P2 and P3).
+REASON_SEND_SETTING = "a-send-setting-on-the-command-line"
+REASON_SEND_CHECK_MISSING = "the-send-check-is-not-in-place"
 
 # What a seat may still send straight to the shared line: the confirmation
 # lines an owner writes when they say a document is still right, which the app
@@ -115,6 +132,15 @@ REASON_PROPOSAL_REWRITE = "rewrites-a-proposal"
 BOOKKEEPING_PREFIX = "work/confirmations/"
 
 SENTENCES = {
+    REASON_SEND_SETTING: (
+        "GTM Base stopped this because it changes, for this one command, a git "
+        "setting that decides where a send goes or which settings git reads."
+    ),
+    REASON_SEND_CHECK_MISSING: (
+        "GTM Base stopped this because git's own check before a send is not in "
+        "place for this base. Open a new Claude Code session in the base, which "
+        "puts it back, and try again."
+    ),
     REASON_PROPOSAL_REWRITE: (
         "GTM Base stopped this because it would take away or write over a "
         "proposal that is waiting for its owner. Make a new proposal instead."
@@ -228,6 +254,36 @@ _ZERO_SHA = re.compile(r"^0{40,}$")
 
 # Settings that would point git at a different set of safeguards.
 _HOOKS_PATH_KEYS = ("core.hookspath", "hooks.path")
+
+
+def _steers_a_send(key: str) -> bool:
+    """Whether a setting decides where a send goes, what it carries, or which settings load.
+
+    Given for one command with `-c`, none of these is read by the checks here,
+    which read the base's settings as they stand, so a send could go somewhere
+    other than the place that was checked (the second security review of P2
+    and P3, finding 1).
+    """
+    key = key.strip().lower()
+    if key.startswith("include.") or key.startswith("includeif."):
+        return True
+    if key in ("push.default", "remote.pushdefault"):
+        return True
+    section, _dot, rest = key.partition(".")
+    name = rest.rsplit(".", 1)[-1] if "." in rest else ""
+    if section == "remote" and name in ("push", "pushurl", "url"):
+        return True
+    if section == "branch" and name in ("merge", "remote", "pushremote"):
+        return True
+    if section == "url" and name in ("insteadof", "pushinsteadof"):
+        return True
+    return False
+
+
+def _guarded_setting(key: str) -> bool:
+    """Whether a lasting `git config` of this key turns a check off or loads other settings."""
+    key = key.strip().lower()
+    return key in _HOOKS_PATH_KEYS or key == "include.path" or key.startswith("includeif.")
 
 # Shells whose `-c` argument is another command to read.
 _SHELLS = ("sh", "bash", "zsh", "dash", "ksh")
@@ -829,6 +885,8 @@ def _classify_git(
                 key = tokens[index].split("=", 1)[0].strip().lower()
                 if key in _HOOKS_PATH_KEYS:
                     result.deny(REASON_HOOKS_PATH)
+                elif _steers_a_send(key):
+                    result.deny(REASON_SEND_SETTING)
                 index += 1
             continue
         if token.startswith("--config-env=") or token.startswith("-c"):
@@ -840,6 +898,8 @@ def _classify_git(
             ).strip().lower()
             if key in _HOOKS_PATH_KEYS:
                 result.deny(REASON_HOOKS_PATH)
+            elif _steers_a_send(key):
+                result.deny(REASON_SEND_SETTING)
             index += 1
             continue
         name = token.split("=", 1)[0]
@@ -1090,11 +1150,17 @@ def _config_points_hooks_elsewhere(rest: Sequence[str]) -> bool:
             continue
         positional.append(token)
         index += 1
-    sections = set(key.split(".", 1)[0] for key in _HOOKS_PATH_KEYS)
+    sections = set(key.split(".", 1)[0] for key in _HOOKS_PATH_KEYS) | {"include"}
     if action == "rename":
-        return any(name.strip().lower() in sections for name in positional[:2])
+        return any(
+            name.strip().lower() in sections or name.strip().lower().startswith("includeif")
+            for name in positional[:2]
+        )
     if action == "set":
-        return len(positional) >= 2 and positional[0].strip().lower() in _HOOKS_PATH_KEYS
+        # Since the second security review of P2 and P3 (finding 1), settings
+        # that load other settings files count too: one of those can set the
+        # hooks folder, or where a send goes, from a file no check reads.
+        return len(positional) >= 2 and _guarded_setting(positional[0])
     return False
 
 
@@ -1226,20 +1292,127 @@ _GH_GRAPHQL_LANDS_RE = re.compile(
 )
 
 
+def _is_graphql(token: str) -> bool:
+    return token.strip().lstrip("/").split("?", 1)[0].lower() == "graphql"
+
+
+def _body_unreadable(token: str) -> bool:
+    """A request body this check cannot read: one taken from a file or a stream."""
+    return "=@" in token or token == "--input" or token.startswith("--input=")
+
+
 def _gh_reaches_the_shared_copy(tokens: Sequence[str]) -> bool:
-    """Whether a GitHub write would change a branch or a file on the shared copy."""
+    """Whether a GitHub write would change a branch or a file on a repository.
+
+    Every `gh api` write is read for the GraphQL operations that land a
+    change, wherever they stand, and a GraphQL request whose body comes from a
+    file or a stream counts as one, because it cannot be read here (the second
+    security review of P2 and P3, finding 3).
+    """
     words = _gh_words(list(tokens))
     if tuple(words[:2]) == constants.GH_MERGE:
         return True
     if not words or words[0] != "api":
         return False
     rest = [str(token) for token in tokens]
-    if any(token.lower() == "graphql" for token in rest):
-        # A query kept in a file cannot be read here, so it counts as one.
-        return any(
-            _GH_GRAPHQL_LANDS_RE.search(token) or "=@" in token for token in rest
-        )
+    if any(_GH_GRAPHQL_LANDS_RE.search(token) for token in rest):
+        return True
+    if any(_is_graphql(token) for token in rest) and any(_body_unreadable(t) for t in rest):
+        return True
     return any(_GH_API_LANDS_RE.search(token) for token in rest)
+
+
+# The repository a `gh api` path names, as `repos/<owner>/<name>/...`.
+_GH_API_REPO_RE = re.compile(r"^/?repos/([^/\s?]+)/([^/\s?]+)", re.IGNORECASE)
+
+
+def _gh_repository_named(tokens: Sequence[str]) -> Optional[str]:
+    """The repository a GitHub command names itself, as `host/owner/name`, or None."""
+    words = [str(token) for token in tokens]
+    named: Optional[str] = None
+    index = 1
+    while index < len(words):
+        token = words[index]
+        if token in ("-R", "--repo"):
+            named = words[index + 1] if index + 1 < len(words) else ""
+            index += 2
+            continue
+        if token.startswith("--repo="):
+            named = token.split("=", 1)[1]
+        elif token.startswith("-R") and len(token) > 2:
+            named = token[2:]
+        index += 1
+    if named is not None:
+        text = named.strip()
+        if "://" not in text and ":" not in text:
+            text = "https://%s" % (text if text.count("/") >= 2 else "github.com/" + text)
+        try:
+            return ids.canonical_remote_address(text)
+        except ValueError:
+            return ""
+    if _gh_words(words)[:1] == ["api"]:
+        for token in words[1:]:
+            match = _GH_API_REPO_RE.match(token)
+            if match:
+                return "github.com/%s/%s" % (match.group(1).lower(), match.group(2).lower())
+    return None
+
+
+def _recorded_shared_copies() -> set:
+    """Every shared copy this computer records for a base it backed up or joined."""
+    found = set()
+    try:
+        account = machine.load_machine_state_raw()
+    except Exception:
+        return found
+    for entry in list(getattr(account, "joined", None) or []):
+        remote = entry.get("remote") if isinstance(entry, dict) else None
+        if isinstance(remote, str) and remote:
+            try:
+                found.add(ids.canonical_remote_address(remote))
+            except ValueError:
+                continue
+    return found
+
+
+def _gh_targets_a_shared_copy(tokens: Sequence[str], cwd: str, git: GitRunner) -> bool:
+    """Whether a GitHub write that lands a change is aimed at a base's shared copy.
+
+    Decided by the repository the command is aimed at, not by the folder it is
+    typed in (the second security review of P2 and P3, finding 2): the one it
+    names with `-R` or in an API path, or else the one the folder's own
+    settings point at, as the GitHub tool itself works it out. A command whose
+    repository cannot be worked out counts as aimed at one.
+    """
+    recorded = _recorded_shared_copies()
+    named = _gh_repository_named(tokens)
+    if named is not None:
+        return not named or named in recorded
+    words = [str(token) for token in tokens]
+    if _gh_words(words)[:1] == ["api"]:
+        # A GraphQL request, or a path that names no repository: GitHub reads
+        # the repository out of the request, and this check cannot.
+        return True
+    # The GitHub tool picks among the folder's remotes, so every one counts,
+    # read from the folder's own settings as written rather than through any
+    # address rewriting.
+    try:
+        top = paths.git_root(cwd, runner=git)
+        listed = (
+            git.run(["config", "--get-regexp", r"^remote\..*\.url$"], cwd=top) if top else None
+        )
+    except Exception:
+        return True
+    remotes = set()
+    for line in (listed.out().splitlines() if listed is not None and listed.ok else []):
+        _key, _space, value = line.partition(" ")
+        try:
+            remotes.add(ids.canonical_remote_address(ids.strip_userinfo(value.strip())))
+        except ValueError:
+            continue
+    if not remotes:
+        return True
+    return bool(remotes & recorded) or shared_line_is_held(cwd, git)
 
 
 def _classify_gh(tokens: List[str], result: Classification) -> None:
@@ -2288,9 +2461,12 @@ def check_command(
     # Accepting a proposal, or writing to a branch or a file through GitHub's
     # own interface, lands a change on the shared copy without a push, so the
     # checks on a push never see it (the security review of P2 and P3,
-    # finding 1). Refused from a base with a shared copy.
-    if any(_gh_reaches_the_shared_copy(tokens) for tokens in result.gh_writes):
-        if shared_line_is_held(cwd, runner):
+    # finding 1). Refused when it is aimed at a base's shared copy, wherever it
+    # is typed (the second review, finding 2).
+    for tokens in result.gh_writes:
+        if _gh_reaches_the_shared_copy(tokens) and _gh_targets_a_shared_copy(
+            tokens, cwd, runner
+        ):
             return sentence_for(REASON_SHARED_LINE)
 
     # The record of having read somebody's own documents, in the half of it
@@ -2387,13 +2563,23 @@ def check_command(
             runner, where, push, branch_now
         ):
             return sentence_for(REASON_PROPOSAL_REWRITE)
-        # Straight onto the shared line from a base with a shared copy. Asked
-        # after the content is read, so a send carrying a key or an address is
-        # refused for that, which is the more useful thing to hear first.
+        # Git's own check is the line that holds when this one misses
+        # something, so a send from a shared base goes only while it is in
+        # place (the second security review of P2 and P3, finding 1).
+        unguarded = (
+            _looks_like_a_base(where, runner)
+            and shared_line_is_held(where, runner)
+            and not install_git_hook.in_place(where, runner)
+        )
+        # Straight onto the shared line from a base with a shared copy. Both
+        # are asked after the content is read, so a send carrying a key or an
+        # address is refused for that, which is the more useful thing to hear.
         held = _looks_like_a_base(where, runner) and _reaches_the_shared_line(
             runner, where, push, branch_now
         )
         if push.delete or not reads_this_one:
+            if unguarded:
+                return sentence_for(REASON_SEND_CHECK_MISSING)
             if held:
                 return sentence_for(REASON_SHARED_LINE)
             continue
@@ -2401,6 +2587,8 @@ def check_command(
             reason = scan_range(runner, where, start, end, allowlist)
             if reason:
                 return reason
+        if unguarded:
+            return sentence_for(REASON_SEND_CHECK_MISSING)
         if held:
             return sentence_for(REASON_SHARED_LINE)
     return None

@@ -51,6 +51,8 @@ def _bare(path):
 class SeatCase(unittest.TestCase):
     """A teammate's seat on a base the owner already backed up."""
 
+    keep_the_send_check = False
+
     def setUp(self):
         self.box = Sandbox().__enter__()
         self.addCleanup(self.box.__exit__, None, None, None)
@@ -78,7 +80,9 @@ class SeatCase(unittest.TestCase):
         # which here is the folder of bare repositories rather than GitHub, so
         # that check would refuse every send. On a real computer it is handed
         # the GitHub address; tests/test_join_link.py proves what it allows.
-        os.remove(os.path.join(self.root, ".git", "hooks", "pre-push"))
+        # Classes that only ask the checks, and never send, keep it in place.
+        if not self.keep_the_send_check:
+            os.remove(os.path.join(self.root, ".git", "hooks", "pre-push"))
         self.gh_log = os.path.join(self.box.path, "gh-calls.jsonl")
         os.environ["GH_FAKE_LOG"] = self.gh_log
         self.addCleanup(os.environ.pop, "GH_FAKE_LOG", None)
@@ -241,11 +245,13 @@ class TestDraftsAfterSetup(SeatCase):
         self.assertTrue(any(name.startswith(constants.CONFIRMATIONS_DIR + "/") for name in changed), changed)
 
 
-class TestTheSecurityReviewOfP2AndP3(SeatCase):
-    """The four findings of the one-pass review, each one a way round "never main"."""
+class ReviewCase(SeatCase):
+    """A seat whose checks are asked, with git's own check before a send in place."""
+
+    keep_the_send_check = True
 
     def setUp(self):
-        super(TestTheSecurityReviewOfP2AndP3, self).setUp()
+        super(ReviewCase, self).setUp()
         from gtmbase import gate
 
         self.gate = gate
@@ -261,6 +267,10 @@ class TestTheSecurityReviewOfP2AndP3(SeatCase):
 
     def said(self, reason):
         return self.gate.sentence_for(reason)
+
+
+class TestTheSecurityReviewOfP2AndP3(ReviewCase):
+    """The four findings of the one-pass review, each one a way round "never main"."""
 
     # Finding 1 ---------------------------------------------------------------
 
@@ -283,7 +293,9 @@ class TestTheSecurityReviewOfP2AndP3(SeatCase):
         elsewhere = os.path.join(self.box.path, "elsewhere")
         os.makedirs(elsewhere)
         git(["init", "-q", "-b", "main"], cwd=elsewhere)
+        git(["remote", "add", "origin", "https://github.com/someone/other-project"], cwd=elsewhere)
         self.assertIsNone(self.check("gh pr merge 12 --merge", cwd=elsewhere))
+        self.assertIsNone(self.check("gh pr merge 12 --merge -R someone/other-project", cwd=elsewhere))
 
     # Finding 2 ---------------------------------------------------------------
 
@@ -378,6 +390,109 @@ class TestTheSecurityReviewOfP2AndP3(SeatCase):
         markers = [line for line in body.splitlines() if validate.parse_marker_line(line)]
         self.assertEqual([real], markers)
         self.assertEqual(validate.parse_marker_line(real), validate.find_marker(body))
+
+
+class TestTheSecondSecurityReview(ReviewCase):
+    """The second review's three findings: settings, the repository aimed at, and GraphQL."""
+
+    def setUp(self):
+        super(TestTheSecondSecurityReview, self).setUp()
+        self.elsewhere = os.path.join(self.box.path, "elsewhere")
+        os.makedirs(self.elsewhere)
+
+    # Finding 1 ---------------------------------------------------------------
+
+    def test_a_setting_that_steers_a_send_is_refused_on_the_command_line(self):
+        refused = self.said(self.gate.REASON_SEND_SETTING)
+        for command in (
+            "git -c push.default=matching push",
+            "git -c remote.origin.push=refs/heads/x:refs/heads/main push origin x",
+            "git -c branch.main.merge=refs/heads/main push",
+            "git -c include.path=/tmp/more push origin proposal/stg-0123456789abcdef",
+            "git -c includeIf.gitdir:/tmp/.path=/tmp/more status",
+            "git -c url.https://elsewhere.example/.pushInsteadOf=https://github.com/ push",
+            "git --config-env=remote.origin.pushurl=ELSEWHERE push",
+        ):
+            self.assertEqual(refused, self.check(command), command)
+        self.assertIsNone(self.check("git -c color.ui=never status"))
+
+    def test_a_lasting_setting_that_loads_other_settings_is_refused(self):
+        refused = self.said(self.gate.REASON_HOOKS_PATH)
+        for command in (
+            "git config include.path /tmp/more",
+            "git config --global includeIf.gitdir:~/bases/.path /tmp/more",
+            "git config --rename-section x include",
+        ):
+            self.assertEqual(refused, self.check(command), command)
+        self.assertIsNone(self.check("git config --get include.path"))
+
+    def test_a_send_goes_only_while_gits_own_check_is_in_place(self):
+        from gtmbase import install_git_hook
+
+        git(["checkout", "-q", "-b", "proposal/stg-0123456789abcdef"], cwd=self.root)
+        push = "git push origin proposal/stg-0123456789abcdef"
+        self.assertTrue(install_git_hook.in_place(self.root))
+        self.assertIsNone(self.check(push))
+        missing = self.said(self.gate.REASON_SEND_CHECK_MISSING)
+        # The hooks folder moved by a line written straight into the settings
+        # file, which no command check sees.
+        with open(os.path.join(self.root, ".git", "config"), "a", encoding="utf-8") as handle:
+            handle.write("[core]\n\thooksPath = /tmp/no-hooks-here\n")
+        self.assertFalse(install_git_hook.in_place(self.root))
+        self.assertEqual(missing, self.check(push))
+        git(["config", "--unset", "core.hooksPath"], cwd=self.root)
+        self.assertIsNone(self.check(push))
+        # And the check itself taken away.
+        os.remove(os.path.join(self.root, ".git", "hooks", "pre-push"))
+        self.assertEqual(missing, self.check(push))
+
+    def test_a_new_session_puts_the_check_back_on_a_shared_base(self):
+        import datetime
+
+        from gtmbase import install_git_hook, session_start
+
+        hook = os.path.join(self.root, ".git", "hooks", "pre-push")
+        os.remove(hook)
+        self.assertFalse(install_git_hook.in_place(self.root))
+        session_start.run(
+            {"session_id": "s-later", "source": "startup", "cwd": self.root},
+            client="claude",
+            now=datetime.datetime(2026, 11, 27, 9, 0, 0),
+            plugin_root=PLUGIN_ROOT,
+            part="both",
+        )
+        self.assertTrue(install_git_hook.in_place(self.root))
+
+    # Finding 2 ---------------------------------------------------------------
+
+    def test_a_merge_or_write_aimed_at_a_shared_copy_is_refused_from_anywhere(self):
+        refused = self.said(self.gate.REASON_SHARED_LINE)
+        for command in (
+            "gh pr merge 12 --merge -R acme-co/acme-base",
+            "gh pr merge 12 --repo=github.com/acme-co/acme-base",
+            "gh pr merge 12 -R https://github.com/acme-co/acme-base",
+            "gh api -X PUT repos/acme-co/acme-base/contents/context/strategy/icp.md -f content=aGk= -f message=x",
+            "gh api -X PATCH /repos/ACME-CO/acme-base/git/refs/heads/main -f sha=abc",
+        ):
+            self.assertEqual(refused, self.check(command, cwd=self.elsewhere), command)
+
+    def test_a_write_whose_repository_cannot_be_worked_out_is_refused(self):
+        refused = self.said(self.gate.REASON_SHARED_LINE)
+        # A folder that is no repository at all, so the tool cannot tell either.
+        self.assertEqual(refused, self.check("gh pr merge 12", cwd=self.elsewhere))
+        self.assertEqual(refused, self.check("gh pr merge 12 -R ''", cwd=self.elsewhere))
+
+    # Finding 3 ---------------------------------------------------------------
+
+    def test_every_api_write_is_read_for_graphql_operations(self):
+        refused = self.said(self.gate.REASON_SHARED_LINE)
+        for command in (
+            "gh api -X POST /graphql -f query='mutation { createRef(input: {}) { clientMutationId } }'",
+            "gh api /graphql --input mutation.json",
+            "gh api graphql -F query=@mutation.graphql",
+            "gh api -X POST some/other/path -f q='mutation { mergePullRequest(input: {}) { x } }'",
+        ):
+            self.assertEqual(refused, self.check(command, cwd=self.elsewhere), command)
 
 
 if __name__ == "__main__":

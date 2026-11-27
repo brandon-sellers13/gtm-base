@@ -170,6 +170,31 @@ def install(
     return code, hooks_dir
 
 
+def in_place(base_root: str, runner: Optional[GitRunner] = None) -> bool:
+    """Whether the safeguard is where git looks for hooks for this folder, right now.
+
+    Asked of git itself, so a hooks folder moved in any settings file, or a
+    safeguard deleted or replaced after it was installed, answers no (the
+    second security review of P2 and P3, finding 1). A question that cannot be
+    answered answers no.
+    """
+    git = runner_or_default(runner)
+    found = git.run(["rev-parse", "--git-path", "hooks"], cwd=base_root)
+    if not found.ok or not found.out():
+        return False
+    folder = found.out()
+    if not os.path.isabs(folder):
+        folder = os.path.join(base_root, folder)
+    hook_path = os.path.join(folder, HOOK_NAME)
+    if not _is_ours(hook_path) or not os.access(hook_path, os.X_OK):
+        return False
+    try:
+        with open(hook_path, encoding="utf-8", errors="replace") as handle:
+            return "push_gate.py" in handle.read(8000)
+    except OSError:
+        return False
+
+
 def _install(
     git: GitRunner, base_root: str, plugin_root: str
 ) -> Tuple[str, Optional[str]]:
