@@ -382,7 +382,7 @@ class TheInventoryOffer(unittest.TestCase):
         return inventory.take(root, base_id, runner=support.NoRemoteRunner(), today=TODAY).sentences()
 
     def offer(self):
-        return starter.OFFER % ("drift grade", "drift grade")
+        return starter.offer_sentence(SKILL)
 
     def test_a_base_with_a_profile_and_a_positioning_is_offered_it(self):
         with support.Sandbox() as sandbox:

@@ -1910,8 +1910,8 @@ All ten decisions made on 2026-11-27. No review per unit; the end-to-end run in 
 - [x] T4.4. Competitors.
 - [x] T4.5. Design.
 - [x] T4.7. Update GTM Base.
-- [ ] T4.9. The content brief. (after T4.8 and T4.2)
-- [ ] T4.10. The outbound sequence. (after T4.8)
+- [x] T4.9. The content brief. (after T4.8 and T4.2)
+- [x] T4.10. The outbound sequence. (after T4.8)
 
 ### 2026-10-10, Plan 1 of Phases 2 and 3 (branch claude/plan-1-meta-skill-3d436e)
 Plan: `docs/plans/2026-10-10-002-feat-plan-1-company-skills-and-meta-skill-plan.md`. Planning only; no product code.

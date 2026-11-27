@@ -93,6 +93,13 @@ HANDS_BACK = (OUTCOME_NOT_CHECKED, OUTCOME_FLAGGED, OUTCOME_READY_WITH_GAPS, OUT
 READABLE_KINDS = (docpaths.KIND_CONTEXT, docpaths.KIND_STANDARD, docpaths.KIND_STACK)
 
 # The settings a skill declares its reads with (CS21).
+# Track 4, Units T4.9 and T4.10: the one folder a skill may declare, among
+# what it reads if the base holds it. It stands for every segment document
+# the base last saved there, each read and checked like any declared
+# document. A segment's name differs by company, so it cannot be declared by
+# path; an empty folder is not a gap, because a base need not have segments.
+SEGMENTS_FOLDER = constants.SEGMENTS_DIR + "/"
+
 READS_REQUIRED = "reads_required"
 READS_OPTIONAL = "reads_optional"
 STANDARD = "standard"
@@ -306,6 +313,9 @@ def declaration_of(skill_text: str) -> Declaration:
             value = []
         checked = []
         for item in value:
+            if key == READS_OPTIONAL and item == SEGMENTS_FOLDER:
+                checked.append(SEGMENTS_FOLDER)
+                continue
             path = _document_path(item)
             if path is None:
                 problems.append((key, item))
@@ -507,6 +517,7 @@ def _work(result, base_root, base_id, skill, conversation, git, today) -> None:
     try:
         if not base_reader.map_text(base_root):
             raise GtmBaseError("the map could not be read", code="unreadable")
+        declared = _with_segments(declared, base_root, git)
         for path in declared:
             saved[path] = _saved_document(base_root, path, git)
     except (GtmBaseError, OSError):
@@ -603,6 +614,55 @@ def _gap_and_unsaved_sentences(result: Start) -> List[str]:
     said = [GAP_SAYS % names.document_name(path) for path in result.gaps]
     said.extend(_opening(UNSAVED_SAYS % names.document_name(path)) for path in result.unsaved)
     return said
+
+
+# The one kind of entry the segments folder stands for: a plain file, in the
+# saved tree's own words, so a link or a folder inside it is never read.
+_PLAIN_FILE_MODES = ("100644", "100755")
+
+
+def _saved_segments(base_root: str, git: GitRunner) -> List[str]:
+    """Each `.md` file the base last saved directly in the segments folder, by path.
+
+    Read from the saved tree itself, one level deep: a folder inside the
+    segments folder, a link, or anything that is not a plain file is left
+    out, and nothing on the disk is read, so nothing outside the base can be
+    reached through it. A base with no saved history, or no segments folder,
+    holds none. A listing that fails is a base that cannot be read.
+    """
+    if not authority._has_history(base_root, git):
+        return []
+    listed = git.run(["ls-tree", "-z", "HEAD", "--", SEGMENTS_FOLDER], cwd=base_root)
+    if not listed.ok:
+        raise GtmBaseError("the segments could not be listed", code="unreadable")
+    found: List[str] = []
+    for entry in listed.stdout.split("\0"):
+        if not entry or "\t" not in entry:
+            continue
+        info, name = entry.split("\t", 1)
+        parts = info.split()
+        if len(parts) != 3 or parts[0] not in _PLAIN_FILE_MODES or parts[1] != "blob":
+            continue
+        if not name.startswith(SEGMENTS_FOLDER):
+            continue
+        rest = name[len(SEGMENTS_FOLDER):]
+        if not rest.endswith(".md") or "/" in rest or rest.startswith("."):
+            continue
+        found.append(name)
+    return sorted(found)
+
+
+def _with_segments(declared: List[str], base_root: str, git: GitRunner) -> List[str]:
+    """The declared paths, with the segments folder standing for each saved segment document."""
+    if SEGMENTS_FOLDER not in declared:
+        return declared
+    segments = _saved_segments(base_root, git)
+    found: List[str] = []
+    for path in declared:
+        for one in (segments if path == SEGMENTS_FOLDER else [path]):
+            if one not in found:
+                found.append(one)
+    return found
 
 
 def _saved_document(base_root: str, path: str, git: GitRunner) -> Optional[str]:

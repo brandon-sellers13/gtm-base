@@ -12,7 +12,7 @@ reads_optional: [context/voice.md]
 standard: standards/<job>.md
 ```
 
-Each declared path must be a context document, a standard or the source map, because those are the documents the moment-of-use check runs on. The standard is always required. A skill's own text never names the runner's commands (`use_skill.py`, `use-skill`, `gtmbase`), because in a chat the connector serves the skill and those commands do not exist there. The contract check refuses a skill that does.
+Each declared path must be a context document, a standard or the source map, because those are the documents the moment-of-use check runs on. One folder may be declared among what a skill reads if the base holds it: `context/icps/`, which stands for every segment document the base last saved there, each read and checked like any other declared document. A segment's name differs by company, so it cannot be declared by path, and an empty folder is not a gap (Track 4, Units T4.9 and T4.10). The standard is always required. A skill's own text never names the runner's commands (`use_skill.py`, `use-skill`, `gtmbase`), because in a chat the connector serves the skill and those commands do not exist there. The contract check refuses a skill that does.
 
 ## Start
 
