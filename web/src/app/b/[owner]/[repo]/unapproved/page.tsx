@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { CleanUrl } from "@/components/CleanUrl";
 import { Header } from "@/components/Header";
 import { SubmitButton } from "@/components/SubmitButton";
+import { mainRuleState } from "@/lib/mainRule";
 import { readForPage } from "@/lib/pageData";
 import { readBase } from "@/lib/reader";
 import { currentSession } from "@/lib/session";
@@ -36,6 +37,7 @@ export default async function UnapprovedPage({
   const base = await readForPage(() => readBase(session.token, owner, repo));
   const { items } = await readForPage(() => listUnapproved(session.token, base.owner, base.repo));
   const isOwner = await readForPage(() => isBaseOwner(session.token, base.owner, base.repo, session.emails));
+  const rule = await mainRuleState(session.token, base.owner, base.repo);
 
   return (
     <div>
@@ -52,6 +54,15 @@ export default async function UnapprovedPage({
         <p className="gb-lede mt-4">
           These changes went straight into the base instead of coming in as a proposal the owner accepted. Keep each one
           if it is right, or undo it.
+        </p>
+        <p className="gb-help mt-3">
+          {rule === "on"
+            ? "The main line of this base is protected, so only GTM Base and the repository's admins can write to it directly. Anything listed here came from one of them, or arrived before it was protected."
+            : rule === "off"
+              ? "The main line of this base is not protected yet. Its owner can protect it on the Team page, and then GitHub refuses changes that skip approval."
+              : rule === "needs-paid-plan"
+                ? "GitHub only protects the main line of a private repository on a paid plan, so on this plan a teammate can still write to it directly. This list is how those changes are caught."
+                : "This list is how changes that skipped approval are caught."}
         </p>
 
         {notice && NOTICES[notice] && (
