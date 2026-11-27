@@ -92,9 +92,11 @@ A skill reaches the base only this way. Never write a file into the base's
 
 A new skill needs two yeses: its creator's, and the base owner's or an
 administrator's. When the creator is the base owner or an administrator, one
-yes is both. Otherwise the creator's yes is recorded on this computer and
-nothing is written until the base owner or an administrator approves it. A
-changed skill needs one yes from its owner, the base owner or an
+yes is both. Otherwise the two may come in either order: the first is recorded
+on this computer and nothing is written until the second is given. When the
+base owner or an administrator gives the last yes, other computers on the base
+can accept the skill; when the creator gives it, they cannot, and the base
+owner approves it again as a change. A changed skill needs one yes from its owner, the base owner or an
 administrator.
 
 ## When this computer has not approved a skill

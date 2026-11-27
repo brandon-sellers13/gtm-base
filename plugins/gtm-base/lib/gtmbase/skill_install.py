@@ -9,10 +9,14 @@ on its `SKILL.md` owner line before it is shown (CS7), the contract check
 runs before anything is shown and again before anything is written (CS26),
 and it needs two yeses (CS6): the creator's, and the base owner's or an
 administrator's. When the creator is the base owner or an administrator their
-one yes counts as both. The creator's yes may wait on this computer as a
-prepared creation outside `skills/`; the yes that writes is always the base
-owner's or an administrator's, so a yes kept in a file this computer can
-rewrite never stands in for theirs.
+one yes counts as both. The two come in either order (Brandon's decision of
+2026-11-27): the first waits on this computer as a prepared creation outside
+`skills/` and writes nothing, and the second writes. A yes kept in a file
+this computer can rewrite is protected only as far as this computer is
+(CS14). On every other computer a version is accepted only when the record's
+own author held a role before the install, so when the creator's yes is the
+one that writes, other computers see no authority behind it and refuse it,
+which is the safe direction.
 
 Changing replaces a skill that is already there with a whole new version,
 shown whole, the contract check passing first, approved by one address in the
@@ -123,6 +127,10 @@ NOT_ALLOWED = (
 WAITING_FOR_THE_BASE_OWNER = (
     "Your yes as the skill's creator is recorded on this computer, and nothing "
     "is written yet. The base owner or an administrator approves it next."
+)
+WAITING_FOR_THE_CREATOR = (
+    "Your yes is recorded on this computer, and nothing is written yet. The "
+    "skill's creator approves it next."
 )
 UNSAVED = (
     "Nothing was written, because this base has unsaved work in it. Save or "
@@ -529,19 +537,37 @@ def approve(
         _checked_files(base_root, skill, files, kept["by"])
         role = _authority_role(base_root, skill, kept["kind"], address, git)
         creator_too = False
+        approver = address
         if kept["kind"] == KIND_INSTALL:
+            # Two yeses, in either order (CS6, Brandon's decision of
+            # 2026-11-27): the creator's, and the base owner's or an
+            # administrator's. One person holding both gives both. Whichever
+            # comes first waits on this computer and writes nothing; the
+            # second writes.
             is_creator = address == kept["by"]
-            if role is None:
-                if not is_creator:
-                    return Done(False, CODE_NOT_ALLOWED, NOT_ALLOWED)
-                # The creator's yes waits here; nothing is written (CS6).
+            if role is None and not is_creator:
+                return Done(False, CODE_NOT_ALLOWED, NOT_ALLOWED)
+            if is_creator:
                 kept["creator_yes"] = True
+            if role is not None:
+                kept["authority_yes"] = {"address": address, "role": role}
+            given = kept.get("authority_yes")
+            if not kept.get("creator_yes") or not isinstance(given, dict):
                 atomic_write_json(where, kept, inside=_folder(base_id))
-                return Done(False, CODE_WAITING, WAITING_FOR_THE_BASE_OWNER)
-            if not is_creator:
-                if not kept.get("creator_yes"):
-                    return Done(False, CODE_NOT_ALLOWED, NOT_ALLOWED)
-                creator_too = True
+                return Done(
+                    False,
+                    CODE_WAITING,
+                    WAITING_FOR_THE_BASE_OWNER if kept.get("creator_yes") else WAITING_FOR_THE_CREATOR,
+                )
+            role = given.get("role")
+            approver = given.get("address")
+            if role not in authority.ROLES or not approver:
+                return Done(False, CODE_NOT_WAITING, NOT_WAITING)
+            # A yes kept from earlier counts only while its giver still holds
+            # the role, read from the map as it stands at the write.
+            if _authority_role(base_root, skill, kept["kind"], approver, git) != role:
+                return Done(False, CODE_NOT_ALLOWED, NOT_ALLOWED)
+            creator_too = approver != kept["by"]
         elif role is None:
             return Done(False, CODE_NOT_ALLOWED, NOT_ALLOWED)
         record_path, record_text = _record(kept, role, creator_too, today)
@@ -578,7 +604,7 @@ def approve(
         skill,
         {path: authority.bytes_hash(files[path].encode("utf-8")) for path in files},
     )
-    authority.trust(base_id, manifest, address, role)
+    authority.trust(base_id, manifest, approver, role)
     remove(where)
     return Done(
         True, None, INSTALLED if kept["kind"] == KIND_INSTALL else CHANGED, saved_work=saved

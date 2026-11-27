@@ -1081,6 +1081,7 @@ PYTHON_SENTENCES = (
     ("skill_install", "MOVED"),
     ("skill_install", "NOT_ALLOWED"),
     ("skill_install", "WAITING_FOR_THE_BASE_OWNER"),
+    ("skill_install", "WAITING_FOR_THE_CREATOR"),
     ("skill_install", "UNSAVED"),
     ("skill_install", "NOT_ON_MAIN"),
     ("skill_install", "COULD_NOT_SAVE"),
