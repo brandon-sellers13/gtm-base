@@ -102,9 +102,13 @@ function firstDifference(a, b) {
 }
 
 {
-  // The seam for Track 4's folder declaration: off until the runner reads one.
+  // Track 4's folder declaration: only context/icps/, only among what a skill
+  // reads if present, and refused whenever that folder is not open.
   const text = "---\nreads_required: [context/icps.md]\nreads_optional: [context/icps/, context/voice.md]\nstandard: standards/x.md\n---\n\n# X\n";
-  check("a folder in reads_optional is refused while no folder is open", declarationOf(text).problems[0]?.[1] === "context/icps/");
+  check("a folder in reads_optional is refused while no folder is open", declarationOf(text, []).problems[0]?.[1] === "context/icps/");
+  check("context/icps/ is the one folder open by default, as the plugin's runner reads it", declarationOf(text).problems.length === 0);
+  const other = declarationOf(text.replace("context/icps/, ", "context/strategy/, "));
+  check("any other folder is refused by default", other.problems[0]?.[1] === "context/strategy/");
   const open = declarationOf(text, ["context/icps/"]);
   check("with context/icps/ open, the same declaration is valid", open.problems.length === 0);
   const required = declarationOf(text.replace("reads_required: [context/icps.md]", "reads_required: [context/icps/]"), ["context/icps/"]);
@@ -131,13 +135,13 @@ function firstDifference(a, b) {
   check("an empty or missing folder adds nothing", same(empty.map((r) => r.path), ["standards/x.md", "context/icps.md", "context/voice.md"]));
 
   // Through a whole start: the approved scenario, with a folder declared and opened.
-  const base = fixtures.find((f) => f.name === "an approved skill that names a folder (refused until the runner reads folders)");
+  const base = fixtures.find((f) => f.name === "an approved skill that names the segments folder, with two segments saved");
   const world = {
     ...base.world,
     files: { ...base.world.files, "context/icps/enterprise.md": "---\nkind: icp\nowner: owner@example.com\nsources: []\nstatus: draft\n---\n\n# Enterprise\n" },
   };
   const verdict = verdictFor({ ...base.snapshot, files: world.files });
-  const started = await startSkill(world, verdict, "drift-grade", { folders: ["context/icps/"] });
+  const started = await startSkill(world, verdict, "drift-grade");
   check(
     "with the folder open, a start hands on each segment through the check, and an absent folder file is no gap",
     started.outcome === "ready-with-gaps" &&
@@ -153,7 +157,7 @@ function firstDifference(a, b) {
         "---\nid: stg-ffffffffffffffff\nkind: change\nhappened_on: 2026-11-10\nwritten_on: 2026-11-11\nnoted_by: owner@example.com\nsource: a call\naffects: [context/icps/enterprise.md]\nreview_by: 2026-12-15\norigin: manual\nstatus: open\n---\n\nEnterprise buyers moved.\n",
     },
   };
-  const flaggedStart = await startSkill(flaggedWorld, verdictFor({ ...base.snapshot, files: flaggedWorld.files }), "drift-grade", { folders: ["context/icps/"] });
+  const flaggedStart = await startSkill(flaggedWorld, verdictFor({ ...base.snapshot, files: flaggedWorld.files }), "drift-grade");
   check("a segment behind a recorded change is flagged like any document", flaggedStart.waiting && same(flaggedStart.flagged, ["context/icps/enterprise.md"]), JSON.stringify(flaggedStart.flagged));
 }
 

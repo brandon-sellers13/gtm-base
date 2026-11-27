@@ -27,11 +27,30 @@ _PLUGIN_ROOT = os.path.dirname(
 )
 STARTER_DIR = os.path.join(_PLUGIN_ROOT, "starter")
 
-# Each shipped skill, the words it is called by, and the documents a base has
-# to hold before it is offered: the ones the skill cannot run without.
+# Each shipped skill, the words it is called by, the documents a base has to
+# hold before it is offered, and what it does, said in the offer. Drift grade
+# and the outbound sequence need what setup writes; the content brief also
+# needs the messaging, because a brief without it has no claim to give.
 DRIFT_GRADE = "drift-grade"
+CONTENT_BRIEF = "content-brief"
+OUTBOUND_SEQUENCE = "outbound-sequence"
+_SETUP = ("context/icps.md", "context/positioning.md")
 STARTER_SKILLS: Dict[str, tuple] = {
-    DRIFT_GRADE: ("drift grade", ("context/icps.md", "context/positioning.md")),
+    DRIFT_GRADE: (
+        "drift grade",
+        _SETUP,
+        "checks a piece of marketing work against the documents your team approved",
+    ),
+    CONTENT_BRIEF: (
+        "content brief",
+        _SETUP + ("context/messaging.md",),
+        "writes a brief a writer can work from, with every gap named",
+    ),
+    OUTBOUND_SEQUENCE: (
+        "outbound sequence",
+        _SETUP,
+        "writes an outbound email sequence for one segment, with every claim traced to its document",
+    ),
 }
 
 CODE_NOT_A_STARTER = "not-a-starter"
@@ -44,9 +63,8 @@ STANDARD_KEPT = (
     "as it is and only the skill is prepared."
 )
 OFFER = (
-    "Your base holds a customer profile and a positioning, so it can take the "
-    "%s skill that comes with GTM Base, which checks a piece of marketing work "
-    "against them. Say \"install %s\" when you want it."
+    "Your base holds what the %s skill that comes with GTM Base needs, so it "
+    "can take it; it %s. Say \"install %s\" when you want it."
 )
 
 
@@ -83,7 +101,7 @@ def standard_text(skill: str) -> Optional[str]:
 def offered(base_root: str) -> List[str]:
     """The shipped skills this base could take: it holds what each needs, and not the skill."""
     found: List[str] = []
-    for skill, (_said, needs) in STARTER_SKILLS.items():
+    for skill, (_said, needs, _does) in STARTER_SKILLS.items():
         if os.path.lexists(os.path.join(base_root, constants.SKILLS_DIR, skill)):
             continue
         if all(os.path.isfile(os.path.join(base_root, *path.split("/"))) for path in needs):
@@ -91,11 +109,13 @@ def offered(base_root: str) -> List[str]:
     return found
 
 
+def offer_sentence(skill: str) -> str:
+    said, _needs, does = STARTER_SKILLS[skill]
+    return OFFER % (said, does, said)
+
+
 def offer_sentences(base_root: str) -> List[str]:
-    return [
-        OFFER % (STARTER_SKILLS[skill][0], STARTER_SKILLS[skill][0])
-        for skill in offered(base_root)
-    ]
+    return [offer_sentence(skill) for skill in offered(base_root)]
 
 
 def prepare(

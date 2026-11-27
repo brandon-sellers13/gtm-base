@@ -179,9 +179,13 @@ The written instructions for one job that uses the base. Kept at
 install, which needs the creator's yes and the base owner's or an
 administrator's, and the inventory counts what is there.
 
-GTM Base comes with one skill, drift grade, which checks a piece of marketing
+GTM Base comes with three skills. Drift grade checks a piece of marketing
 work against the customer profile, the positioning and, when the base holds
 them, the messaging, the voice guide, the competitors and the buyer
-personas. The inventory offers it once a base holds a customer profile and a
-positioning and does not have it yet. It is installed with its standard,
-`standards/drift-grade.md`, and the base owns both from then on.
+personas. The content brief writes a brief a writer can work from, in a named
+segment's own words when the base holds that segment's document. The
+outbound sequence writes an email sequence for one segment with every claim
+traced to its document. The inventory offers each once a base holds what it
+needs (a customer profile and a positioning, and for the content brief the
+messaging too) and does not have it yet. Each is installed with its standard
+under `standards/`, and the base owns both from then on.
