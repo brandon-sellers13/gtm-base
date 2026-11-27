@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased (a refusal that says how to fix it)
+
+- When a draft is refused for using a name the notes record as a customer's, such as a customer recorded simply as "Denver" in a draft that needs the city, the refusal now tells the person how to fix it: record that customer under a fuller name, such as the company's full name. The check itself is unchanged and still refuses the name.
+
 ## Unreleased (Track 4: the content brief and the outbound sequence)
 
 - GTM Base now comes with two more skills a base can take, built the way drift grade is: written in the plugin, installed like any company skill with its standard, and run on the runner. Saying "install content brief" or "install outbound sequence" prepares each.

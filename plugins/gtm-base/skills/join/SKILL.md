@@ -689,7 +689,10 @@ python3 scripts/join.py review --step <step> --run <run identifier> --draft <dra
   sentence it prints.
 - A `named=` line beside a `customer-named` code gives a customer's name as
   that line wrote it, one line for each name. Write that line again without
-  those names, and keep everything else it says.
+  those names, and keep everything else it says. When a name is one the draft
+  needed for something other than that customer, such as a city, also tell the
+  person which name it was and say the last sentence review printed, which
+  says how to fix it.
 - `questions=<number>` and a sentence mean the draft leaves that many
   questions for them, each marked in it as `[your call: ...]`. Say the
   sentence before you show the draft.

@@ -33,7 +33,7 @@ Plan: `docs/plans/2026-11-26-001-feat-chat-connector-plan.md`.
 2. **C3.** Skills served live, with the skill index in the connector's instructions and each skill arriving with the documents it needs. Built on 2026-11-27 on top of the runner, the skills folder and drift grade, and deployed to the test site only; it waits on its security review before anyone but Brandon connects.
 3. **C5.** A short setup guide and a copyable Project instruction for each base, so a person working for several clients sets up one Project per client. Nothing blocks it.
 4. Carried over from C1 and C2: the Claude half of the run, the refusal when a conversation asks for a second base, and the sign-in test with two GitHub accounts. All three need Simona's account.
-5. A security review (one pass) of C3 before anyone but Brandon connects, then an end-to-end run in Claude and in ChatGPT across two Projects. C2's review found nothing at the bar, apart from one borderline proposal pattern that needs Brandon's decision (below).
+5. A security review (one pass) of C3 before anyone but Brandon connects, then an end-to-end run in Claude and in ChatGPT across two Projects. C2's review found nothing at the bar, apart from one borderline proposal pattern, which Brandon decided on 2026-11-27 to close in C3's security pull request, for the plugin and the connector together.
 
 ### Track 2: teammates in Claude Code on a shared base
 
@@ -64,13 +64,13 @@ These make a base worth having. Without them, a new company's base holds little 
 2. **T4.8, drift grade,** the first skill that uses a base. It waits on Plan 1's runner and skills folder, and it is what gives C3 something worth serving in a demo.
 3. **T4.9, the content brief, then T4.10, the outbound sequence,** which follow the pattern drift grade proves.
 
-### Track 5: from a working product to one people can buy
+### Track 5: from a working product to one people can use
 
-1. **Pricing and packaging.** Not decided. Calven, the nearest competitor, charges $99 a month for one seat and $1,000 a month (or $800 a month billed annually) for unlimited seats.
-2. **Sign-up.** The app is invite-only through one allowlist; opening it needs a sign-up path and the security review that goes with it.
-3. **A domain and the app's public name,** in place of `gtm-base-app.netlify.app`.
+1. **Pricing.** Decided by Brandon on 2026-11-27: GTM Base stays 100 percent free and may be open-sourced, so there is no pricing or billing work. The plugin already declares the MIT license.
+2. **Sign-up.** The app is invite-only through one allowlist, and opening it needs a sign-up path and the security review that goes with it. Brandon decided on 2026-11-27 that sign-up opens only after C3's security fixes are confirmed, P2's security review is done and both end-to-end runs pass, and that it then opens by invitation to a short list before anything is public.
+3. **A domain and the app's public name,** in place of `gtm-base-app.netlify.app`. Brandon is buying the domain on Monday, 2026-11-30, and it blocks nothing before sign-up.
 4. **Brandon's own live checks:** update the installed plugin from 0.4.0 to the current version, and see Claude Code's approval question for a backup with his own eyes.
-5. **Loose ends:** the invite test with Simona, deleting the two test repositories (`gtm-base-backup-test` and `gtm-base-backup-test-2`), and taking down the connector's test site once the Claude half of the run has passed.
+5. **Loose ends:** the invite test with Simona (on hold by Brandon's choice, along with her GitHub username), deleting the two test repositories (`gtm-base-backup-test` and `gtm-base-backup-test-2`), and taking down the connector's test site once the Claude half of the run has passed.
 
 ## The order
 
@@ -81,17 +81,20 @@ These make a base worth having. Without them, a new company's base holds little 
 | 3 | Drift grade (T4.8), then C3 | C3 needs a real skill to serve |
 | 4 | P2 and P3 | Teammates in Claude Code can work on a shared base |
 | 5 | Both end-to-end runs, with the security reviews for C3 and P2 | The checks that the full experience works for two people |
-| 6 | Pricing, sign-up and a domain | Turn the working product into one people can buy |
+| 6 | Sign-up and a domain, with no pricing or billing work | Open the free product, by invitation to a short list first and then to everyone |
 
 The rest of Track 4 (T4.4, T4.5, T4.7, then T4.9 and T4.10) and of Plan 1 (2.4a, 3.5, 3.6) runs alongside steps 3 to 5.
 
 ## Decisions waiting on Brandon
 
-1. Pricing and packaging, including whether the connector comes with every plan or a paid tier.
-2. Simona's GitHub username, for the invite test and the two-person end-to-end runs.
-3. When to open sign-up beyond the allowlist.
-4. The borderline proposal pattern C2's security review found, decided once for the plugin and the connector together.
-5. Whether a draft may keep a city's name when the notes record a customer by that name (for example a customer recorded simply as "Denver"). Today the customer-name check refuses it.
+Brandon decided each of these on 2026-11-27, so none is waiting on him now.
+
+1. **The borderline proposal pattern** C2's security review found is being closed in C3's security pull request, for the plugin and the connector together.
+2. **A city's name that is also a customer's name** (for example a customer recorded simply as "Denver") stays refused by the customer-name check. The refusal now tells the person how to fix it, which is to record that customer under a fuller name, such as the company's full name.
+3. **Simona's GitHub username** is on hold, by Brandon's choice. The invite test and the two-person end-to-end runs wait with it.
+4. **Sign-up** opens only after C3's security fixes are confirmed, P2's security review is done and both end-to-end runs pass. It then opens by invitation to a short list before anything is public.
+5. **Pricing.** GTM Base stays 100 percent free and may be open-sourced, so step 6 is sign-up and a domain, with no pricing or billing work. The plugin already declares the MIT license.
+6. **The domain.** Brandon is buying it on Monday, 2026-11-30, and it blocks nothing before sign-up.
 
 ## Review standard
 

@@ -130,6 +130,14 @@ CITE_AGAIN = (
     "Some lines of that draft do not rest on the notes they cite, so write those "
     "lines again from the same request, as each code says, and check it again."
 )
+# Said to the person when a name a draft was refused for is one it needed for
+# something other than that customer, such as a city (Brandon's decision of
+# 2026-11-27: the check keeps refusing, and the refusal says how to fix it).
+CUSTOMER_NAME_FIX = (
+    "Your notes record a customer by that name, so no draft can use it, even as "
+    "the name of a city, until you record that customer under a fuller name, such "
+    "as the company's full name."
+)
 LINES_TAKEN_OUT = (
     "Lines that still did not rest on their notes after three tries were taken "
     "out, and each is now a question in the draft for the person to answer."
@@ -1840,6 +1848,8 @@ def run_review(options, out):
         line(out, "named", named)
     if all(code.split(":")[0] in citations.CODES + (citations.CODE_SETUP_SECTION,) for code in reviewed.codes):
         out.write(CITE_AGAIN + "\n")
+        if reviewed.named:
+            out.write(CUSTOMER_NAME_FIX + "\n")
     else:
         out.write(
             "That draft holds something that must not be written down, so write it "
