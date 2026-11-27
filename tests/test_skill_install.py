@@ -322,7 +322,13 @@ class TestAccepting(unittest.TestCase):
             self.assertEqual(skill_install.CODE_NO_APPROVAL, done.code)
             self.assertIn(skill_install.NO_APPROVAL, contract.run(root, base_id).render())
 
-    def test_an_approval_by_somebody_without_authority_then_counts_for_nothing(self):
+    def test_a_record_put_back_by_somebody_else_stays_its_first_approvers(self):
+        """Judged by the change that first added it (the C3 security review's follow-up).
+
+        Whoever puts a record back never becomes its approver. Put back exactly
+        as it was saved, it is the base owner's approval again; put back
+        changed, nothing in the base is accepted.
+        """
         with support.Sandbox() as sandbox:
             root, base_id = self.installed_elsewhere(sandbox)
             record = os.path.join(root, constants.CORRECTIONS_DIR, records(root)[0])
@@ -333,6 +339,12 @@ class TestAccepting(unittest.TestCase):
             support.write(record, text)
             support.git(["add", "-A"], cwd=root)
             support.git(["commit", "-q", "-m", "put back"], cwd=root, author=STRANGER)
+            showing = skill_install.approval_of(root, base_id, SKILL, support.NoRemoteRunner())
+            self.assertTrue(showing.acceptable)
+            self.assertEqual(OWNER, showing.approver)
+            support.write(record, text + "\n")
+            support.git(["add", "-A"], cwd=root)
+            support.git(["commit", "-q", "-m", "put back, changed"], cwd=root, author=STRANGER)
             showing = skill_install.approval_of(root, base_id, SKILL, support.NoRemoteRunner())
             self.assertFalse(showing.acceptable)
 
