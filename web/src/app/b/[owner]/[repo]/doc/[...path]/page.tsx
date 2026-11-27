@@ -3,14 +3,27 @@ import { redirect } from "next/navigation";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { Header } from "@/components/Header";
+import { SubmitButton } from "@/components/SubmitButton";
 import { readForPage } from "@/lib/pageData";
 import { docHref, PARTS, readDocument } from "@/lib/reader";
 import { currentSession } from "@/lib/session";
+import { confirmOffer } from "@/lib/stale/confirm";
+import { documentName, fourLines } from "@/lib/stale/words";
+import { confirmAction } from "./actions";
+
+const NOTICES: Record<string, string> = {
+  confirmed: "Recorded: you confirmed this document already reflects that context change.",
+  "confirm-refused":
+    "Nothing was recorded. That change no longer overtakes this document, or this GitHub account is not recorded as its owner.",
+  "confirm-failed": "GitHub did not save the confirmation. Nothing was recorded; please try again.",
+};
 
 export default async function DocumentPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ owner: string; repo: string; path: string[] }>;
+  searchParams: Promise<{ confirm?: string; notice?: string }>;
 }) {
   const session = await currentSession();
   if (!session) redirect("/");
@@ -19,6 +32,13 @@ export default async function DocumentPage({
   const filePath = path.join("/");
   const { base, doc, body, fields } = await readForPage(() => readDocument(session.token, owner, repo, filePath));
   const part = PARTS.find((p) => p.key === doc.part);
+  const { confirm, notice } = await searchParams;
+  // The connector's "it already reflects this change" link: shown only when the
+  // change still overtakes this document and this person owns it.
+  const offer =
+    typeof confirm === "string" && /^stg-[0-9a-f]{16}$/.test(confirm)
+      ? await confirmOffer(session.token, owner, repo, filePath, confirm, session.emails)
+      : null;
 
   return (
     <div className="mx-auto max-w-3xl px-4 sm:px-6">
@@ -30,6 +50,40 @@ export default async function DocumentPage({
           </Link>
           {part && <> · {part.title}</>}
         </p>
+
+        {notice && NOTICES[notice] && (
+          <p className="mt-6 rounded-lg border border-line bg-notice px-4 py-3 text-sm">{NOTICES[notice]}</p>
+        )}
+
+        {offer && (
+          <section className="mt-6 rounded-lg border border-line bg-notice px-4 py-4 text-sm">
+            <p className="font-medium">
+              Does {documentName(filePath)} already reflect this context change?
+            </p>
+            <p className="mt-2 text-ink-mid">
+              It was recorded on {offer.entry.happenedOn}. The record says, in its own words:
+            </p>
+            <pre className="mt-2 whitespace-pre-wrap font-mono text-xs leading-5">
+              {fourLines(filePath, offer.entry, new Date().toISOString().slice(0, 10))
+                .split("\n")
+                .slice(1, -1)
+                .join("\n")}
+            </pre>
+            <p className="mt-3 text-ink-mid">
+              Confirm only if the document below already says this. If it does not, leave it flagged and have a fix prepared
+              instead. The confirmation is recorded as {offer.email}.
+            </p>
+            <form action={confirmAction} className="mt-4">
+              <input type="hidden" name="owner" value={owner} />
+              <input type="hidden" name="repo" value={repo} />
+              <input type="hidden" name="path" value={filePath} />
+              <input type="hidden" name="entry" value={offer.entry.id} />
+              <SubmitButton pendingText="Recording…" className="rounded-lg bg-ink px-4 py-2 text-sm font-medium text-ground">
+                It already reflects this change
+              </SubmitButton>
+            </form>
+          </section>
+        )}
 
         <dl className="mt-6 grid grid-cols-[auto_1fr] gap-x-6 gap-y-2 rounded-lg border border-line bg-surface px-4 py-3 text-sm">
           <dt className="font-mono text-xs leading-5 text-ink-quiet">file</dt>

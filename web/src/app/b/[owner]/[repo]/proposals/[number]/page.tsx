@@ -3,6 +3,7 @@ import { notFound, redirect } from "next/navigation";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { Header } from "@/components/Header";
+import { SubmitButton } from "@/components/SubmitButton";
 import { readForPage } from "@/lib/pageData";
 import { acceptingEmail, blockedReason, getProposal, mayDiscard, ProposalNotFound } from "@/lib/proposals";
 import { docHref } from "@/lib/reader";
@@ -18,7 +19,6 @@ const PROBLEMS: Record<string, string> = {
   checking: "GitHub is still checking whether this proposal can be merged. Try again in a moment.",
   blocked: "This proposal cannot be accepted here; see the note above the buttons.",
   "not-allowed-discard": "Only the person who proposed this, or the owner of a document it changes, can discard it.",
-  gone: "This proposal is no longer open.",
   failed: "GitHub did not finish that. Nothing was changed; please try again.",
 };
 
@@ -168,7 +168,9 @@ export default async function ProposalPage({
               </p>
               <form action={acceptAction} className="mt-4">
                 {hidden}
-                <button className="rounded-lg bg-ink px-5 py-3 text-sm font-medium text-ground">Accept</button>
+                <SubmitButton pendingText="Accepting…" className="rounded-lg bg-ink px-5 py-3 text-sm font-medium text-ground">
+                  Accept
+                </SubmitButton>
               </form>
             </>
           ) : session.emails.length === 0 ? (
@@ -200,7 +202,9 @@ export default async function ProposalPage({
               maxLength={500}
               className="mt-2 w-full rounded-lg border border-line bg-ground px-3 py-2 text-sm"
             />
-            <button className="mt-3 rounded-lg border border-line px-4 py-2 text-sm">Discard</button>
+            <SubmitButton pendingText="Discarding…" className="mt-3 rounded-lg border border-line px-4 py-2 text-sm">
+              Discard
+            </SubmitButton>
           </form>
           )}
         </section>

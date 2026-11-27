@@ -1835,7 +1835,7 @@ Brandon took the recommended answer to all four decisions. Built on branch claud
 - [x] The security review (one pass, 2026-11-26, on PR #18): no high or medium finding. Eighteen candidates were traced and rejected. The one residual is inherent to OAuth: someone could forward a victim their own Claude or ChatGPT sign-in link, and since GitHub signs a returning person in silently, one click on Allow would finish it. Whether that works depends on Claude's and ChatGPT's own callbacks tying `state` to the person who started the sign-in, which cannot be checked from here; the consent page's product name, return destination and warning are the defense.
 - [ ] Test the forwarded sign-in risk (C1 plan, "Known risk: a forwarded sign-in link") with two accounts: start adding the connector in one ChatGPT or Claude account, finish the sign-in in a browser signed in as a different GitHub user, and see whether the first account ends up connected. Fits the end-to-end run with a second GitHub account.
 - [x] The live site's settings (2026-11-26, at Brandon's request): CONNECTOR_SECRET (secret) and CONNECTOR_ENABLED set on gtm-base-app for production only, and `https://gtm-base-app.netlify.app/api/connector/oauth/github-callback` added to GTM BaseLive. They take effect only when the live site is next deployed.
-- [ ] Merge PR #18 and deploy main to the live site. The live site is not connected to GitHub, so merging alone changes nothing there; it is deployed from the command line, from a checkout linked to gtm-base-app.
+- [x] PR #18 merged (6baaadb) after the nine CodeRabbit findings were fixed (1a39a7e, 45 of 45 checks on the test site), and main deployed to the live site on 2026-11-26 (deploy 6b08b757ddcfc03acda297a1; the one before it, for a rollback, was 6b084fb94460772b6bc76b50). The live site is not connected to GitHub, so it is deployed from the command line, from a checkout linked to gtm-base-app. Afterwards the web app's home page, sign-in and the 19 public connector checks all passed on the live site. The connector is on there; no product has connected to it yet.
 - [ ] Teardown when C1 is done: the spike's old callback address on GTM BaseLive, the old "GTM Base test" connector in ChatGPT, and the test site.
 
 ### 2026-11-24, the Release B replay gate on the summarize-first build (branch claude/release-b-replay-40efb2)
@@ -1873,10 +1873,10 @@ The lean plan Brandon approved on 2026-11-25: merge main, rehearse case three al
 ## 2026-11-26, the connector for Claude chat, Cowork and ChatGPT (plan: docs/plans/2026-11-26-001-feat-chat-connector-plan.md)
 The order across every track is in `docs/plans/2026-11-26-003-roadmap-to-full-experience.md`. No review per unit; one security review before anyone but Brandon connects.
 - [x] S0. The spike: what Claude and ChatGPT accept from a remote connector. (done 2026-11-26, PR #17)
-- [ ] C1. The endpoint, GitHub sign-in and one base per conversation. (in review, PR #18)
-- [ ] C2. Reading documents, with the moment-of-use flag in the answer.
+- [x] C1. The endpoint, GitHub sign-in and one base per conversation. (merged and live, PR #18)
+- [ ] C2. Reading documents, with the moment-of-use flag in the answer. (built with C4 on `claude/connector-c2-plan`; ChatGPT run passed end to end on the test site 2026-11-26; in review)
 - [ ] C3. Skills served live. (waits on Plan 1's skills folder, unit 4.2b)
-- [ ] C4. Proposing a context change from chat.
+- [ ] C4. Proposing a context change from chat. (ships with C2, same pull request)
 - [ ] C5. The setup guide and a Project instruction for each base.
 - [ ] The security review, then the end-to-end run in Claude and ChatGPT across two Projects.
 

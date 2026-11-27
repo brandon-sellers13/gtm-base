@@ -341,7 +341,7 @@ if (secret) {
   check("a 2026-07-28 server/discover is answered", discover.status === 200 && !!discover.body?.result, JSON.stringify(discover.body).slice(0, 160));
   const tools = await mcp(token, { method: "tools/list" }, { protocol: "2025-11-25" });
   const names = (tools.body?.result?.tools ?? []).map((t) => t.name).sort().join(",");
-  check("the tools are list_bases and read_document", names === "list_bases,read_document", names);
+  check("the tools are list_bases, list_documents, propose_change, propose_fix and read_document", names === "list_bases,list_documents,propose_change,propose_fix,read_document", names);
 
   const noConversation = await callTool(token, "list_bases", {}, null);
   check("a call with no conversation id is refused", /could not tell which conversation/.test(toolText(noConversation)));

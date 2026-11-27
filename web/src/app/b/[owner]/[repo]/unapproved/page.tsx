@@ -2,6 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { CleanUrl } from "@/components/CleanUrl";
 import { Header } from "@/components/Header";
+import { SubmitButton } from "@/components/SubmitButton";
 import { readForPage } from "@/lib/pageData";
 import { readBase } from "@/lib/reader";
 import { currentSession } from "@/lib/session";
@@ -87,14 +88,18 @@ export default async function UnapprovedPage({
                       <input type="hidden" name="owner" value={base.owner} />
                       <input type="hidden" name="repo" value={base.repo} />
                       <input type="hidden" name="sha" value={item.sha} />
-                      <button className="rounded-lg border border-line px-4 py-2 text-sm">Keep</button>
+                      <SubmitButton pendingText="Keeping…" className="rounded-lg border border-line px-4 py-2 text-sm">
+                        Keep
+                      </SubmitButton>
                     </form>
                     {item.undoable ? (
                       <form action={undoAction}>
                         <input type="hidden" name="owner" value={base.owner} />
                         <input type="hidden" name="repo" value={base.repo} />
                         <input type="hidden" name="sha" value={item.sha} />
-                        <button className="rounded-lg bg-ink px-4 py-2 text-sm font-medium text-ground">Undo</button>
+                        <SubmitButton pendingText="Undoing…" className="rounded-lg bg-ink px-4 py-2 text-sm font-medium text-ground">
+                          Undo
+                        </SubmitButton>
                       </form>
                     ) : (
                       <span className="self-center text-sm text-ink-quiet">Undo this one on GitHub.</span>

@@ -44,6 +44,12 @@ export default async function ProposalsPage({
             documents it changed.
           </p>
         )}
+        {notice === "gone" && (
+          <p className="mt-6 rounded-lg border border-line bg-notice px-4 py-3 text-sm">
+            Proposal #{number} is already closed, so nothing more was done. If you clicked Accept or Discard more than
+            once, the first click finished it.
+          </p>
+        )}
         {notice === "discarded" && (
           <p className="mt-6 rounded-lg border border-line bg-notice px-4 py-3 text-sm">
             Proposal #{number} is discarded. The base is unchanged, and the same change will not be proposed again.

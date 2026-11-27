@@ -39,6 +39,8 @@ export async function acceptAction(formData: FormData) {
     else if (error instanceof GitHubError && error.status === 401) redirect("/api/auth/expired");
     else problem = "failed";
   }
+  // A closed proposal has no page of its own any more, so say so on the list.
+  if (problem === "gone") redirect(`/b/${owner}/${repo}/proposals?notice=gone&number=${number}`);
   if (problem) redirect(`${page}?problem=${problem}`);
   redirect(`/b/${owner}/${repo}/proposals?notice=accepted&number=${number}`);
 }
@@ -65,6 +67,7 @@ export async function discardAction(formData: FormData) {
     else if (error instanceof GitHubError && error.status === 401) redirect("/api/auth/expired");
     else problem = "failed";
   }
+  if (problem === "gone") redirect(`/b/${owner}/${repo}/proposals?notice=gone&number=${number}`);
   if (problem) redirect(`/b/${owner}/${repo}/proposals/${number}?problem=${problem}`);
   redirect(`/b/${owner}/${repo}/proposals?notice=discarded&number=${number}`);
 }
