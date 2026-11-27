@@ -1886,9 +1886,10 @@ The order across every track is in `docs/plans/2026-11-26-003-roadmap-to-full-ex
 - [x] C4. Proposing a context change from chat. (shipped with C2 in PR #23)
 - [x] C5. The setup guide and a Project instruction for each base, shown on each base's page when the connector is on. (branch `claude/c5-setup-guide`; web build, lint, type check and the 69 stale-parity checks pass; deployed to the test site gtm-base-connector-spike on 2026-11-26 as deploy 6b08e9a83a9d29a0988fe498 and checked there on the gtm-base-test page, including the copy button. Not deployed to the live site.)
 - [ ] Carried over from C1 and C2, all needing Simona's account: the Claude half of the run, the refusal of a second base in one conversation, and the sign-in test with two GitHub accounts.
-- [x] Brandon: decide the borderline proposal pattern from C2's security review, once for the plugin and the connector. (decided 2026-11-27: it is closed in C3's security pull request, for both together)
+- [x] Brandon: decide the borderline proposal pattern from C2's security review, once for the plugin and the connector. (Decided 2026-11-27: close it. Built on branch `claude/c3-security-fixes`: the web app refuses a records-only accept when any commit in the proposal touched another file, and a record settles a document only when the change that brought it onto the main line also changed that document, in the plugin and the connector alike.)
 - [ ] Take down the connector's test site once the Claude half has passed.
-- [ ] The security review of C3, then the end-to-end run in Claude and ChatGPT across two Projects.
+- [x] The security review of C3 (one pass on 4e10ddb): four findings, fixed in the plugin and the connector together on branch `claude/c3-security-fixes` (roles read only from approved state, an approval ends when its skill's folder changes after it, and segment names limited to lowercase letters, digits and hyphens), and the skill index moved out of the instructions into `list_documents` only. Deployed to the test site only.
+- [ ] The reviewer confirms the four fixes, then the end-to-end run in Claude and ChatGPT across two Projects.
 - [x] When Track 4's runner reads `reads_optional: [context/icps/]`, add `context/icps/` to `FOLDER_DECLARATIONS` in `web/src/lib/stale/skills.ts` and regenerate the skill parity fixtures (`tests/skill_parity.py`). (PR #36, merged as 4e10ddb)
 
 ## 2026-11-27, Brandon's decisions on the roadmap (`docs/plans/2026-11-26-003-roadmap-to-full-experience.md`)

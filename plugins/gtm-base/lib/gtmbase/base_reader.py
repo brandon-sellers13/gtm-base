@@ -909,6 +909,31 @@ def corrections(
         merged_by, merged_on, merged_in = accepted_at(
             root, relative, default_branch, git
         )
+        # What the change that first brought the record onto the main line
+        # changed, compared with its own first parent. A file that change did
+        # not touch is not settled by the record (see stale.CorrectionRecord).
+        # The first such change, not the latest: a record later copied into
+        # the current layout's folder by a change of records alone was still
+        # accepted with its document.
+        accepted_paths = None
+        if merged_in:
+            args = ["log", "--first-parent", "--diff-filter=A", "--format=%H"]
+            if default_branch:
+                args.append(default_branch)
+            first = git.run(
+                args + ["--"] + record_names(relative), cwd=root, timeout=LOCAL_TIMEOUT_SECONDS
+            )
+            firsts = [line.strip() for line in first.stdout.split("\n") if line.strip()] if first.ok else []
+            shown = git.run(
+                ["show", "--diff-merges=first-parent", "--name-only", "--format=", "-z", firsts[-1] if firsts else merged_in],
+                cwd=root,
+                timeout=LOCAL_TIMEOUT_SECONDS,
+            )
+            accepted_paths = (
+                [layout.where_it_lives(root, path) for path in nul_fields(shown.stdout)]
+                if shown.ok
+                else []
+            )
         records.append(
             stale.CorrectionRecord(
                 correction,
@@ -922,6 +947,7 @@ def corrections(
                     for path in correction.touched_paths
                     if isinstance(path, str)
                 },
+                accepted_paths=accepted_paths,
             )
         )
     return records

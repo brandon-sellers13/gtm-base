@@ -14,7 +14,7 @@
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
-import { verdictOf } from "../src/lib/stale/rules.ts";
+import { firstAddedIn, verdictOf } from "../src/lib/stale/rules.ts";
 import {
   approvalOf,
   declarationOf,
@@ -48,7 +48,23 @@ const verdictFor = (snapshot) => {
 
 const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
 
-for (const { name, snapshot, world, expected } of fixtures) {
+for (const { name, snapshot, world: given, expected } of fixtures) {
+  // Who first added each record comes from the connector's own reading of the
+  // main line (firstAddedIn, as the history walk uses it), not from the plugin,
+  // and is held to the plugin's skill_install.first_added before it is used.
+  const corrections = { ...given.corrections };
+  for (const [path, chain] of Object.entries(given.recordChains ?? {})) {
+    const found = firstAddedIn(chain);
+    const derived = { addedBy: found?.email ?? null, addedOn: found?.day ?? null, addedIn: found?.oid ?? null };
+    const plugin = given.corrections[path];
+    check(
+      `${name}: who first added ${path.split("/").pop()} is who the plugin says`,
+      derived.addedBy === (plugin.addedBy ?? null) && derived.addedIn === (plugin.addedIn ?? null),
+      `plugin ${JSON.stringify([plugin.addedBy, plugin.addedIn])}, port ${JSON.stringify([derived.addedBy, derived.addedIn])}`,
+    );
+    corrections[path] = { ...plugin, ...derived };
+  }
+  const world = { ...given, corrections };
   const verdict = verdictFor(snapshot);
   const index = (await skillIndex(world)).map((entry) => entry.name);
   const wantIndex = Object.entries(expected)
@@ -58,7 +74,7 @@ for (const { name, snapshot, world, expected } of fixtures) {
   check(`${name}: the skills listed`, same(index, wantIndex), `plugin ${JSON.stringify(wantIndex)}, port ${JSON.stringify(index)}`);
   for (const [skill, want] of Object.entries(expected)) {
     const read = await readSkill(world, skill);
-    const approved = read ? approvalOf(world, skill, read.files) : null;
+    const approved = read ? await approvalOf(world, skill, read.files) : null;
     check(`${name}: ${skill} approved is ${want.acceptable}`, !!approved === want.acceptable && (!approved || approved.role === want.role), `port ${JSON.stringify(approved)}`);
     const started = await startSkill(world, verdict, skill, { links: world.links });
     const got = {
@@ -130,6 +146,14 @@ function firstDifference(a, b) {
       ["standards/x.md", "context/icps.md", "context/icps/a-segment.md", "context/icps/b-segment.md", "context/voice.md"],
     ),
     JSON.stringify(reads),
+  );
+  // The C3 security review, finding 3, held directly: a hidden file in the
+  // folder is never handed on, whatever its name looks like.
+  const hidden = expandedReads(open, { "context/icps.md": "a", "context/icps/.notes.md": "h", "context/icps/.a.md": "h" }, []);
+  check(
+    "a hidden file in the folder is never handed on",
+    !hidden.some((r) => r.path.startsWith("context/icps/.")),
+    JSON.stringify(hidden.map((r) => r.path)),
   );
   const empty = expandedReads(open, { "context/icps.md": "a" }, []);
   check("an empty or missing folder adds nothing", same(empty.map((r) => r.path), ["standards/x.md", "context/icps.md", "context/voice.md"]));

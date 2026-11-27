@@ -43,12 +43,6 @@ export async function boundBase(conversation: Conversation, login: string): Prom
   return (await recordOf(conversation, login)).data.base;
 }
 
-// The bound base, read only: no record is started for a conversation that has
-// not called a tool yet (used when listing the tools, C3).
-export async function peekBase(conversation: Conversation, login: string): Promise<string | null> {
-  return (await smallStore("connector-bindings").read<Binding>(keyOf(conversation, login)))?.data.base ?? null;
-}
-
 // Bases compare without regard to case, as GitHub's owner and repository names do.
 const same = (a: string, b: string) => a.toLowerCase() === b.toLowerCase();
 

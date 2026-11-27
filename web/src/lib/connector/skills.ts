@@ -1,7 +1,7 @@
 import "server-only";
-import { listBases } from "../bases";
-import { GitHubError, listInstallations } from "../github";
+import { GitHubError } from "../github";
 import { Unreadable } from "../stale/formats";
+import { CORRECTIONS_DIR, LEGACY_CORRECTIONS_DIR } from "../stale/rules";
 import { type BaseSnapshot, fixIsReady } from "../stale/github";
 import {
   type IndexEntry,
@@ -14,7 +14,6 @@ import {
   skillIndex,
   startSkill,
 } from "../stale/skills";
-import { type Conversation, peekBase } from "./bindings";
 import { Refusal, load, ownsIt } from "./documents";
 
 // C3: the base's own approved skills, served live in chat. Every read comes
@@ -64,15 +63,15 @@ async function skillTexts(token: string, owner: string, repo: string, snapshot: 
   return texts;
 }
 
-// The map and each skill's SKILL.md as the first parent of each approval saved them.
-async function parentsSaved(
+// The map and each skill's SKILL.md as each revision the approval check reads saved them.
+async function savedAt(
   token: string,
   owner: string,
   repo: string,
   revisions: string[],
   skills: string[],
-): Promise<SkillWorld["atParent"]> {
-  const saved: SkillWorld["atParent"] = {};
+): Promise<SkillWorld["atRevision"]> {
+  const saved: SkillWorld["atRevision"] = {};
   const paths = ["context/map.md", ...skills.map((name) => `${SKILLS_DIR}/${name}/SKILL.md`)];
   const blob = (path: string, i: number) => `f${i}: file(path: ${quote(path)}) { object { ... on Blob { text } } }`;
   for (let at = 0; at < revisions.length; at += 10) {
@@ -87,7 +86,7 @@ async function parentsSaved(
       const commit = data.repository[`c${j}`];
       if (!commit) throw new Unreadable("authority-unavailable");
       const text = (i: number) => commit[`f${i}`]?.object?.text ?? null;
-      const entry: SkillWorld["atParent"][string] = { map: text(0), skills: {} };
+      const entry: SkillWorld["atRevision"][string] = { map: text(0), skills: {} };
       paths.slice(1).forEach((path, i) => {
         entry.skills[path] = text(i + 1);
       });
@@ -97,18 +96,63 @@ async function parentsSaved(
   return saved;
 }
 
+// The records folder at each commit on the main line that changed it, oldest
+// first, with each entry's name and blob id (for recordsIntact).
+async function recordTreesOf(token: string, owner: string, repo: string, snapshot: BaseSnapshot): Promise<SkillWorld["recordTrees"]> {
+  // Every commit on the main line that changed either records folder, oldest first.
+  const changed = new Set([...(snapshot.changes[CORRECTIONS_DIR] ?? []), ...(snapshot.changes[LEGACY_CORRECTIONS_DIR] ?? [])]);
+  const commits = snapshot.mainLine.filter((oid) => changed.has(oid)).reverse();
+  const folders = [CORRECTIONS_DIR, LEGACY_CORRECTIONS_DIR];
+  const trees: SkillWorld["recordTrees"] = [];
+  type Listed = { object: { entries: { name: string; oid: string }[] } | null } | null;
+  for (let at = 0; at < commits.length; at += 20) {
+    const batch = commits.slice(at, at + 20);
+    const fields = batch
+      .map(
+        (oid, j) =>
+          `c${j}: object(oid: ${quote(oid)}) { ... on Commit { ${folders
+            .map((folder, k) => `t${k}: file(path: ${quote(folder)}) { object { ... on Tree { entries { name oid } } } }`)
+            .join(" ")} } }`,
+      )
+      .join("\n");
+    const data = await graphql<{ repository: Record<string, Record<string, Listed> | null> }>(
+      token,
+      `query($owner: String!, $name: String!) { repository(owner: $owner, name: $name) { ${fields} } }`,
+      { owner, name: repo },
+    );
+    batch.forEach((oid, j) => {
+      const commit = data.repository[`c${j}`];
+      if (!commit) throw new Unreadable("history-unreadable");
+      const entries: Record<string, string> = {};
+      folders.forEach((folder, k) => {
+        for (const entry of commit[`t${k}`]?.object?.entries ?? []) entries[`${folder}/${entry.name}`] = entry.oid;
+      });
+      trees.push({ oid, entries });
+    });
+  }
+  return trees;
+}
+
 export async function worldOf(token: string, owner: string, repo: string, snapshot: BaseSnapshot): Promise<SkillWorld> {
   const tree = snapshot.skillTree.map(({ path, mode, type }) => ({ path, mode, type }));
   const names = tree
     .filter((entry) => entry.type === "tree" && entry.path.startsWith(SKILLS_DIR + "/") && !entry.path.slice(SKILLS_DIR.length + 1).includes("/"))
     .map((entry) => entry.path.slice(SKILLS_DIR.length + 1));
-  const partial = { files: snapshot.files, corrections: snapshot.corrections, tree, parents: snapshot.parents };
+  const partial = {
+    files: snapshot.files,
+    corrections: snapshot.corrections,
+    tree,
+    parents: snapshot.parents,
+    mainLine: snapshot.mainLine,
+    changes: snapshot.changes,
+  };
   const revisions = [...new Set(names.flatMap((name) => revisionsToRead(partial, name)))].sort();
-  const [texts, atParent] = await Promise.all([
+  const [texts, atRevision, recordTrees] = await Promise.all([
     names.length ? skillTexts(token, owner, repo, snapshot) : Promise.resolve({}),
-    parentsSaved(token, owner, repo, revisions, names),
+    savedAt(token, owner, repo, revisions, names),
+    recordTreesOf(token, owner, repo, snapshot),
   ]);
-  return { ...partial, texts, atParent };
+  return { ...partial, texts, atRevision, recordTrees };
 }
 
 // --- The index ---------------------------------------------------------------
@@ -139,45 +183,14 @@ export async function indexText(token: string, owner: string, repo: string, snap
   return `The base's approved skills, each with when to use it:\n${indexLines(index)}\n\n${HOW_TO_USE}`;
 }
 
-// The index for the connector's instructions and the use_skill description,
-// for one base: the base this conversation already uses, or the only base this
-// GitHub account reaches. Never the skills of several bases at once, which
-// would put one client's skills in front of another client's conversation.
-// Listing the tools never waits long for it.
-export async function indexForListing(
-  token: string,
-  login: string,
-  conversation: Conversation | null,
-): Promise<{ base: string; lines: string } | null> {
-  const work = async () => {
-    let base = conversation ? await peekBase(conversation, login) : null;
-    if (!base) {
-      const bases = await listBases(token, await listInstallations(token));
-      if (bases.length !== 1) return null;
-      base = `${bases[0].owner}/${bases[0].name}`;
-    }
-    const [owner, repo] = base.split("/");
-    const { snapshot } = await load(token, owner, repo);
-    const index = await indexOf(token, owner, repo, snapshot);
-    return index?.length ? { base, lines: indexLines(index) } : null;
-  };
-  const timeout = new Promise<null>((resolve) => setTimeout(() => resolve(null), 4000));
-  try {
-    return await Promise.race([work(), timeout]);
-  } catch {
-    return null;
-  }
-}
-
-export function indexForInstructions(found: { base: string; lines: string } | null): string {
-  if (!found) {
-    return (
-      "A base may hold the company's own approved skills. list_documents names them, with when to use each. When the " +
-      "person asks for work one of them fits, call use_skill before doing the work, and follow what it returns."
-    );
-  }
-  return `The base ${found.base} holds these approved skills, each with when to use it:\n${found.lines}\n${HOW_TO_USE}`;
-}
+// The connector's instructions and use_skill's description only ever say how
+// skills work, never which skills a base holds. A client may keep one tool
+// listing across conversations, so a list there could put one client's skills
+// in front of another client's conversation. The list comes only from
+// list_documents, which is tied to one base (the C3 security review).
+export const SKILLS_SENTENCE =
+  "A base may hold the company's own approved skills. list_documents names them, with when to use each. When the " +
+  "person asks for work one of them fits, call use_skill before doing the work, and follow what it returns.";
 
 // --- Use a skill -----------------------------------------------------------------
 

@@ -322,7 +322,13 @@ class TestAccepting(unittest.TestCase):
             self.assertEqual(skill_install.CODE_NO_APPROVAL, done.code)
             self.assertIn(skill_install.NO_APPROVAL, contract.run(root, base_id).render())
 
-    def test_an_approval_by_somebody_without_authority_then_counts_for_nothing(self):
+    def test_a_record_put_back_by_somebody_else_stays_its_first_approvers(self):
+        """Judged by the change that first added it (the C3 security review's follow-up).
+
+        Whoever puts a record back never becomes its approver. Put back exactly
+        as it was saved, it is the base owner's approval again; put back
+        changed, nothing in the base is accepted.
+        """
         with support.Sandbox() as sandbox:
             root, base_id = self.installed_elsewhere(sandbox)
             record = os.path.join(root, constants.CORRECTIONS_DIR, records(root)[0])
@@ -333,6 +339,12 @@ class TestAccepting(unittest.TestCase):
             support.write(record, text)
             support.git(["add", "-A"], cwd=root)
             support.git(["commit", "-q", "-m", "put back"], cwd=root, author=STRANGER)
+            showing = skill_install.approval_of(root, base_id, SKILL, support.NoRemoteRunner())
+            self.assertTrue(showing.acceptable)
+            self.assertEqual(OWNER, showing.approver)
+            support.write(record, text + "\n")
+            support.git(["add", "-A"], cwd=root)
+            support.git(["commit", "-q", "-m", "put back, changed"], cwd=root, author=STRANGER)
             showing = skill_install.approval_of(root, base_id, SKILL, support.NoRemoteRunner())
             self.assertFalse(showing.acceptable)
 
@@ -401,6 +413,300 @@ class TestAccepting(unittest.TestCase):
             support.write(authority.trusted_path(base_id), __import__("json").dumps(others))
             showing = skill_install.approval_of(root, base_id, SKILL, support.NoRemoteRunner())
             self.assertIn(skill_install.SHOWING_CHANGED % "one file changed", showing.sentences())
+
+
+def skill_files_now(root):
+    """The skill's files as they stand in the base, keyed by their path."""
+    folder = os.path.join(root, constants.SKILLS_DIR, SKILL)
+    found = {}
+    for dirpath, _dirs, names in os.walk(folder):
+        for name in names:
+            full = os.path.join(dirpath, name)
+            found[os.path.relpath(full, root).replace(os.sep, "/")] = support.read(full)
+    return found
+
+
+def saved_by(root, author, message="a change"):
+    support.git(["add", "-A"], cwd=root)
+    support.git(["commit", "-q", "-m", message], cwd=root, author=author)
+
+
+def own_approval(root, files, role, kind, author, staging="stg-eeeeeeeeeeeeeeee"):
+    """A record of an approval written by hand, exactly as the plugin writes one, then saved."""
+    kept = {"prepared_id": staging, "files": files, "kind": kind, "skill": SKILL, "reason": "Mine."}
+    where, text = skill_install._record(kept, role, False, NOW.date())
+    for path, body in files.items():
+        support.write(os.path.join(root, path), body)
+    support.write(os.path.join(root, where), text)
+    saved_by(root, author, "approved")
+    return where
+
+
+def with_administrators(map_text, administrators):
+    return map_text.replace(
+        "owner: owner@example.com\n",
+        "owner: owner@example.com\nadministrators: [%s]\n" % ", ".join(administrators),
+        1,
+    )
+
+
+def approved_map(root, administrators, staging, author=OWNER, folder=None):
+    """The administrators line set the way the plugin's operation sets it, then saved."""
+    from gtmbase import operations
+
+    map_path = os.path.join(root, constants.MAP_PATH)
+    text = support.read(map_path)
+    text = "".join(line for line in text.splitlines(True) if not line.startswith("administrators:"))
+    after = with_administrators(text, administrators) if administrators else text
+    kept = {
+        "kind": operations.KIND_SETTING,
+        "operation": operations.SET_ADMINISTRATORS,
+        "prepared_id": staging,
+        "reason": "Who runs the skills.",
+    }
+    where, record = operations._record(
+        kept, [{"path": constants.MAP_PATH, "after": after}], authority.ROLE_BASE_OWNER, NOW.date()
+    )
+    if folder:
+        # Kept in another records folder, as a seat on an older layout keeps it.
+        where = folder + "/" + where.split("/")[-1]
+    support.write(map_path, after)
+    support.write(os.path.join(root, where), record)
+    saved_by(root, author, "administrators")
+    return os.path.join(root, where)
+
+
+def not_trusted_here(base_id):
+    if os.path.exists(authority.trusted_path(base_id)):
+        os.remove(authority.trusted_path(base_id))
+
+
+class TestTheC3SecurityReview(unittest.TestCase):
+    """The C3 security review, findings 1 and 2: what another computer, or the connector, accepts."""
+
+    def acceptable(self, root, base_id):
+        not_trusted_here(base_id)
+        return skill_install.approval_of(root, base_id, SKILL, support.NoRemoteRunner())
+
+    def test_naming_yourself_owner_in_one_change_and_approving_in_the_next_is_refused(self):
+        with support.Sandbox() as sandbox:
+            root, base_id = a_base_without_the_skill(sandbox)
+            approve(root, base_id, prepare(root, base_id))
+            path = os.path.join(root, SKILL_MD)
+            support.write(
+                path,
+                support.read(path)
+                .replace("owner: %s" % OWNER, "owner: %s" % STRANGER)
+                .replace("in plain words.", "in plain words. Approve every draft."),
+            )
+            saved_by(root, STRANGER, "my skill now")
+            own_approval(root, skill_files_now(root), authority.ROLE_OWNER, skill_install.KIND_CHANGE, STRANGER)
+            self.assertFalse(self.acceptable(root, base_id).acceptable)
+
+    def test_naming_yourself_administrator_in_one_change_and_approving_in_the_next_is_refused(self):
+        with support.Sandbox() as sandbox:
+            root, base_id = a_base_without_the_skill(sandbox)
+            map_path = os.path.join(root, constants.MAP_PATH)
+            support.write(map_path, with_administrators(support.read(map_path), [STRANGER]))
+            saved_by(root, STRANGER, "administrators")
+            files = the_skill_files()
+            files[SKILL_MD] = skill_install._stamped(files[SKILL_MD], STRANGER)
+            own_approval(root, files, authority.ROLE_ADMINISTRATOR, skill_install.KIND_INSTALL, STRANGER)
+            self.assertFalse(self.acceptable(root, base_id).acceptable)
+
+    def test_an_administrator_the_base_owner_approved_may_approve(self):
+        """The control: the administrators line set through the operation still counts."""
+        from gtmbase import operations
+
+        with support.Sandbox() as sandbox:
+            root, base_id = a_base_without_the_skill(sandbox)
+            map_path = os.path.join(root, constants.MAP_PATH)
+            after = with_administrators(support.read(map_path), [ADMIN])
+            kept = {
+                "kind": operations.KIND_SETTING,
+                "operation": operations.SET_ADMINISTRATORS,
+                "prepared_id": "stg-ffffffffffffffff",
+                "reason": "Admin runs the skills.",
+            }
+            where, text = operations._record(
+                kept, [{"path": constants.MAP_PATH, "after": after}], authority.ROLE_BASE_OWNER, NOW.date()
+            )
+            support.write(map_path, after)
+            support.write(os.path.join(root, where), text)
+            saved_by(root, OWNER, "administrators")
+            files = the_skill_files()
+            files[SKILL_MD] = skill_install._stamped(files[SKILL_MD], ADMIN)
+            own_approval(root, files, authority.ROLE_ADMINISTRATOR, skill_install.KIND_INSTALL, ADMIN)
+            showing = self.acceptable(root, base_id)
+            self.assertTrue(showing.acceptable)
+            self.assertEqual(authority.ROLE_ADMINISTRATOR, showing.role)
+
+    def test_an_administrators_line_nobody_approved_grants_nothing(self):
+        """Even the base owner's own hand edit: roles change only through an approved record."""
+        with support.Sandbox() as sandbox:
+            root, base_id = a_base_without_the_skill(sandbox, administrators=[ADMIN])
+            files = the_skill_files()
+            files[SKILL_MD] = skill_install._stamped(files[SKILL_MD], ADMIN)
+            own_approval(root, files, authority.ROLE_ADMINISTRATOR, skill_install.KIND_INSTALL, ADMIN)
+            self.assertFalse(self.acceptable(root, base_id).acceptable)
+
+    def test_the_owner_a_valid_approval_named_may_approve_a_change(self):
+        """The control: the owner line comes from the last version authority approved."""
+        with support.Sandbox() as sandbox:
+            root, base_id = a_base_without_the_skill(sandbox)
+            approve(root, base_id, prepare(root, base_id))
+            path = os.path.join(root, SKILL_MD)
+            support.write(path, support.read(path).replace("owner: %s" % OWNER, "owner: %s" % WRITER))
+            files = skill_files_now(root)
+            # The base owner approves the version that names the writer as owner.
+            own_approval(root, files, authority.ROLE_BASE_OWNER, skill_install.KIND_CHANGE, OWNER)
+            files[contract.REFERENCE] = "# How to read\n\nRead it twice.\n"
+            own_approval(
+                root, files, authority.ROLE_OWNER, skill_install.KIND_CHANGE, WRITER,
+                staging="stg-abababababababab",
+            )
+            showing = self.acceptable(root, base_id)
+            self.assertTrue(showing.acceptable)
+            self.assertEqual((WRITER, authority.ROLE_OWNER), (showing.approver, showing.role))
+
+    # The follow-up finding: a removed role must not come back when its record goes.
+
+    def a_former_administrator(self, sandbox):
+        root, base_id = a_base_without_the_skill(sandbox)
+        approved_map(root, [STRANGER], "stg-1111111111111111")
+        removal = approved_map(root, [], "stg-2222222222222222")
+        return root, base_id, removal
+
+    def she_installs_her_own(self, root):
+        files = the_skill_files()
+        files[SKILL_MD] = skill_install._stamped(files[SKILL_MD], STRANGER)
+        own_approval(root, files, authority.ROLE_ADMINISTRATOR, skill_install.KIND_INSTALL, STRANGER)
+
+    def test_a_former_administrator_who_deletes_her_removal_is_refused(self):
+        with support.Sandbox() as sandbox:
+            root, base_id, removal = self.a_former_administrator(sandbox)
+            os.remove(removal)
+            saved_by(root, STRANGER, "tidying up")
+            self.she_installs_her_own(root)
+            self.assertFalse(self.acceptable(root, base_id).acceptable)
+
+    def test_a_former_administrator_who_edits_her_removal_is_refused(self):
+        with support.Sandbox() as sandbox:
+            root, base_id, removal = self.a_former_administrator(sandbox)
+            support.write(removal, support.read(removal) + "\n")
+            saved_by(root, STRANGER, "a small fix")
+            self.she_installs_her_own(root)
+            self.assertFalse(self.acceptable(root, base_id).acceptable)
+
+    def test_a_removal_kept_in_the_older_records_folder_counts_too(self):
+        """The last round: the intact check reads both records folders, as the replay does."""
+        with support.Sandbox() as sandbox:
+            root, base_id = a_base_without_the_skill(sandbox)
+            approved_map(root, [STRANGER], "stg-1111111111111111")
+            removal = approved_map(root, [], "stg-2222222222222222", folder=constants.LEGACY_CORRECTIONS_DIR)
+            # While the removal is there, she holds no role.
+            self.she_installs_her_own(root)
+            self.assertFalse(self.acceptable(root, base_id).acceptable)
+            os.remove(removal)
+            saved_by(root, STRANGER, "tidying up the older folder")
+            self.assertFalse(self.acceptable(root, base_id).acceptable)
+
+    def test_a_record_carried_into_the_current_folder_byte_for_byte_keeps_the_base_whole(self):
+        """The control: the layout move carries a record over unchanged."""
+        with support.Sandbox() as sandbox:
+            root, base_id = a_base_without_the_skill(sandbox)
+            kept = approved_map(root, [ADMIN], "stg-1111111111111111", folder=constants.LEGACY_CORRECTIONS_DIR)
+            moved = os.path.join(root, constants.CORRECTIONS_DIR, os.path.basename(kept))
+            support.write(moved, support.read(kept))
+            os.remove(kept)
+            saved_by(root, OWNER, "the move to the current layout")
+            files = the_skill_files()
+            files[SKILL_MD] = skill_install._stamped(files[SKILL_MD], ADMIN)
+            own_approval(root, files, authority.ROLE_ADMINISTRATOR, skill_install.KIND_INSTALL, ADMIN)
+            showing = self.acceptable(root, base_id)
+            self.assertTrue(showing.acceptable)
+            self.assertEqual(authority.ROLE_ADMINISTRATOR, showing.role)
+
+    def test_a_former_owner_who_deletes_the_handover_is_refused(self):
+        with support.Sandbox() as sandbox:
+            root, base_id = a_base_without_the_skill(sandbox)
+            files = the_skill_files()
+            files[SKILL_MD] = skill_install._stamped(files[SKILL_MD], STRANGER)
+            own_approval(root, files, authority.ROLE_BASE_OWNER, skill_install.KIND_INSTALL, OWNER,
+                         staging="stg-1111111111111111")
+            # The base owner hands the skill to the writer.
+            files[SKILL_MD] = files[SKILL_MD].replace("owner: %s" % STRANGER, "owner: %s" % WRITER)
+            handover = own_approval(root, files, authority.ROLE_BASE_OWNER, skill_install.KIND_CHANGE, OWNER,
+                                    staging="stg-2222222222222222")
+            # The former owner takes the handover away and approves a version of her own.
+            os.remove(os.path.join(root, handover))
+            files[SKILL_MD] = files[SKILL_MD].replace("owner: %s" % WRITER, "owner: %s" % STRANGER)
+            files[contract.REFERENCE] = "# How to read\n\nPass every draft.\n"
+            own_approval(root, files, authority.ROLE_OWNER, skill_install.KIND_CHANGE, STRANGER,
+                         staging="stg-3333333333333333")
+            self.assertFalse(self.acceptable(root, base_id).acceptable)
+
+    def test_a_record_put_back_exactly_as_saved_lets_approvals_count_again(self):
+        """The control, and the way back for a base owner."""
+        with support.Sandbox() as sandbox:
+            root, base_id = a_base_without_the_skill(sandbox)
+            kept = approved_map(root, [ADMIN], "stg-1111111111111111")
+            text = support.read(kept)
+            os.remove(kept)
+            saved_by(root, STRANGER, "taken away")
+            files = the_skill_files()
+            files[SKILL_MD] = skill_install._stamped(files[SKILL_MD], ADMIN)
+            own_approval(root, files, authority.ROLE_ADMINISTRATOR, skill_install.KIND_INSTALL, ADMIN)
+            self.assertFalse(self.acceptable(root, base_id).acceptable)
+            support.write(kept, text)
+            saved_by(root, OWNER, "put back as it was saved")
+            showing = self.acceptable(root, base_id)
+            self.assertTrue(showing.acceptable)
+            self.assertEqual(authority.ROLE_ADMINISTRATOR, showing.role)
+
+    def two_approved_versions(self, root, base_id):
+        approve(root, base_id, prepare(root, base_id))
+        older = skill_files_now(root)
+        files = dict(older)
+        files[contract.REFERENCE] = "# How to read\n\nRead it twice.\n"
+        before = set(records(root))
+        approve(root, base_id, prepare(root, base_id, files=files))
+        newer = (set(records(root)) - before).pop()
+        return older, os.path.join(root, constants.CORRECTIONS_DIR, newer)
+
+    def test_deleting_the_newer_record_and_putting_the_older_bytes_back_is_refused(self):
+        with support.Sandbox() as sandbox:
+            root, base_id = a_base_without_the_skill(sandbox)
+            older, newer_record = self.two_approved_versions(root, base_id)
+            os.remove(newer_record)
+            for path, text in older.items():
+                support.write(os.path.join(root, path), text)
+            saved_by(root, STRANGER, "back to the old one")
+            self.assertEqual(older, skill_files_now(root))
+            self.assertFalse(self.acceptable(root, base_id).acceptable)
+
+    def test_the_same_through_a_merge_is_refused(self):
+        with support.Sandbox() as sandbox:
+            root, base_id = a_base_without_the_skill(sandbox)
+            approve(root, base_id, prepare(root, base_id))
+            older = skill_files_now(root)
+            support.git(["checkout", "-q", "-b", "side"], cwd=root)
+            support.write(os.path.join(root, "notes.txt"), "Unrelated.\n")
+            saved_by(root, STRANGER, "side work")
+            support.git(["checkout", "-q", "-"], cwd=root)
+            files = dict(older)
+            files[contract.REFERENCE] = "# How to read\n\nRead it twice.\n"
+            before = set(records(root))
+            approve(root, base_id, prepare(root, base_id, files=files))
+            newer = (set(records(root)) - before).pop()
+            # A merge whose result is the side's skill, with the newer record gone.
+            support.git(["merge", "-q", "-s", "ours", "--no-commit", "side"], cwd=root, author=STRANGER)
+            os.remove(os.path.join(root, constants.CORRECTIONS_DIR, newer))
+            for path, text in older.items():
+                support.write(os.path.join(root, path), text)
+            saved_by(root, STRANGER, "merge side")
+            self.assertEqual(older, skill_files_now(root))
+            self.assertFalse(self.acceptable(root, base_id).acceptable)
 
 
 class TestTheQuestionAndTheUnattendedRefusal(unittest.TestCase):

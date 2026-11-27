@@ -42,6 +42,18 @@ export type CorrectionFacts = {
   // The commit that brought it onto the main line, whose saved map and
   // documents decide whether that person could accept it then.
   mergedIn: string | null;
+  // Who first added it to the main line, the day, and the commit
+  // (skill_install.first_added). Approvals are judged by these, never by the
+  // newest change, so whoever edits a record later does not become its approver.
+  addedBy?: string | null;
+  addedOn?: string | null;
+  addedIn?: string | null;
+  // The files the commit that first brought it onto the main line changed,
+  // compared with its first parent. A record
+  // settles a document only when this lists it, so a proposal that edits a
+  // document, adds its record and undoes the edit settles nothing (C2's
+  // security review, closed 2026-11-27). Null means it was not worked out.
+  acceptedPaths?: string[] | null;
 };
 
 export type LineAuthor = { email: string; revision: string };
@@ -67,6 +79,36 @@ export const CHANGES_DIR = "learning/changes";
 export const CORRECTIONS_DIR = "learning/corrections";
 export const CONFIRMATIONS_DIR = "work/confirmations";
 export const OLDER_LAYOUT = "older-layout";
+export const LEGACY_CORRECTIONS_DIR = "corrections";
+
+// base_reader.record_names: every path one record may have been saved under,
+// its own first, so a record the layout move carried over is followed back to
+// the older folder it was first added in.
+export function recordNames(path: string): string[] {
+  const name = path.split("/").pop()!;
+  const names = [path];
+  for (const folder of [CORRECTIONS_DIR, LEGACY_CORRECTIONS_DIR]) if (!names.includes(`${folder}/${name}`)) names.push(`${folder}/${name}`);
+  return names;
+}
+
+// One commit on the main line, with the blob id each of a record's names has
+// there (null when absent). A chain is newest first, each node followed by its
+// first parent.
+export type ChainNode = { oid: string; email: string | null; day: string | null; names: Record<string, string | null> };
+
+// skill_install.first_added: the oldest commit on the main line where any of
+// a record's names appears that its first parent did not hold. Asked about the
+// record's own name alone, a record a teammate planted in the older folder and
+// the base owner's layout move later carried over would be credited to the
+// base owner (the C3 security review's last round).
+export function firstAddedIn(chain: ChainNode[]): ChainNode | null {
+  let found: ChainNode | null = null;
+  chain.forEach((node, i) => {
+    const parent = chain[i + 1];
+    if (Object.entries(node.names).some(([name, oid]) => oid && !parent?.names[name])) found = node;
+  });
+  return found;
+}
 
 const OLDER_FOLDERS = ["work/changes/", "work/decisions/", "corrections/", "context/strategy/", "context/plan/"];
 const OLDER_FILES = ["context/metrics/definitions.md"];
@@ -397,6 +439,7 @@ export function verdictOf(snapshot: Snapshot): Verdict {
     if (!record.entryId) continue;
     const touched = record.touchedPaths.map((p) => whereItLives(snapshot, p));
     const coModified = facts.coModified.map((p) => whereItLives(snapshot, p));
+    const acceptedPaths = facts.acceptedPaths == null ? null : facts.acceptedPaths.map((p) => whereItLives(snapshot, p));
     // Whether whoever accepted it could do so then, for each document it touched.
     const mergedAllowed = new Map(touched.map((p) => [p, allowedThen(snapshot, p, facts.mergedBy, facts.mergedIn)]));
     for (const touchedPath of touched) {
@@ -404,6 +447,7 @@ export function verdictOf(snapshot: Snapshot): Verdict {
       if (!info) continue;
       if (!coModified.includes(touchedPath)) continue;
       if (!facts.hashAtCommit || facts.hashAtCommit !== record.contentHash) continue;
+      if (acceptedPaths && !acceptedPaths.includes(touchedPath)) continue;
       settled.add(`${record.entryId}\n${touchedPath}`);
       if (!facts.mergedOn || !facts.mergedBy || !/^\d{4}-\d{2}-\d{2}$/.test(facts.mergedOn)) continue;
       if (!mergedAllowed.get(touchedPath)) continue;

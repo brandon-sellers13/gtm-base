@@ -56,6 +56,9 @@ export type Proposal = ProposalSummary & {
   body: string; // markdown, with the marker line taken off
   files: ProposalFile[];
   complete: boolean; // false when the proposal changes too many files to check
+  // True when the proposal as a whole changes records only, but one of its
+  // commits touched another file along the way (an edit made and then undone).
+  editsUndone: boolean;
   baseRef: string;
   headSha: string; // the version the person was shown
   baseOwners: string[]; // the map's owners on the base branch: who decides for records alone
@@ -193,25 +196,57 @@ export async function getProposal(token: string, owner: string, repo: string, nu
     );
   }
 
+  // A proposal that changes records only is accepted by the base's owner, so
+  // every commit in it is read: one that touched any other file means a
+  // document was edited and the edit undone, which must not come in as records
+  // alone (C2's security review, the borderline pattern closed 2026-11-27).
+  let editsUndone = false;
+  if (complete && files.length > 0 && files.every((f) => !f.ownedDocument)) {
+    editsUndone = await anyCommitTouchedMore(token, owner, repo, number);
+  }
+
   return {
     ...summary(pull, found.proposalId),
     htmlUrl: pull.html_url,
     body: (pull.body ?? "").replace(MARKER, "").trim(),
     files,
     complete,
+    editsUndone,
     baseRef: pull.base.ref,
     headSha: pull.head.sha,
     baseOwners,
   };
 }
 
+const MAX_COMMITS_READ = 100;
+
+// Whether any commit in the proposal touched a file that is not a record. A
+// proposal with more commits than are read counts as having done so.
+async function anyCommitTouchedMore(token: string, owner: string, repo: string, number: number): Promise<boolean> {
+  const commits = await api<{ sha: string }[]>(`/repos/${owner}/${repo}/pulls/${number}/commits?per_page=${MAX_COMMITS_READ}`, { token });
+  if (commits.length >= MAX_COMMITS_READ) return true;
+  for (const commit of commits) {
+    const shown = await api<{ files?: { filename: string; previous_filename?: string }[] }>(
+      `/repos/${owner}/${repo}/commits/${commit.sha}`,
+      { token },
+    );
+    const names = (shown.files ?? []).flatMap((file) => [file.filename, ...(file.previous_filename ? [file.previous_filename] : [])]);
+    if (names.length >= 300) return true;
+    if (names.some((name) => !(RECORD_PREFIXES.some((prefix) => name.startsWith(prefix)) && name.endsWith(".md")))) return true;
+  }
+  return false;
+}
+
 // Why this proposal cannot be accepted here at all, whoever asks. Only owned
 // documents and the plugin's records may come in through an accept: anything
 // else (settings, hooks, scripts, CLAUDE.md, other files) would run or apply on
-// every seat, which the plugin's own checks refuse in a base.
-export function blockedReason(proposal: Proposal): "too-large" | "other-files" | null {
+// every seat, which the plugin's own checks refuse in a base. A proposal that
+// ends up records only, after one of its commits touched anything else, is
+// refused too.
+export function blockedReason(proposal: Proposal): "too-large" | "other-files" | "edits-undone" | null {
   if (!proposal.complete) return "too-large";
   if (proposal.files.some((f) => !f.allowed)) return "other-files";
+  if (proposal.editsUndone) return "edits-undone";
   return null;
 }
 
@@ -224,7 +259,7 @@ export function acceptingEmail(proposal: Proposal, verifiedEmails: string[]): st
   // A proposal that only records something (a context change proposed from
   // chat, say) touches no owned document, so the base's owner decides.
   if (owned.length === 0) {
-    if (proposal.files.length === 0 || proposal.baseOwners.length === 0) return null;
+    if (proposal.files.length === 0 || proposal.baseOwners.length === 0 || proposal.editsUndone) return null;
     return mine.find((email) => proposal.baseOwners.includes(email)) ?? null;
   }
   if (owned.some((f) => f.owners.length === 0)) return null;

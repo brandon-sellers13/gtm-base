@@ -5,10 +5,13 @@ import { classify, parseCorrectionsFile, Refused, Unreadable } from "./formats";
 import {
   CONFIRMATIONS_DIR,
   CORRECTIONS_DIR,
+  type ChainNode,
   type CorrectionFacts,
+  LEGACY_CORRECTIONS_DIR,
   type SavedRevision,
   type Snapshot,
   contentHash,
+  firstAddedIn,
 } from "./rules";
 
 // Builds the snapshot the moment-of-use rules read, from one base on GitHub,
@@ -115,13 +118,18 @@ type HistoryNode = {
   oid: string;
   author: { email: string | null; date: string | null };
   parents: { totalCount: number; nodes: { oid: string }[] };
-  [file: `f${number}`]: { oid: string } | null;
+  [file: `f${number}` | `g${number}` | `w${number}`]: { oid: string } | null;
 };
 
 // Each commit's parents, for every commit the history walk saw; null for a
 // commit with more parents than the walk read (an octopus merge), which a
 // caller treats as history it cannot read.
 export type Parents = Record<string, string[] | null>;
+
+// The main line, newest first, and for each watched path (the map and each
+// skill's folder) every commit on it whose copy differs from its first
+// parent's, newest first: the plugin's `git log --first-parent -- <path>`.
+export type MainLine = { mainLine: string[]; changes: Record<string, string[]> };
 
 async function recordFacts(
   token: string,
@@ -130,10 +138,16 @@ async function recordFacts(
   head: string,
   records: { path: string; touched: string[] }[],
   parents: Parents,
+  watched: string[],
+  line: MainLine,
 ): Promise<Snapshot["corrections"]> {
   const facts: Snapshot["corrections"] = {};
   if (!records.length) return facts;
-  const fileFields = records.map((r, i) => `f${i}: file(path: ${quote(r.path)}) { oid }`).join(" ");
+  const fileFields = [
+    ...records.map((r, i) => `f${i}: file(path: ${quote(r.path)}) { oid }`),
+    ...records.map((r, i) => `g${i}: file(path: ${quote(`${LEGACY_CORRECTIONS_DIR}/${r.path.split("/").pop()}`)}) { oid }`),
+    ...watched.map((path, i) => `w${i}: file(path: ${quote(path)}) { oid }`),
+  ].join(" ");
   const nodes = new Map<string, HistoryNode>();
   let after: string | null = null;
   let seen = 0;
@@ -156,6 +170,31 @@ async function recordFacts(
   }
 
   const fileAt = (node: HistoryNode | undefined, i: number) => (node ? (node[`f${i}`]?.oid ?? null) : null);
+  const watchedAt = (node: HistoryNode | undefined, i: number) => (node ? (node[`w${i}`]?.oid ?? null) : null);
+
+  // The main line, and where each watched path changed along it. A skill's
+  // folder the head holds must show an id at the head, or the walk did not
+  // read it: it is then left out, and serving that skill is refused as
+  // unreadable (skills.ts, changedSince), while every other tool goes on.
+  for (let node = nodes.get(head); node; ) {
+    line.mainLine.push(node.oid);
+    const first = node.parents.nodes[0]?.oid;
+    if (first && !nodes.has(first)) {
+      // A main line the walk did not reach the root of cannot say where the
+      // map was first saved, so it judges no approval at all.
+      line.mainLine.length = 0;
+      break;
+    }
+    node = first ? nodes.get(first) : undefined;
+  }
+  for (const [i, path] of watched.entries()) {
+    if (path.startsWith("skills/") && !watchedAt(nodes.get(head), i)) continue;
+    line.changes[path] = line.mainLine.filter((oid) => {
+      const node = nodes.get(oid)!;
+      const parent = node.parents.nodes[0] ? nodes.get(node.parents.nodes[0].oid) : undefined;
+      return watchedAt(node, i) !== watchedAt(parent, i);
+    });
+  }
 
   for (const [i, record] of records.entries()) {
     // The commit that first added it: the oldest commit, not a merge, holding
@@ -206,8 +245,41 @@ async function recordFacts(
         }
       }
     }
+    // What the commit that first brought it onto the main line changed,
+    // compared with its first parent (base_reader: the oldest first-parent
+    // commit that added it, then git show --diff-merges=first-parent). A list
+    // GitHub cuts short counts as changing nothing, so the record then settles
+    // nothing.
+    // The commit that first added it on the main line under either of its
+    // names (skill_install.first_added).
+    const legacy = `${LEGACY_CORRECTIONS_DIR}/${record.path.split("/").pop()}`;
+    const chain: ChainNode[] = line.mainLine.map((oid) => {
+      const node = nodes.get(oid)!;
+      return {
+        oid,
+        email: node.author.email,
+        day: node.author.date?.slice(0, 10) ?? null,
+        names: { [record.path]: fileAt(node, i), [legacy]: node[`g${i}`]?.oid ?? null },
+      };
+    });
+    const firstAdded = firstAddedIn(chain);
+    const firstIn: HistoryNode | null = firstAdded ? nodes.get(firstAdded.oid)! : null;
+    let acceptedPaths: string[] | null = null;
+    if (merged && firstIn) {
+      const first = firstIn.parents.nodes[0]?.oid;
+      const shown = first
+        ? await api<{ files?: { filename: string }[] }>(`/repos/${owner}/${repo}/compare/${first}...${firstIn.oid}`, { token })
+        : await api<{ files?: { filename: string }[] }>(`/repos/${owner}/${repo}/commits/${firstIn.oid}`, { token });
+      const names = (shown.files ?? []).map((file) => file.filename);
+      acceptedPaths = names.length >= 300 ? [] : names;
+    }
     const day = merged?.author.date?.slice(0, 10) ?? null;
+    const addedDay = firstIn?.author.date?.slice(0, 10) ?? null;
     facts[record.path] = {
+      addedBy: firstIn?.author.email ?? null,
+      addedOn: addedDay && /^\d{4}-\d{2}-\d{2}$/.test(addedDay) ? addedDay : null,
+      addedIn: firstIn?.oid ?? null,
+      acceptedPaths,
       coModified,
       hashAtCommit,
       mergedBy: merged?.author.email ?? null,
@@ -262,7 +334,7 @@ async function savedRevisions(
 // a folder ("tree") from a file ("blob") or another repository ("commit").
 export type TreeEntry = { path: string; mode: string; type: string; sha: string };
 
-export type BaseSnapshot = Snapshot & { branch: string; head: string; skillTree: TreeEntry[]; parents: Parents; links: string[] };
+export type BaseSnapshot = Snapshot & MainLine & { branch: string; head: string; skillTree: TreeEntry[]; parents: Parents; links: string[] };
 
 export async function snapshotOf(token: string, owner: string, repo: string, today: string): Promise<BaseSnapshot> {
   if (!validRepo(owner, repo)) throw new BaseUnavailable();
@@ -305,9 +377,19 @@ export async function snapshotOf(token: string, owner: string, repo: string, tod
   }
 
   const parents: Parents = {};
+  const line: MainLine = { mainLine: [], changes: {} };
+  const watched = [
+    "context/map.md",
+    CORRECTIONS_DIR,
+    LEGACY_CORRECTIONS_DIR,
+    ...tree.tree
+      .filter((entry) => entry.type === "tree" && entry.path.startsWith("skills/") && !entry.path.slice("skills/".length).includes("/"))
+      .map((entry) => entry.path)
+      .sort(),
+  ];
   const [confirmationAuthors, corrections] = await Promise.all([
     blameAll(token, owner, repo, head, confirmations),
-    recordFacts(token, owner, repo, head, records, parents),
+    recordFacts(token, owner, repo, head, records, parents, watched, line),
   ]);
   // The skills folder is only listed here; a skill's files are read when a
   // skill is served (connector/skills.ts), never as documents.
@@ -343,6 +425,7 @@ export async function snapshotOf(token: string, owner: string, repo: string, tod
     skillTree,
     parents,
     links,
+    ...line,
   };
 }
 

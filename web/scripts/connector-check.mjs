@@ -349,12 +349,14 @@ if (secret) {
   const skillTool = (tools.body?.result?.tools ?? []).find((t) => t.name === "use_skill");
   check(
     "use_skill is titled Use a company skill, read only, and says how to find the skills",
-    skillTool?.title === "Use a company skill" && skillTool?.annotations?.readOnlyHint === true && /list_documents names them/.test(skillTool?.description ?? ""),
+    skillTool?.title === "Use a company skill" &&
+      skillTool?.annotations?.readOnlyHint === true &&
+      /list_documents names the base's approved skills/.test(skillTool?.description ?? ""),
     skillTool?.description?.slice(0, 120),
   );
   check(
-    "the instructions say how skills are used, with no base's skills when none can be tied to the call",
-    /call use_skill before doing the work/.test(init.body?.result?.instructions ?? ""),
+    "the instructions say how skills are used and never list any base's skills",
+    /call use_skill before doing the work/.test(init.body?.result?.instructions ?? "") && !/approved skills, each with when/.test(init.body?.result?.instructions ?? ""),
   );
 
   const noConversation = await callTool(token, "list_bases", {}, null);
@@ -449,7 +451,12 @@ if (secret) {
     check("a skill the base does not hold is refused, naming the ones it does", /holds no skill by that name/.test(unknown) && /- drift-grade: /.test(unknown));
     const listing = await mcp(real, { method: "tools/list", params: { _meta: { "com.anthropic/session": conv } } }, { protocol: "2025-11-25" });
     const description = (listing.body?.result?.tools ?? []).find((t) => t.name === "use_skill")?.description ?? "";
-    check("once the conversation uses that base, the tool list carries its skill index", description.includes(`The base ${skillBase} holds these approved skills`) && description.includes("- drift-grade: "), description.slice(-200));
+    const instructions = (await mcp(real, { method: "initialize", params: { protocolVersion: "2025-11-25", capabilities: {}, clientInfo: { name: "check", version: "1" }, _meta: { "com.anthropic/session": conv } } }, { protocol: "2025-11-25" })).body?.result?.instructions ?? "";
+    check(
+      "even once the conversation uses that base, the tool list and the instructions name none of its skills",
+      !description.includes("drift-grade") && !instructions.includes("drift-grade"),
+      description.slice(-200),
+    );
   } else {
     console.log("skip  the skill checks (set GITHUB_TOKEN and SKILL_BASE, a base holding an approved drift grade)");
   }

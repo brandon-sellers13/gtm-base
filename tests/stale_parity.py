@@ -133,6 +133,16 @@ def corrections_record(entry_id, staging_id, content_hash, touched):
     )
 
 
+def _first_added(root, path, runner):
+    """Who first added a record to the main line (skill_install.first_added), when the plugin has it."""
+    from gtmbase import skill_install
+
+    if not hasattr(skill_install, "first_added"):
+        return {}
+    email, day, revision = skill_install.first_added(root, path, "main", runner)
+    return {"addedBy": email, "addedOn": day, "addedIn": revision}
+
+
 class Base(object):
     """One scenario's repository, built commit by commit."""
 
@@ -165,9 +175,17 @@ class Base(object):
         self.save({confirmations_path(path): text}, author=author, append=True)
 
     def accept_record(self, entry_id, merged_by, merged_on, good_hash=True, change_doc=True,
-                      path="context/positioning.md", owner=OWNER, extra=""):
-        """A proposal written by a teammate on a side branch, merged onto main."""
+                      path="context/positioning.md", owner=OWNER, extra="", undo=False):
+        """A proposal written by a teammate on a side branch, merged onto main.
+
+        With `undo`, a second commit on the proposal puts the document back as
+        it was, so the proposal as a whole changes records only.
+        """
         staging = "stg-cccccccccccccccc"
+        before = None
+        if undo:
+            with open(os.path.join(self.root, path), encoding="utf-8") as handle:
+                before = handle.read()
         git(["checkout", "-q", "-b", "proposal"], cwd=self.root)
         new_text = doc("doc", owner, "Fixed", body="Companies over 50 people.")
         files = {}
@@ -182,6 +200,8 @@ class Base(object):
             record = record.replace("marker:", extra + "marker:", 1)
         files["learning/corrections/%s.md" % staging] = record
         self.save(files, author=TEAMMATE, day="2026-11-08")
+        if undo:
+            self.save({path: before}, author=TEAMMATE, day="2026-11-08")
         git(["checkout", "-q", "main"], cwd=self.root)
         git(
             ["merge", "-q", "--no-ff", "-m", "accept", "proposal"],
@@ -227,6 +247,10 @@ class Base(object):
                 "mergedBy": record.merged_by_email,
                 "mergedOn": record.merged_on.isoformat() if record.merged_on else None,
                 "mergedIn": base_reader.accepted_at(self.root, path, "main", runner)[2],
+                **_first_added(self.root, path, runner),
+                "acceptedPaths": (
+                    None if getattr(record, "accepted_paths", None) is None else list(record.accepted_paths)
+                ),
             }
             if corrections[path]["mergedIn"]:
                 revisions.add(corrections[path]["mergedIn"])
@@ -401,6 +425,12 @@ def scenarios():
         b.save({"learning/changes/%s.md" % A: change(A, "2026-11-01", "2026-11-02", POS)})
         b.accept_record(A, OWNER, "2026-11-10", change_doc=False)
     yield s("an accepted record that did not change the document", record_alone)
+
+    # C2's security review, the borderline pattern closed on 2026-11-27.
+    def edit_undone(b):
+        b.save({"learning/changes/%s.md" % A: change(A, "2026-11-01", "2026-11-02", POS)})
+        b.accept_record(A, OWNER, "2026-11-10", undo=True)
+    yield s("an accepted record whose edit was undone inside the proposal", edit_undone)
 
     def second_owner(b):
         b.save({"learning/changes/%s.md" % A: change(A, "2026-11-01", "2026-11-02", ["context/messaging.md"])})

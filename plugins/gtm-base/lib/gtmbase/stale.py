@@ -288,6 +288,14 @@ class CorrectionRecord(object):
     when the caller could not work that out. When the address is one of the
     affected file's owners, accepting the change is that owner saying the file
     is right, which is Brandon's rule of 2026-09-05.
+
+    `accepted_paths` are the files the change that first brought the record onto
+    that line changed, compared with its first parent. A record settles a file
+    only when that change changed the file too, so a proposal that edits a
+    document, adds its record and then undoes the edit is accepted as records
+    only and settles nothing (C2's security review, the borderline pattern
+    Brandon closed on 2026-11-27). None means nobody worked it out, and the
+    rule is not applied.
     """
 
     __slots__ = (
@@ -298,6 +306,7 @@ class CorrectionRecord(object):
         "merged_by_email",
         "merged_on",
         "merged_allowed",
+        "accepted_paths",
     )
 
     def __init__(
@@ -309,7 +318,9 @@ class CorrectionRecord(object):
         merged_by_email: Optional[str] = None,
         merged_on=None,
         merged_allowed=None,
+        accepted_paths: Optional[Sequence[str]] = None,
     ):
+        self.accepted_paths = None if accepted_paths is None else list(accepted_paths)
         # Keyed by path: whether whoever accepted the record was in that
         # file's authority set when they accepted it (CS4). None means nobody
         # judged it, and the file's owners today decide.
@@ -982,6 +993,10 @@ def _corrections_confirmations(known, corrections, malformed):
                         MALFORMED_HASH_MISMATCH,
                     )
                 )
+                continue
+            if record.accepted_paths is not None and path not in record.accepted_paths:
+                # Brought onto the main line without the file changing there:
+                # the edit was undone inside the proposal, so nothing is settled.
                 continue
             settled.add((entry_id, path))
             merged_on = _as_date(record.merged_on)
