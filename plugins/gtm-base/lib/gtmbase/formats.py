@@ -1446,6 +1446,21 @@ LEGACY_KEEP_HINT = (
 )
 PR_FIELDS = ("before", "after", "why", "evidence", "confidence", "rule_changed", "marker")
 
+# Words shaped like the start of the marker line, wherever they stand.
+_MARKER_WORDS_RE = re.compile(r"gtm-base(\s+)proposal", re.IGNORECASE)
+
+
+def defuse_marker_text(text: str) -> str:
+    """Words somebody wrote, with nothing in them that reads as the marker line.
+
+    The sections of a proposal hold a person's own words, each at the start of
+    a line, and a line of theirs shaped like the marker could be read as this
+    proposal's marker by whatever reads the body (the security review of P2 and
+    P3, finding 4). The hyphen is taken out of the first word, so the words
+    still read the same and no line of them can match.
+    """
+    return _MARKER_WORDS_RE.sub(lambda found: "gtm base%sproposal" % found.group(1), text)
+
 
 def render_pr_body(fields: Dict[str, Any]) -> str:
     """Write the one document a reviewer reads, in the one order it has."""
@@ -1472,12 +1487,12 @@ def render_pr_body(fields: Dict[str, Any]) -> str:
         "## Rule being changed\n\n%s\n\n"
         "## About this proposal\n\n%s\n\n%s\n\n%s\n"
         % (
-            fields["before"].strip(),
-            fields["after"].strip(),
-            fields["why"].strip(),
-            fields["evidence"].strip(),
+            defuse_marker_text(fields["before"].strip()),
+            defuse_marker_text(fields["after"].strip()),
+            defuse_marker_text(fields["why"].strip()),
+            defuse_marker_text(fields["evidence"].strip()),
             fields["confidence"].strip(),
-            str(rule).strip(),
+            defuse_marker_text(str(rule).strip()),
             ABOUT_SENTENCE,
             KEEP_THE_CHANGE_HINT,
             marker,

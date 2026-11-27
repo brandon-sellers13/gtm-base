@@ -105,6 +105,9 @@ REASON_APPROVAL_TICKET = "names-the-approval-ticket"
 # shared copy, carrying more than confirmation lines (P2). Every other change
 # from a seat goes to its owner as a proposal.
 REASON_SHARED_LINE = "straight-to-the-shared-line"
+# A send that takes away or writes over a proposal waiting on the shared copy
+# (the security review of P2 and P3, finding 3).
+REASON_PROPOSAL_REWRITE = "rewrites-a-proposal"
 
 # What a seat may still send straight to the shared line: the confirmation
 # lines an owner writes when they say a document is still right, which the app
@@ -112,6 +115,10 @@ REASON_SHARED_LINE = "straight-to-the-shared-line"
 BOOKKEEPING_PREFIX = "work/confirmations/"
 
 SENTENCES = {
+    REASON_PROPOSAL_REWRITE: (
+        "GTM Base stopped this because it would take away or write over a "
+        "proposal that is waiting for its owner. Make a new proposal instead."
+    ),
     REASON_SHARED_LINE: (
         "GTM Base stopped this because it sends a change straight to the base "
         "everyone shares. A change goes to its owner as a proposal instead, "
@@ -873,6 +880,14 @@ def _classify_git(
         # including the base's own settings file, a section renamed into the
         # protected one was read by the name it came from, and a value that
         # only held the text of the key was refused.
+        if _config_points_hooks_elsewhere(rest):
+            # Git's own check before a send lives in the hooks folder, so a
+            # setting that moves that folder turns the check off for good.
+            # Only the one-command form was refused until the security review
+            # of P2 and P3 (finding 2). Refused in any settings file, because
+            # the account's own settings reach every base on this computer.
+            result.deny(REASON_HOOKS_PATH)
+            return
         where = folder.resolve(directory) if (directory and folder) else directory
         if where is None and folder is not None:
             where = folder.path
@@ -1036,6 +1051,53 @@ def _config_changes_the_base_name(rest: Sequence[str], where: Optional[str]) -> 
     return positional[0].strip().lower() == paths.BASE_ID_CONFIG_KEY
 
 
+def _config_points_hooks_elsewhere(rest: Sequence[str]) -> bool:
+    """Whether one `git config` command sets the folder git runs its hooks from.
+
+    Setting it, in either form, is what turns git's own check before a send
+    off; reading it, or taking it away, which puts the hooks back, is not.
+    Renaming or replacing the whole section it lives in is read as setting it.
+    """
+    tokens = [str(token) for token in rest]
+    action = "set"
+    if tokens and not tokens[0].startswith("-"):
+        word = tokens[0].lower()
+        if word in _CONFIG_WORDS:
+            if _CONFIG_WORDS[word] is None:
+                return False
+            action = _CONFIG_WORDS[word]
+            tokens = tokens[1:]
+    positional: List[str] = []
+    index = 0
+    while index < len(tokens):
+        token = tokens[index]
+        name, sign, _value = token.partition("=")
+        lowered = name.lower()
+        if token == "--":
+            positional.extend(tokens[index + 1 :])
+            break
+        if lowered in _CONFIG_READS or lowered == "--blob":
+            return False
+        if lowered in _CONFIG_OPTIONS:
+            action = _CONFIG_OPTIONS[lowered]
+            index += 1
+            continue
+        if (lowered in _CONFIG_VALUED or lowered in ("-f", "--file")) and not sign:
+            index += 2
+            continue
+        if token.startswith("-"):
+            index += 1
+            continue
+        positional.append(token)
+        index += 1
+    sections = set(key.split(".", 1)[0] for key in _HOOKS_PATH_KEYS)
+    if action == "rename":
+        return any(name.strip().lower() in sections for name in positional[:2])
+    if action == "set":
+        return len(positional) >= 2 and positional[0].strip().lower() in _HOOKS_PATH_KEYS
+    return False
+
+
 def _config_edit_folder(rest: Sequence[str], where: Optional[str]) -> Optional[str]:
     """The folder whose settings a `git config --edit` would open.
 
@@ -1150,6 +1212,36 @@ def _gh_api_is_a_write(tokens: Sequence[str]) -> bool:
     return False
 
 
+# What a write through GitHub's own interface names when it changes a branch,
+# a file, or merges: the references, the contents, a merge, a proposal's merge.
+_GH_API_LANDS_RE = re.compile(
+    r"(?:^|/)(?:git/refs|contents|merges|merge-upstream)(?:/|$|\?)"
+    r"|(?:^|/)pulls/\d+/merge(?:/|$|\?)",
+    re.IGNORECASE,
+)
+# The GraphQL operations that do the same.
+_GH_GRAPHQL_LANDS_RE = re.compile(
+    r"\b(?:mergePullRequest|createCommitOnBranch|updateRefs?|createRef|deleteRef|"
+    r"enablePullRequestAutoMerge|mergeBranch)\b"
+)
+
+
+def _gh_reaches_the_shared_copy(tokens: Sequence[str]) -> bool:
+    """Whether a GitHub write would change a branch or a file on the shared copy."""
+    words = _gh_words(list(tokens))
+    if tuple(words[:2]) == constants.GH_MERGE:
+        return True
+    if not words or words[0] != "api":
+        return False
+    rest = [str(token) for token in tokens]
+    if any(token.lower() == "graphql" for token in rest):
+        # A query kept in a file cannot be read here, so it counts as one.
+        return any(
+            _GH_GRAPHQL_LANDS_RE.search(token) or "=@" in token for token in rest
+        )
+    return any(_GH_API_LANDS_RE.search(token) for token in rest)
+
+
 def _classify_gh(tokens: List[str], result: Classification) -> None:
     result.has_gh = True
     words = _gh_words(tokens)
@@ -1161,7 +1253,7 @@ def _classify_gh(tokens: List[str], result: Classification) -> None:
         if denied == single or denied == pair:
             result.deny(REASON_DENIED_COMMAND)
             return
-    if pair in constants.GH_GATED_WRITES:
+    if pair in constants.GH_GATED_WRITES or pair == constants.GH_MERGE:
         result.gh_writes.append(list(tokens))
         return
     if words[0] == "api" and _gh_api_is_a_write(tokens[1:]):
@@ -1690,32 +1782,108 @@ def only_bookkeeping(git: GitRunner, cwd: str, start: Optional[str], end: str) -
     return True
 
 
+# A target a send's own words cannot settle: a pattern, every matching branch,
+# or a mapping in the base's settings. Read as reaching every branch there is.
+_ANY_TARGET = "*"
+# The lines of work proposals travel on, on the shared copy.
+PROPOSAL_REF_PREFIX = "refs/heads/" + constants.PROPOSAL_BRANCH_PREFIX
+
+
+def _setting(git: GitRunner, cwd: str, key: str) -> List[str]:
+    found = git.run(["config", "--get-all", key], cwd=cwd)
+    return [line.strip() for line in found.out().splitlines() if line.strip()] if found.ok else []
+
+
+def _branch_named(target: str) -> str:
+    return target[len("refs/heads/"):] if target.startswith("refs/heads/") else target
+
+
+def push_targets(git: GitRunner, cwd: str, push, branch_now) -> List[Tuple[str, str, bool]]:
+    """Every (source, branch on the shared copy, forced) a typed send would write.
+
+    Worked out the way git does, not from the words alone (the security review
+    of P2 and P3, finding 2): a send naming no branch follows `push.default`
+    and any `remote.<name>.push` mapping in the settings, and a pattern or a
+    mapping that the words cannot settle is read as reaching every branch.
+    """
+    remote = push.remote or "origin"
+    # The source of every pair is empty only for a send that takes a branch
+    # away, so a send of every branch names its source as a pattern.
+    if push.all_refs:
+        return [(_ANY_TARGET, _ANY_TARGET, push.force)]
+    mapped = _setting(git, cwd, "remote.%s.push" % remote) if "/" not in remote and ":" not in remote else []
+    specs = list(push.refspecs)
+    if not specs:
+        if mapped:
+            specs = mapped
+        else:
+            default = (_setting(git, cwd, "push.default") or ["simple"])[-1].lower()
+            if default == "nothing":
+                return []
+            if default == "matching":
+                return [(_ANY_TARGET, _ANY_TARGET, push.force)]
+            if default in ("upstream", "tracking"):
+                merge = (
+                    _setting(git, cwd, "branch.%s.merge" % branch_now) if branch_now else []
+                )
+                return [("HEAD", _branch_named(merge[-1]) if merge else _ANY_TARGET, push.force)]
+            specs = ["HEAD"]
+    found: List[Tuple[str, str, bool]] = []
+    for spec in specs:
+        forced = push.force or spec.startswith("+")
+        text = spec[1:] if spec.startswith("+") else spec
+        if "*" in text or text == ":":
+            found.append((text, _ANY_TARGET, forced))
+            continue
+        source, colon, target = text.partition(":")
+        if not colon:
+            if mapped and push.refspecs:
+                # A branch named alone goes where the settings map it.
+                found.append((source, _ANY_TARGET, forced))
+                continue
+            target = source
+        if target in ("", "HEAD"):
+            target = branch_now or _ANY_TARGET
+        found.append((source, _branch_named(target), forced))
+    return found
+
+
 def _reaches_the_shared_line(git: GitRunner, cwd: str, push, branch_now) -> bool:
     """Whether a send typed on a command line would change the shared line with more than bookkeeping."""
     if not shared_line_is_held(cwd, git):
         return False
     remote = push.remote or "origin"
     names = shared_line_names(git, cwd, remote)
-    if push.all_refs:
-        return True
-    for spec in push.refspecs or ["HEAD"]:
-        text = spec[1:] if spec.startswith("+") else spec
-        source, colon, target = text.partition(":")
-        if not colon:
-            target = source
-        if target in ("", "HEAD"):
-            target = branch_now or ""
-        target_name = target.rsplit("/", 1)[-1]
-        if target_name not in names:
+    for source, target, _forced in push_targets(git, cwd, push, branch_now):
+        if target == _ANY_TARGET:
+            return True
+        if target not in names:
             continue
         if push.delete or not source:
             return True
-        upstream = "refs/remotes/%s/%s" % (remote, target_name)
+        upstream = "refs/remotes/%s/%s" % (remote, target)
         start = git.run(["rev-parse", "--verify", "--quiet", upstream + "^{commit}"], cwd=cwd)
         end = git.run(
             ["rev-parse", "--verify", "--quiet", (source or "HEAD") + "^{commit}"], cwd=cwd
         )
         if not (start.ok and end.ok) or not only_bookkeeping(git, cwd, start.out(), end.out()):
+            return True
+    return False
+
+
+def _rewrites_a_proposal(git: GitRunner, cwd: str, push, branch_now) -> bool:
+    """Whether a typed send would take away or overwrite a proposal on the shared copy.
+
+    A proposal waits for its owner on a line of work of its own, and nothing a
+    seat does may take one away or write over a teammate's (the security
+    review of P2 and P3, finding 3). A new proposal is only ever added to.
+    """
+    if not shared_line_is_held(cwd, git):
+        return False
+    prefix = constants.PROPOSAL_BRANCH_PREFIX
+    for source, target, forced in push_targets(git, cwd, push, branch_now):
+        reaches = target == _ANY_TARGET or target.startswith(prefix)
+        if reaches and (push.delete or forced or not source):
             return True
     return False
 
@@ -2117,6 +2285,13 @@ def check_command(
     for folder in result.config_edits:
         if folder is None or _looks_like_a_base(folder, runner):
             return sentence_for(REASON_BASE_NAME)
+    # Accepting a proposal, or writing to a branch or a file through GitHub's
+    # own interface, lands a change on the shared copy without a push, so the
+    # checks on a push never see it (the security review of P2 and P3,
+    # finding 1). Refused from a base with a shared copy.
+    if any(_gh_reaches_the_shared_copy(tokens) for tokens in result.gh_writes):
+        if shared_line_is_held(cwd, runner):
+            return sentence_for(REASON_SHARED_LINE)
 
     # The record of having read somebody's own documents, in the half of it
     # that holds wherever a send comes from: a record standing there that
@@ -2208,6 +2383,10 @@ def check_command(
         # because knowing what it would undo takes nothing being read.
         if _forces_default_branch(runner, where, push, branch_now):
             return sentence_for(REASON_FORCE_DEFAULT)
+        if _looks_like_a_base(where, runner) and _rewrites_a_proposal(
+            runner, where, push, branch_now
+        ):
+            return sentence_for(REASON_PROPOSAL_REWRITE)
         # Straight onto the shared line from a base with a shared copy. Asked
         # after the content is read, so a send carrying a key or an address is
         # refused for that, which is the more useful thing to hear first.
@@ -2318,6 +2497,14 @@ def check_git_hook(
         )
         for parts in lines:
             _local_ref, local_sha, remote_ref, remote_sha = parts[:4]
+            if remote_ref.startswith(PROPOSAL_REF_PREFIX) and not _ZERO_SHA.match(remote_sha):
+                # A proposal already on the shared copy is only ever added to:
+                # taken away, or written over with history it did not have, is
+                # a teammate's proposal lost.
+                if _ZERO_SHA.match(local_sha) or not runner.run(
+                    ["merge-base", "--is-ancestor", remote_sha, local_sha], cwd=cwd
+                ).ok:
+                    return sentence_for(REASON_PROPOSAL_REWRITE)
             if remote_ref not in held:
                 continue
             if _ZERO_SHA.match(local_sha) or not only_bookkeeping(

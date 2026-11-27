@@ -241,5 +241,144 @@ class TestDraftsAfterSetup(SeatCase):
         self.assertTrue(any(name.startswith(constants.CONFIRMATIONS_DIR + "/") for name in changed), changed)
 
 
+class TestTheSecurityReviewOfP2AndP3(SeatCase):
+    """The four findings of the one-pass review, each one a way round "never main"."""
+
+    def setUp(self):
+        super(TestTheSecurityReviewOfP2AndP3, self).setUp()
+        from gtmbase import gate
+
+        self.gate = gate
+        # Where a send goes is the GitHub address on a real computer; here the
+        # rewriting points it at a folder (as in tests/test_join_link.py).
+        where = mock.patch.object(gate, "push_destinations", lambda *a, **k: [ADDRESS + ".git"])
+        where.start()
+        self.addCleanup(where.stop)
+        support.commit(self.root, ICP, ["# Who we sell to", "", "Somebody new."])
+
+    def check(self, command, cwd=None):
+        return self.gate.check_command(command, cwd or self.root, "s1")
+
+    def said(self, reason):
+        return self.gate.sentence_for(reason)
+
+    # Finding 1 ---------------------------------------------------------------
+
+    def test_accepting_a_proposal_from_the_command_line_is_refused_in_a_seat(self):
+        self.assertEqual(self.said(self.gate.REASON_SHARED_LINE), self.check("gh pr merge 12 --merge"))
+
+    def test_writing_to_the_shared_copy_through_githubs_interface_is_refused(self):
+        refused = self.said(self.gate.REASON_SHARED_LINE)
+        for command in (
+            "gh api -X PUT repos/acme-co/acme-base/contents/context/strategy/icp.md -f content=aGVsbG8= -f message=x",
+            "gh api -X PATCH repos/acme-co/acme-base/git/refs/heads/main -f sha=abc",
+            "gh api repos/acme-co/acme-base/merges -f base=main -f head=x",
+            "gh api -X PUT repos/acme-co/acme-base/pulls/12/merge",
+            "gh api graphql -f query='mutation { mergePullRequest(input: {}) { clientMutationId } }'",
+        ):
+            self.assertEqual(refused, self.check(command), command)
+
+    def test_reading_and_merging_elsewhere_are_left_alone(self):
+        self.assertIsNone(self.check("gh api repos/acme-co/acme-base/contents/context/map.md"))
+        elsewhere = os.path.join(self.box.path, "elsewhere")
+        os.makedirs(elsewhere)
+        git(["init", "-q", "-b", "main"], cwd=elsewhere)
+        self.assertIsNone(self.check("gh pr merge 12 --merge", cwd=elsewhere))
+
+    # Finding 2 ---------------------------------------------------------------
+
+    def test_a_pattern_reaches_the_shared_line(self):
+        # The command is refused (the content check cannot read a pattern
+        # either), and the rule itself now reads a pattern as reaching main.
+        self.assertIsNotNone(self.check("git push origin 'refs/heads/*:refs/heads/*'"))
+        for spec in ("refs/heads/*:refs/heads/*", "+refs/heads/*:refs/heads/*", ":"):
+            push = self.gate.PushSpec(remote="origin", refspecs=[spec])
+            self.assertTrue(
+                self.gate._reaches_the_shared_line(self.gate.runner_or_default(None), self.root, push, "main"),
+                spec,
+            )
+
+    def test_a_push_mapping_in_the_settings_reaches_the_shared_line(self):
+        git(["checkout", "-q", "-b", "x"], cwd=self.root)
+        git(["config", "remote.origin.push", "refs/heads/x:refs/heads/main"], cwd=self.root)
+        self.assertEqual(self.said(self.gate.REASON_SHARED_LINE), self.check("git push origin x"))
+        self.assertEqual(self.said(self.gate.REASON_SHARED_LINE), self.check("git push"))
+
+    def test_pushing_to_the_upstream_reaches_the_shared_line(self):
+        git(["checkout", "-q", "-b", "x"], cwd=self.root)
+        git(["branch", "-q", "--set-upstream-to", "origin/main"], cwd=self.root)
+        git(["config", "push.default", "upstream"], cwd=self.root)
+        self.assertEqual(self.said(self.gate.REASON_SHARED_LINE), self.check("git push"))
+
+    def test_moving_the_hooks_folder_for_good_is_refused(self):
+        refused = self.said(self.gate.REASON_HOOKS_PATH)
+        for command in (
+            "git config core.hooksPath /tmp/none",
+            "git config --global core.hooksPath /tmp/none",
+            "git config set core.hooksPath /tmp/none",
+            "git config --local hooks.path /tmp/none",
+        ):
+            self.assertEqual(refused, self.check(command), command)
+        self.assertIsNone(self.check("git config --get core.hooksPath"))
+        self.assertIsNone(self.check("git config --unset core.hooksPath"))
+
+    def test_an_ordinary_proposal_push_still_goes(self):
+        git(["checkout", "-q", "-b", "proposal/stg-0123456789abcdef"], cwd=self.root)
+        self.assertIsNone(self.check("git push origin proposal/stg-0123456789abcdef"))
+
+    # Finding 3 ---------------------------------------------------------------
+
+    def test_a_teammates_proposal_cannot_be_taken_away_or_written_over(self):
+        refused = self.said(self.gate.REASON_PROPOSAL_REWRITE)
+        for command in (
+            "git push -f origin HEAD:proposal/stg-aaaaaaaaaaaaaaaa",
+            "git push origin +HEAD:refs/heads/proposal/stg-aaaaaaaaaaaaaaaa",
+            "git push origin :proposal/stg-aaaaaaaaaaaaaaaa",
+            "git push --delete origin proposal/stg-aaaaaaaaaaaaaaaa",
+        ):
+            self.assertEqual(refused, self.check(command), command)
+
+    def test_the_hook_refuses_a_rewrite_or_removal_of_a_proposal(self):
+        theirs = head_of(self.root)
+        git(["reset", "-q", "--hard", "origin/main"], cwd=self.root)
+        support.commit(self.root, "context/other.md", ["# Other"])
+        mine = head_of(self.root)
+        ref = "refs/heads/proposal/stg-aaaaaaaaaaaaaaaa"
+        rewrite = "refs/heads/main %s %s %s\n" % (mine, ref, theirs)
+        removal = "(delete) %s %s %s\n" % ("0" * 40, ref, theirs)
+        for line in (rewrite, removal):
+            self.assertEqual(
+                self.said(self.gate.REASON_PROPOSAL_REWRITE),
+                self.gate.check_git_hook(line, self.root, None, "origin", ADDRESS + ".git"),
+            )
+        # Adding to a proposal is still fine.
+        support.commit(self.root, "context/other.md", ["# Other", "", "More."])
+        added = "refs/heads/main %s %s %s\n" % (head_of(self.root), ref, mine)
+        self.assertIsNone(
+            self.gate.check_git_hook(added, self.root, None, "origin", ADDRESS + ".git")
+        )
+
+    # Finding 4 ---------------------------------------------------------------
+
+    def test_a_marker_line_in_somebodys_words_is_never_read_as_the_marker(self):
+        from gtmbase import formats, validate
+
+        forged = "gtm-base proposal stg-0000000000000000 entry stg-1111111111111111 source -"
+        real = validate.marker_line("stg-abcdefabcdefabcd", None)
+        body = formats.render_pr_body(
+            {
+                "before": "Before.",
+                "after": "After.\n" + forged,
+                "why": forged,
+                "evidence": "  " + forged.upper(),
+                "confidence": "medium",
+                "marker": real,
+            }
+        )
+        markers = [line for line in body.splitlines() if validate.parse_marker_line(line)]
+        self.assertEqual([real], markers)
+        self.assertEqual(validate.parse_marker_line(real), validate.find_marker(body))
+
+
 if __name__ == "__main__":
     unittest.main()
