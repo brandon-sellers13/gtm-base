@@ -30,7 +30,7 @@ Built and live:
 Plan: `docs/plans/2026-11-26-001-feat-chat-connector-plan.md`.
 
 1. **C1, C2 and C4** are done and live.
-2. **C3.** Skills served live, with the skill index in the connector's instructions and each skill arriving with the documents it needs. It is blocked until Track 3 builds the runner and gives a base an approved skills folder, and until Track 4 builds drift grade, the first skill worth serving.
+2. **C3.** Skills served live, with the skill index in the connector's instructions and each skill arriving with the documents it needs. Built on 2026-11-27 on top of the runner, the skills folder and drift grade, and deployed to the test site only; it waits on its security review before anyone but Brandon connects.
 3. **C5.** A short setup guide and a copyable Project instruction for each base, so a person working for several clients sets up one Project per client. Nothing blocks it.
 4. Carried over from C1 and C2: the Claude half of the run, the refusal when a conversation asks for a second base, and the sign-in test with two GitHub accounts. All three need Simona's account.
 5. A security review (one pass) of C3 before anyone but Brandon connects, then an end-to-end run in Claude and in ChatGPT across two Projects. C2's review found nothing at the bar, apart from one borderline proposal pattern that needs Brandon's decision (below).

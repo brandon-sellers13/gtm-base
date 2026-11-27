@@ -10,6 +10,7 @@ import {
   validateChangeEntry,
 } from "./formats";
 import { contentHash } from "./rules";
+import { touchesSkills } from "./skills";
 
 // Everything the connector and the web app write into a base, in the plugin's
 // own formats, so Claude Code reads it exactly as it reads its own. Each text is
@@ -137,6 +138,8 @@ export async function openProposal(options: {
   body: string;
 }): Promise<{ number: number; url: string }> {
   const { token, owner, repo } = options;
+  // The connector never writes into a base's skills folder (C3).
+  if (touchesSkills(Object.keys(options.files))) throw new Error("A proposal may not write into the skills folder.");
   const info = await api<{ default_branch: string }>(path(owner, repo), { token });
   const tip = await api<{ object: { sha: string } }>(
     `${path(owner, repo)}/git/ref/heads/${encodeURIComponent(info.default_branch)}`,

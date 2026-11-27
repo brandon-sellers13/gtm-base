@@ -444,15 +444,27 @@ const CORRECTIONS_FIELDS = [
   "approved_hashes",
 ];
 
-// formats._pairs: a list of path=value items.
-function pairs(value: Value | undefined): void {
+// formats._pairs: a list of path=value items, read into a mapping from path
+// to value (a later item for the same path wins, as in a Python dict).
+function pairs(value: Value | undefined): Record<string, string> {
+  const found: Record<string, string> = {};
   for (const item of asList(value ?? [])) {
     const at = item.lastIndexOf("=");
     if (at < 0 || !item.slice(0, at) || !item.slice(at + 1)) throw new Refused("bad-pair");
+    found[item.slice(0, at)] = item.slice(at + 1);
   }
+  return found;
 }
 
-export type CorrectionsFile = { entryId: string | null; contentHash: string; touchedPaths: string[] };
+export type CorrectionsFile = {
+  entryId: string | null;
+  contentHash: string;
+  touchedPaths: string[];
+  // Since Plan 1's Unit 4.2b: the role and the exact hash each approved file
+  // was approved with (a skill's approval names every file of the skill).
+  approvedRoles: Record<string, string>;
+  approvedHashes: Record<string, string>;
+};
 
 // CorrectionsFile.parse; the plugin does not validate it on this path.
 export function parseCorrectionsFile(text: string): CorrectionsFile {
@@ -465,12 +477,14 @@ export function parseCorrectionsFile(text: string): CorrectionsFile {
   if (!("third_party" in fields)) throw new Refused("missing-field");
   asBool(fields.third_party);
   const touchedPaths = asList(fields.touched_paths ?? []);
-  pairs(fields.approved_roles);
-  pairs(fields.approved_hashes);
+  const approvedRoles = pairs(fields.approved_roles);
+  const approvedHashes = pairs(fields.approved_hashes);
   return {
     entryId: optional(fields.entry_id),
     contentHash: strip(pyStr(fields.content_hash)),
     touchedPaths,
+    approvedRoles,
+    approvedHashes,
   };
 }
 

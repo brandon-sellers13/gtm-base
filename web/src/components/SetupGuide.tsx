@@ -68,7 +68,8 @@ export function SetupGuide({ owner, repo, connectorUrl }: { owner: string; repo:
         </li>
         <li>
           When Claude&apos;s permission mode is Manual, it asks before it uses each tool for the first time. Choose
-          Always allow for List my bases, List documents and Read a document. Leave Propose a context change and
+          Always allow for List my bases, List documents, Read a document and Use a company skill. Leave Propose a
+          context change and
           Prepare a fix for a document on Needs approval, so you see every proposal before Claude sends it. You can
           change these choices later in the connector&apos;s settings in Claude.
         </li>
