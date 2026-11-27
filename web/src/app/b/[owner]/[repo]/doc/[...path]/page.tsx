@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { Header } from "@/components/Header";
+import { SubmitButton } from "@/components/SubmitButton";
 import { readForPage } from "@/lib/pageData";
 import { docHref, PARTS, readDocument } from "@/lib/reader";
 import { currentSession } from "@/lib/session";
@@ -77,9 +78,9 @@ export default async function DocumentPage({
               <input type="hidden" name="repo" value={repo} />
               <input type="hidden" name="path" value={filePath} />
               <input type="hidden" name="entry" value={offer.entry.id} />
-              <button className="rounded-lg bg-ink px-4 py-2 text-sm font-medium text-ground">
+              <SubmitButton pendingText="Recording…" className="rounded-lg bg-ink px-4 py-2 text-sm font-medium text-ground">
                 It already reflects this change
-              </button>
+              </SubmitButton>
             </form>
           </section>
         )}
