@@ -23,7 +23,7 @@ def prompt(step):
 
 # The steps that read the material directly rather than the notes: a context
 # change, and every document drafted after setup (Track 4).
-SOURCE_STEPS = (drafting.STEP_CHANGE,) + drafting.LATER_STEPS
+SOURCE_STEPS = (drafting.STEP_CHANGE,) + drafting.DRAFTED_LATER
 
 
 def flat(text):
@@ -120,7 +120,7 @@ class TestEveryPromptRefusesPlaceholdersAndContactDetails(unittest.TestCase):
                 "Keep the customer names"
                 if step == drafting.STEP_CHANGE
                 else "written exactly as the sources write them"
-                if step in drafting.LATER_STEPS
+                if step in drafting.DRAFTED_LATER
                 else "written exactly as the notes write them"
             )
             self.assertIn(kept, flat(text), step)

@@ -1174,6 +1174,12 @@ class TestTheSkillsAsTheyAreWritten(unittest.TestCase):
             return umbrella.segment_text("Fintech lenders")
         if step in drafting.LATER_STEPS:
             return flow.captured(step + ".md")
+        if step in drafting.DESTINED_STEPS:
+            # Plan 1, Units 2.4a and 3.5: the shape kept in the plugin, which
+            # carries no figure the walk's material would have to hold.
+            return "```markdown\n%s```\n" % support.read(
+                os.path.join(support.PLUGIN_DIR, "starter", step + ".md")
+            )
         return flow.captured("icp.md" if step == "icp" else "positioning.md")
 
     # --- the walk itself ---------------------------------------------------

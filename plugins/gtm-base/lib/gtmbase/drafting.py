@@ -74,6 +74,25 @@ LATER_STEPS = (
 STEPS = STEPS + LATER_STEPS
 CONTEXT_STEPS = CONTEXT_STEPS + LATER_STEPS
 
+# Plan 1, Units 2.4a and 3.5: the goals, the metric definitions and a standard,
+# drafted after setup the same way, from what the person says and the
+# material they name. Each is asked for rather than inferred: a figure only
+# the person can give comes from their own words, which travel as pasted
+# text, and the figure rule refuses one neither carries. They differ from the
+# documents above in where they go. Goals and metric definitions go in the
+# folder of the business they are for when the base names one, and a
+# standard is written for one job, so each carries the destination its
+# request was given (`later_destination`).
+STEP_GOALS = "goals"
+STEP_METRICS = "metrics"
+STEP_STANDARD = "standard"
+DESTINED_STEPS = (STEP_GOALS, STEP_METRICS, STEP_STANDARD)
+# Every document drafted after setup: Track 4's, which may also be taken in
+# as they stand, and these three, which are only ever asked for.
+DRAFTED_LATER = LATER_STEPS + DESTINED_STEPS
+STEPS = STEPS + DESTINED_STEPS
+CONTEXT_STEPS = CONTEXT_STEPS + DESTINED_STEPS
+
 # What this step was called before the rename. A setup run somebody left
 # halfway through may have saved that name, and coming back to it has to work.
 LEGACY_STEP_CHANGE = "ledger-entry"
@@ -104,6 +123,9 @@ PROMPT_FILES.update(
         STEP_PRODUCT: "draft-product.md",
         STEP_COMPETITORS: "draft-competitors.md",
         STEP_DESIGN: "draft-design.md",
+        STEP_GOALS: "draft-goals.md",
+        STEP_METRICS: "draft-metric-definitions.md",
+        STEP_STANDARD: "draft-standard.md",
     }
 )
 
@@ -133,12 +155,41 @@ KINDS = {
 
 # Each document drafted after setup calls itself by its kind's own key, and
 # is written where the list of kinds keeps it.
-KINDS.update({step: step for step in LATER_STEPS})
+KINDS.update({step: step for step in DRAFTED_LATER})
 LATER_PATHS = {
     kind.key: kind.pattern
     for kind in constants.BASE_KINDS
-    if kind.key in LATER_STEPS
+    if kind.key in DRAFTED_LATER and "<" not in kind.pattern
 }
+
+def valid_destination(step: str, where: Optional[str]) -> bool:
+    """Whether a remembered destination is one this step may be written to.
+
+    The flat path of its kind, the kind's file in one business's folder
+    directly under `context`, or for a standard one standard's path. Nothing
+    deeper and nothing else.
+    """
+    from . import docpaths
+
+    if not where or not isinstance(where, str):
+        return False
+    found = docpaths.classify(where)
+    if found is None or found.path != where:
+        return False
+    if step == STEP_STANDARD:
+        return found.kind == docpaths.KIND_STANDARD
+    if step not in (STEP_GOALS, STEP_METRICS) or found.kind != docpaths.KIND_CONTEXT:
+        return False
+    if where == LATER_PATHS.get(step):
+        return True
+    parts = where.split("/")
+    return (
+        len(parts) == 3
+        and parts[0] == constants.CONTEXT_DIR
+        and re.match(r"^[a-z0-9]+(?:-[a-z0-9]+)*$", parts[1]) is not None
+        and parts[2] == step + ".md"
+    )
+
 
 # The settings every context file this unit writes has to carry.
 CONTEXT_FIELDS = ("kind", "owner", "last_confirmed", "sources", "status")
@@ -171,6 +222,8 @@ SKIPPED_HEADINGS = {
     STEP_PRODUCT: "Product",
     STEP_COMPETITORS: "Competitors",
     STEP_DESIGN: "Design guide",
+    STEP_GOALS: "Goals",
+    STEP_METRICS: "Metric definitions",
 }
 
 # The section every document drafted after setup ends with: what the material
@@ -220,6 +273,37 @@ LATER_ITEMS_SECTION = {
 # A part that may be empty, because an empty list is a real answer: a design
 # guide that forbids nothing says so by leaving this part empty (call 3).
 LATER_MAY_BE_EMPTY = {STEP_DESIGN: ("Forbidden devices",)}
+
+# Plan 1, Units 2.4a and 3.5. The goals and the metric definitions end with
+# what is not decided yet, because what they leave open is a decision nobody
+# has made, not material that was missing.
+UNDECIDED_SECTION = "What is not decided yet"
+LATER_SECTIONS[STEP_GOALS] = ("Goals", UNDECIDED_SECTION)
+LATER_SECTIONS[STEP_METRICS] = (
+    "Definitions",
+    "Counts that are different numbers",
+    UNDECIDED_SECTION,
+)
+# A standard's five parts (Plan 1, Unit 3.5): the rules of a job in words,
+# each number living in exactly one other place.
+LATER_SECTIONS[STEP_STANDARD] = (
+    "The job's goal",
+    "What is unacceptable",
+    "What needs approval",
+    "Checks before work is handed back",
+    "How each threshold relates to a goal",
+)
+LATER_ITEMS_SECTION[STEP_GOALS] = "Goals"
+LATER_ITEMS_SECTION[STEP_METRICS] = "Definitions"
+# The lines each goal and each definition carries, each holding the person's
+# answer or a `[your call: ...]` marker in its place.
+ITEM_LINES = {
+    STEP_GOALS: ("Target:", "Measured in:"),
+    STEP_METRICS: ("Counts:", "Where the number lives:"),
+}
+# The part a standard may leave as a real empty answer: a job that needs no
+# approval says so, and that is kept rather than refused.
+LATER_MAY_BE_EMPTY[STEP_STANDARD] = ("What needs approval",)
 
 # --- The codes a refusal carries ---------------------------------------------
 
@@ -286,6 +370,13 @@ CODE_GAP_UNNAMED = "gap-not-named:%s"
 # into a base by this path (Unit T4.5).
 CODE_IMAGE = "image"
 
+# Plan 1, Units 2.4a and 3.5: a goal or a definition missing one of its
+# lines, a standard's body holding a digit that is not part of a date, and a
+# destination that is not a place this document may go.
+CODE_ITEM_LINE = "item-line-missing:%s"
+CODE_DIGIT_IN_STANDARD = "digit-in-standard"
+CODE_NOT_A_DESTINATION = "not-a-destination"
+
 # The long dashes, written as escapes so this file holds neither of them.
 EM_DASH = "\u2014"
 EN_DASH = "\u2013"
@@ -324,6 +415,9 @@ PROGRESS = {
     STEP_PRODUCT: "Drafting your product document.",
     STEP_COMPETITORS: "Drafting your competitors document.",
     STEP_DESIGN: "Drafting your design guide.",
+    STEP_GOALS: "Drafting your goals.",
+    STEP_METRICS: "Drafting your metric definitions.",
+    STEP_STANDARD: "Drafting the standard for that job.",
     "saving": "Saving that into the base.",
 }
 
@@ -773,6 +867,8 @@ class Draft(object):
             return POSITIONING_PATH
         if self.step == STEP_SEGMENT and self.destination:
             return self.destination
+        if self.step in DESTINED_STEPS and self.destination:
+            return self.destination
         if self.step in LATER_PATHS:
             return LATER_PATHS[self.step]
         raise DraftError(self.step, "no-fixed-path")
@@ -1032,7 +1128,7 @@ def parse(step: str, model_text: str) -> Draft:
                 raise DraftError(step, CODE_EMPTY_SECTION % heading)
         if _holds_a_link(without_setup_sections(body)):
             raise DraftError(step, CODE_LINK)
-    if step in LATER_STEPS:
+    if step in DRAFTED_LATER:
         check_later_shape(step, body)
 
     return Draft(step, text, fields, body, [], present)
@@ -1085,6 +1181,8 @@ def check_later_shape(step: str, body: str) -> None:
             continue
         if not sections.get(heading.lower(), "").strip():
             raise DraftError(step, CODE_EMPTY_SECTION % heading)
+    if step == STEP_STANDARD and digits_outside_dates(body):
+        raise DraftError(step, CODE_DIGIT_IN_STANDARD)
     items_heading = LATER_ITEMS_SECTION.get(step)
     if items_heading is not None:
         part = sections.get(items_heading.lower(), "")
@@ -1100,6 +1198,10 @@ def check_later_shape(step: str, body: str) -> None:
                 not _facts_dated(text) for _heading, text in items
             ):
                 raise DraftError(step, CODE_FACT_UNDATED)
+            for label in ITEM_LINES.get(step, ()):
+                for _heading, text in items:
+                    if not _line_after(text, label):
+                        raise DraftError(step, CODE_ITEM_LINE % label.rstrip(":"))
     if step == STEP_PRODUCT and _PRICE_RE.search(
         sections.get("where pricing lives", "")
     ):
@@ -1160,6 +1262,75 @@ def colour_codes_in(text: str) -> List[str]:
         if code not in found:
             found.append(code)
     return found
+
+
+def _line_after(text: str, label: str) -> str:
+    """What one labelled line of an item says, or nothing when it is missing or empty."""
+    for line in str(text or "").split("\n"):
+        cleaned = line.strip().lstrip("-*").strip()
+        if cleaned.lower().startswith(label.lower()):
+            return cleaned[len(label):].strip()
+    return ""
+
+
+# A date written the one way the base writes dates, which the digit lint
+# lets through.
+_DATE_RE = re.compile(r"\b\d{4}-\d{2}-\d{2}\b")
+
+
+def digits_outside_dates(body: str) -> List[int]:
+    """The line numbers of a standard's body that hold a digit outside a date.
+
+    A number lives in exactly one place: a business goal in the goals, an
+    engine threshold in the engine's own settings (Plan 1, P41). So a
+    standard holds none. Number words are not caught here; the prompt forbids
+    them and the owner's read checks them.
+    """
+    found = []
+    for number, line in enumerate(str(body or "").split("\n"), start=1):
+        if re.search(r"\d", _DATE_RE.sub("", line)):
+            found.append(number)
+    return found
+
+
+def later_destination(
+    step: str,
+    base_root: Optional[str] = None,
+    business: Optional[str] = None,
+    job: Optional[str] = None,
+) -> str:
+    """Where a goals, metric definitions or standard draft goes, or a refusal.
+
+    Goals and metric definitions go flat at their kind's path when no
+    business is named, and in the named business's folder under `context`
+    when the map lists that business (Plan 1, call 1). A standard goes at
+    `standards/<job>.md`, and a job is always named.
+    """
+    from . import businesses, docpaths
+
+    if step == STEP_STANDARD:
+        if business or not job:
+            raise DraftError(step, CODE_NOT_A_DESTINATION)
+        found = docpaths.classify("%s/%s.md" % (constants.STANDARDS_DIR, job))
+        if found is None or found.kind != docpaths.KIND_STANDARD:
+            raise DraftError(step, CODE_NOT_A_DESTINATION)
+        return found.path
+    if step not in (STEP_GOALS, STEP_METRICS) or job:
+        raise DraftError(step, CODE_NOT_A_DESTINATION)
+    if not business:
+        return LATER_PATHS[step]
+    from . import base_reader
+
+    try:
+        listed = [
+            one.slug
+            for one in businesses.read_map_businesses(base_reader.map_text(base_root))
+        ] if base_root else []
+    except (ValidationError, PathError):
+        listed = []
+    if business not in listed:
+        raise DraftError(step, CODE_NOT_A_DESTINATION)
+    return "%s/%s/%s.md" % (constants.CONTEXT_DIR, business, step)
 
 
 def figures_in(text: str) -> List[str]:

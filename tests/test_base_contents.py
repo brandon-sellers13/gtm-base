@@ -515,9 +515,15 @@ class TestTheInventoryOffersThem(AfterSetup):
         self.assertEqual(inventory.STATE_SKIPPED, cell("voice").state)
         self.assertEqual(inventory.STATE_PRESENT, cell("messaging").state)
         offered = sorted(kind for kind, _column in answer.draftable_missing)
-        # This base predates the source map's starter, so it is offered too.
+        # This base predates the source map's starter, so it is offered too,
+        # and the goals, the definitions and a standard are offered since
+        # Plan 1's Units 2.4a and 3.5.
         self.assertEqual(
-            ["buyer-personas", "competitors", "design", "product", "stack"], offered
+            [
+                "buyer-personas", "competitors", "design", "goals",
+                "metrics", "product", "stack", "standard",
+            ],
+            offered,
         )
         self.assertIn("buyer personas", answer.ask().lower())
         self.assertEqual(2, len(constants.REQUIRED_CONTEXT_FILES))
