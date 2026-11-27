@@ -1874,9 +1874,9 @@ The lean plan Brandon approved on 2026-11-25: merge main, rehearse case three al
 The order across every track is in `docs/plans/2026-11-26-003-roadmap-to-full-experience.md`. No review per unit; one security review before anyone but Brandon connects.
 - [x] S0. The spike: what Claude and ChatGPT accept from a remote connector. (done 2026-11-26, PR #17)
 - [x] C1. The endpoint, GitHub sign-in and one base per conversation. (merged and live, PR #18)
-- [ ] C2. Reading documents, with the moment-of-use flag in the answer. (built with C4 on `claude/connector-c2-plan`; ChatGPT run passed end to end on the test site 2026-11-26; in review)
+- [x] C2. Reading documents, with the moment-of-use flag in the answer. (PR #23, merged as 429da77 and deployed to the live site on 2026-11-26 as deploy 6b08e688339d2aae566195f8; the one before it, for a rollback, is C1's 6b08b757ddcfc03acda297a1. The ChatGPT run passed end to end on the test site, the security review found nothing at the bar, and on the live site the home page, sign-in and the 19 public connector checks pass. The Claude half waits for Simona's invite.)
 - [ ] C3. Skills served live. (waits on Plan 1's skills folder, unit 4.2b)
-- [ ] C4. Proposing a context change from chat. (ships with C2, same pull request)
+- [x] C4. Proposing a context change from chat. (shipped with C2 in PR #23)
 - [ ] C5. The setup guide and a Project instruction for each base.
 - [ ] The security review, then the end-to-end run in Claude and ChatGPT across two Projects.
 
