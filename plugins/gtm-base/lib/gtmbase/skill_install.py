@@ -673,7 +673,8 @@ def approval_of(
         return showing
     files = showing.manifest.files
     default = base_reader._default_branch(base_root, git)
-    found = _approvals_of_the_skill(base_root, skill, default, git)
+    saved = _saved_approvals(base_root, skill, default, git)
+    found = [item for item in saved if _is_skill_approval(item[1], skill)]
     matching = [item for item in found if item[1].approved_hashes == files]
     for record_path, record, email, day, revision in matching:
         if any(
@@ -684,13 +685,23 @@ def approval_of(
             # version is not brought back by putting its bytes back.
             continue
         try:
-            # Judged as the base stood before the change that added the
-            # record, so a change cannot grant its own author the role it
-            # needs: a new skill names no owner yet, and the map is read as it
-            # was (the security pass on Unit 4.2b, finding 1).
-            role = authority.at(
-                base_root, _skill_md(skill), revision + "^1", runner=git
-            ).role_of(email)
+            # Anything on the main line that changed the skill's folder after
+            # the approval ends it, even when the files now match its hashes
+            # again, so deleting a newer record and putting the older bytes
+            # back does not bring the older version back (the C3 security
+            # review, finding 2).
+            if _changed_since(base_root, skill, revision, default, git):
+                continue
+            # Judged only from what authority already approved before this
+            # record reached the main line: the skill's owner line as its last
+            # valid approval had it, and the map's roles as the base owner
+            # last approved them. Whatever simply sat on the main line before
+            # the approval is never read, so a teammate who names themself
+            # owner or administrator in one change cannot approve in the next
+            # (the C3 security review, finding 1).
+            role = _approved_authority(base_root, skill, revision, saved, default, git).role_of(
+                email
+            )
         except authority.AuthorityUnavailable:
             continue
         if role is None or record.approved_roles.get(_skill_md(skill)) not in authority.ROLES:
@@ -708,9 +719,16 @@ def approval_of(
     return showing
 
 
-def _approvals_of_the_skill(base_root: str, skill: str, default, git: GitRunner) -> list:
-    """Every saved approval of a version of this skill: (path, record, address, day, revision)."""
+def _is_skill_approval(record, skill: str) -> bool:
+    """Whether a record approves a version of this skill and nothing else."""
     prefix = "%s/%s/" % (constants.SKILLS_DIR, skill)
+    return bool(record.approved_hashes) and all(
+        path.startswith(prefix) for path in record.approved_hashes
+    )
+
+
+def _saved_approvals(base_root: str, skill: str, default, git: GitRunner) -> list:
+    """Every saved approval of this skill or of the map: (path, record, address, day, revision)."""
     found = []
     for record_path in base_reader.correction_files(base_root):
         text = authority.saved_file(base_root, record_path, runner=git)
@@ -720,14 +738,106 @@ def _approvals_of_the_skill(base_root: str, skill: str, default, git: GitRunner)
             record = formats.CorrectionsFile.parse(text)
         except (ValidationError, PathError):
             continue
-        if not record.approved_hashes or not all(
-            path.startswith(prefix) for path in record.approved_hashes
-        ):
+        if not _is_skill_approval(record, skill) and constants.MAP_PATH not in record.approved_hashes:
             continue
         email, day, revision = base_reader.accepted_at(base_root, record_path, default, git)
         if email and revision:
             found.append((record_path, record, email, day, revision))
     return found
+
+
+def _git_lines(base_root: str, args: List[str], git: GitRunner) -> List[str]:
+    """One git listing, line by line, or a refusal when it cannot be read."""
+    listed = git.run(args, cwd=base_root, timeout=authority.LOCAL_TIMEOUT_SECONDS)
+    if not listed.ok:
+        raise authority.AuthorityUnavailable(
+            "the main line could not be read", code="unreadable"
+        )
+    return [line.strip() for line in listed.stdout.split("\n") if line.strip()]
+
+
+def _changed_since(base_root: str, skill: str, revision: str, default, git: GitRunner) -> bool:
+    """Whether a change on the main line after this revision touched the skill's folder.
+
+    Each change is compared with its own first parent, which is how the main
+    line moved, so a folder changed and then put back still counts as changed.
+    """
+    folder = "%s/%s/" % (constants.SKILLS_DIR, skill)
+    return bool(
+        _git_lines(
+            base_root,
+            ["log", "--first-parent", "--format=%H", "%s..%s" % (revision, default or "HEAD"), "--", folder],
+            git,
+        )
+    )
+
+
+def _approved_authority(
+    base_root: str, skill: str, revision: str, saved: list, default, git: GitRunner
+) -> authority.AuthoritySet:
+    """The skill's authority set as authority itself had approved it before this revision.
+
+    The main line is walked from its oldest change. The map's roles start as
+    the map the base first saved there, which is the base being set up, and
+    change only with a record of the map approved by the base owner those
+    roles name, whose map bytes are exactly the ones approved. The skill's
+    owners are the owner line of the last approval of the skill that was
+    itself valid, read from the SKILL.md bytes it approved, so a skill nobody
+    has validly approved yet has no owner at all. Changes in the same revision
+    are judged on what stood before it. Nothing that merely sat on the main
+    line is ever read as authority.
+    """
+    tip = default or "HEAD"
+    line = _git_lines(base_root, ["rev-list", "--first-parent", tip], git)
+    place = dict((oid, index) for index, oid in enumerate(line))
+    if revision not in place:
+        raise authority.AuthorityUnavailable("the approval is not on the main line", code="unreadable")
+    skill_md = _skill_md(skill)
+    events: Dict[int, list] = {}
+    map_changes = _git_lines(
+        base_root, ["log", "--first-parent", "--format=%H", tip, "--", constants.MAP_PATH], git
+    )
+    if map_changes and map_changes[-1] in place:
+        events.setdefault(place[map_changes[-1]], []).append((0, "", "first-map", None, None))
+    for record_path, record, email, _day, at in saved:
+        if at not in place:
+            continue
+        if constants.MAP_PATH in record.approved_hashes:
+            events.setdefault(place[at], []).append((1, record_path, "map", record, email))
+        if _is_skill_approval(record, skill):
+            events.setdefault(place[at], []).append((2, record_path, "skill", record, email))
+    roles = authority.Roles()
+    owners: List[str] = []
+    for index in sorted((i for i in events if i > place[revision]), reverse=True):
+        at = line[index]
+        judged = authority.AuthoritySet(owners, roles)
+        new_roles, new_owners = roles, owners
+        for _order, _path, kind, record, email in sorted(events[index], key=lambda e: (e[0], e[1])):
+            if kind == "first-map":
+                new_roles = authority.roles_from_map(
+                    authority._saved(base_root, at, constants.MAP_PATH, git)
+                )
+                continue
+            if kind == "map":
+                if not roles.base_owner or email != roles.base_owner:
+                    continue
+                if record.approved_roles.get(constants.MAP_PATH) not in authority.ROLES:
+                    continue
+                text = authority._saved(base_root, at, constants.MAP_PATH, git)
+                if text is not None and authority.bytes_hash(
+                    text.encode("utf-8")
+                ) == record.approved_hashes[constants.MAP_PATH]:
+                    new_roles = authority.roles_from_map(text)
+                continue
+            if judged.role_of(email) is None or record.approved_roles.get(skill_md) not in authority.ROLES:
+                continue
+            text = authority._saved(base_root, at, skill_md, git)
+            if text is not None and authority.bytes_hash(
+                text.encode("utf-8")
+            ) == record.approved_hashes.get(skill_md):
+                new_owners = authority.owners_in(text)
+        roles, owners = new_roles, new_owners
+    return authority.AuthoritySet(owners, roles)
 
 
 def _is_ancestor(base_root: str, older: str, newer: str, git: GitRunner) -> bool:

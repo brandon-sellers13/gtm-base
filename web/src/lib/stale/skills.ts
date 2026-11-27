@@ -25,7 +25,7 @@ import {
   parseFrontmatter,
   splitDocument,
 } from "./formats";
-import { type CorrectionFacts, type Verdict, roleOf, rolesFrom } from "./rules";
+import { type CorrectionFacts, type Roles, type Verdict, roleOf, rolesFrom } from "./rules";
 import { documentName, fenced, flagBlock, usedAsIs } from "./words";
 
 export const SKILLS_DIR = "skills";
@@ -39,6 +39,7 @@ const SKILL_RES = [
   new RegExp(`^skills/(${NAME})/examples/${NAME}/${NAME}\\.(?:md|txt)$`),
 ];
 const ROLES = ["owner", "base-owner", "administrator"];
+const SEGMENT_NAME = /^[a-z0-9-]+\.md$/;
 const LINK_MODE = "120000";
 
 // --- The words, from runner.py -------------------------------------------------
@@ -85,9 +86,14 @@ export type SkillWorld = {
   texts: Record<string, string | null>;
   // Each commit's parents (null when the walk could not read them all).
   parents: Record<string, string[] | null>;
-  // For the first parent of each revision that brought an approval onto the
-  // main line: the map and each skill's SKILL.md as that revision saved them.
-  atParent: Record<string, { map: string | null; skills: Record<string, string | null> }>;
+  // The main line, newest first: the head and each first parent back to the root.
+  mainLine: string[];
+  // For the map and for each skill's folder (`skills/<name>`), every commit on
+  // the main line whose copy differs from its first parent's, newest first.
+  changes: Record<string, string[]>;
+  // For each revision the approval check reads: the map and each skill's
+  // SKILL.md exactly as that revision saved them.
+  atRevision: Record<string, { map: string | null; skills: Record<string, string | null> }>;
 };
 
 // The folders a skill may name in `reads_optional`, whose `.md` files are handed
@@ -175,9 +181,13 @@ function isAncestor(parents: SkillWorld["parents"], older: string, newer: string
 
 type Found = { path: string; approvedRoles: Record<string, string>; approvedHashes: Record<string, string>; email: string; day: string | null; revision: string };
 
-// Every saved approval of a version of this skill, in the plugin's order.
+const isSkillApproval = (approvedHashes: Record<string, string>, skill: string) => {
+  const approved = Object.keys(approvedHashes);
+  return approved.length > 0 && approved.every((p) => p.startsWith(`${SKILLS_DIR}/${skill}/`));
+};
+
+// Every saved approval of this skill or of the map (skill_install._saved_approvals).
 function approvalsOf(world: SkillWorld, skill: string): Found[] {
-  const prefix = `${SKILLS_DIR}/${skill}/`;
   const found: Found[] = [];
   const records = Object.keys(world.files)
     .filter((p) => p.startsWith(CORRECTIONS_DIR + "/") && !p.slice(CORRECTIONS_DIR.length + 1).includes("/") && p.endsWith(".md"))
@@ -192,8 +202,7 @@ function approvalsOf(world: SkillWorld, skill: string): Found[] {
       if (error instanceof Refused) continue;
       throw error;
     }
-    const approved = Object.keys(record.approvedHashes);
-    if (!approved.length || !approved.every((p) => p.startsWith(prefix))) continue;
+    if (!isSkillApproval(record.approvedHashes, skill) && !(MAP_PATH in record.approvedHashes)) continue;
     const facts = world.corrections[path];
     if (!facts) throw new Unreadable("record-history-unavailable");
     if (facts.mergedBy && facts.mergedIn) {
@@ -210,31 +219,108 @@ function approvalsOf(world: SkillWorld, skill: string): Found[] {
   return found;
 }
 
-// The first parent of each revision whose saved map and SKILL.md the approval
-// check needs, so the connector can fetch exactly those.
-export function revisionsToRead(world: Omit<SkillWorld, "atParent" | "texts">, skill: string): string[] {
+// The commit that first saved the map on the main line: the base being set up.
+const firstMap = (world: Pick<SkillWorld, "changes">) => world.changes[MAP_PATH]?.at(-1) ?? null;
+
+// Each revision whose saved map and SKILL.md the approval check reads, so the
+// connector can fetch exactly those.
+export function revisionsToRead(world: Omit<SkillWorld, "atRevision" | "texts">, skill: string): string[] {
   const wanted = new Set<string>();
-  for (const one of approvalsOf({ ...world, texts: {}, atParent: {} }, skill)) {
-    const parent = world.parents[one.revision]?.[0];
-    if (parent) wanted.add(parent);
-  }
+  for (const one of approvalsOf({ ...world, texts: {}, atRevision: {} }, skill)) wanted.add(one.revision);
+  const first = firstMap(world);
+  if (first) wanted.add(first);
   return [...wanted].sort();
 }
 
-export function approvalOf(world: SkillWorld, skill: string, files: Record<string, string>): Approval | null {
+async function hashOf(text: string | null | undefined): Promise<string | null> {
+  return typeof text === "string" ? sha256(text) : null;
+}
+
+// skill_install._approved_authority: the skill's authority set as authority
+// itself had approved it before this revision. The map's roles start as the map
+// the base first saved on the main line and change only with a record of the
+// map approved by the base owner those roles name, whose map bytes are exactly
+// the ones approved. The skill's owners are the owner line of the last valid
+// approval of the skill, from the SKILL.md bytes it approved. Changes in one
+// revision are judged on what stood before it. Whatever merely sat on the main
+// line is never read as authority (the C3 security review, finding 1).
+async function approvedRoles(world: SkillWorld, skill: string, revision: string, saved: Found[]): Promise<Roles> {
+  const place = new Map(world.mainLine.map((oid, index) => [oid, index]));
+  const at = place.get(revision);
+  if (at === undefined) throw new Unreadable("authority-unavailable");
   const skillMd = `${SKILLS_DIR}/${skill}/SKILL.md`;
-  const found = approvalsOf(world, skill);
+  type Event = { order: number; path: string; kind: "first-map" | "map" | "skill"; one?: Found };
+  const events = new Map<number, Event[]>();
+  const add = (index: number, event: Event) => events.set(index, [...(events.get(index) ?? []), event]);
+  const first = firstMap(world);
+  if (first && place.has(first)) add(place.get(first)!, { order: 0, path: "", kind: "first-map" });
+  for (const one of saved) {
+    const index = place.get(one.revision);
+    if (index === undefined) continue;
+    if (MAP_PATH in one.approvedHashes) add(index, { order: 1, path: one.path, kind: "map", one });
+    if (isSkillApproval(one.approvedHashes, skill)) add(index, { order: 2, path: one.path, kind: "skill", one });
+  }
+  const textAt = (oid: string) => {
+    const texts = world.atRevision[oid];
+    if (!texts) throw new Unreadable("authority-unavailable");
+    return texts;
+  };
+  let roles: Roles = { owners: [], baseOwner: null, administrators: [] };
+  const older = [...events.keys()].filter((index) => index > at).sort((a, b) => b - a);
+  for (const index of older) {
+    const oid = world.mainLine[index];
+    let next: Roles = roles;
+    const ordered = events.get(index)!.sort((a, b) => a.order - b.order || (a.path < b.path ? -1 : a.path > b.path ? 1 : 0));
+    for (const event of ordered) {
+      if (event.kind === "first-map") {
+        const fromMap = rolesFrom(null, textAt(oid).map);
+        next = { ...next, baseOwner: fromMap.baseOwner, administrators: fromMap.administrators };
+        continue;
+      }
+      const one = event.one!;
+      if (event.kind === "map") {
+        if (!roles.baseOwner || one.email !== roles.baseOwner) continue;
+        if (!ROLES.includes(one.approvedRoles[MAP_PATH] ?? "")) continue;
+        const text = textAt(oid).map;
+        if ((await hashOf(text)) === one.approvedHashes[MAP_PATH]) {
+          const fromMap = rolesFrom(null, text);
+          next = { ...next, baseOwner: fromMap.baseOwner, administrators: fromMap.administrators };
+        }
+        continue;
+      }
+      if (!roleOf(roles, one.email) || !ROLES.includes(one.approvedRoles[skillMd] ?? "")) continue;
+      const text = textAt(oid).skills[skillMd];
+      if ((await hashOf(text)) === one.approvedHashes[skillMd]) next = { ...next, owners: rolesFrom(text ?? null, null).owners };
+    }
+    roles = next;
+  }
+  return roles;
+}
+
+// skill_install._changed_since: whether a commit on the main line after this
+// revision changed the skill's folder, each compared with its own first parent,
+// so a folder changed and then put back still counts (the C3 security review,
+// finding 2).
+function changedSince(world: SkillWorld, skill: string, revision: string): boolean {
+  const at = world.mainLine.indexOf(revision);
+  const changed = world.changes[`${SKILLS_DIR}/${skill}`];
+  if (at < 0 || !changed) throw new Unreadable("history-unreadable");
+  return changed.some((oid) => {
+    const index = world.mainLine.indexOf(oid);
+    return index >= 0 && index < at;
+  });
+}
+
+export async function approvalOf(world: SkillWorld, skill: string, files: Record<string, string>): Promise<Approval | null> {
+  const skillMd = `${SKILLS_DIR}/${skill}/SKILL.md`;
+  const saved = approvalsOf(world, skill);
+  const found = saved.filter((item) => isSkillApproval(item.approvedHashes, skill));
   for (const one of found.filter((item) => sameFiles(item.approvedHashes, files))) {
     // A newer approval of this skill replaced this one, so the old version is
     // not brought back by putting its bytes back.
     if (found.some((other) => other.revision !== one.revision && isAncestor(world.parents, one.revision, other.revision))) continue;
-    // Judged as the base stood before the change that added the record, so a
-    // change cannot grant its own author the role it needs.
-    const parent = world.parents[one.revision]?.[0];
-    if (!parent) continue;
-    const saved = world.atParent[parent];
-    if (!saved) throw new Unreadable("authority-unavailable");
-    const role = roleOf(rolesFrom(saved.skills[skillMd] ?? null, saved.map), one.email);
+    if (changedSince(world, skill, one.revision)) continue;
+    const role = roleOf(await approvedRoles(world, skill, one.revision, saved), one.email);
     if (!role || !ROLES.includes(one.approvedRoles[skillMd] ?? "")) continue;
     return { approver: one.email, role, day: one.day, record: one.path };
   }
@@ -332,8 +418,11 @@ export function expandedReads(
       add(path, false, false);
       continue;
     }
+    // runner._SEGMENT_NAME: only lowercase letters, digits and hyphens, because
+    // the name goes out on the document= line outside the fence, and so never a
+    // hidden file (the C3 security review, findings 3 and 4).
     const inside = Object.keys(files)
-      .filter((file) => file.startsWith(path) && !file.slice(path.length).includes("/") && file.endsWith(".md"))
+      .filter((file) => file.startsWith(path) && SEGMENT_NAME.test(file.slice(path.length)))
       .filter((file) => !links.includes(file) && classify(file) === "context")
       .sort();
     for (const file of inside) add(file, false, true);
@@ -409,7 +498,7 @@ export async function startSkill(
   }
 
   // Step 2: the version on the main line is one somebody with authority approved.
-  started.approval = approvalOf(world, skill, read.files);
+  started.approval = await approvalOf(world, skill, read.files);
   if (!started.approval) return refuse("untrusted", fill(REFUSED_NOT_APPROVED_SAYS, skill));
 
   // Step 3: the base can be read for the check.
@@ -537,7 +626,7 @@ export async function skillIndex(world: SkillWorld, folders: readonly string[] =
     if (!read) continue;
     const declaration = declarationOf(read.texts[`${SKILLS_DIR}/${name}/SKILL.md`], folders);
     if (declaration.problems.length) continue;
-    if (!approvalOf(world, name, read.files)) continue;
+    if (!(await approvalOf(world, name, read.files))) continue;
     index.push({ name, description: oneLine(declaration.description ?? "") || "No description given." });
   }
   return index;

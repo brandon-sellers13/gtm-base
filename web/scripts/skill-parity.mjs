@@ -58,7 +58,7 @@ for (const { name, snapshot, world, expected } of fixtures) {
   check(`${name}: the skills listed`, same(index, wantIndex), `plugin ${JSON.stringify(wantIndex)}, port ${JSON.stringify(index)}`);
   for (const [skill, want] of Object.entries(expected)) {
     const read = await readSkill(world, skill);
-    const approved = read ? approvalOf(world, skill, read.files) : null;
+    const approved = read ? await approvalOf(world, skill, read.files) : null;
     check(`${name}: ${skill} approved is ${want.acceptable}`, !!approved === want.acceptable && (!approved || approved.role === want.role), `port ${JSON.stringify(approved)}`);
     const started = await startSkill(world, verdict, skill, { links: world.links });
     const got = {

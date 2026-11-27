@@ -7,7 +7,7 @@ import { type Choice, Refusal as DocumentRefusal, listDocuments, proposeChange, 
 import { validRepo } from "../reader";
 import { type Conversation, bindOrCheck, boundBase, conversationFrom } from "./bindings";
 import type { AccessBody } from "./grants";
-import { indexForInstructions, useSkill } from "./skills";
+import { SKILLS_SENTENCE, useSkill } from "./skills";
 
 // The connector's tools, made fresh for every request by the MCP library:
 // list my bases (C1), list documents and read a document with the
@@ -21,9 +21,6 @@ export type CallFacts = {
   // Set when GitHub refuses the person's token, so the endpoint answers 401
   // and the product signs in again.
   githubRefused: boolean;
-  // When the tools are being listed: the skill index of the one base this
-  // request can be tied to, for the instructions and use_skill's description.
-  skillIndex?: { base: string; lines: string } | null;
 };
 
 const BASE_INSTRUCTIONS =
@@ -114,11 +111,10 @@ async function guarded(facts: CallFacts, work: () => Promise<ReturnType<typeof t
 }
 
 
-export function connectorServer(skillIndex: CallFacts["skillIndex"] = null): McpServer {
-  const skills = indexForInstructions(skillIndex ?? null);
+export function connectorServer(): McpServer {
   const server = new McpServer(
     { name: "gtm-base", title: "GTM Base", version: "1.0.0" },
-    { instructions: `${BASE_INSTRUCTIONS}\n\n${skills}` },
+    { instructions: `${BASE_INSTRUCTIONS}\n\n${SKILLS_SENTENCE}` },
   );
 
   server.registerTool(
@@ -212,8 +208,8 @@ export function connectorServer(skillIndex: CallFacts["skillIndex"] = null): Mcp
       description:
         "Fetch one of the base's own approved skills, with the documents it reads, before doing the work it is for, and follow " +
         "what it returns. If a document it reads is behind a recorded context change, the first answer is only the flag: tell " +
-        "the person, wait for their choice, and call again as the answer says. " +
-        skills,
+        "the person, wait for their choice, and call again as the answer says. list_documents names the base's approved " +
+        "skills; never guess a name.",
       inputSchema: z.object({
         base: BASE_FIELD,
         skill: z.string().max(80).describe("The skill's name, as the base's list of approved skills gives it, such as drift-grade."),

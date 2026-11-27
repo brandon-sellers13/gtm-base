@@ -1888,7 +1888,8 @@ The order across every track is in `docs/plans/2026-11-26-003-roadmap-to-full-ex
 - [ ] Carried over from C1 and C2, all needing Simona's account: the Claude half of the run, the refusal of a second base in one conversation, and the sign-in test with two GitHub accounts.
 - [x] Brandon: decide the borderline proposal pattern from C2's security review, once for the plugin and the connector. (decided 2026-11-27: it is closed in C3's security pull request, for both together)
 - [ ] Take down the connector's test site once the Claude half has passed.
-- [ ] The security review of C3, then the end-to-end run in Claude and ChatGPT across two Projects.
+- [x] The security review of C3 (one pass on 4e10ddb): four findings, fixed in the plugin and the connector together on branch `claude/c3-security-fixes` (roles read only from approved state, an approval ends when its skill's folder changes after it, and segment names limited to lowercase letters, digits and hyphens), and the skill index moved out of the instructions into `list_documents` only. Deployed to the test site only.
+- [ ] The reviewer confirms the four fixes, then the end-to-end run in Claude and ChatGPT across two Projects.
 - [x] When Track 4's runner reads `reads_optional: [context/icps/]`, add `context/icps/` to `FOLDER_DECLARATIONS` in `web/src/lib/stale/skills.ts` and regenerate the skill parity fixtures (`tests/skill_parity.py`). (PR #36, merged as 4e10ddb)
 
 ## 2026-11-27, Brandon's decisions on the roadmap (`docs/plans/2026-11-26-003-roadmap-to-full-experience.md`)

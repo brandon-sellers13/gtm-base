@@ -620,6 +620,13 @@ def _gap_and_unsaved_sentences(result: Start) -> List[str]:
 # saved tree's own words, so a link or a folder inside it is never read.
 _PLAIN_FILE_MODES = ("100644", "100755")
 
+# The only names a segment file is handed on under. The name goes out on the
+# `[for the assistant] document=` line, outside the fence, so it may hold
+# nothing but lowercase letters, digits and hyphens: a teammate cannot write an
+# instruction into it, and a hidden file never matches (the C3 security
+# review, findings 3 and 4).
+_SEGMENT_NAME = re.compile(r"^[a-z0-9-]+\.md$")
+
 
 def _saved_segments(base_root: str, git: GitRunner) -> List[str]:
     """Each `.md` file the base last saved directly in the segments folder, by path.
@@ -646,7 +653,7 @@ def _saved_segments(base_root: str, git: GitRunner) -> List[str]:
         if not name.startswith(SEGMENTS_FOLDER):
             continue
         rest = name[len(SEGMENTS_FOLDER):]
-        if not rest.endswith(".md") or "/" in rest or rest.startswith("."):
+        if not _SEGMENT_NAME.match(rest):
             continue
         found.append(name)
     return sorted(found)
