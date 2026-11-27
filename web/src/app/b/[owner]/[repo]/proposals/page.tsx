@@ -26,52 +26,52 @@ export default async function ProposalsPage({
     <div>
       <Header session={session} />
       <CleanUrl />
-      <main className="page">
-        <p className="label-mono break-all">
-          <Link href={`/b/${base.owner}/${base.repo}`} className="link-quiet">
+      <main className="gb-page">
+        <p className="gb-label-mono break-all">
+          <Link href={`/b/${base.owner}/${base.repo}`} className="gb-link-quiet">
             <span aria-hidden="true">← </span>
             {base.owner} / {base.repo}
           </Link>
         </p>
-        <h1 className="title mt-2">Proposals</h1>
-        <p className="lede mt-4">
+        <h1 className="gb-h2 mt-2">Proposals</h1>
+        <p className="gb-lede mt-4">
           Changes your team&apos;s Claude Code sessions propose to this base. The owner of each document accepts or
           discards them.
         </p>
 
         {notice === "accepted" && (
-          <p className="notice mt-8" role="status">
+          <p className="gb-notice mt-8" role="status">
             Proposal #{number} is accepted. It is now part of the base, and it counts as your confirmation of the
             documents it changed.
           </p>
         )}
         {notice === "gone" && (
-          <p className="notice mt-8" role="status">
+          <p className="gb-notice mt-8" role="status">
             Proposal #{number} is already closed, so nothing more was done. If you clicked Accept or Discard more than
             once, the first click finished it.
           </p>
         )}
         {notice === "discarded" && (
-          <p className="notice mt-8" role="status">
+          <p className="gb-notice mt-8" role="status">
             Proposal #{number} is discarded. The base is unchanged, and the same change will not be proposed again.
           </p>
         )}
 
         {proposals.length === 0 ? (
-          <p className="empty mt-10">
+          <p className="gb-empty mt-10">
             Nothing waiting. Proposals appear here when a teammate&apos;s Claude Code proposes a change to this base.
           </p>
         ) : (
-          <ul className="rows mt-10">
+          <ul className="gb-docs mt-10">
             {proposals.map((p) => (
               <li key={p.number} className="flex items-start gap-3">
                 {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={p.avatarUrl} alt="" className="avatar mt-0.5 h-7 w-7" />
+                <img src={p.avatarUrl} alt="" className="gb-avatar mt-0.5 h-7 w-7" />
                 <span className="min-w-0 break-words">
-                  <Link href={`/b/${base.owner}/${base.repo}/proposals/${p.number}`} className="link-quiet font-bold">
+                  <Link href={`/b/${base.owner}/${base.repo}/proposals/${p.number}`} className="gb-link-quiet font-bold">
                     {p.title}
                   </Link>
-                  <span className="meta-mono block">
+                  <span className="gb-meta block">
                     #{p.number} · {p.author} · {p.createdAt}
                   </span>
                 </span>

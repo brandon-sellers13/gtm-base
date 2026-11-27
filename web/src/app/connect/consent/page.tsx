@@ -20,16 +20,16 @@ export default async function ConsentPage() {
   return (
     <div>
       <Header session={null} linked={false} />
-      <main className="page max-w-[560px]">
+      <main className="gb-page max-w-[560px]">
         {!consent ? (
           <section>
-            <h1 className="title">This sign-in has expired.</h1>
-            <p className="lede mt-5">Start again from Claude or ChatGPT, where you added GTM Base.</p>
+            <h1 className="gb-h2">This sign-in has expired.</h1>
+            <p className="gb-lede mt-5">Start again from Claude or ChatGPT, where you added GTM Base.</p>
           </section>
         ) : (
           <section>
-            <h1 className="title break-words">Connect GTM Base to {consent.clientName}?</h1>
-            <div className="panel mt-8 space-y-4 text-ink-mid">
+            <h1 className="gb-h2 break-words">Connect GTM Base to {consent.clientName}?</h1>
+            <div className="gb-card p-4 sm:p-6 mt-8 space-y-4 text-ink-mid">
             <p>
               A product calling itself <strong className="text-ink">{consent.clientName}</strong> wants to use GTM Base as
               the GitHub account <strong className="font-mono text-[15px] break-words text-ink">{consent.grant.login}</strong>. If you allow it,
@@ -45,14 +45,14 @@ export default async function ConsentPage() {
               <button
                 name="decision"
                 value="allow"
-                className="btn min-w-[120px]"
+                className="gb-btn primary min-w-[120px]"
               >
                 Allow
               </button>
               <button
                 name="decision"
                 value="cancel"
-                className="btn btn-secondary min-w-[120px]"
+                className="gb-btn min-w-[120px]"
               >
                 Cancel
               </button>

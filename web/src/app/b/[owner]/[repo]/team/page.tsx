@@ -48,57 +48,57 @@ export default async function TeamPage({
     <div>
       <Header session={session} />
       <CleanUrl />
-      <main className="page">
-        <p className="label-mono break-all">
-          <Link href={`/b/${base.owner}/${base.repo}`} className="link-quiet">
+      <main className="gb-page">
+        <p className="gb-label-mono break-all">
+          <Link href={`/b/${base.owner}/${base.repo}`} className="gb-link-quiet">
             <span aria-hidden="true">← </span>
             {base.owner} / {base.repo}
           </Link>
         </p>
-        <h1 className="title mt-2">Team</h1>
-        <p className="lede mt-4">
+        <h1 className="gb-h2 mt-2">Team</h1>
+        <p className="gb-lede mt-4">
           Everyone here can read the base and propose changes from Claude Code. The owner of a document accepts or
           discards each proposal.
         </p>
 
         {notice && NOTICES[notice] && (
           <p
-            className={`notice mt-8 ${["not-owner", "bad-username", "no-such-user", "refused", "failed"].includes(notice) ? "notice-problem" : ""}`}
+            className={`gb-notice mt-8 ${["not-owner", "bad-username", "no-such-user", "refused", "failed"].includes(notice) ? "problem" : ""}`}
             role="status"
           >
             {NOTICES[notice](shownWho)}
           </p>
         )}
 
-        <h2 className="heading section-label">People</h2>
-        <ul className="rows">
+        <h2 className="gb-heading gb-section">People</h2>
+        <ul className="gb-docs">
           {team.members.map((m) => (
             <li key={m.login} className="flex flex-wrap items-center gap-x-3 gap-y-1">
               {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={m.avatarUrl} alt="" className="avatar h-7 w-7" />
+              <img src={m.avatarUrl} alt="" className="gb-avatar h-7 w-7" />
               <span className="min-w-0 font-bold break-all">{m.login}</span>
-              <span className="meta-mono">{m.role === "admin" ? "admin" : "can propose"}</span>
+              <span className="gb-meta">{m.role === "admin" ? "admin" : "can propose"}</span>
             </li>
           ))}
         </ul>
 
         {team.invitations.length > 0 && (
           <>
-            <h2 className="heading section-label">Invited</h2>
-            <ul className="rows">
+            <h2 className="gb-heading gb-section">Invited</h2>
+            <ul className="gb-docs">
               {team.invitations.map((i) => (
                 <li key={i.id} className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
                   <span className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1">
                     {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img src={i.avatarUrl} alt="" className="avatar h-7 w-7" />
+                    <img src={i.avatarUrl} alt="" className="gb-avatar h-7 w-7" />
                     <span className="font-bold break-all">{i.login}</span>
-                    <span className="meta-mono">invited {i.createdAt}</span>
+                    <span className="gb-meta">invited {i.createdAt}</span>
                   </span>
                   {owner_ && (
                     <form action={cancelAction}>
                       {hidden}
                       <input type="hidden" name="invitation" value={i.id} />
-                      <button className="btn btn-secondary btn-sm">Cancel</button>
+                      <button className="gb-btn small">Cancel</button>
                     </form>
                   )}
                 </li>
@@ -108,9 +108,9 @@ export default async function TeamPage({
         )}
 
         {owner_ ? (
-          <form action={inviteAction} className="panel mt-12">
+          <form action={inviteAction} className="gb-card p-4 sm:p-6 mt-12">
             {hidden}
-            <label className="field-label" htmlFor="username">
+            <label className="gb-field-label" htmlFor="username">
               Invite a teammate by their GitHub username
             </label>
             <div className="flex flex-col gap-4 sm:flex-row sm:items-end">
@@ -120,32 +120,32 @@ export default async function TeamPage({
                 required
                 maxLength={40}
                 placeholder="their-github-username"
-                className="field"
+                className="gb-input"
               />
-              <button className="btn min-h-[48px] shrink-0 sm:min-w-[120px]">Invite</button>
+              <button className="gb-btn primary min-h-[48px] shrink-0 sm:min-w-[120px]">Invite</button>
             </div>
-            <p className="help">
+            <p className="gb-help">
               They can read the base and propose changes. On GitHub&apos;s free plan they could also push a change
               straight to the base without a proposal; GTM Base will flag any change that skipped approval so it can be
               kept or undone.
             </p>
           </form>
         ) : (
-          <p className="empty mt-12">Only the owner of this base can invite people.</p>
+          <p className="gb-empty mt-12">Only the owner of this base can invite people.</p>
         )}
 
-        <h2 className="heading section-label">How a teammate joins</h2>
-        <ol className="list-decimal space-y-3 pl-6 text-ink-mid marker:font-mono marker:text-[13px] marker:font-bold marker:text-ink">
+        <h2 className="gb-heading gb-section">How a teammate joins</h2>
+        <ol className="gb-numbered text-ink-mid">
           <li>
             Accept GitHub&apos;s invitation, from the email or at{" "}
-            <a href={`https://github.com/${base.owner}/${base.repo}/invitations`} className="link break-all">
+            <a href={`https://github.com/${base.owner}/${base.repo}/invitations`} className="gb-link break-all">
               github.com/{base.owner}/{base.repo}/invitations
             </a>
             .
           </li>
           <li>
             Sign in to GTM Base at{" "}
-            <a href={appUrl()} className="link break-all">
+            <a href={appUrl()} className="gb-link break-all">
               {appUrl().replace(/^https?:\/\//, "")}
             </a>{" "}
             with that GitHub account. The base appears on their home page.

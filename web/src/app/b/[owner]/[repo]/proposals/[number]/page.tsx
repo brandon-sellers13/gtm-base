@@ -60,42 +60,42 @@ export default async function ProposalPage({
   return (
     <div>
       <Header session={session} />
-      <main className="page">
-        <p className="label-mono break-all">
-          <Link href={`/b/${owner}/${repo}`} className="link-quiet">
+      <main className="gb-page">
+        <p className="gb-label-mono break-all">
+          <Link href={`/b/${owner}/${repo}`} className="gb-link-quiet">
             {owner} / {repo}
           </Link>{" "}
           ·{" "}
-          <Link href={`/b/${owner}/${repo}/proposals`} className="link-quiet">
+          <Link href={`/b/${owner}/${repo}/proposals`} className="gb-link-quiet">
             <span aria-hidden="true">← </span>Proposals
           </Link>
         </p>
-        <h1 className="title mt-2 break-words">{proposal.title}</h1>
-        <p className="meta-mono mt-3">
+        <h1 className="gb-h2 mt-2 break-words">{proposal.title}</h1>
+        <p className="gb-meta mt-3">
           #{proposal.number} · proposed by {proposal.author} on {proposal.createdAt} ·{" "}
-          <a href={proposal.htmlUrl} className="link-quiet">
+          <a href={proposal.htmlUrl} className="gb-link-quiet">
             on GitHub
           </a>
         </p>
 
         {problem && PROBLEMS[problem] && (
-          <p className="notice notice-problem mt-8" role="alert">
+          <p className="gb-notice problem mt-8" role="alert">
             {PROBLEMS[problem]}
           </p>
         )}
 
-        <h2 className="heading section-label">Changes</h2>
-        <ul className="rows">
+        <h2 className="gb-heading gb-section">Changes</h2>
+        <ul className="gb-docs">
           {proposal.files.map((file) => (
             <li key={file.path} className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
               {file.ownedDocument && file.status !== "added" ? (
-                <Link href={docHref(owner, repo, file.path)} className="link-quiet min-w-0 font-mono text-[14px] font-bold break-all">
+                <Link href={docHref(owner, repo, file.path)} className="gb-link-quiet min-w-0 font-mono text-[14px] font-bold break-all">
                   {file.path}
                 </Link>
               ) : (
                 <span className="min-w-0 font-mono text-[14px] font-bold break-all">{file.path}</span>
               )}
-              <span className="meta-mono">
+              <span className="gb-meta">
                 {file.status}
                 {file.ownedDocument && (
                   <>
@@ -110,7 +110,7 @@ export default async function ProposalPage({
           ))}
         </ul>
 
-        <h2 className="heading section-label">What the proposal says</h2>
+        <h2 className="gb-heading gb-section">What the proposal says</h2>
         <article className="doc">
           <ReactMarkdown remarkPlugins={[remarkGfm]} disallowedElements={["img"]} unwrapDisallowed>
             {proposal.body}
@@ -118,11 +118,11 @@ export default async function ProposalPage({
         </article>
 
         {/* The description is written by the proposer; this is what would actually change. */}
-        <h2 className="heading section-label">What would actually change</h2>
+        <h2 className="gb-heading gb-section">What would actually change</h2>
         {proposal.files
           .filter((f) => f.status !== "renamed away" && f.status !== "copied from")
           .map((file) => (
-            <div key={file.path} className="rows mt-6 overflow-hidden">
+            <div key={file.path} className="gb-card mt-6 overflow-hidden">
               <p className="border-b-[1.5px] border-ink bg-ground px-3 py-2 font-mono text-[13px] font-bold break-all">{file.path}</p>
               {file.patch ? (
                 <pre className="grid grid-cols-[minmax(100%,max-content)] overflow-x-auto bg-surface py-2 font-mono text-[13px] leading-6">
@@ -144,7 +144,7 @@ export default async function ProposalPage({
               ) : (
                 <p className="px-3 py-3 text-[15px] text-ink-mid">
                   GitHub does not show this change inline (too large or not text).{" "}
-                  <a href={`${proposal.htmlUrl}/files`} className="link">
+                  <a href={`${proposal.htmlUrl}/files`} className="gb-link">
                     Read it on GitHub
                   </a>{" "}
                   before accepting.
@@ -153,7 +153,7 @@ export default async function ProposalPage({
             </div>
           ))}
 
-        <section className="panel mt-12">
+        <section className="gb-card gb-card-body mt-12 sm:p-6">
           {blocked === "other-files" ? (
             <p className="text-ink-mid">
               This proposal changes files that are not base documents or records (marked above). Those can change how
@@ -172,7 +172,7 @@ export default async function ProposalPage({
               </p>
               <form action={acceptAction} className="mt-4">
                 {hidden}
-                <SubmitButton pendingText="Accepting…" className="btn min-w-[140px]">
+                <SubmitButton pendingText="Accepting…" className="gb-chip go min-w-[120px]">
                   Accept
                 </SubmitButton>
               </form>
@@ -180,7 +180,7 @@ export default async function ProposalPage({
           ) : session.emails.length === 0 ? (
             <p className="text-ink-mid">
               To accept, GTM Base needs to see your verified email addresses.{" "}
-              <a href="/api/auth/login" className="link">
+              <a href="/api/auth/login" className="gb-link">
                 Sign in again
               </a>{" "}
               and allow it.
@@ -197,16 +197,16 @@ export default async function ProposalPage({
           {canDiscard && (
           <form action={discardAction} className="mt-6 border-t border-rule pt-6">
             {hidden}
-            <label className="field-label" htmlFor="reason">
+            <label className="gb-field-label" htmlFor="reason">
               Discard it instead (optional reason, posted on the pull request)
             </label>
             <input
               id="reason"
               name="reason"
               maxLength={500}
-              className="field"
+              className="gb-input"
             />
-            <SubmitButton pendingText="Discarding…" className="btn btn-secondary btn-sm mt-4">
+            <SubmitButton pendingText="Discarding…" className="gb-chip mt-4">
               Discard
             </SubmitButton>
           </form>

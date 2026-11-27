@@ -41,22 +41,22 @@ export default async function UnapprovedPage({
     <div>
       <Header session={session} />
       <CleanUrl />
-      <main className="page">
-        <p className="label-mono break-all">
-          <Link href={`/b/${base.owner}/${base.repo}`} className="link-quiet">
+      <main className="gb-page">
+        <p className="gb-label-mono break-all">
+          <Link href={`/b/${base.owner}/${base.repo}`} className="gb-link-quiet">
             <span aria-hidden="true">← </span>
             {base.owner} / {base.repo}
           </Link>
         </p>
-        <h1 className="title mt-2">Changes that skipped approval</h1>
-        <p className="lede mt-4">
+        <h1 className="gb-h2 mt-2">Changes that skipped approval</h1>
+        <p className="gb-lede mt-4">
           These changes went straight into the base instead of coming in as a proposal the owner accepted. Keep each one
           if it is right, or undo it.
         </p>
 
         {notice && NOTICES[notice] && (
           <p
-            className={`notice mt-8 ${["not-owner", "changed-since", "not-undoable", "base-moved", "failed"].includes(notice) ? "notice-problem" : ""}`}
+            className={`gb-notice mt-8 ${["not-owner", "changed-since", "not-undoable", "base-moved", "failed"].includes(notice) ? "problem" : ""}`}
             role="status"
           >
             {NOTICES[notice]}
@@ -64,19 +64,19 @@ export default async function UnapprovedPage({
         )}
 
         {items.length === 0 ? (
-          <p className="empty mt-10">
+          <p className="gb-empty mt-10">
             Nothing here. Every recent change to this base came in through an approval.
           </p>
         ) : (
           <ul className="mt-10 space-y-6">
             {items.map((item) => (
-              <li key={item.sha} className="panel">
-                <p className="heading-tile break-words">{item.message}</p>
-                <p className="meta-mono mt-2">
+              <li key={item.sha} className="gb-card p-4 sm:p-6">
+                <p className="gb-heading-sm break-words">{item.message}</p>
+                <p className="gb-meta mt-2">
                   {item.author} · {item.date} ·{" "}
                   <a
                     href={`https://github.com/${base.owner}/${base.repo}/commit/${item.sha}`}
-                    className="link-quiet"
+                    className="gb-link-quiet"
                   >
                     {item.sha.slice(0, 7)} on GitHub
                   </a>
@@ -89,12 +89,12 @@ export default async function UnapprovedPage({
                   ))}
                 </ul>
                 {isOwner && (
-                  <div className="mt-5 flex flex-wrap gap-4">
+                  <div className="gb-choices mt-5">
                     <form action={keepAction}>
                       <input type="hidden" name="owner" value={base.owner} />
                       <input type="hidden" name="repo" value={base.repo} />
                       <input type="hidden" name="sha" value={item.sha} />
-                      <SubmitButton pendingText="Keeping…" className="btn btn-secondary btn-sm min-w-[96px]">
+                      <SubmitButton pendingText="Keeping…" className="gb-chip min-w-[96px]">
                         Keep
                       </SubmitButton>
                     </form>
@@ -103,7 +103,7 @@ export default async function UnapprovedPage({
                         <input type="hidden" name="owner" value={base.owner} />
                         <input type="hidden" name="repo" value={base.repo} />
                         <input type="hidden" name="sha" value={item.sha} />
-                        <SubmitButton pendingText="Undoing…" className="btn btn-sm min-w-[96px]">
+                        <SubmitButton pendingText="Undoing…" className="gb-chip go min-w-[96px]">
                           Undo
                         </SubmitButton>
                       </form>
@@ -117,7 +117,7 @@ export default async function UnapprovedPage({
           </ul>
         )}
         {!isOwner && items.length > 0 && (
-          <p className="empty mt-8">Only the owner of this base can keep or undo these.</p>
+          <p className="gb-empty mt-8">Only the owner of this base can keep or undo these.</p>
         )}
       </main>
     </div>

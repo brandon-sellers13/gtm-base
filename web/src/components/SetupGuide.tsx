@@ -18,27 +18,27 @@ export function SetupGuide({ owner, repo, connectorUrl }: { owner: string; repo:
   const instruction = projectInstruction(owner, repo);
 
   return (
-    <section id="use-in-chat" className="mt-16 scroll-mt-24 border-t border-ink pt-12">
-      <h2 className="heading">Use this base in Claude or ChatGPT</h2>
+    <section id="use-in-chat" className="mt-16 scroll-mt-24 border-t-[1.5px] border-ink pt-12">
+      <h2 className="gb-heading">Use this base in Claude or ChatGPT</h2>
       <p className="mt-3 text-ink-mid">
         Claude and ChatGPT can read this base through the GTM Base connector. You add the connector to your account once,
         and then you give this company its own Project with the instruction below, so every conversation in that Project
         works from this base and no other.
       </p>
 
-      <div className="rows mt-6">
-        <div className="flex flex-col gap-3 border-b-[1.5px] border-ink bg-ground px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
-          <span className="min-w-0 font-bold break-words">The Project instruction for {owner}/{repo}</span>
+      <div className="gb-card mt-6">
+        <div className="gb-card-head flex-col !items-start sm:flex-row sm:!items-center">
+          <span className="min-w-0 break-words">The Project instruction for {owner}/{repo}</span>
           <CopyButton text={instruction} label="Copy the instruction" />
         </div>
-        <p className="px-4 py-4 font-mono text-[13px] leading-relaxed whitespace-pre-wrap break-words">{instruction}</p>
+        <p className="gb-card-body font-mono !text-[13px] leading-relaxed break-words whitespace-pre-wrap">{instruction}</p>
       </div>
 
-      <div className="rows mt-6">
-        <div className="flex flex-col gap-3 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+      <div className="gb-card mt-6">
+        <div className="gb-card-body flex-col sm:flex-row sm:items-center sm:justify-between">
           <span className="min-w-0">
             <span className="block font-bold">The connector address</span>
-            <span className="meta-mono block break-all">{connectorUrl}</span>
+            <span className="gb-meta block break-all">{connectorUrl}</span>
           </span>
           <CopyButton text={connectorUrl} label="Copy the address" />
         </div>
@@ -102,14 +102,14 @@ export function SetupGuide({ owner, repo, connectorUrl }: { owner: string; repo:
 
 function Steps({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <details className="group rows mt-6">
-      <summary className="flex min-h-[52px] cursor-pointer list-none items-center gap-3 px-4 py-3 font-bold [&::-webkit-details-marker]:hidden">
+    <details className="group gb-card mt-6">
+      <summary className="flex min-h-[52px] cursor-pointer bg-ground list-none items-center gap-3 px-4 py-3 font-bold [&::-webkit-details-marker]:hidden">
         <span aria-hidden="true" className="inline-block w-3 text-source transition-transform group-open:rotate-90">
           →
         </span>
         {title}
       </summary>
-      <ol className="list-decimal space-y-3 border-t-[1.5px] border-ink py-4 pr-4 pl-10 text-[15px] leading-relaxed text-ink-mid marker:font-mono marker:text-[13px] marker:font-bold marker:text-ink">
+      <ol className="gb-numbered border-t-[1.5px] border-ink bg-surface p-4 text-[15px] leading-relaxed text-ink-mid">
         {children}
       </ol>
     </details>

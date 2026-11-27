@@ -23,10 +23,10 @@ export default async function Setup({ searchParams }: { searchParams: Promise<{ 
   return (
     <div>
       <Header session={null} linked={false} />
-      <main className="page max-w-[640px]">
+      <main className="gb-page max-w-[640px]">
         {notice && NOTICES[notice] && (
           <p
-            className={`notice mb-8 ${notice === "setup-expired" || notice === "setup-failed" || notice === "live-url" ? "notice-problem" : ""}`}
+            className={`gb-notice mb-8 ${notice === "setup-expired" || notice === "setup-failed" || notice === "live-url" ? "problem" : ""}`}
             role="status"
           >
             {NOTICES[notice]}
@@ -34,29 +34,29 @@ export default async function Setup({ searchParams }: { searchParams: Promise<{ 
         )}
         {connected ? (
           <>
-            <h1 className="title">Connected to GitHub.</h1>
-            <Link href="/" className="btn mt-8">
+            <h1 className="gb-h2">Connected to GitHub.</h1>
+            <Link href="/" className="gb-btn primary mt-8">
               Go to sign in
             </Link>
 
-            <h2 className="heading mt-16 border-t-[1.5px] border-ink pt-12">Connect the live address</h2>
+            <h2 className="gb-heading mt-16 border-t-[1.5px] border-ink pt-12">Connect the live address</h2>
             <p className="mt-3 text-ink-mid">
               The live site needs its own GitHub App, because GitHub only sends people back to the address an app was
               created for. GitHub sends you back here afterwards, and the app&apos;s settings are saved in{" "}
               <span className="font-mono text-[15px]">web/.env.live</span>, without being shown on screen.
             </p>
-            <form action="/setup/start" method="post" className="panel mt-6">
+            <form action="/setup/start" method="post" className="gb-card p-4 sm:p-6 mt-6">
               <input type="hidden" name="target" value="live" />
-              <label className="field-label" htmlFor="liveUrl">
+              <label className="gb-field-label" htmlFor="liveUrl">
                 Live address
               </label>
               <input
                 id="liveUrl"
                 name="liveUrl"
                 defaultValue="https://gtm-base-app.netlify.app"
-                className="field"
+                className="gb-input"
               />
-              <label className="field-label mt-6" htmlFor="liveName">
+              <label className="gb-field-label mt-6" htmlFor="liveName">
                 App name on GitHub (must be unique across GitHub)
               </label>
               <input
@@ -64,17 +64,17 @@ export default async function Setup({ searchParams }: { searchParams: Promise<{ 
                 name="name"
                 defaultValue="GTM Base"
                 maxLength={34}
-                className="field"
+                className="gb-input"
               />
-              <button className="btn mt-6 w-full sm:w-auto">
+              <button className="gb-btn primary mt-6 w-full sm:w-auto">
                 Continue to GitHub
               </button>
             </form>
           </>
         ) : (
           <>
-            <h1 className="title">Connect this copy of GTM Base to GitHub.</h1>
-            <p className="lede mt-5">
+            <h1 className="gb-h2">Connect this copy of GTM Base to GitHub.</h1>
+            <p className="gb-lede mt-5">
               GitHub will show you a page to create a GitHub App for GTM Base under your account. Nothing is created until
               you click the button on that page. The app&apos;s settings then come straight back to this computer and are
               saved in <span className="font-mono text-[15px]">web/.env.local</span>, without being shown on screen.
@@ -83,8 +83,8 @@ export default async function Setup({ searchParams }: { searchParams: Promise<{ 
               It asks to read and write repository files and pull requests on the accounts you install it on, and nothing
               else for now.
             </p>
-            <form action="/setup/start" method="post" className="panel mt-8">
-              <label className="field-label" htmlFor="name">
+            <form action="/setup/start" method="post" className="gb-card p-4 sm:p-6 mt-8">
+              <label className="gb-field-label" htmlFor="name">
                 App name on GitHub (must be unique across GitHub)
               </label>
               <input
@@ -92,9 +92,9 @@ export default async function Setup({ searchParams }: { searchParams: Promise<{ 
                 name="name"
                 defaultValue={`GTM Base Dev ${suffix}`}
                 maxLength={34}
-                className="field"
+                className="gb-input"
               />
-              <button className="btn mt-6 w-full sm:w-auto">
+              <button className="gb-btn primary mt-6 w-full sm:w-auto">
                 Continue to GitHub
               </button>
             </form>

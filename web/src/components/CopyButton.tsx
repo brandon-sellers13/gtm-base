@@ -18,7 +18,7 @@ export function CopyButton({ text, label }: { text: string; label: string }) {
   }
 
   return (
-    <button type="button" onClick={copy} className="btn btn-secondary btn-sm shrink-0" aria-live="polite">
+    <button type="button" onClick={copy} className="gb-btn small shrink-0" aria-live="polite">
       {state === "copied" ? "Copied" : state === "failed" ? "Select the text and copy it" : label}
     </button>
   );

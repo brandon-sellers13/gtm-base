@@ -31,8 +31,8 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ n
       <CleanUrl />
       <main className="flex-1">
         {notice && NOTICES[notice] && (
-          <div className="page pb-0">
-            <p className={`notice ${FAILED.has(notice) ? "notice-problem" : ""}`} role="status">
+          <div className="gb-page pb-0">
+            <p className={`gb-notice ${FAILED.has(notice) ? "problem" : ""}`} role="status">
               {NOTICES[notice]}
             </p>
           </div>
@@ -46,20 +46,20 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ n
 
 function NotConnected() {
   return (
-    <section className="page">
-      <h1 className="title">GTM Base is not connected to GitHub yet.</h1>
+    <section className="gb-page">
+      <h1 className="gb-h2">GTM Base is not connected to GitHub yet.</h1>
       {isDevelopment() ? (
         <>
-          <p className="lede mt-5">
+          <p className="gb-lede mt-5">
             This copy of the app runs on your computer. Connecting it registers a GitHub App that the app signs people in
             with and uses to read and change each company base.
           </p>
-          <Link href="/setup" className="btn mt-8">
+          <Link href="/setup" className="gb-btn primary mt-8">
             Connect to GitHub
           </Link>
         </>
       ) : (
-        <p className="lede mt-5">The person running this app has not finished setting it up.</p>
+        <p className="gb-lede mt-5">The person running this app has not finished setting it up.</p>
       )}
     </section>
   );
@@ -67,16 +67,16 @@ function NotConnected() {
 
 function SignedOut() {
   return (
-    <section className="band">
-      <div className="mx-auto max-w-[880px] text-center">
-        <h1 className="display">Your team and its AI, working from the same company context.</h1>
-        <p className="lede mx-auto mt-6">
+    <section className="gb-band cool">
+      <div className="gb-stack mx-auto w-full max-w-[1200px]">
+        <h1 className="gb-h1 max-w-[880px]">Your team and its AI, working from the same company context.</h1>
+        <p className="gb-lede">
           Read your company base, approve the changes your team proposes, and see anything that changed without approval.
         </p>
-        <a href="/api/auth/login" className="btn mt-9 min-w-[200px]">
+        <a href="/api/auth/login" className="gb-btn primary">
           Sign in with GitHub
         </a>
-        <p className="mt-5 text-[15px] text-ink-mid">GTM Base is invite-only while it is being built.</p>
+        <p className="text-[15px] text-ink-mid">GTM Base is invite-only while it is being built.</p>
       </div>
     </section>
   );
@@ -106,36 +106,36 @@ async function SignedIn({
   if (tokenRefused) redirect("/api/auth/expired");
 
   return (
-    <section className="page">
-      <h1 className="title">Welcome, {name}.</h1>
+    <section className="gb-page">
+      <h1 className="gb-h2">Welcome, {name}.</h1>
 
-      <div className="section-label flex items-end justify-between gap-4">
-        <h2 className="heading">Your bases</h2>
+      <div className="gb-section flex items-end justify-between gap-4">
+        <h2 className="gb-heading">Your bases</h2>
         {!team && (
-          <Link href="/new" className="btn btn-sm shrink-0">
+          <Link href="/new" className="gb-btn primary small shrink-0">
             Create a base
           </Link>
         )}
       </div>
       {bases === null ? (
-        <p className="notice notice-problem mt-6">GitHub did not answer just now. Reload the page to try again.</p>
+        <p className="gb-notice problem mt-6">GitHub did not answer just now. Reload the page to try again.</p>
       ) : bases.length === 0 ? (
-        <p className="empty mt-6 text-ink-mid">
+        <p className="gb-empty mt-6 text-ink-mid">
           No company base yet. Create one, or give GTM Base access to a repository that already holds one (it has a{" "}
           <span className="font-mono text-[13px]">context/map.md</span>) in the account settings below.
         </p>
       ) : (
-        <ul className="rows mt-6">
+        <ul className="gb-docs mt-6">
           {bases.map((base) => (
             <li key={`${base.owner}/${base.name}`} className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1">
               <span className="min-w-0 break-words">
                 <span className="text-ink-quiet">{base.owner} / </span>
-                <Link href={`/b/${base.owner}/${base.name}`} className="link-quiet font-bold">
+                <Link href={`/b/${base.owner}/${base.name}`} className="gb-link-quiet font-bold">
                   {base.name}
                 </Link>
                 {created === `${base.owner}/${base.name}` && <span className="tag ml-2 bg-ok-tint text-ok">new</span>}
               </span>
-              <a href={base.htmlUrl} className="meta-mono link-quiet">
+              <a href={base.htmlUrl} className="gb-meta gb-link-quiet">
                 Open on GitHub
               </a>
             </li>
@@ -143,18 +143,18 @@ async function SignedIn({
         </ul>
       )}
 
-      <h2 className="heading section-label">Accounts</h2>
+      <h2 className="gb-heading gb-section">Accounts</h2>
       {installations === null ? null : installations.length === 0 ? (
-        <p className="empty mt-6 text-ink-mid">GTM Base is not installed on any of your accounts yet.</p>
+        <p className="gb-empty mt-6 text-ink-mid">GTM Base is not installed on any of your accounts yet.</p>
       ) : (
-        <ul className="rows mt-6">
+        <ul className="gb-docs mt-6">
           {installations.map((installation) => (
             <li key={installation.id} className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1">
               <span className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1">
                 {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={installation.account.avatar_url} alt="" className="avatar h-6 w-6" />
+                <img src={installation.account.avatar_url} alt="" className="gb-avatar h-6 w-6" />
                 <span className="font-bold">{installation.account.login}</span>
-                <span className="meta-mono">
+                <span className="gb-meta">
                   {installation.repository_selection === "all" ? "all repositories" : "selected repositories"}
                 </span>
               </span>
@@ -164,7 +164,7 @@ async function SignedIn({
                     ? `https://github.com/organizations/${installation.account.login}/settings/installations/${installation.id}`
                     : `https://github.com/settings/installations/${installation.id}`
                 }
-                className="meta-mono link-quiet"
+                className="gb-meta gb-link-quiet"
               >
                 Choose repositories
               </a>
@@ -173,7 +173,7 @@ async function SignedIn({
         </ul>
       )}
       {!team && (
-        <a href="/api/auth/login?install=1" className="link mt-6 inline-block">
+        <a href="/api/auth/login?install=1" className="gb-link mt-6 inline-block">
           Install GTM Base on another account
         </a>
       )}

@@ -9,10 +9,10 @@ export default async function NotFound() {
   return (
     <div>
       <Header session={session} />
-      <main className="page max-w-[640px]">
-        <p className="label-mono">404</p>
-        <h1 className="title mt-2">This page could not be found.</h1>
-        <Link href="/" className="btn btn-secondary mt-8">
+      <main className="gb-page max-w-[640px]">
+        <p className="gb-label-mono">404</p>
+        <h1 className="gb-h2 mt-2">This page could not be found.</h1>
+        <Link href="/" className="gb-btn mt-8">
           Go to the home page
         </Link>
       </main>
