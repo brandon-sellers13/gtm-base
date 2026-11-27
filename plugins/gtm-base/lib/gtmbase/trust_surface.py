@@ -60,9 +60,10 @@ CODE_GIT_SETTINGS_FILE = "git-settings-file"
 CODE_PLUGINS_FOLDER = "plugins-folder"
 # The tree holds a code file.
 CODE_CODE_FILE = "code-file"
-# The base's own skills folder holds something other than its placeholder.
-# Until the company-skills brainstorm settles who may approve a change to a
-# skill, the folder is kept empty (Unit 1.5b, Brandon's call 13).
+# The base's own skills folder holds something a skill may not: a name
+# outside the admitted shapes, a file anybody can run, one too large, or a
+# skill setting that grants power (Plan 1, Unit 4.2b, CS19 to CS21). The code
+# keeps its name from when the folder was kept empty.
 CODE_SKILLS_FILE = "skills-folder-not-empty"
 # The tree holds something under the settings folder other than the settings file.
 CODE_CLAUDE_FOLDER_ENTRY = "claude-folder-entry"
@@ -247,6 +248,7 @@ def _walk_codes(root: str, ignored: Set[str]) -> Set[str]:
     """Walk the tree once, never following a link, and stop at the cap."""
     codes: Set[str] = set()
     seen = 0
+    skill_files = []
     for dirpath, dirnames, filenames in os.walk(root, followlinks=False):
         relative_dir = os.path.relpath(dirpath, root)
         prefix = "" if relative_dir == "." else relative_dir.replace(os.sep, "/") + "/"
@@ -278,11 +280,43 @@ def _walk_codes(root: str, ignored: Set[str]) -> Set[str]:
             codes.update(_component_codes(relative.split("/"), False))
             # The skills folder's placeholder is allowed by its name only
             # while it holds nothing (Astra's review of Unit 1.5b, finding 8).
-            if layout.is_the_skills_placeholder(relative) and not (
-                layout.placeholder_is_empty(os.path.join(dirpath, name))
-            ):
-                codes.add(CODE_SKILLS_FILE)
+            if layout.is_the_skills_placeholder(relative):
+                if not layout.placeholder_is_empty(os.path.join(dirpath, name)):
+                    codes.add(CODE_SKILLS_FILE)
+            elif _under_skills(relative):
+                skill_files.append(relative)
+                if _skill_file_problem(relative, os.path.join(dirpath, name)):
+                    codes.add(CODE_SKILLS_FILE)
+    from . import skillshape
+
+    if skillshape.too_many(skill_files):
+        codes.add(CODE_SKILLS_FILE)
     return codes
+
+
+def _under_skills(relative: str) -> bool:
+    parts = [normalize_component(part) for part in relative.split("/")]
+    return len(parts) > 1 and parts[0] == constants.SKILLS_DIR
+
+
+def _skill_file_problem(relative: str, full: str) -> bool:
+    """Whether one file in the skills folder on the disk fails what a skill file must be.
+
+    Read without following a link; a file anybody can run is refused whatever
+    its name (Plan 1, Unit 4.2b, CS20).
+    """
+    from . import skillshape
+
+    try:
+        if os.path.islink(full) or not os.path.isfile(full):
+            return True
+        runnable = bool(os.stat(full).st_mode & 0o111)
+        with open(full, "rb") as handle:
+            data = handle.read(skillshape.MAX_FILE_BYTES + 1)
+    except OSError:
+        return True
+    mode = "100755" if runnable else skillshape.REGULAR_MODE
+    return skillshape.file_problem(relative, data, mode) is not None
 
 
 def check(root: str, runner: Optional[GitRunner] = None) -> TrustResult:

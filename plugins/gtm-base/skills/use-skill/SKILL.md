@@ -69,6 +69,46 @@ once it is accepted.
 A figure the check accepts is only a figure that appears in a file. It does not
 prove the figure belongs to the right measure or period, so never say it does.
 
+## Installing or changing a skill
+
+A skill reaches the base only this way. Never write a file into the base's
+`skills` folder yourself; GTM Base refuses it.
+
+1. Write the whole skill in a folder outside the base: its `SKILL.md`, any
+   references in `references/`, and at least one example in
+   `examples/<example>/`, each with an input, the documents it ran against, an
+   approved `output.md`, an `expectations.md` and at least one deliberately
+   wrong output named `wrong-<name>.md`.
+2. Ask for a file to hold why, in the person's own words, with
+   `python3 scripts/use_skill.py --new-words-file reason`, and write their
+   words to the path it prints.
+3. Prepare it:
+   `python3 scripts/use_skill.py --prepare-install '<skill>' --from '<folder>' --reason-file '<the path it printed>'`
+   This runs the contract check first and prepares nothing when it fails.
+4. Show the person everything it printed, whole, and ask whether to approve
+   it. When they say yes, run
+   `python3 scripts/use_skill.py --approve-install '<prepared>' --shown '<shown>'`
+   with the two values from its last line.
+
+A new skill needs two yeses: its creator's, and the base owner's or an
+administrator's. When the creator is the base owner or an administrator, one
+yes is both. Otherwise the creator's yes is recorded on this computer and
+nothing is written until the base owner or an administrator approves it. A
+changed skill needs one yes from its owner, the base owner or an
+administrator.
+
+## When this computer has not approved a skill
+
+When the run says somebody with authority approved a version this computer has
+not, show who it was:
+
+`python3 scripts/use_skill.py --show '<skill>'`
+
+Say what it printed and ask whether this computer should run that version. On
+a yes, run `python3 scripts/use_skill.py --accept '<skill>' --shown '<shown>'`
+with the value from its last line. A version nobody with authority approved
+cannot be accepted; it can only be changed as above.
+
 ## Before a skill is shown for approval
 
 The contract check runs a skill's own examples and says whether each approved

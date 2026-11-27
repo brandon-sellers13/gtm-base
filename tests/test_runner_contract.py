@@ -653,19 +653,19 @@ class TestTheConversationMark(unittest.TestCase):
 
     def test_an_unattended_start_marks_the_conversation_before_it_runs(self):
         with support.Sandbox():
-            command = "python3 scripts/use_skill.py --start weekly-readout --unattended"
+            command = "python3 %s --start weekly-readout --unattended" % USE_SKILL_SCRIPT
             self.assertIsNone(approval.decide(self.payload(command)))
             self.assertTrue(authority.is_unattended("scheduled-run"))
 
     def test_an_attended_start_marks_nothing(self):
         with support.Sandbox():
-            command = "python3 scripts/use_skill.py --start weekly-readout"
+            command = "python3 %s --start weekly-readout" % USE_SKILL_SCRIPT
             approval.decide(self.payload(command))
             self.assertFalse(authority.is_unattended("scheduled-run"))
 
     def test_a_mark_that_cannot_be_written_stops_the_start(self):
         with support.Sandbox():
-            command = "python3 scripts/use_skill.py --start weekly-readout --unattended"
+            command = "python3 %s --start weekly-readout --unattended" % USE_SKILL_SCRIPT
             with mock.patch.object(authority, "mark_unattended", side_effect=OSError("full")):
                 verdict = approval.decide(self.payload(command))
             output = verdict["hookSpecificOutput"]

@@ -746,6 +746,8 @@ def _incoming_contents_refused(
         placeholder = layout.is_the_skills_placeholder(name)
         stack = name == constants.STACK_PATH
         if not placeholder and not stack:
+            if _incoming_skill_refused(root, target, name, git):
+                refused.append(name)
             continue
         shown = git.run(
             ["show", "%s:%s" % (target, name)],
@@ -763,6 +765,51 @@ def _incoming_contents_refused(
             if scan.scan_source_map(shown.stdout, allowlist):
                 refused.append(name)
     return refused
+
+
+def _incoming_skill_refused(root: str, target: str, name: str, git: GitRunner) -> bool:
+    """Whether one incoming file under the skills folder fails what a skill file must be.
+
+    Its saved mode, size, encoding and settings are read from the update
+    itself (Plan 1, Unit 4.2b, CS19 to CS21), and so is the number of files
+    the skill would hold. A file the update takes away carries nothing in.
+    """
+    from . import skillshape
+
+    parts = [part for part in name.replace("\\", "/").split("/") if part not in ("", ".")]
+    if len(parts) < 2 or trust_surface.normalize_component(parts[0]) != constants.SKILLS_DIR:
+        return False
+    listed = git.run(
+        ["ls-tree", "-z", target, "--", name], cwd=root, timeout=LOCAL_TIMEOUT_SECONDS
+    )
+    if not listed.ok:
+        return True
+    entry = listed.stdout.strip("\0\n ")
+    if not entry:
+        return False
+    mode = entry.split(" ", 1)[0]
+    shown = git.run(
+        ["cat-file", "blob", "%s:%s" % (target, name)],
+        cwd=root,
+        timeout=LOCAL_TIMEOUT_SECONDS,
+    )
+    if not shown.ok:
+        return True
+    # Git's output is read as UTF-8 with anything else replaced, so a
+    # replaced character is a file that was not UTF-8, refused as one.
+    if "�" in shown.stdout:
+        return True
+    data = shown.stdout.encode("utf-8")
+    if skillshape.file_problem(name, data, mode) is not None:
+        return True
+    every = git.run(
+        ["ls-tree", "-r", "-z", "--name-only", target, "--", constants.SKILLS_DIR],
+        cwd=root,
+        timeout=LOCAL_TIMEOUT_SECONDS,
+    )
+    if not every.ok:
+        return True
+    return skillshape.too_many(item for item in every.stdout.split("\0") if item)
 
 
 def _incoming_symlinks(root: str, target: str, git: GitRunner) -> List[str]:

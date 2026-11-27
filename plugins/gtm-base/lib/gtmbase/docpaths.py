@@ -155,13 +155,16 @@ def check_record_path(candidate) -> str:
 
     A record lists the files its change wrote: context files, the record of
     context changes, the record itself, and, since this unit, a standard, the
-    source map and a new lesson.
+    source map and a new lesson. Since Unit 4.2b it also lists a skill's
+    files, which only the install and change operations write.
     """
     try:
         return paths.check_repo_path_syntax(candidate, paths.PROPOSAL_PATH_PREFIXES)
     except PathError:
         found = classify(candidate)
-        if found is not None and found.kind in (KIND_STANDARD, KIND_STACK, KIND_LESSON):
+        if found is not None and found.kind in (
+            KIND_STANDARD, KIND_STACK, KIND_LESSON, KIND_SKILL
+        ):
             return found.path
         raise
 

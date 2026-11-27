@@ -25,6 +25,14 @@ Plan 1, Unit 3.1, the thin runner:
 - The moment-of-use check can now be asked about documents as last saved, so an unsaved edit on the disk changes nothing it finds.
 - What the tests prove is the contract. Whether a skill does good work is Brandon's replay of real runs, and nothing here claims otherwise. Writing a skill into a base stays refused until Unit 4.2b.
 
+Plan 1, Unit 4.2b, the skills folder:
+
+- A base's skills folder now admits a skill's files in exact shapes: `skills/<job>/SKILL.md`, references in `references/`, and one flat folder per example, markdown or plain text only, at most 64,000 bytes a file and 50 files a skill, nothing anybody can run, and a `SKILL.md` whose settings hold only the keys the company-skills requirements list. Everything else stays refused when a base is opened, on an update from the shared copy and in a send, each of which reads the files themselves.
+- A file tool writing into the skills folder is still refused, even for a shape the folder admits. A skill is written only by `use_skill.py --prepare-install` and `--approve-install`, which run the contract check first, show the whole skill, and write all of it or nothing.
+- A new skill needs its creator's yes and the base owner's or an administrator's; one person holding both gives one yes. The creator's yes waits on this computer and the base owner's or an administrator's is the one that writes. A changed skill needs one yes from its owner, the base owner or an administrator, and may not move its owner line. Each records one approval of the whole skill, with the role and every file's hash, and this computer trusts it.
+- A run of a skill this computer does not trust yet, attended, now says whether somebody with authority approved that version. `use_skill.py --show` says who, in which role, on what day and what changed since the version trusted here, and `--accept` trusts it after one question. A version nobody with authority approved cannot be accepted. Unattended, the run is refused and asks nothing, and installing, changing and accepting are refused in a run nobody is watching.
+- Still to come: a skill listed by the review when it goes stale, and the session start naming the skills this computer trusts.
+
 ## 0.5.0 (not yet released)
 
 Release B: Units 1.5b, 1.6, 1.7a to 1.7e and 1.8, call 29, calls 57 to 60, and the live-check follow-up, with 0.3.3 to 0.3.10 and 0.4.0 carried. Prepared on 2026-10-10 as 0.4.0; main shipped 0.4.0 on 2026-10-21 first, so Release B ships as 0.5.0, and the date is set on the day it ships.

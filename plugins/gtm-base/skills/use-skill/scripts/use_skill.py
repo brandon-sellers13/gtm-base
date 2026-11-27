@@ -45,7 +45,7 @@ if _lib not in sys.path:
 
 import argparse  # noqa: E402
 
-from gtmbase import machine, paths, runner  # noqa: E402
+from gtmbase import machine, moment, paths, runner, skill_install, wordsfile  # noqa: E402
 from gtmbase.errors import GtmBaseError  # noqa: E402
 
 EXIT_DONE = 0
@@ -72,6 +72,28 @@ def build_parser():
     actions.add_argument(
         "--incomplete", action="store_true", help="list runs that were started and never finished"
     )
+    actions.add_argument(
+        "--new-words-file", help="hand out a file to put somebody's own words in, of one kind"
+    )
+    actions.add_argument(
+        "--prepare-install", metavar="SKILL", help="prepare a whole skill, new or changed, to be shown"
+    )
+    actions.add_argument(
+        "--approve-install", metavar="PREPARED", help="give one yes to a prepared skill"
+    )
+    actions.add_argument(
+        "--show", metavar="SKILL", help="show who approved a skill this computer does not trust yet"
+    )
+    actions.add_argument(
+        "--accept", metavar="SKILL", help="trust here a version somebody with authority approved"
+    )
+    parser.add_argument(
+        "--from", dest="source_folder", help="with --prepare-install: the folder the skill is written in"
+    )
+    parser.add_argument(
+        "--reason-file", help="with --prepare-install: a file this script handed out, holding why"
+    )
+    parser.add_argument("--shown", help="with --approve-install or --accept: the value the showing printed")
     parser.add_argument(
         runner.UNATTENDED_WORD,
         dest="unattended",
@@ -96,7 +118,11 @@ def _read(path):
 
 def main(argv=None):
     options = build_parser().parse_args(argv)
-    if not (options.start or options.finish or options.check or options.incomplete):
+    if not (
+        options.start or options.finish or options.check or options.incomplete
+        or options.new_words_file or options.prepare_install or options.approve_install
+        or options.show or options.accept
+    ):
         build_parser().print_help()
         return EXIT_ERROR
     resolution = paths.resolve_base(os.getcwd(), machine.load_machine_state())
@@ -133,6 +159,56 @@ def main(argv=None):
         done = runner.finish(base_id, options.finish, output, sources)
         sys.stdout.write(done.render() + "\n")
         return EXIT_DONE if done.accepted else EXIT_REFUSED
+
+    if options.new_words_file:
+        if options.new_words_file not in wordsfile.KINDS:
+            sys.stdout.write(wordsfile.NOT_OURS + "\n")
+            return EXIT_REFUSED
+        wordsfile.ensure_words_dir(base_id)
+        sys.stdout.write("words=%s\n" % wordsfile.new_words_path(base_id, options.new_words_file))
+        return EXIT_DONE
+
+    if options.prepare_install:
+        if not options.source_folder or not options.reason_file:
+            build_parser().print_help()
+            return EXIT_ERROR
+        claim = wordsfile.claim_words(options.reason_file, base_id)
+        if claim is None:
+            sys.stdout.write(wordsfile.NOT_OURS + "\n")
+            return EXIT_REFUSED
+        try:
+            files = skill_install.files_from_folder(options.source_folder, options.prepare_install)
+            prepared = skill_install.prepare(
+                root, base_id, options.prepare_install, files, claim.text
+            )
+        except GtmBaseError as failure:
+            wordsfile.release_words(claim)
+            sys.stdout.write(str(failure) + "\n")
+            return EXIT_REFUSED
+        wordsfile.consume_claim(claim)
+        sys.stdout.write(moment.fenced(prepared.artifact) + "\n")
+        sys.stdout.write(
+            "[for the assistant] prepared=%s shown=%s\n" % (prepared.prepared_id, prepared.shown)
+        )
+        return EXIT_DONE
+
+    if options.approve_install:
+        done = skill_install.approve(root, base_id, options.approve_install, options.shown or "")
+        sys.stdout.write(done.sentence + "\n")
+        return EXIT_DONE if done.done or done.code == skill_install.CODE_WAITING else EXIT_REFUSED
+
+    if options.show:
+        showing = skill_install.approval_of(root, base_id, options.show)
+        sys.stdout.write("\n".join(showing.sentences()) + "\n")
+        if showing.acceptable:
+            sys.stdout.write("[for the assistant] shown=%s\n" % showing.shown)
+            return EXIT_DONE
+        return EXIT_DONE if showing.trusted else EXIT_REFUSED
+
+    if options.accept:
+        done = skill_install.accept(root, base_id, options.accept, options.shown or "")
+        sys.stdout.write(done.sentence + "\n")
+        return EXIT_DONE if done.done else EXIT_REFUSED
 
     if options.check:
         contract = runner.check_examples(root, base_id, options.check)

@@ -95,9 +95,8 @@ REASON_BAD_PAYLOAD = "unreadable-request"
 REASON_MISSING_FILE = "body-file-unreadable"
 REASON_SEAT_FOLDER = "seat-folder"
 REASON_BASE_NAME = "changes-the-name-a-base-is-known-by"
-# The send carries a file in the base's own skills folder, which is kept empty
-# until the company-skills brainstorm settles who may approve a change to a
-# skill (Unit 1.5b, Brandon's call 13).
+# The send carries a file in the base's own skills folder that is not one of
+# the shapes the folder admits (Plan 1, Unit 4.2b, CS19 to CS21).
 REASON_SKILLS_FILE = "a-file-in-the-skills-folder"
 # A command that sets, reads or clears the ticket an allowed approval carries
 # (Unit 1.7e). Only `approval` may put one on a command.
@@ -179,8 +178,8 @@ SENTENCES = {
     ),
     REASON_SKILLS_FILE: (
         "GTM Base stopped this because it would send a file in the base's "
-        "skills folder, which stays empty until your team has settled who may "
-        "approve a change to a skill."
+        "skills folder that is not one a skill may hold, such as a script, a "
+        "file anybody can run, or a skill setting that grants it power."
     ),
     REASON_APPROVAL_TICKET: (
         "GTM Base stopped this because it touches the value GTM Base uses to "
@@ -1454,7 +1453,40 @@ def _skills_in_every_piece_of_work(
             settings[1] != REGULAR_FILE_MODE or settings[3] != EMPTY_BLOB
         ):
             return True
-    return False
+        if not layout.is_the_skills_placeholder(path) and _a_bad_skill_file(
+            git, cwd, path, settings[1], settings[3]
+        ):
+            return True
+    return _a_skill_too_large(git, cwd, end)
+
+
+def _a_bad_skill_file(git: GitRunner, cwd: str, path: str, mode: str, blob: str) -> bool:
+    """Whether a file a send carries under the skills folder fails what a skill file must be.
+
+    Its saved mode and its exact bytes are read from the piece of work itself
+    (Plan 1, Unit 4.2b, CS19 to CS21). A file that cannot be read is refused.
+    """
+    from . import skillshape
+
+    parts = [part for part in path.split("/") if part not in ("", ".")]
+    if len(parts) < 2 or parts[0].casefold() != constants.SKILLS_DIR:
+        return False
+    shown = git.run(["cat-file", "blob", blob], cwd=cwd)
+    if not shown.ok or "�" in shown.stdout:
+        return True
+    return skillshape.file_problem(path, shown.stdout.encode("utf-8"), mode) is not None
+
+
+def _a_skill_too_large(git: GitRunner, cwd: str, end: str) -> Optional[bool]:
+    """Whether the work being sent holds a skill with more files than CS20 allows."""
+    from . import skillshape
+
+    every = git.run(
+        ["ls-tree", "-r", "-z", "--name-only", end, "--", constants.SKILLS_DIR], cwd=cwd
+    )
+    if not every.ok:
+        return None
+    return skillshape.too_many(item for item in every.stdout.split("\0") if item)
 
 
 def _messages_text(git: GitRunner, cwd: str, start: str, end: str) -> Optional[str]:
