@@ -1867,18 +1867,21 @@ The lean plan Brandon approved on 2026-11-25: merge main, rehearse case three al
 - [x] Case two resumes from its kept notes on a plugin copy of the new commit (done 2026-11-25, above).
 - [x] Brandon scores cases one and three, and case two once it is run (done 2026-11-25, above).
 - [x] The scored re-run of all three cases (done 2026-11-25). The gate passes.
-- [ ] Customer-name check fix (`d7c4ad7`, branch `claude/customer-name-false-refusals`, built on this branch's tip): Brandon decides whether it goes into Release B.
+- [x] Customer-name check fix: it went into Release B and is on main as 990e1a9 (PR #15). Whether a draft may keep a city's name when the notes record a customer by it is still Brandon's call.
 - [x] Brandon: review and merge Release B (0.5.0) into main. (merged 2026-11-25, PR #15)
 
 ## 2026-11-26, the connector for Claude chat, Cowork and ChatGPT (plan: docs/plans/2026-11-26-001-feat-chat-connector-plan.md)
 The order across every track is in `docs/plans/2026-11-26-003-roadmap-to-full-experience.md`. No review per unit; one security review before anyone but Brandon connects.
 - [x] S0. The spike: what Claude and ChatGPT accept from a remote connector. (done 2026-11-26, PR #17)
 - [x] C1. The endpoint, GitHub sign-in and one base per conversation. (merged and live, PR #18)
-- [ ] C2. Reading documents, with the moment-of-use flag in the answer. (built with C4 on `claude/connector-c2-plan`; ChatGPT run passed end to end on the test site 2026-11-26; in review)
-- [ ] C3. Skills served live. (waits on Plan 1's skills folder, unit 4.2b)
-- [ ] C4. Proposing a context change from chat. (ships with C2, same pull request)
-- [ ] C5. The setup guide and a Project instruction for each base.
-- [ ] The security review, then the end-to-end run in Claude and ChatGPT across two Projects.
+- [x] C2. Reading documents, with the moment-of-use flag in the answer. (PR #23, merged as 429da77 and deployed to the live site on 2026-11-26 as deploy 6b08e688339d2aae566195f8; the one before it, for a rollback, is C1's 6b08b757ddcfc03acda297a1. The ChatGPT run passed end to end on the test site, the security review found nothing at the bar, and on the live site the home page, sign-in and the 19 public connector checks pass. The Claude half waits for Simona's invite.)
+- [ ] C3. Skills served live. (waits on Plan 1's runner 3.1 and skills folder 4.2b, and on Track 4's drift grade T4.8)
+- [x] C4. Proposing a context change from chat. (shipped with C2 in PR #23)
+- [ ] C5. The setup guide and a Project instruction for each base. (nothing blocks it)
+- [ ] Carried over from C1 and C2, all needing Simona's account: the Claude half of the run, the refusal of a second base in one conversation, and the sign-in test with two GitHub accounts.
+- [ ] Brandon: decide the borderline proposal pattern from C2's security review, once for the plugin and the connector.
+- [ ] Take down the connector's test site once the Claude half has passed.
+- [ ] The security review of C3, then the end-to-end run in Claude and ChatGPT across two Projects.
 
 ## Plan 1, company skills and the Meta ads skill (plan: docs/plans/2026-10-10-002-feat-plan-1-company-skills-and-meta-skill-plan.md)
 Step 2 of `docs/plans/2026-11-26-003-roadmap-to-full-experience.md`. The planning documents and the four built units were brought up to date with main on 2026-11-26 (branch `claude/plan-1-catchup`), keeping every Release B and backup rule (full suite on the merge 5e80a5b: 3323 tests OK, then 223 OK from a linked folder). The sections below are the original build records from 2026-10-10.
@@ -1886,12 +1889,25 @@ Step 2 of `docs/plans/2026-11-26-003-roadmap-to-full-experience.md`. The plannin
 - [x] Unit 2.1. The base inventory.
 - [x] Unit 2.5a. The source map parser.
 - [x] Unit 4.2a. One authority rule, one path rule, approvals bound to bytes, and the refusal in an unattended run.
-- [ ] Unit 4.2b. The skills folder. (next; connector unit C3 waits on it)
-- [ ] Unit 3.1. The thin runner, its contract test, and atlas figure 9.
+- [ ] Unit 3.1. The thin runner, its contract test, and atlas figure 9. (next; installing a skill runs its check)
+- [ ] Unit 4.2b. The skills folder. (after 3.1; connector unit C3 and drift grade wait on both)
 - [ ] Unit 2.4a. Metric definitions and goals, the driver-app half.
 - [ ] Unit 3.5. The creative-testing standard.
 - [ ] Unit 3.6. The Meta ads skill running through the runner.
-- [ ] Brandon: review and merge the catch-up pull request.
+- [x] Brandon: review and merge the catch-up pull request. (merged 2026-11-26, PR #22)
+
+## Track 4, what a base holds (plan: docs/plans/2026-11-27-001-feat-track-4-base-contents-plan.md)
+All ten decisions made on 2026-11-27. No review per unit; the end-to-end run in the plan is the check.
+- [ ] T4.1. A recorded decision suggests the documents built on it. (unblocked)
+- [ ] T4.2. Messaging and voice, adopted or drafted. (unblocked)
+- [ ] T4.3. Buyer personas and product. (unblocked)
+- [ ] T4.6. The source map for any company. (unblocked)
+- [ ] T4.8. Drift grade, the first skill on a base. (waits on Plan 1's 3.1 and 4.2b)
+- [ ] T4.4. Competitors.
+- [ ] T4.5. Design.
+- [ ] T4.7. Update GTM Base.
+- [ ] T4.9. The content brief. (after T4.8 and T4.2)
+- [ ] T4.10. The outbound sequence. (after T4.8)
 
 ### 2026-10-10, Plan 1 of Phases 2 and 3 (branch claude/plan-1-meta-skill-3d436e)
 Plan: `docs/plans/2026-10-10-002-feat-plan-1-company-skills-and-meta-skill-plan.md`. Planning only; no product code.
