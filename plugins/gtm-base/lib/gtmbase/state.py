@@ -340,6 +340,10 @@ SEAT_DEFAULTS = {
     # The first backup review (backup.py): the address and the saved version
     # it reviewed, when the person said yes to sending it, and when it went.
     "first_backup": None,
+    # A seat joined from a link (join_link.py): the GitHub repository it was
+    # copied from, and when. A seat with this record sends only to that
+    # repository, and only as proposals.
+    "joined_from": None,
     "git_hook_installed": False,
     "git_hook_code": None,
     # The weekly one line. It is off until somebody turns it on, and the day it
@@ -426,6 +430,7 @@ def _clean_pending_confirmations(value, problems: List[str]) -> List[dict]:
 _FIRST_BACKUP_KEYS = frozenset(
     ("address", "branch", "reviewed_head", "reviewed_at", "approved_at", "sent_at")
 )
+_JOINED_FROM_KEYS = frozenset(("address", "joined_at"))
 
 
 def load_seat(base_id: str) -> Tuple[dict, List[str]]:
@@ -481,6 +486,19 @@ def load_seat(base_id: str) -> Tuple[dict, List[str]]:
         if clean is None:
             problems.append("bad-value")
         seat["first_backup"] = clean
+    joined = seat.get("joined_from")
+    if joined is not None:
+        clean = None
+        if (
+            isinstance(joined, dict)
+            and set(joined) == _JOINED_FROM_KEYS
+            and isinstance(joined.get("address"), str)
+            and isinstance(joined.get("joined_at"), str)
+        ):
+            clean = {k: joined.get(k) for k in _JOINED_FROM_KEYS}
+        if clean is None:
+            problems.append("bad-value")
+        seat["joined_from"] = clean
     if _quiet_is_past_the_longest(seat):
         seat["silent_until"] = None
         seat["silent_until_set_on"] = None

@@ -568,7 +568,9 @@ class TestTheSkillsAsTheyAreWritten(unittest.TestCase):
     # Backing up needs a real GitHub repository, which this walk has none of, so
     # here both of its steps must be refused rather than run; tests/test_backup.py
     # walks them end to end against a repository of its own.
-    REFUSED_ON_PURPOSE = ("backup-review", "backup", "invite", "join-link")
+    # Joining from a link needs one too; tests/test_join_link.py walks both
+    # of its steps against a repository of its own.
+    REFUSED_ON_PURPOSE = ("backup-review", "backup", "invite", "join-review", "join-link")
 
     def document(self, relative):
         return os.path.join(SKILLS_DIR, relative.replace("/", os.sep))

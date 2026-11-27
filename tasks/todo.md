@@ -1820,7 +1820,9 @@ Brandon decided to build the web app now and productize from the start. No revie
 - [ ] W5. Invite a teammate and give them the line to join from Claude Code. (built and live 2026-11-25, PR #13; the real invite test waits for Simona's GitHub username and the Administration approval on the dev install)
 - [x] W6. Changes that skipped approval: Keep or Undo. (done 2026-11-25)
 - [x] P1. Back up a base to its repository. (done 2026-11-26, PR #16; the approval question is seen live once Brandon updates the installed plugin)
-- [ ] P2. Join a base from a link.
+- [x] P2. Join a base from a link. (built 2026-11-27 on `claude/p2-join-from-link`: `join.py join-review` and `join-link`, the seat record, and no straight send to main from a base with a shared copy beyond confirmation lines; not merged)
+  - [ ] The one-pass security review of P2 (what joining writes onto a teammate's computer, the sign-in it relies on, and the shared-line rule), before P2 ships.
+  - [ ] After the web reskin (#35) merges: drop the team page's sentence that joining from Claude Code arrives with the next plugin release.
 - [ ] P3. Shared base: record-change and the setup closing send proposals; no direct push to main from a seat.
 - [ ] The end-to-end run with a second GitHub account.
 

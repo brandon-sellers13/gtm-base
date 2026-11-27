@@ -92,3 +92,37 @@ class _LimitWhenLoaded(importlib.abc.MetaPathFinder):
 
 if os.environ.get("GTM_BASE_TESTS_READING_LIMIT", "").isdigit():
     sys.meta_path.insert(0, _LimitWhenLoaded(int(os.environ["GTM_BASE_TESTS_READING_LIMIT"])))
+
+
+class _PrivateWhenLoaded(importlib.abc.MetaPathFinder):
+    """A local stand-in repository read as private, as the backup module loads.
+
+    tests/test_join_link.py runs the join commands through the script against
+    a folder of bare repositories standing in for GitHub. A local repository
+    can always be read without a sign-in, which the join refuses as a public
+    repository, so the script is told what the library tests are told with a
+    stand-in. Nothing in the plugin reads the variable.
+    """
+
+    def find_spec(self, name, path, target=None):
+        if name != "gtmbase.backup":
+            return None
+        sys.meta_path.remove(self)
+        try:
+            spec = importlib.util.find_spec(name)
+        finally:
+            sys.meta_path.insert(0, self)
+        if spec is None or spec.loader is None:
+            return spec
+        load = spec.loader.exec_module
+
+        def exec_module(module):
+            load(module)
+            module.readable_without_sign_in = lambda *args, **kwargs: False
+
+        spec.loader.exec_module = exec_module
+        return spec
+
+
+if os.environ.get("GTM_BASE_TESTS_PRIVATE_STAND_IN") == "1":
+    sys.meta_path.insert(0, _PrivateWhenLoaded())

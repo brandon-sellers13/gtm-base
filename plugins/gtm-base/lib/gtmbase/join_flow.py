@@ -143,10 +143,10 @@ NOTE_NOT_SAVED = "note-not-saved"
 # session is holding text nobody has vetted.
 MODE_BACKUP = "backup"
 MODE_INVITE = "invite"
+# Joining from a link is `join_link.py` since P2; it is no longer refused.
 MODE_JOIN_LINK = "join-link"
 NOT_IN_THIS_RELEASE = {
     MODE_INVITE: constants.INVITE_NOT_IN_THIS_RELEASE,
-    MODE_JOIN_LINK: constants.JOIN_LINK_NOT_IN_THIS_RELEASE,
 }
 
 # What the closing step writes, and where.

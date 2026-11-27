@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased (P2: join a base from a link)
+
+- A teammate can now join a base from the line the GTM Base app gives them: "join a base from a link" and the base's GitHub address. `join.py join-review` writes nothing; it checks the address is a plain GitHub repository address, that git on this computer can read it with its own sign-in, that it is private and not empty, that this computer does not already have that base, and names the folder it would go in, which is the usual place for bases, `~/GTM Bases/<repository name>/gtm-base`. `join.py join-link` then copies it, and Claude Code asks the person itself before it runs.
+- Joining holds no sign-in of its own and never repeats what git prints. A token pasted into the address is refused as not an address. The copy is made in a half built folder beside where it is going: the repository's own list of files is read before a single file is written, and a link or a folder of another repository is refused there; the written folder is then read by the same trust check every session start runs. Anything a base never holds stops the join, and the half built folder, and the folder made for it, are removed. Links stay plain files in a joined base whatever a later update carries.
+- A joined computer is a seat: the base is recorded with the identifier every seat works out from its address, git's own check before a send is put in place, and the seat records the repository it was copied from. Sends from it go only to that repository, and a seat never sends its whole history as a backup.
+- Once a base has a shared copy, whether it was backed up from this computer or joined from a link, nothing goes straight to the line of work the team shares except confirmation lines, which the app counts as bookkeeping. Both the check on Claude Code's commands and git's own check before a send refuse anything else, including taking that line away and a document change hidden behind a confirmation. Every other change goes as a proposal.
+- Asking to invite somebody now points to the Team page of the GTM Base app, where inviting happens.
+
 ## Unreleased (a refusal that says how to fix it)
 
 - When a draft is refused for using a name the notes record as a customer's, such as a customer recorded simply as "Denver" in a draft that needs the city, the refusal now tells the person how to fix it: record that customer under a fuller name, such as the company's full name. The check itself is unchanged and still refuses the name.
