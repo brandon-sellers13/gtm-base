@@ -1148,6 +1148,11 @@ PYTHON_SENTENCES = (
     ("truth_map", "BUSINESSES_UNREADABLE"),
     ("truth_map", "SCREENED"),
     ("truth_map", "UNREADABLE"),
+    # Track 4, step 1.
+    ("truth_map", "NOT_NAMED"),
+    ("truth_map", "NO_ROWS"),
+    ("record_change", "SUGGESTED_INTRO"),
+    ("drafting", "NOT_COVERED"),
 )
 
 # Constants that read like a sentence but that no person ever reads. Each one

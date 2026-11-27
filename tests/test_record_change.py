@@ -1424,6 +1424,73 @@ def flagged(base, path):
     ).flagged
 
 
+class TestTheSuggestionsFollowThrough(LocalCase):
+    """Track 4, Unit T4.1: the documents built on the ones a change names.
+
+    The documents step reads what changed without taking the file away, and
+    names the documents it probably affects together with the ones usually
+    built on them. They are suggestions: only the numbers chosen are recorded.
+    """
+
+    PERSONAS = "context/buyer-personas.md"
+    VOICE = "context/voice.md"
+
+    def setUp(self):
+        super(TestTheSuggestionsFollowThrough, self).setUp()
+        self.base.write(MESSAGING, MESSAGING_TEXT)
+        self.base.write(
+            self.PERSONAS, MESSAGING_TEXT.replace("kind: messaging", "kind: buyer-personas")
+        )
+        self.base.write(self.VOICE, MESSAGING_TEXT.replace("kind: messaging", "kind: voice"))
+        self.base.save("three more documents")
+
+    def test_moving_up_market_suggests_the_profile_and_what_is_built_on_it(self):
+        what = _words_file(self.flow, "what-changed", "We moved up-market.")
+        code, out, err = self.flow.run(
+            ["--record-change", "documents", "--what-changed-file", what]
+        )
+        self.assertEqual(0, code, out + err)
+        numbers = dict((name, number) for number, name in (
+            line.split(". ", 1) for line in listed(out)
+        ))
+        self.assertIn(record_change.SUGGESTED_INTRO, out)
+        suggested = value_on(out.replace("   [for the assistant] ", ""), "suggested")
+        expected = sorted(
+            int(numbers[name])
+            for name in (
+                "your customer profile",
+                "your positioning",
+                "your messaging",
+                "your buyer personas",
+            )
+        )
+        self.assertEqual(expected, sorted(int(one) for one in suggested.split(",")))
+        self.assertNotIn(numbers["your voice guide"], suggested.split(","))
+        # The file is only looked at, so the showing can still take it.
+        self.assertTrue(os.path.exists(what))
+
+    def test_choosing_fewer_than_suggested_records_only_those(self):
+        what = _words_file(self.flow, "what-changed", "We moved up-market.")
+        code, out, err = self.flow.run(
+            ["--record-change", "documents", "--what-changed-file", what]
+        )
+        self.assertEqual(0, code, out + err)
+        numbers = dict((name, number) for number, name in (
+            line.split(". ", 1) for line in listed(out)
+        ))
+        self.flow.shown_and_recorded(
+            numbers["your customer profile"], what="We moved up-market.", list_first=False
+        )
+        self.assertTrue(flagged(self.base, ICP))
+        self.assertFalse(flagged(self.base, MESSAGING))
+        self.assertFalse(flagged(self.base, self.PERSONAS))
+
+    def test_without_the_words_nothing_is_suggested(self):
+        code, out, err = self.flow.run(["--record-change", "documents"])
+        self.assertEqual(0, code, out + err)
+        self.assertNotIn(record_change.SUGGESTED_INTRO, out)
+
+
 class TestTheCurrentLayout(unittest.TestCase):
     """Recording a context change on a base laid out the Release B way.
 

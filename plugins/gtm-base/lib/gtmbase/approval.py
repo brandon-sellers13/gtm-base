@@ -432,6 +432,10 @@ def _what(script: str, options) -> Optional[Tuple[str, Tuple[str, ...]]]:
             found = (SAYS_SAVE_DRAFT, ("join_flow.approve_step",))
         elif mode == "adopt":
             found = (SAYS_ADOPT_PAGE, ("join_flow.adoption_approve",))
+        elif mode == "adopt-document":
+            # A finished messaging, voice, personas or product document
+            # (Track 4), taken in exactly as the person was just shown it.
+            found = (SAYS_ADOPT_PAGE, ("join_flow.document_adoption_approve",))
         elif mode == "adopt-leave":
             found = (SAYS_LEAVE_PAGE_OUT, ("join_flow.adoption_leave_out",))
         elif mode == "draft-leave":

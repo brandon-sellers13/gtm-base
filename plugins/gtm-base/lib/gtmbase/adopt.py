@@ -747,13 +747,16 @@ def clean(
     source_line: str,
     covers: Optional[str] = None,
     dropped: Sequence[str] = (),
+    kind: str = constants.SEGMENT_KIND,
 ) -> Cleaned:
     """Run clauses two to eight on one page, and return what would be saved.
 
     `label` is the page's name as the person was shown it, used only to say
     what hidden parts were taken out of it. `source_line` is what the settings
     will name as the original, and `day` the date the file says it was last
-    confirmed. Nothing here writes anything.
+    confirmed. `kind` is what the saved file says it is: a segment, or one of
+    the documents a base takes in after setup (Track 4). Nothing here writes
+    anything.
     """
     if not isinstance(raw_text, str):
         raise AdoptionRefused(CODE_UNREADABLE)
@@ -800,7 +803,7 @@ def clean(
             CODE_WIDER_THAN_SCOPE, WIDER_THAN_SCOPE % {"covers": covers}
         )
     fields = {
-        "kind": constants.SEGMENT_KIND,
+        "kind": kind,
         "owner": owner_email,
         "last_confirmed": day.isoformat() if hasattr(day, "isoformat") else str(day),
         "sources": [source_line],

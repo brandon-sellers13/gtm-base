@@ -1097,7 +1097,11 @@ def approve_adopted(
     # leaves a temporary name behind, which is this plugin's own and goes.
     sweep_for_a_page(base_root, relative)
     ready_to_write(base_root, git)
-    _segment_file_is_free(base_root, relative)
+    if relative not in drafting.LATER_PATHS.values():
+        # Every adopted page is a segment's, except a finished document of
+        # one of the kinds a base takes in after setup, which has one fixed
+        # path of its own (Track 4).
+        _segment_file_is_free(base_root, relative)
     if _already_there(base_root, relative):
         raise ReviewError(CODE_FILE_EXISTS)
     before = head_now(git, base_root)
@@ -1650,9 +1654,14 @@ def skip(
         # Only the two required documents are ever written down as skipped. A
         # segment the person does not want is left out, which writes nothing.
         raise ReviewError("cannot-skip", code="cannot-skip")
-    relative = (
-        drafting.ICP_PATH if step == drafting.STEP_ICP else drafting.POSITIONING_PATH
-    )
+    if step == drafting.STEP_ICP:
+        relative = drafting.ICP_PATH
+    elif step == drafting.STEP_POSITIONING:
+        relative = drafting.POSITIONING_PATH
+    else:
+        # A document drafted after setup that the person chose not to have
+        # (Track 4), which the inventory then reports as skipped.
+        relative = drafting.LATER_PATHS[step]
     text = drafting.skipped_text(step, address, state.today(moment).isoformat())
 
     ready_to_write(base_root, git)

@@ -362,3 +362,105 @@ def read(base_root: str) -> SourceMap:
     if unreadable:
         found.problems.insert(0, Problem(CODE_BUSINESSES_UNREADABLE))
     return found
+
+
+# --- Rows drafted from what a person says (Track 4, Unit T4.6) ---------------
+
+# A drafted row naming a place or a tool the person never named, and a draft
+# holding no row at all.
+CODE_NOT_NAMED = "not-named"
+CODE_NO_ROWS = "no-rows"
+NOT_NAMED = (
+    "A drafted row names a place or a tool you did not name, so it is not used."
+)
+NO_ROWS = "The draft holds no rows, so there is nothing to add to your source map."
+_SENTENCES[CODE_NOT_NAMED] = NOT_NAMED
+_SENTENCES[CODE_NO_ROWS] = NO_ROWS
+# What a person may say reads a kind of data when nothing does yet. Such a
+# cell needs no tool named in their answers.
+NOTHING_READS_IT = ("nothing", "none", "nothing yet", "no tool", "not connected")
+
+_FENCE_LINE = re.compile(r"^\s*```")
+
+
+def _without_fence(text: str) -> str:
+    return "\n".join(
+        line for line in str(text or "").split("\n") if not _FENCE_LINE.match(line)
+    )
+
+
+def _evened(text: str) -> str:
+    from . import notes as notes_module
+
+    return notes_module.even_out(str(text or ""))
+
+
+def _said(value: str, answers: str) -> bool:
+    """Whether a cell's words stand whole in what the person said."""
+    wanted = _evened(value)
+    if not wanted:
+        return False
+    return bool(
+        re.search(r"(?<!\w)%s(?!\w)" % re.escape(wanted), _evened(answers))
+    )
+
+
+def check_drafted(
+    draft_text: str,
+    answers: str,
+    listed: Sequence[str] = (),
+    names: Optional[Dict[str, Optional[str]]] = None,
+    allowlist=None,
+    check_businesses: bool = True,
+) -> SourceMap:
+    """Read drafted rows exactly as the file's own rows are read, and more.
+
+    The draft is the "Where the material lives" section with its table. Every
+    row has to carry all five columns, nothing shaped like a key or a token,
+    and a business the map lists, as any row of the file does. On top of that,
+    where a kind of data lives and which tool reads it have to be words the
+    person said, so a tool a company of that size usually has never becomes a
+    row because nobody named it. A cell saying nothing reads it yet is let
+    through. Rows that fail are left out of `rows` and named in `problems`.
+    """
+    found = parse(
+        _without_fence(draft_text),
+        listed,
+        names=names,
+        allowlist=allowlist,
+        check_businesses=check_businesses,
+    )
+    kept: List[Row] = []
+    for row in found.rows:
+        reader = str(row.read_by or "").strip().lower().rstrip(".")
+        if not _said(row.where, answers) or (
+            reader not in NOTHING_READS_IT and not _said(row.read_by, answers)
+        ):
+            row.problems.append(CODE_NOT_NAMED)
+            found.problems.append(Problem(CODE_NOT_NAMED, row.line_number))
+            continue
+        kept.append(row)
+    found.rows = kept
+    if not kept and not found.problems:
+        found.problems.append(Problem(CODE_NO_ROWS))
+    found.problems.sort(key=lambda problem: problem.line_number)
+    return found
+
+
+def check_drafted_in(base_root: str, draft_text: str, answers: str) -> SourceMap:
+    """`check_drafted` against one base's businesses and its own allowlist."""
+    unreadable = False
+    map_text = read_text(os.path.join(base_root, constants.MAP_PATH)) or ""
+    try:
+        listed = businesses.read_map_businesses(map_text)
+    except ValidationError:
+        listed, unreadable = [], True
+    allowlist, _code = scan.load_allowlist(base_root)
+    return check_drafted(
+        draft_text,
+        answers,
+        [one.slug for one in listed],
+        names={one.slug: one.name for one in listed},
+        allowlist=allowlist,
+        check_businesses=not unreadable,
+    )

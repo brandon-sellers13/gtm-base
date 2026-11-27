@@ -25,9 +25,9 @@ from __future__ import annotations
 
 import datetime
 from collections import namedtuple
-from typing import Any, Dict, List, Optional, Sequence
+from typing import Any, Dict, List, Optional, Sequence, Tuple
 
-from . import constants
+from . import constants, layout
 from .errors import PathError, ValidationError
 from .docpaths import check_syntax as check_context_path_syntax
 from .validate import read_map_settings
@@ -182,6 +182,7 @@ class ContextFileInfo(object):
         "kind",
         "open_questions",
         "authority",
+        "relates_to",
     )
 
     def __init__(
@@ -194,6 +195,7 @@ class ContextFileInfo(object):
         kind: str = "",
         open_questions: Optional[Sequence[str]] = None,
         authority: Optional[Sequence[str]] = None,
+        relates_to: Optional[Sequence[str]] = None,
     ):
         self.path = path
         self.owners = list(owners or [])
@@ -209,6 +211,10 @@ class ContextFileInfo(object):
         # asks. Worked out from the body by whoever read the file, never
         # stored anywhere (Unit 1.7b, requirement P27).
         self.open_questions = tuple(open_questions or ())
+        # The items of the file's `sources` setting, as written. A standard
+        # follows a goals change only when one of them names a goals document
+        # (Track 4, Unit T4.1).
+        self.relates_to = tuple(str(item) for item in (relates_to or ()))
 
     @property
     def skipped(self) -> bool:
@@ -1174,35 +1180,131 @@ def _affected_files_proposals(known, entries, map_hints):
     file whose own name, or whose kind, the entry mentions. When neither points
     anywhere, the candidates are every ideal customer profile and positioning
     file the base holds, because those are the files a decision most often
-    moves. A file the base does not hold is never a candidate.
+    moves. Then every document that usually follows from a candidate, by
+    `constants.KIND_FOLLOWS`, is added (Track 4, Unit T4.1). A file the base
+    does not hold is never a candidate.
     """
-    hints = {str(key).lower(): list(value) for key, value in (map_hints or {}).items()}
     proposals = []
     for entry in entries:
         if entry.status != "open" or entry.affects:
             continue
-        text = _text_of(entry)
-        candidates = set()
-        for word, paths in hints.items():
-            if word and word in text:
-                candidates.update(paths)
-        for path, info in known.items():
-            if not info.present:
-                continue
-            stem = _stem(path)
-            if stem and stem in text:
-                candidates.add(path)
-            elif info.kind and info.kind.lower() in text:
-                candidates.add(path)
-        if not candidates:
-            candidates = {
-                path
-                for path, info in known.items()
-                if info.present and info.kind.lower() in FALLBACK_KINDS
-            }
-        candidates = {path for path in candidates if path in known and known[path].present}
-        proposals.append(AffectedFilesProposal(entry.id, sorted(candidates)))
+        proposals.append(
+            AffectedFilesProposal(
+                entry.id, _suggested_for_text(known, _text_of(entry), map_hints)
+            )
+        )
     return proposals
+
+
+def _mentioned(known, text, map_hints):
+    """The documents a change's words point at, or the fallback when none."""
+    hints = {str(key).lower(): list(value) for key, value in (map_hints or {}).items()}
+    candidates = set()
+    for word, paths in hints.items():
+        if word and word in text:
+            candidates.update(paths)
+    for path, info in known.items():
+        if not info.present:
+            continue
+        stem = _stem(path)
+        if stem and stem in text:
+            candidates.add(path)
+        elif info.kind and info.kind.lower() in text:
+            candidates.add(path)
+    if not candidates:
+        candidates = {
+            path
+            for path, info in known.items()
+            if info.present and info.kind.lower() in FALLBACK_KINDS
+        }
+    return {path for path in candidates if path in known and known[path].present}
+
+
+def kind_key(path: str, kind: str = "") -> Optional[str]:
+    """Which kind on `constants.BASE_KINDS` a document is, or None.
+
+    Read from where it sits first, and from what its settings say it is only
+    when its place says nothing, so a segment of the customer profile counts
+    as the profile and a goals document in a business's folder counts as
+    goals.
+    """
+    normalized = str(path or "").replace("\\", "/")
+    current = layout.current_of(normalized) or normalized
+    folder, _sep, name = current.rpartition("/")
+    if folder in (constants.SEGMENTS_DIR, constants.LEGACY_SEGMENTS_DIR):
+        return "icps"
+    if folder == constants.STANDARDS_DIR:
+        return "standard"
+    if current == constants.STACK_PATH:
+        return "stack"
+    if current.startswith(constants.SKILLS_DIR + "/"):
+        return "skill"
+    if current.startswith(constants.CONTEXT_DIR + "/") and current.count("/") <= 2:
+        for one in constants.BASE_KINDS:
+            if one.pattern.startswith(constants.CONTEXT_DIR + "/") and (
+                one.pattern.rsplit("/", 1)[-1] == name
+            ):
+                return one.key
+    said = str(kind or "").strip().lower()
+    if said in ("icp", constants.SEGMENT_KIND):
+        return "icps"
+    for one in constants.BASE_KINDS:
+        if one.key == said:
+            return one.key
+    return None
+
+
+def _relates_to_goals(info) -> bool:
+    """Whether a standard's own sources name a goals document."""
+    return any(
+        "goals.md" in item.replace("\\", "/").lower() for item in info.relates_to
+    )
+
+
+def followers(known, chosen) -> List[str]:
+    """The documents the base holds that usually follow from the chosen ones.
+
+    One step deep, by `constants.KIND_FOLLOWS`, and never one of the chosen
+    documents itself. A standard follows a goals change only when its own
+    sources name a goals document.
+    """
+    wanted = set()
+    for path in chosen:
+        info = known.get(path)
+        key = kind_key(path, info.kind if info is not None else "")
+        wanted.update(constants.KIND_FOLLOWS.get(key, ()))
+    found = set()
+    for path, info in known.items():
+        if not info.present or path in chosen:
+            continue
+        key = kind_key(path, info.kind)
+        if key not in wanted:
+            continue
+        if key == "standard" and not _relates_to_goals(info):
+            continue
+        found.add(path)
+    return sorted(found)
+
+
+def _suggested_for_text(known, text, map_hints):
+    mentioned = _mentioned(known, text, map_hints)
+    return sorted(mentioned | set(followers(known, mentioned)))
+
+
+def suggested_paths(
+    files: Sequence[ContextFileInfo],
+    text: str,
+    map_hints: Optional[Dict[str, Sequence[str]]] = None,
+) -> Tuple[List[str], List[str]]:
+    """What a change in these words probably affects, as two lists.
+
+    The first is what its words point at (or the profile and positioning when
+    they point at nothing), the second what usually follows from those. Both
+    are suggestions only, read the same way the review's proposals are.
+    """
+    known = _index_files(files, [])
+    mentioned = _mentioned(known, str(text or "").lower(), map_hints)
+    return sorted(mentioned), followers(known, mentioned)
 
 
 def _review_by_items(day, entries):

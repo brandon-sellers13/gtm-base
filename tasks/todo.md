@@ -1898,10 +1898,10 @@ Step 2 of `docs/plans/2026-11-26-003-roadmap-to-full-experience.md`. The plannin
 
 ## Track 4, what a base holds (plan: docs/plans/2026-11-27-001-feat-track-4-base-contents-plan.md)
 All ten decisions made on 2026-11-27. No review per unit; the end-to-end run in the plan is the check.
-- [ ] T4.1. A recorded decision suggests the documents built on it. (unblocked)
-- [ ] T4.2. Messaging and voice, adopted or drafted. (unblocked)
-- [ ] T4.3. Buyer personas and product. (unblocked)
-- [ ] T4.6. The source map for any company. (unblocked)
+- [x] T4.1. A recorded decision suggests the documents built on it.
+- [x] T4.2. Messaging and voice, adopted or drafted.
+- [x] T4.3. Buyer personas and product.
+- [x] T4.6. The source map for any company.
 - [ ] T4.8. Drift grade, the first skill on a base. (waits on Plan 1's 3.1 and 4.2b)
 - [ ] T4.4. Competitors.
 - [ ] T4.5. Design.

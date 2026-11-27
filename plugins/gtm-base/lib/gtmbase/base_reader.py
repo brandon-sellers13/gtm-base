@@ -201,6 +201,15 @@ def documents_outside_context(root: str) -> List[str]:
     return found
 
 
+def _items(value) -> List[str]:
+    """A list setting as plain strings, whatever shape it came in."""
+    if isinstance(value, (list, tuple)):
+        return [str(item) for item in value]
+    if isinstance(value, str) and value.strip():
+        return [value.strip()]
+    return []
+
+
 def _file_info(root: str, relative: str, git: Optional[GitRunner]):
     """One document as the stale library wants it, or None when it cannot be read."""
     text = read_text(os.path.join(root, relative.replace("/", os.sep)))
@@ -228,6 +237,9 @@ def _file_info(root: str, relative: str, git: Optional[GitRunner]):
         kind=str(fields.get("kind") or ""),
         # Read from the body every time, never stored (Unit 1.7b).
         open_questions=callmarkers.questions(text),
+        # What a standard rests on, so a goals change can suggest it (Track
+        # 4, Unit T4.1).
+        relates_to=_items(fields.get("sources")),
         authority=(
             authority.at(root, relative, runner=git).addresses()
             if git is not None

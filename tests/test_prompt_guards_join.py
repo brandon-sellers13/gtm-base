@@ -21,6 +21,11 @@ def prompt(step):
         return handle.read()
 
 
+# The steps that read the material directly rather than the notes: a context
+# change, and every document drafted after setup (Track 4).
+SOURCE_STEPS = (drafting.STEP_CHANGE,) + drafting.LATER_STEPS
+
+
 def flat(text):
     """One long line, so an assertion never depends on where a line wrapped."""
     return " ".join(text.split())
@@ -37,7 +42,7 @@ class TestEveryPromptCarriesTheFenceSentence(unittest.TestCase):
             # heading (the summarize-first stage); a context change still
             # reads its sources.
             heading = text.index(
-                "## The sources" if step == drafting.STEP_CHANGE else "## The notes"
+                "## The sources" if step in SOURCE_STEPS else "## The notes"
             )
             sentence = text.index(constants.SOURCE_FENCE_SENTENCE)
             placeholder = text.index("{{sources}}")
@@ -114,6 +119,8 @@ class TestEveryPromptRefusesPlaceholdersAndContactDetails(unittest.TestCase):
             kept = (
                 "Keep the customer names"
                 if step == drafting.STEP_CHANGE
+                else "written exactly as the sources write them"
+                if step in drafting.LATER_STEPS
                 else "written exactly as the notes write them"
             )
             self.assertIn(kept, flat(text), step)
@@ -180,7 +187,7 @@ class TestTheDocumentPromptsWriteDefinitionsNeverTracking(unittest.TestCase):
     )
 
     def test_each_document_prompt_forbids_pipeline_state(self):
-        for step in self.DOCUMENT_STEPS:
+        for step in self.DOCUMENT_STEPS + drafting.LATER_STEPS:
             text = prompt(step)
             self.assertIn("## Definitions, never tracking", text, step)
             self.assertLess(
