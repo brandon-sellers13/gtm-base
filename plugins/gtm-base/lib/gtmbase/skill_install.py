@@ -782,18 +782,21 @@ def records_intact(base_root: str, default, git: GitRunner) -> bool:
     taken away, or changed after it was saved, could bring back a role the base
     owner removed. When any record under the corrections folder is missing or
     differs from what was first saved, no approval is accepted at all. Putting
-    the record back exactly as it was first saved makes it whole again. Records
-    the layout move brought into the folder count from the day they arrived.
+    the record back exactly as it was first saved makes it whole again. Both
+    records folders count, as `_saved_approvals` reads both, and a record is
+    still there when either of its names holds the bytes it was first saved
+    with, so the layout move, which carries records over byte for byte, keeps
+    a base whole.
     """
     tip = default or "HEAD"
-    folder = constants.CORRECTIONS_DIR + "/"
+    folders = [folder + "/" for folder in constants.ALL_CORRECTIONS_DIRS]
     added = git.run(
         ["log", "--first-parent", "--diff-merges=first-parent", "--no-renames", "--diff-filter=A",
-         "--raw", "--no-abbrev", "--format=", tip, "--", folder],
+         "--raw", "--no-abbrev", "--format=", tip, "--"] + folders,
         cwd=base_root,
         timeout=authority.LOCAL_TIMEOUT_SECONDS,
     )
-    now = git.run(["ls-tree", "-r", tip, "--", folder], cwd=base_root, timeout=authority.LOCAL_TIMEOUT_SECONDS)
+    now = git.run(["ls-tree", "-r", tip, "--"] + folders, cwd=base_root, timeout=authority.LOCAL_TIMEOUT_SECONDS)
     if not added.ok or not now.ok:
         return False
     first: Dict[str, str] = {}
@@ -812,7 +815,10 @@ def records_intact(base_root: str, default, git: GitRunner) -> bool:
         parts = meta.split()
         if len(parts) == 3:
             current[path] = parts[2]
-    return all(current.get(path) == oid for path, oid in first.items())
+    return all(
+        any(current.get(name) == oid for name in base_reader.record_names(path))
+        for path, oid in first.items()
+    )
 
 
 def _git_lines(base_root: str, args: List[str], git: GitRunner) -> List[str]:

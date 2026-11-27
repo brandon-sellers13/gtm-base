@@ -450,7 +450,7 @@ def with_administrators(map_text, administrators):
     )
 
 
-def approved_map(root, administrators, staging, author=OWNER):
+def approved_map(root, administrators, staging, author=OWNER, folder=None):
     """The administrators line set the way the plugin's operation sets it, then saved."""
     from gtmbase import operations
 
@@ -467,6 +467,9 @@ def approved_map(root, administrators, staging, author=OWNER):
     where, record = operations._record(
         kept, [{"path": constants.MAP_PATH, "after": after}], authority.ROLE_BASE_OWNER, NOW.date()
     )
+    if folder:
+        # Kept in another records folder, as a seat on an older layout keeps it.
+        where = folder + "/" + where.split("/")[-1]
     support.write(map_path, after)
     support.write(os.path.join(root, where), record)
     saved_by(root, author, "administrators")
@@ -594,6 +597,35 @@ class TestTheC3SecurityReview(unittest.TestCase):
             saved_by(root, STRANGER, "a small fix")
             self.she_installs_her_own(root)
             self.assertFalse(self.acceptable(root, base_id).acceptable)
+
+    def test_a_removal_kept_in_the_older_records_folder_counts_too(self):
+        """The last round: the intact check reads both records folders, as the replay does."""
+        with support.Sandbox() as sandbox:
+            root, base_id = a_base_without_the_skill(sandbox)
+            approved_map(root, [STRANGER], "stg-1111111111111111")
+            removal = approved_map(root, [], "stg-2222222222222222", folder=constants.LEGACY_CORRECTIONS_DIR)
+            # While the removal is there, she holds no role.
+            self.she_installs_her_own(root)
+            self.assertFalse(self.acceptable(root, base_id).acceptable)
+            os.remove(removal)
+            saved_by(root, STRANGER, "tidying up the older folder")
+            self.assertFalse(self.acceptable(root, base_id).acceptable)
+
+    def test_a_record_carried_into_the_current_folder_byte_for_byte_keeps_the_base_whole(self):
+        """The control: the layout move carries a record over unchanged."""
+        with support.Sandbox() as sandbox:
+            root, base_id = a_base_without_the_skill(sandbox)
+            kept = approved_map(root, [ADMIN], "stg-1111111111111111", folder=constants.LEGACY_CORRECTIONS_DIR)
+            moved = os.path.join(root, constants.CORRECTIONS_DIR, os.path.basename(kept))
+            support.write(moved, support.read(kept))
+            os.remove(kept)
+            saved_by(root, OWNER, "the move to the current layout")
+            files = the_skill_files()
+            files[SKILL_MD] = skill_install._stamped(files[SKILL_MD], ADMIN)
+            own_approval(root, files, authority.ROLE_ADMINISTRATOR, skill_install.KIND_INSTALL, ADMIN)
+            showing = self.acceptable(root, base_id)
+            self.assertTrue(showing.acceptable)
+            self.assertEqual(authority.ROLE_ADMINISTRATOR, showing.role)
 
     def test_a_former_owner_who_deletes_the_handover_is_refused(self):
         with support.Sandbox() as sandbox:

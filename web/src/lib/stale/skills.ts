@@ -25,7 +25,7 @@ import {
   parseFrontmatter,
   splitDocument,
 } from "./formats";
-import { type CorrectionFacts, type Roles, type Verdict, roleOf, rolesFrom } from "./rules";
+import { type CorrectionFacts, LEGACY_CORRECTIONS_DIR, type Roles, type Verdict, recordNames, roleOf, rolesFrom } from "./rules";
 import { documentName, fenced, flagBlock, usedAsIs } from "./words";
 
 export const SKILLS_DIR = "skills";
@@ -94,8 +94,9 @@ export type SkillWorld = {
   // For each revision the approval check reads: the map and each skill's
   // SKILL.md exactly as that revision saved them.
   atRevision: Record<string, { map: string | null; skills: Record<string, string | null> }>;
-  // The records folder (learning/corrections) at each commit on the main line
-  // that changed it, oldest first: each entry's name and blob id.
+  // Both records folders (learning/corrections and the older corrections) at
+  // each commit on the main line that changed either, oldest first: each
+  // record's full path and blob id.
   recordTrees: { oid: string; entries: Record<string, string> }[];
 };
 
@@ -104,13 +105,16 @@ export type SkillWorld = {
 // replay reads only the records that exist today, so one taken away or changed
 // could bring back a role the base owner removed; then nothing is accepted.
 // Putting the record back exactly as it was first saved makes it whole again.
+// Both records folders count, and a record is still there when either of its
+// names holds the bytes it was first saved with, so the layout move, which
+// carries records over byte for byte, keeps a base whole.
 export function recordsIntact(world: Pick<SkillWorld, "recordTrees">): boolean {
   const first = new Map<string, string>();
   for (const { entries } of world.recordTrees) {
-    for (const [name, oid] of Object.entries(entries)) if (!first.has(name)) first.set(name, oid);
+    for (const [path, oid] of Object.entries(entries)) if (!first.has(path)) first.set(path, oid);
   }
   const now = world.recordTrees.at(-1)?.entries ?? {};
-  return [...first].every(([name, oid]) => now[name] === oid);
+  return [...first].every(([path, oid]) => recordNames(path).some((name) => now[name] === oid));
 }
 
 // The folders a skill may name in `reads_optional`, whose `.md` files are handed
@@ -333,6 +337,10 @@ function changedSince(world: SkillWorld, skill: string, revision: string): boole
 export async function approvalOf(world: SkillWorld, skill: string, files: Record<string, string>): Promise<Approval | null> {
   const skillMd = `${SKILLS_DIR}/${skill}/SKILL.md`;
   if (!recordsIntact(world)) return null;
+  // The connector never reads a record in the older records folder, which the
+  // plugin's replay does read, so a role taken away there would go unseen.
+  // While any record sits in that folder, nothing is accepted here.
+  if (Object.keys(world.recordTrees.at(-1)?.entries ?? {}).some((path) => path.startsWith(`${LEGACY_CORRECTIONS_DIR}/`))) return null;
   const saved = approvalsOf(world, skill);
   const found = saved.filter((item) => isSkillApproval(item.approvedHashes, skill));
   for (const one of found.filter((item) => sameFiles(item.approvedHashes, files))) {

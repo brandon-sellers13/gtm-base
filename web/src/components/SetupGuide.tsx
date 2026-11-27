@@ -95,6 +95,10 @@ export function SetupGuide({ owner, repo, connectorUrl }: { owner: string; repo:
         </li>
         <li>Make a ChatGPT Project for this company and paste the instruction into the Project&apos;s instructions.</li>
         <li>ChatGPT may ask you to confirm before it proposes a change. Read the proposal before you agree to it.</li>
+        <li>
+          ChatGPT keeps the list of tools it saw when you added the connector, so after GTM Base adds a tool, open
+          Settings, then Plugins, then GTM Base, and choose Refresh tools.
+        </li>
       </Steps>
     </section>
   );

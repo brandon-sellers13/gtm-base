@@ -79,6 +79,36 @@ export const CHANGES_DIR = "learning/changes";
 export const CORRECTIONS_DIR = "learning/corrections";
 export const CONFIRMATIONS_DIR = "work/confirmations";
 export const OLDER_LAYOUT = "older-layout";
+export const LEGACY_CORRECTIONS_DIR = "corrections";
+
+// base_reader.record_names: every path one record may have been saved under,
+// its own first, so a record the layout move carried over is followed back to
+// the older folder it was first added in.
+export function recordNames(path: string): string[] {
+  const name = path.split("/").pop()!;
+  const names = [path];
+  for (const folder of [CORRECTIONS_DIR, LEGACY_CORRECTIONS_DIR]) if (!names.includes(`${folder}/${name}`)) names.push(`${folder}/${name}`);
+  return names;
+}
+
+// One commit on the main line, with the blob id each of a record's names has
+// there (null when absent). A chain is newest first, each node followed by its
+// first parent.
+export type ChainNode = { oid: string; email: string | null; day: string | null; names: Record<string, string | null> };
+
+// skill_install.first_added: the oldest commit on the main line where any of
+// a record's names appears that its first parent did not hold. Asked about the
+// record's own name alone, a record a teammate planted in the older folder and
+// the base owner's layout move later carried over would be credited to the
+// base owner (the C3 security review's last round).
+export function firstAddedIn(chain: ChainNode[]): ChainNode | null {
+  let found: ChainNode | null = null;
+  chain.forEach((node, i) => {
+    const parent = chain[i + 1];
+    if (Object.entries(node.names).some(([name, oid]) => oid && !parent?.names[name])) found = node;
+  });
+  return found;
+}
 
 const OLDER_FOLDERS = ["work/changes/", "work/decisions/", "corrections/", "context/strategy/", "context/plan/"];
 const OLDER_FILES = ["context/metrics/definitions.md"];

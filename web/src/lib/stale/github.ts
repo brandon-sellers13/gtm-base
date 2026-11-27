@@ -5,10 +5,13 @@ import { classify, parseCorrectionsFile, Refused, Unreadable } from "./formats";
 import {
   CONFIRMATIONS_DIR,
   CORRECTIONS_DIR,
+  type ChainNode,
   type CorrectionFacts,
+  LEGACY_CORRECTIONS_DIR,
   type SavedRevision,
   type Snapshot,
   contentHash,
+  firstAddedIn,
 } from "./rules";
 
 // Builds the snapshot the moment-of-use rules read, from one base on GitHub,
@@ -115,7 +118,7 @@ type HistoryNode = {
   oid: string;
   author: { email: string | null; date: string | null };
   parents: { totalCount: number; nodes: { oid: string }[] };
-  [file: `f${number}` | `w${number}`]: { oid: string } | null;
+  [file: `f${number}` | `g${number}` | `w${number}`]: { oid: string } | null;
 };
 
 // Each commit's parents, for every commit the history walk saw; null for a
@@ -142,6 +145,7 @@ async function recordFacts(
   if (!records.length) return facts;
   const fileFields = [
     ...records.map((r, i) => `f${i}: file(path: ${quote(r.path)}) { oid }`),
+    ...records.map((r, i) => `g${i}: file(path: ${quote(`${LEGACY_CORRECTIONS_DIR}/${r.path.split("/").pop()}`)}) { oid }`),
     ...watched.map((path, i) => `w${i}: file(path: ${quote(path)}) { oid }`),
   ].join(" ");
   const nodes = new Map<string, HistoryNode>();
@@ -246,13 +250,20 @@ async function recordFacts(
     // commit that added it, then git show --diff-merges=first-parent). A list
     // GitHub cuts short counts as changing nothing, so the record then settles
     // nothing.
-    // The commit that first added it on the main line (skill_install.first_added).
-    let firstIn: HistoryNode | null = null;
-    for (let node = nodes.get(head); node; ) {
-      const parent = node.parents.nodes[0] ? nodes.get(node.parents.nodes[0].oid) : undefined;
-      if (fileAt(node, i) && !fileAt(parent, i)) firstIn = node; // newest first; keep the oldest
-      node = parent;
-    }
+    // The commit that first added it on the main line under either of its
+    // names (skill_install.first_added).
+    const legacy = `${LEGACY_CORRECTIONS_DIR}/${record.path.split("/").pop()}`;
+    const chain: ChainNode[] = line.mainLine.map((oid) => {
+      const node = nodes.get(oid)!;
+      return {
+        oid,
+        email: node.author.email,
+        day: node.author.date?.slice(0, 10) ?? null,
+        names: { [record.path]: fileAt(node, i), [legacy]: node[`g${i}`]?.oid ?? null },
+      };
+    });
+    const firstAdded = firstAddedIn(chain);
+    const firstIn: HistoryNode | null = firstAdded ? nodes.get(firstAdded.oid)! : null;
     let acceptedPaths: string[] | null = null;
     if (merged && firstIn) {
       const first = firstIn.parents.nodes[0]?.oid;
@@ -370,6 +381,7 @@ export async function snapshotOf(token: string, owner: string, repo: string, tod
   const watched = [
     "context/map.md",
     CORRECTIONS_DIR,
+    LEGACY_CORRECTIONS_DIR,
     ...tree.tree
       .filter((entry) => entry.type === "tree" && entry.path.startsWith("skills/") && !entry.path.slice("skills/".length).includes("/"))
       .map((entry) => entry.path)

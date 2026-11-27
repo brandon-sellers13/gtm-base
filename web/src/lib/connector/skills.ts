@@ -1,7 +1,7 @@
 import "server-only";
 import { GitHubError } from "../github";
 import { Unreadable } from "../stale/formats";
-import { CORRECTIONS_DIR } from "../stale/rules";
+import { CORRECTIONS_DIR, LEGACY_CORRECTIONS_DIR } from "../stale/rules";
 import { type BaseSnapshot, fixIsReady } from "../stale/github";
 import {
   type IndexEntry,
@@ -99,14 +99,23 @@ async function savedAt(
 // The records folder at each commit on the main line that changed it, oldest
 // first, with each entry's name and blob id (for recordsIntact).
 async function recordTreesOf(token: string, owner: string, repo: string, snapshot: BaseSnapshot): Promise<SkillWorld["recordTrees"]> {
-  const commits = [...(snapshot.changes[CORRECTIONS_DIR] ?? [])].reverse();
+  // Every commit on the main line that changed either records folder, oldest first.
+  const changed = new Set([...(snapshot.changes[CORRECTIONS_DIR] ?? []), ...(snapshot.changes[LEGACY_CORRECTIONS_DIR] ?? [])]);
+  const commits = snapshot.mainLine.filter((oid) => changed.has(oid)).reverse();
+  const folders = [CORRECTIONS_DIR, LEGACY_CORRECTIONS_DIR];
   const trees: SkillWorld["recordTrees"] = [];
+  type Listed = { object: { entries: { name: string; oid: string }[] } | null } | null;
   for (let at = 0; at < commits.length; at += 20) {
     const batch = commits.slice(at, at + 20);
     const fields = batch
-      .map((oid, j) => `c${j}: object(oid: ${quote(oid)}) { ... on Commit { file(path: ${quote(CORRECTIONS_DIR)}) { object { ... on Tree { entries { name oid } } } } } }`)
+      .map(
+        (oid, j) =>
+          `c${j}: object(oid: ${quote(oid)}) { ... on Commit { ${folders
+            .map((folder, k) => `t${k}: file(path: ${quote(folder)}) { object { ... on Tree { entries { name oid } } } }`)
+            .join(" ")} } }`,
+      )
       .join("\n");
-    const data = await graphql<{ repository: Record<string, { file: { object: { entries: { name: string; oid: string }[] } | null } | null } | null> }>(
+    const data = await graphql<{ repository: Record<string, Record<string, Listed> | null> }>(
       token,
       `query($owner: String!, $name: String!) { repository(owner: $owner, name: $name) { ${fields} } }`,
       { owner, name: repo },
@@ -115,7 +124,9 @@ async function recordTreesOf(token: string, owner: string, repo: string, snapsho
       const commit = data.repository[`c${j}`];
       if (!commit) throw new Unreadable("history-unreadable");
       const entries: Record<string, string> = {};
-      for (const entry of commit.file?.object?.entries ?? []) entries[entry.name] = entry.oid;
+      folders.forEach((folder, k) => {
+        for (const entry of commit[`t${k}`]?.object?.entries ?? []) entries[`${folder}/${entry.name}`] = entry.oid;
+      });
       trees.push({ oid, entries });
     });
   }
