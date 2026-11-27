@@ -136,14 +136,56 @@ class TestInstalling(unittest.TestCase):
             self.assertEqual(skill_install.CODE_NOT_ALLOWED, done.code)
             self.assertEqual([], skill_files_on_disk(root))
 
-    def test_the_base_owners_yes_alone_does_not_stand_in_for_the_creators(self):
+    def test_the_base_owners_yes_first_waits_and_the_creators_then_writes(self):
+        """Either order (Brandon's decision of 2026-11-27); the first yes writes nothing."""
         with support.Sandbox() as sandbox:
             root, base_id = a_base_without_the_skill(sandbox)
             seat_address(root, WRITER)
             prepared = prepare(root, base_id)
             seat_address(root, OWNER)
-            done = approve(root, base_id, prepared)
-            self.assertEqual(skill_install.CODE_NOT_ALLOWED, done.code)
+            first = approve(root, base_id, prepared)
+            self.assertEqual(skill_install.CODE_WAITING, first.code)
+            self.assertEqual(skill_install.WAITING_FOR_THE_CREATOR, first.sentence)
+            self.assertEqual([], skill_files_on_disk(root))
+            self.assertEqual([], records(root))
+            seat_address(root, WRITER)
+            second = approve(root, base_id, prepared)
+            self.assertTrue(second.done, second.sentence)
+            self.assertEqual(runner.OUTCOME_READY, contract.run(root, base_id).outcome)
+            record = support.read(os.path.join(root, constants.CORRECTIONS_DIR, records(root)[0]))
+            self.assertIn("approved by its creator and by the base owner", record)
+
+    def test_when_the_creators_yes_writes_another_computer_cannot_accept_it(self):
+        """The record's author is the creator, who held no role before the install."""
+        with support.Sandbox() as sandbox:
+            root, base_id = a_base_without_the_skill(sandbox)
+            seat_address(root, WRITER)
+            prepared = prepare(root, base_id)
+            seat_address(root, OWNER)
+            approve(root, base_id, prepared)
+            seat_address(root, WRITER)
+            self.assertTrue(approve(root, base_id, prepared).done)
+            os.remove(authority.trusted_path(base_id))
+            showing = skill_install.approval_of(root, base_id, SKILL, support.NoRemoteRunner())
+            self.assertFalse(showing.acceptable)
+            # The base owner approving it again as a change makes it acceptable.
+            seat_address(root, OWNER)
+            files = the_skill_files()
+            files[SKILL_MD] = support.read(os.path.join(root, SKILL_MD))
+            self.assertTrue(approve(root, base_id, prepare(root, base_id, files=files)).done)
+            os.remove(authority.trusted_path(base_id))
+            showing = skill_install.approval_of(root, base_id, SKILL, support.NoRemoteRunner())
+            self.assertTrue(showing.acceptable)
+
+    def test_a_strangers_yes_counts_for_neither(self):
+        with support.Sandbox() as sandbox:
+            root, base_id = a_base_without_the_skill(sandbox)
+            seat_address(root, WRITER)
+            prepared = prepare(root, base_id)
+            seat_address(root, STRANGER)
+            self.assertEqual(skill_install.CODE_NOT_ALLOWED, approve(root, base_id, prepared).code)
+            seat_address(root, WRITER)
+            self.assertEqual(skill_install.CODE_WAITING, approve(root, base_id, prepared).code)
             self.assertEqual([], skill_files_on_disk(root))
 
     def test_failing_examples_prepare_nothing(self):
