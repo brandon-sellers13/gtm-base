@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased (who may approve a company skill)
+
+- A company skill approved on another computer is now accepted here only when the person who approved it held that role in what the base owner had already approved. Roles no longer come from whatever the map or the skill said just before the approval, so a teammate can no longer name themself owner or administrator in one change and approve in the next.
+- This means an administrator added by editing the map's `administrators:` line by hand no longer counts, even when the base owner made the edit. Skills that administrator approved are refused as approved by nobody. To fix it, the base owner sets the administrators through GTM Base's administrators setting and approves it, and the administrator approves the skill again.
+- If any record in `learning/corrections/` is deleted or edited after it was saved, GTM Base accepts no approval of any company skill in that base. A missing or changed record could otherwise bring back a role the base owner had taken away. To fix it, put the record back exactly as it was first saved, for example by reverting the change that deleted or edited it, and approvals count again.
+- An approval also ends as soon as anything changes the skill's folder after it, even when the change is later undone, so an older version cannot come back by deleting a newer approval. Approve the skill again to serve it.
+- A segment file in `context/icps/` is handed to a skill only when its name uses lowercase letters, digits and hyphens and ends in `.md`, because the name is shown to the assistant outside the fenced text.
+- A record settles a document only when the change that first brought it onto the main line also changed that document, so a proposal that edits a document, adds its record and then undoes the edit settles nothing.
+
 ## Unreleased (P3: working on a shared base)
 
 - Recording a context change now works on a base a team shares. Every step runs as it does on a base of one's own, and the yes sends the change to the base's owner as a proposal instead of refusing with one sentence. The change is written exactly as it was shown into a working folder of this seat's own, made from the shared copy's latest line, and goes as one proposal holding that file alone, with the proposal line the GTM Base app's inbox reads. Nothing is written into the person's own folder, and no document is asked about until the owner accepts it; from then on every document it affects is flagged as usual.

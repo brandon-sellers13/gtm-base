@@ -184,7 +184,7 @@ async function recordFacts(
     node = first ? nodes.get(first) : undefined;
   }
   for (const [i, path] of watched.entries()) {
-    if (path !== "context/map.md" && !watchedAt(nodes.get(head), i)) continue;
+    if (path.startsWith("skills/") && !watchedAt(nodes.get(head), i)) continue;
     line.changes[path] = line.mainLine.filter((oid) => {
       const node = nodes.get(oid)!;
       const parent = node.parents.nodes[0] ? nodes.get(node.parents.nodes[0].oid) : undefined;
@@ -246,14 +246,15 @@ async function recordFacts(
     // commit that added it, then git show --diff-merges=first-parent). A list
     // GitHub cuts short counts as changing nothing, so the record then settles
     // nothing.
+    // The commit that first added it on the main line (skill_install.first_added).
+    let firstIn: HistoryNode | null = null;
+    for (let node = nodes.get(head); node; ) {
+      const parent = node.parents.nodes[0] ? nodes.get(node.parents.nodes[0].oid) : undefined;
+      if (fileAt(node, i) && !fileAt(parent, i)) firstIn = node; // newest first; keep the oldest
+      node = parent;
+    }
     let acceptedPaths: string[] | null = null;
-    if (merged) {
-      let firstIn: HistoryNode = merged;
-      for (let node = nodes.get(head); node; ) {
-        const parent = node.parents.nodes[0] ? nodes.get(node.parents.nodes[0].oid) : undefined;
-        if (fileAt(node, i) && !fileAt(parent, i)) firstIn = node; // newest first; keep the oldest
-        node = parent;
-      }
+    if (merged && firstIn) {
       const first = firstIn.parents.nodes[0]?.oid;
       const shown = first
         ? await api<{ files?: { filename: string }[] }>(`/repos/${owner}/${repo}/compare/${first}...${firstIn.oid}`, { token })
@@ -262,7 +263,11 @@ async function recordFacts(
       acceptedPaths = names.length >= 300 ? [] : names;
     }
     const day = merged?.author.date?.slice(0, 10) ?? null;
+    const addedDay = firstIn?.author.date?.slice(0, 10) ?? null;
     facts[record.path] = {
+      addedBy: firstIn?.author.email ?? null,
+      addedOn: addedDay && /^\d{4}-\d{2}-\d{2}$/.test(addedDay) ? addedDay : null,
+      addedIn: firstIn?.oid ?? null,
       acceptedPaths,
       coModified,
       hashAtCommit,
@@ -364,6 +369,7 @@ export async function snapshotOf(token: string, owner: string, repo: string, tod
   const line: MainLine = { mainLine: [], changes: {} };
   const watched = [
     "context/map.md",
+    CORRECTIONS_DIR,
     ...tree.tree
       .filter((entry) => entry.type === "tree" && entry.path.startsWith("skills/") && !entry.path.slice("skills/".length).includes("/"))
       .map((entry) => entry.path)

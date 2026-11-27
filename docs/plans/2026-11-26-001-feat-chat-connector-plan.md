@@ -200,6 +200,8 @@ The one-pass review of C3 found four problems, fixed in the plugin and the conne
 
 The connector reads what these rules need from the history walk it already made: the main line and, for the map and each skill's folder, every change along it.
 
+The confirming review found one more medium hole in those fixes. The roles were replayed only from the records on the main line today, each judged by its newest change, so a former administrator could delete or edit the record that removed her, and a former owner could delete the record that handed the skill on, and get the role back. Now every record is judged by the change that first added it, and when any record under `learning/corrections/` is missing or differs from what was first saved, no approval is accepted in that base at all. Putting the record back exactly as it was first saved makes the base whole again. The plugin and the connector apply this together, and the connector reads the records folder's tree at each commit that changed it.
+
 The same change closes the borderline pattern from C2's security review, which Brandon decided on 2026-11-27 to close in the plugin and the connector together. A proposal whose commits edit a document, add a record for it, and then undo the edit changes records only, so the base owner could accept it and the document would count as settled. Two rules now stop it. The web app refuses a records-only accept when any commit in the proposal touched a file that is not a record. And wherever a proposal is accepted, including on GitHub itself, a record settles a document only when the change that brought it onto the main line also changed that document, which the plugin's `stale` rule and the connector's port now both require.
 
 ## Review standard

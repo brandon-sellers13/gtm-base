@@ -131,6 +131,14 @@ function firstDifference(a, b) {
     ),
     JSON.stringify(reads),
   );
+  // The C3 security review, finding 3, held directly: a hidden file in the
+  // folder is never handed on, whatever its name looks like.
+  const hidden = expandedReads(open, { "context/icps.md": "a", "context/icps/.notes.md": "h", "context/icps/.a.md": "h" }, []);
+  check(
+    "a hidden file in the folder is never handed on",
+    !hidden.some((r) => r.path.startsWith("context/icps/.")),
+    JSON.stringify(hidden.map((r) => r.path)),
+  );
   const empty = expandedReads(open, { "context/icps.md": "a" }, []);
   check("an empty or missing folder adds nothing", same(empty.map((r) => r.path), ["standards/x.md", "context/icps.md", "context/voice.md"]));
 

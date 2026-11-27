@@ -94,7 +94,24 @@ export type SkillWorld = {
   // For each revision the approval check reads: the map and each skill's
   // SKILL.md exactly as that revision saved them.
   atRevision: Record<string, { map: string | null; skills: Record<string, string | null> }>;
+  // The records folder (learning/corrections) at each commit on the main line
+  // that changed it, oldest first: each entry's name and blob id.
+  recordTrees: { oid: string; entries: Record<string, string> }[];
 };
+
+// skill_install.records_intact: whether every record ever added to the main
+// line is still there with the bytes it was first saved with. The authority
+// replay reads only the records that exist today, so one taken away or changed
+// could bring back a role the base owner removed; then nothing is accepted.
+// Putting the record back exactly as it was first saved makes it whole again.
+export function recordsIntact(world: Pick<SkillWorld, "recordTrees">): boolean {
+  const first = new Map<string, string>();
+  for (const { entries } of world.recordTrees) {
+    for (const [name, oid] of Object.entries(entries)) if (!first.has(name)) first.set(name, oid);
+  }
+  const now = world.recordTrees.at(-1)?.entries ?? {};
+  return [...first].every(([name, oid]) => now[name] === oid);
+}
 
 // The folders a skill may name in `reads_optional`, whose `.md` files are handed
 // on one by one. Exactly the one folder the plugin's runner reads
@@ -205,14 +222,16 @@ function approvalsOf(world: SkillWorld, skill: string): Found[] {
     if (!isSkillApproval(record.approvedHashes, skill) && !(MAP_PATH in record.approvedHashes)) continue;
     const facts = world.corrections[path];
     if (!facts) throw new Unreadable("record-history-unavailable");
-    if (facts.mergedBy && facts.mergedIn) {
+    // Judged by the change that first added it, never the newest one.
+    if (facts.addedBy === undefined || facts.addedIn === undefined) throw new Unreadable("record-history-unavailable");
+    if (facts.addedBy && facts.addedIn) {
       found.push({
         path,
         approvedRoles: record.approvedRoles,
         approvedHashes: record.approvedHashes,
-        email: facts.mergedBy,
-        day: facts.mergedOn,
-        revision: facts.mergedIn,
+        email: facts.addedBy,
+        day: facts.addedOn ?? null,
+        revision: facts.addedIn,
       });
     }
   }
@@ -224,9 +243,9 @@ const firstMap = (world: Pick<SkillWorld, "changes">) => world.changes[MAP_PATH]
 
 // Each revision whose saved map and SKILL.md the approval check reads, so the
 // connector can fetch exactly those.
-export function revisionsToRead(world: Omit<SkillWorld, "atRevision" | "texts">, skill: string): string[] {
+export function revisionsToRead(world: Omit<SkillWorld, "atRevision" | "texts" | "recordTrees">, skill: string): string[] {
   const wanted = new Set<string>();
-  for (const one of approvalsOf({ ...world, texts: {}, atRevision: {} }, skill)) wanted.add(one.revision);
+  for (const one of approvalsOf({ ...world, texts: {}, atRevision: {}, recordTrees: [] }, skill)) wanted.add(one.revision);
   const first = firstMap(world);
   if (first) wanted.add(first);
   return [...wanted].sort();
@@ -313,6 +332,7 @@ function changedSince(world: SkillWorld, skill: string, revision: string): boole
 
 export async function approvalOf(world: SkillWorld, skill: string, files: Record<string, string>): Promise<Approval | null> {
   const skillMd = `${SKILLS_DIR}/${skill}/SKILL.md`;
+  if (!recordsIntact(world)) return null;
   const saved = approvalsOf(world, skill);
   const found = saved.filter((item) => isSkillApproval(item.approvedHashes, skill));
   for (const one of found.filter((item) => sameFiles(item.approvedHashes, files))) {

@@ -1,6 +1,7 @@
 import "server-only";
 import { GitHubError } from "../github";
 import { Unreadable } from "../stale/formats";
+import { CORRECTIONS_DIR } from "../stale/rules";
 import { type BaseSnapshot, fixIsReady } from "../stale/github";
 import {
   type IndexEntry,
@@ -95,6 +96,32 @@ async function savedAt(
   return saved;
 }
 
+// The records folder at each commit on the main line that changed it, oldest
+// first, with each entry's name and blob id (for recordsIntact).
+async function recordTreesOf(token: string, owner: string, repo: string, snapshot: BaseSnapshot): Promise<SkillWorld["recordTrees"]> {
+  const commits = [...(snapshot.changes[CORRECTIONS_DIR] ?? [])].reverse();
+  const trees: SkillWorld["recordTrees"] = [];
+  for (let at = 0; at < commits.length; at += 20) {
+    const batch = commits.slice(at, at + 20);
+    const fields = batch
+      .map((oid, j) => `c${j}: object(oid: ${quote(oid)}) { ... on Commit { file(path: ${quote(CORRECTIONS_DIR)}) { object { ... on Tree { entries { name oid } } } } } }`)
+      .join("\n");
+    const data = await graphql<{ repository: Record<string, { file: { object: { entries: { name: string; oid: string }[] } | null } | null } | null> }>(
+      token,
+      `query($owner: String!, $name: String!) { repository(owner: $owner, name: $name) { ${fields} } }`,
+      { owner, name: repo },
+    );
+    batch.forEach((oid, j) => {
+      const commit = data.repository[`c${j}`];
+      if (!commit) throw new Unreadable("history-unreadable");
+      const entries: Record<string, string> = {};
+      for (const entry of commit.file?.object?.entries ?? []) entries[entry.name] = entry.oid;
+      trees.push({ oid, entries });
+    });
+  }
+  return trees;
+}
+
 export async function worldOf(token: string, owner: string, repo: string, snapshot: BaseSnapshot): Promise<SkillWorld> {
   const tree = snapshot.skillTree.map(({ path, mode, type }) => ({ path, mode, type }));
   const names = tree
@@ -109,11 +136,12 @@ export async function worldOf(token: string, owner: string, repo: string, snapsh
     changes: snapshot.changes,
   };
   const revisions = [...new Set(names.flatMap((name) => revisionsToRead(partial, name)))].sort();
-  const [texts, atRevision] = await Promise.all([
+  const [texts, atRevision, recordTrees] = await Promise.all([
     names.length ? skillTexts(token, owner, repo, snapshot) : Promise.resolve({}),
     savedAt(token, owner, repo, revisions, names),
+    recordTreesOf(token, owner, repo, snapshot),
   ]);
-  return { ...partial, texts, atRevision };
+  return { ...partial, texts, atRevision, recordTrees };
 }
 
 // --- The index ---------------------------------------------------------------

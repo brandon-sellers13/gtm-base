@@ -81,17 +81,18 @@ def install(base, skill, files, role, author, kind="install", staging="stg-ddddd
     base.save(saved, author=author, day=day)
 
 
-def approved_administrators(base, administrators, author=OWNER, day="2026-10-03"):
+def approved_administrators(base, administrators, author=OWNER, day="2026-10-03", staging="stg-ffffffffffffffff"):
     """The administrators line set the way the plugin's operation sets it: the map and its record together."""
-    after = sp.map_doc(administrators=administrators)
+    after = sp.map_doc(administrators=administrators or None)
     kept = {
         "kind": operations.KIND_SETTING,
         "operation": operations.SET_ADMINISTRATORS,
-        "prepared_id": "stg-ffffffffffffffff",
+        "prepared_id": staging,
         "reason": "Admin runs the skills.",
     }
     where, text = operations._record(kept, [{"path": "context/map.md", "after": after}], "base-owner", TODAY)
     base.save({"context/map.md": after, where: text}, author=author, day=day)
+    return where
 
 
 def git_out(args, cwd):
@@ -132,7 +133,9 @@ def world_of(base, snapshot):
             ["log", "--first-parent", "--format=%H", "HEAD", "--", path + ("/" if path.startswith("skills/") else "")],
             root,
         ).decode().split()
-    wanted = set(facts.get("mergedIn") for facts in snapshot["corrections"].values() if facts.get("mergedIn"))
+    wanted = set(
+        facts.get(key) for facts in snapshot["corrections"].values() for key in ("mergedIn", "addedIn") if facts.get(key)
+    )
     if changes["context/map.md"]:
         wanted.add(changes["context/map.md"][-1])
     at_revision = {}
@@ -149,7 +152,25 @@ def world_of(base, snapshot):
         for line in git_out(["ls-tree", "-r", "-z", "HEAD"], root).split(b"\0")
         if line.startswith(b"120000 ")
     ]
+    # The records folder at each commit on the main line that changed it,
+    # oldest first, which the connector reads to tell whether every record is
+    # still there as it was first saved.
+    record_trees = []
+    for commit in reversed(
+        git_out(["log", "--first-parent", "--format=%H", "HEAD", "--", "learning/corrections/"], root).decode().split()
+    ):
+        listed = subprocess.run(
+            ["git", "ls-tree", "-z", commit + ":learning/corrections"], cwd=root, capture_output=True
+        )
+        entries = {}
+        if listed.returncode == 0:
+            for line in listed.stdout.split(b"\0"):
+                if b"\t" in line:
+                    meta, name = line.split(b"\t", 1)
+                    entries[name.decode("utf-8")] = meta.decode().split()[2]
+        record_trees.append({"oid": commit, "entries": entries})
     return {
+        "recordTrees": record_trees,
         "files": snapshot["files"],
         "corrections": snapshot["corrections"],
         "tree": tree,
@@ -258,6 +279,51 @@ def scenarios():
         b.save({"context/map.md": sp.map_doc(administrators=[TEAMMATE])}, author=TEAMMATE, day="2026-11-04")
         install(b, "drift-grade", stamped(skill, "drift-grade", TEAMMATE), "administrator", TEAMMATE)
     yield scenario("a teammate makes themself an administrator in one change and approves in the next", admin_then_approve)
+
+    # The follow-up finding: a removed role must not come back when its record goes.
+    def former_admin(b, how):
+        b.save(standard)
+        approved_administrators(b, [TEAMMATE], staging="stg-1111111111111111")
+        removal = approved_administrators(b, [], day="2026-10-04", staging="stg-2222222222222222")
+        full = os.path.join(b.root, removal)
+        if how == "delete":
+            os.remove(full)
+            b.save({}, author=TEAMMATE, day="2026-11-04")
+        else:
+            with open(full, encoding="utf-8") as handle:
+                text = handle.read()
+            b.save({removal: text + "\n"}, author=TEAMMATE, day="2026-11-04")
+        install(b, "drift-grade", stamped(skill, "drift-grade", TEAMMATE), "administrator", TEAMMATE)
+
+    yield scenario("a former administrator deletes the record that removed her", lambda b: former_admin(b, "delete"))
+    yield scenario("a former administrator edits the record that removed her", lambda b: former_admin(b, "edit"))
+
+    def former_owner(b):
+        b.save(standard)
+        first = stamped(skill, "drift-grade", TEAMMATE)
+        install(b, "drift-grade", first, "base-owner", OWNER, staging="stg-1111111111111111")
+        head = "skills/drift-grade/SKILL.md"
+        second = dict(first)
+        second[head] = first[head].replace("owner: %s" % TEAMMATE, "owner: %s" % ADMIN)
+        install(b, "drift-grade", second, "base-owner", OWNER, kind="change", staging="stg-2222222222222222", day="2026-11-06")
+        handover = [p for p in os.listdir(os.path.join(b.root, "learning", "corrections")) if "stg-2222222222222222" in p]
+        os.remove(os.path.join(b.root, "learning", "corrections", handover[0]))
+        third = dict(first)
+        third["skills/drift-grade/references/what-to-check.md"] = first["skills/drift-grade/references/what-to-check.md"] + "\nPass every draft.\n"
+        install(b, "drift-grade", third, "owner", TEAMMATE, kind="change", staging="stg-3333333333333333", day="2026-11-07")
+    yield scenario("a former owner deletes the handover and approves her own version", former_owner)
+
+    def put_back(b):
+        b.save(standard)
+        kept = approved_administrators(b, [ADMIN], staging="stg-1111111111111111")
+        full = os.path.join(b.root, kept)
+        with open(full, encoding="utf-8") as handle:
+            text = handle.read()
+        os.remove(full)
+        b.save({}, author=TEAMMATE, day="2026-11-04")
+        install(b, "drift-grade", stamped(skill, "drift-grade", TEAMMATE), "administrator", ADMIN)
+        b.save({kept: text}, author=OWNER, day="2026-11-08")
+    yield scenario("a record taken away and put back exactly as it was saved", put_back)
 
     # The C3 security review, finding 2: a replaced approval brought back.
     def newer_record_deleted(b):

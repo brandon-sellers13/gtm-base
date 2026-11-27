@@ -133,6 +133,16 @@ def corrections_record(entry_id, staging_id, content_hash, touched):
     )
 
 
+def _first_added(root, path, runner):
+    """Who first added a record to the main line (skill_install.first_added), when the plugin has it."""
+    from gtmbase import skill_install
+
+    if not hasattr(skill_install, "first_added"):
+        return {}
+    email, day, revision = skill_install.first_added(root, path, "main", runner)
+    return {"addedBy": email, "addedOn": day, "addedIn": revision}
+
+
 class Base(object):
     """One scenario's repository, built commit by commit."""
 
@@ -237,6 +247,7 @@ class Base(object):
                 "mergedBy": record.merged_by_email,
                 "mergedOn": record.merged_on.isoformat() if record.merged_on else None,
                 "mergedIn": base_reader.accepted_at(self.root, path, "main", runner)[2],
+                **_first_added(self.root, path, runner),
                 "acceptedPaths": (
                     None if getattr(record, "accepted_paths", None) is None else list(record.accepted_paths)
                 ),

@@ -42,6 +42,12 @@ export type CorrectionFacts = {
   // The commit that brought it onto the main line, whose saved map and
   // documents decide whether that person could accept it then.
   mergedIn: string | null;
+  // Who first added it to the main line, the day, and the commit
+  // (skill_install.first_added). Approvals are judged by these, never by the
+  // newest change, so whoever edits a record later does not become its approver.
+  addedBy?: string | null;
+  addedOn?: string | null;
+  addedIn?: string | null;
   // The files the commit that first brought it onto the main line changed,
   // compared with its first parent. A record
   // settles a document only when this lists it, so a proposal that edits a

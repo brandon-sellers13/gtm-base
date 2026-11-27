@@ -42,6 +42,7 @@ from __future__ import annotations
 import datetime
 import json
 import os
+import re
 import secrets
 from typing import Dict, List, Optional, Sequence, Tuple
 
@@ -673,6 +674,10 @@ def approval_of(
         return showing
     files = showing.manifest.files
     default = base_reader._default_branch(base_root, git)
+    if not records_intact(base_root, default, git):
+        # A record was taken away or changed after it was saved, so who holds
+        # which role cannot be replayed safely, and nothing is accepted.
+        return showing
     saved = _saved_approvals(base_root, skill, default, git)
     found = [item for item in saved if _is_skill_approval(item[1], skill)]
     matching = [item for item in found if item[1].approved_hashes == files]
@@ -740,10 +745,74 @@ def _saved_approvals(base_root: str, skill: str, default, git: GitRunner) -> lis
             continue
         if not _is_skill_approval(record, skill) and constants.MAP_PATH not in record.approved_hashes:
             continue
-        email, day, revision = base_reader.accepted_at(base_root, record_path, default, git)
+        email, day, revision = first_added(base_root, record_path, default, git)
         if email and revision:
             found.append((record_path, record, email, day, revision))
     return found
+
+
+def first_added(base_root: str, record_path: str, default, git: GitRunner):
+    """Who first added a record to the main line, on what day, in which revision.
+
+    The first change, never the newest: whoever edits a record later does not
+    become its approver (the C3 security review, the follow-up finding). Both
+    of the record's names are asked about, so a record the layout move carried
+    over is found where it was first added.
+    """
+    args = ["log", "--first-parent", "-M", "--diff-filter=A", "--format=%H%x1f%ae%x1f%ad", "--date=short"]
+    if default:
+        args.append(default)
+    args.append("--")
+    args.extend(base_reader.record_names(record_path))
+    listed = git.run(args, cwd=base_root, timeout=authority.LOCAL_TIMEOUT_SECONDS)
+    if not listed.ok:
+        return None, None, None
+    found = (None, None, None)
+    for line in listed.stdout.split("\n"):
+        parts = line.strip().split("\x1f")
+        if len(parts) == 3 and parts[1] and re.match(r"\d{4}-\d{2}-\d{2}$", parts[2]):
+            found = (parts[1], parts[2], parts[0])
+    return found
+
+
+def records_intact(base_root: str, default, git: GitRunner) -> bool:
+    """Whether every record ever added to the main line is still there, byte for byte.
+
+    The authority replay reads only the records that exist today, so a record
+    taken away, or changed after it was saved, could bring back a role the base
+    owner removed. When any record under the corrections folder is missing or
+    differs from what was first saved, no approval is accepted at all. Putting
+    the record back exactly as it was first saved makes it whole again. Records
+    the layout move brought into the folder count from the day they arrived.
+    """
+    tip = default or "HEAD"
+    folder = constants.CORRECTIONS_DIR + "/"
+    added = git.run(
+        ["log", "--first-parent", "--diff-merges=first-parent", "--no-renames", "--diff-filter=A",
+         "--raw", "--no-abbrev", "--format=", tip, "--", folder],
+        cwd=base_root,
+        timeout=authority.LOCAL_TIMEOUT_SECONDS,
+    )
+    now = git.run(["ls-tree", "-r", tip, "--", folder], cwd=base_root, timeout=authority.LOCAL_TIMEOUT_SECONDS)
+    if not added.ok or not now.ok:
+        return False
+    first: Dict[str, str] = {}
+    for line in added.stdout.split("\n"):
+        if not line.startswith(":") or "\t" not in line:
+            continue
+        meta, path = line.split("\t", 1)
+        parts = meta.split()
+        if len(parts) >= 4:
+            first[path] = parts[3]  # newest first, so the oldest addition is kept
+    current: Dict[str, str] = {}
+    for line in now.stdout.split("\n"):
+        if "\t" not in line:
+            continue
+        meta, path = line.split("\t", 1)
+        parts = meta.split()
+        if len(parts) == 3:
+            current[path] = parts[2]
+    return all(current.get(path) == oid for path, oid in first.items())
 
 
 def _git_lines(base_root: str, args: List[str], git: GitRunner) -> List[str]:
