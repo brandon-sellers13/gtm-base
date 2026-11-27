@@ -37,6 +37,7 @@ const KNOWN_DOCUMENTS: Record<string, string> = {
   "context/icps.md": "your customer profile",
   "context/buyer-personas.md": "your buyer personas",
   "context/positioning.md": "your positioning",
+  "context/competitors.md": "your competitors document",
   "context/messaging.md": "your messaging",
   "context/voice.md": "your voice guide",
   "context/design.md": "your design guide",

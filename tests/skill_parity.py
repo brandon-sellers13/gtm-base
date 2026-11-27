@@ -281,7 +281,19 @@ def scenarios():
         files[head] = before.replace("reads_optional: [", "reads_optional: [context/icps/, ")
         assert files[head] != before
         install(b, "drift-grade", files, "base-owner", OWNER)
-    yield scenario("an approved skill that names a folder (refused until the runner reads folders)", folder_declaration)
+        # Two segments saved out of name order, a file that is not markdown and
+        # a segment one folder down, so the plugin's own order and its rule for
+        # what the folder hands back are what the connector is held to.
+        b.save(
+            {
+                "context/icps/storage.md": sp.doc("icp", OWNER, "Storage"),
+                "context/icps/long-distance.md": sp.doc("icp", OWNER, "Long distance"),
+                "context/icps/notes.txt": "Some notes.\n",
+                "context/icps/older/deep.md": sp.doc("icp", OWNER, "One folder down"),
+            },
+            day="2026-11-06",
+        )
+    yield scenario("an approved skill that names the segments folder, with two segments saved", folder_declaration)
 
     def with_a_link(b):
         b.save(standard)

@@ -91,10 +91,10 @@ export type SkillWorld = {
 };
 
 // The folders a skill may name in `reads_optional`, whose `.md` files are handed
-// on one by one. Empty until the plugin's runner reads a folder declaration
-// (Track 4, `context/icps/`), so a skill naming one is refused as the plugin
-// refuses it today. See `declarationOf` and `expandedReads`.
-export const FOLDER_DECLARATIONS: readonly string[] = [];
+// on one by one. Exactly the one folder the plugin's runner reads
+// (`runner.SEGMENTS_FOLDER`, Track 4 T4.9 and T4.10), so any other folder is
+// refused as the plugin refuses it. See `declarationOf` and `expandedReads`.
+export const FOLDER_DECLARATIONS: readonly string[] = ["context/icps/"];
 
 // --- Reading a skill whole (authority.read_skill) ---------------------------------
 
