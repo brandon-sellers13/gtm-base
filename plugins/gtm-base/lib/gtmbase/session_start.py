@@ -928,11 +928,27 @@ def _daily_block(root, base_id, session_id, now, git, root_of_plugin, part):
     return result
 
 
+def _has_a_shared_copy(base_id) -> bool:
+    """Whether this seat sends to a shared copy: backed up from here, or joined."""
+    from . import backup
+
+    try:
+        return backup.shared_address(base_id or "") is not None
+    except Exception:
+        return False
+
+
 def _daily_work(
     root, base_id, session_id, now, git, root_of_plugin, part, seat, left_again
 ):
     if part.writes:
-        if not seat.get("git_hook_installed"):
+        # On a base with a shared copy it is also put back when it was
+        # installed once and is no longer where git looks for it, because a
+        # send from such a base goes only while it is in place (the second
+        # security review of P2 and P3). Elsewhere it is installed once.
+        if not seat.get("git_hook_installed") or (
+            _has_a_shared_copy(base_id) and not install_git_hook.in_place(root, git)
+        ):
             try:
                 install_git_hook.install(
                     root, root_of_plugin, runner=git, base_id=base_id

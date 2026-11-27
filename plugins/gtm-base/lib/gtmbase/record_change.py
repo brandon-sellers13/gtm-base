@@ -69,6 +69,7 @@ from . import (
     review,
     scan,
     segments,
+    shared_send,
     stale,
     state,
     unsaved,
@@ -126,7 +127,6 @@ ANSWER_NOT_NOW = "not-now"
 ANSWERS = (ANSWER_YES, ANSWER_NO, ANSWER_NOT_NOW)
 
 # Codes, for the log and the tests. None is shown to a person.
-CODE_SHARED_COPY = "has-a-shared-copy"
 CODE_CANNOT_TELL = compose_proposal.CODE_CANNOT_TELL
 CODE_NO_WORDS = "no-words-for-the-change"
 CODE_TOO_LONG = "too-long"
@@ -200,10 +200,13 @@ LEFT_FLAGGED = (
     "%s stays flagged, so GTM Base will say so when it is about to be used and "
     "in your next review."
 )
-SHARED_COPY = (
-    "This base has a shared copy, and GTM Base cannot yet record a context "
-    "change there on its own, so nothing was written. It can still be recorded "
-    "together with an edit to a document it affects."
+# What the yes says on a base with a shared copy, where the change goes to
+# the owners as a proposal rather than straight into the base (P3).
+PROPOSED = (
+    "That context change is sent as a proposal. Nothing changes in the shared "
+    "base until the base's owner accepts it in the GTM Base app or in Claude "
+    "Code, and from then on every document it affects is flagged until "
+    "somebody says it already says this."
 )
 NEEDS_WORDS = (
     "A context change needs what changed, in their words, so nothing was "
@@ -320,17 +323,20 @@ def _refuse(sentence: str, code: str) -> Refused:
 # --- The shared copy ---------------------------------------------------------
 
 
-def refuse_a_shared_copy(base_root: str, runner: Optional[GitRunner] = None) -> None:
-    """Stop at once on a base with a shared copy, or one nobody can tell about.
+def shared_copy(base_root: str, runner: Optional[GitRunner] = None) -> bool:
+    """Whether this base has a shared copy; stop at once when nobody can tell.
 
     Not being able to read whether there is one is its own answer and never a
-    no, the rule `compose_proposal.shared_copy_state` already keeps.
+    no, the rule `compose_proposal.shared_copy_state` already keeps. A base
+    with one takes the change as a proposal (P3); until then every step here
+    refused it, because a local save there would never reach anybody.
     """
     found = compose_proposal.shared_copy_state(base_root, runner=runner)
     if found == compose_proposal.SHARED_COPY_PRESENT:
-        raise _refuse(SHARED_COPY, CODE_SHARED_COPY)
+        return True
     if found != compose_proposal.SHARED_COPY_ABSENT:
         raise _refuse(compose_proposal.CANNOT_TELL, CODE_CANNOT_TELL)
+    return False
 
 
 # --- Step 1: the ask ---------------------------------------------------------
@@ -758,8 +764,14 @@ def build_entry(
     today: datetime.date,
     happened_on: Optional[str] = None,
     runner: Optional[GitRunner] = None,
+    shared: bool = False,
 ) -> formats.ChangeEntry:
     """The whole context change, from the person's own words.
+
+    On a base with a shared copy the change is named by a fresh random
+    identifier rather than the first free one, because a change another seat
+    proposed and nobody has accepted yet is not in this copy to be counted, and
+    two proposals under one name would collide when the second is accepted.
 
     The words are never put through the check a model's draft goes through,
     which refuses a long dash or a word from the house list: those are rules
@@ -794,7 +806,7 @@ def build_entry(
     )
     body = what + ("\n\n" + why if why else "")
     entry = formats.ChangeEntry(
-        id=free_id(base_root),
+        id=shared_send.new_staging_id() if shared else free_id(base_root),
         happened_on=happened.isoformat(),
         written_on=today.isoformat(),
         noted_by=address,
@@ -916,7 +928,7 @@ def preview(
     """
     git = runner_or_default(runner)
     day = today or state.today()
-    refuse_a_shared_copy(base_root, runner=git)
+    shared = shared_copy(base_root, runner=git)
     # A new showing replaces the one before it even when it is refused, so a
     # yes can never land on a version the person was in the middle of
     # correcting (the correctness review of 0.3.3).
@@ -942,7 +954,8 @@ def preview(
     if len(as_shown(one_by_one)) > SHOWN_CHARS:
         raise _refuse(TOO_MANY_DOCUMENTS, CODE_TOO_MANY_DOCUMENTS)
     entry = build_entry(
-        base_root, what, why, source, affects, day, happened_on, runner=git
+        base_root, what, why, source, affects, day, happened_on, runner=git,
+        shared=shared,
     )
     text = entry.render()
     # The four lines come from this entry and from nothing else, the closing's
@@ -987,14 +1000,20 @@ def leave(base_id: str) -> str:
 
 
 class Recorded(object):
-    """What the yes wrote, and the documents to ask about next."""
+    """What the yes wrote, and the documents to ask about next.
 
-    __slots__ = ("entry", "relative", "plan")
+    On a base with a shared copy nothing is written here: `proposal` is the
+    proposal it was sent as, and there is nothing to ask about until the
+    owner accepts it.
+    """
 
-    def __init__(self, entry, relative, plan):
+    __slots__ = ("entry", "relative", "plan", "proposal")
+
+    def __init__(self, entry, relative, plan, proposal=None):
         self.entry = entry
         self.relative = relative
         self.plan = plan
+        self.proposal = proposal
 
 
 def _waiting(base_id: str):
@@ -1259,14 +1278,69 @@ def _take_it_back(
     return whole
 
 
+def _propose(base_root, base_id, entry, text, git, gh=None, session_id=None) -> Recorded:
+    """Send the change that was shown as a proposal, on a base with a shared copy.
+
+    The entry is written exactly as it was shown, in a working folder of this
+    seat's own made from the shared copy's latest line, and goes to the owners
+    as one proposal holding that file alone. The person's own folder is not
+    touched. The documents it affects are flagged once it is accepted, so
+    nothing is asked about them here.
+    """
+    where: List[str] = []
+
+    def write(folder: str) -> List[str]:
+        relative = base_reader.where_to_write_the_entry(folder, entry.id)
+        full = os.path.join(folder, relative.replace("/", os.sep))
+        if os.path.lexists(full) or not _inside_the_base(folder, full):
+            raise _refuse(MOVED_ON, CODE_MOVED_ON)
+        os.makedirs(os.path.dirname(full), exist_ok=True)
+        _publish(full, text)
+        where.append(relative)
+        return [relative]
+
+    what, _blank, why = entry.body.partition("\n\n")
+    with _writing(base_id):
+        sent = shared_send.send(
+            base_root,
+            base_id,
+            write,
+            "Context change: %s" % _one_line(what)[:80],
+            {
+                "before": "Not recorded yet.",
+                "after": _one_line(what),
+                "why": _one_line(why) or why_when_none(entry),
+                "evidence": entry.source,
+                "confidence": "medium",
+            },
+            entry_id=entry.id,
+            session_id=session_id,
+            gh=gh,
+            runner=git,
+        )
+    forget_showing(base_id)
+    try:
+        _count_one_more()
+    except (GtmBaseError, OSError):
+        pass
+    plan = join_flow.Reconciliation([], list(entry.affects))
+    plan.name_of = safe_name
+    return Recorded(entry, where[0] if where else None, plan, proposal=sent)
+
+
 def record(
     base_root: str,
     base_id: str,
     shown: str,
     today: Optional[datetime.date] = None,
     runner: Optional[GitRunner] = None,
+    gh=None,
+    session_id: Optional[str] = None,
 ) -> Recorded:
     """Write the context change that was shown, on the person's yes.
+
+    On a base with a shared copy it is sent as a proposal instead (P3), and
+    nothing is written into the person's own folder.
 
     The yes is bound to what was shown and to the revision the base was on.
     Anything that moved since then stops it, and the change is shown again
@@ -1279,7 +1353,7 @@ def record(
     approval.require("record_change.record")
     git = runner_or_default(runner)
     day = today or state.today()
-    refuse_a_shared_copy(base_root, runner=git)
+    shared = shared_copy(base_root, runner=git)
     waiting = _waiting(base_id)
     if waiting is None:
         raise _refuse(NOTHING_WAITING, CODE_NOTHING_WAITING)
@@ -1306,6 +1380,9 @@ def record(
     # the refusal says what it is about and nothing is left half done.
     if gitcmd.executable_drivers(base_root):
         raise _refuse(RUNS_A_PROGRAM, CODE_RUNS_A_PROGRAM)
+
+    if shared:
+        return _propose(base_root, base_id, entry, text, git, gh=gh, session_id=session_id)
 
     with _writing(base_id):
         try:

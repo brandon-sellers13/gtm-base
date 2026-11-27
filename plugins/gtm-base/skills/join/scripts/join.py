@@ -79,6 +79,7 @@ from gtmbase import (  # noqa: E402
     push_conditions,
     review,
     segments,
+    shared_send,
     sources,
     truth_map,
     wordsfile,
@@ -1910,8 +1911,22 @@ def run_approve(options, out):
         )
     except ReviewError as refusal:
         return an_approval_refusal(refusal, options, out)
+    except shared_send.Refused as refusal:
+        line(out, "codes", refusal.code)
+        out.write(str(refusal) + "\n")
+        return EXIT_REFUSED
     line(out, "base", result.root)
     line(out, "file", result.path)
+    if review.CODE_SENT_AS_PROPOSAL in (result.codes or []):
+        # A base a team shares: the draft and the record of the yes went to
+        # the base's owner as one proposal, and nothing is in the base yet.
+        line(out, "status", "proposed")
+        out.write(
+            "That is sent to the base's owner as a proposal, together with the "
+            "record that you said yes. Nothing changes in the shared base until "
+            "they accept it in the GTM Base app or in Claude Code.\n"
+        )
+        return EXIT_DONE
     if drafting.step_named(step) == drafting.STEP_CHANGE:
         # The two steps after this one are about this one change, and they
         # need its name rather than the file it landed in.

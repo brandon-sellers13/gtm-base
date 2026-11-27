@@ -63,8 +63,12 @@ export type Proposal = ProposalSummary & {
 
 export class ProposalNotFound extends Error {}
 
+// The marker is the body's last line, so the last line shaped like one is the
+// marker. A line shaped like one higher up sits in somebody's own words and is
+// never read as it (the security review of P2 and P3, finding 4).
 function marker(body: string | null) {
-  const match = (body ?? "").match(MARKER);
+  const found = [...(body ?? "").matchAll(new RegExp(MARKER.source, "gm"))];
+  const match = found[found.length - 1];
   return match ? { proposalId: match[1], entryId: match[2], sourceId: match[3] } : null;
 }
 

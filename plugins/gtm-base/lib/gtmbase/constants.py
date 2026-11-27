@@ -237,6 +237,13 @@ GH_GATED_WRITES = (
     ("issue", "comment"),
     ("release", "create"),
 )
+# Accepting a proposal from the command line. Nothing in GTM Base runs it: the
+# owner accepts in the GTM Base app. On a base with a shared copy it is
+# refused, because it lands a change on the shared line without the owner
+# (the security review of P2 and P3, finding 1). Anywhere else it is left
+# alone, because refusing it in every repository on a computer would refuse
+# ordinary work.
+GH_MERGE = ("pr", "merge")
 # GitHub commands no GTM Base skill ever uses. They are refused outright,
 # because one of them would change who can see the base without sending
 # anything the scan could read.

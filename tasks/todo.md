@@ -1823,7 +1823,8 @@ Brandon decided to build the web app now and productize from the start. No revie
 - [x] P2. Join a base from a link. (built 2026-11-27 on `claude/p2-join-from-link`: `join.py join-review` and `join-link`, the seat record, and no straight send to main from a base with a shared copy beyond confirmation lines; not merged)
   - [ ] The one-pass security review of P2 (what joining writes onto a teammate's computer, the sign-in it relies on, and the shared-line rule), before P2 ships.
   - [ ] After the web reskin (#35) merges: drop the team page's sentence that joining from Claude Code arrives with the next plugin release.
-- [ ] P3. Shared base: record-change and the setup closing send proposals; no direct push to main from a seat.
+- [x] P3. Shared base: record-change and the setup closing send proposals; no direct push to main from a seat. (built 2026-11-27 on `claude/p3-shared-base`, cut from P2: `shared_send.py`, record-change's yes, `review.approve` after setup, and the closing's note; the push rule itself is in P2; not merged)
+  - [ ] Other writes that still save onto a shared base's own line and would now be held at the send: creating a document or a setting through `operations.py`, the move to the current layout (`changes.py`), skipping a document, taking a finished page in after setup, and installing a skill. Each should go as a proposal the same way.
 - [ ] The end-to-end run with a second GitHub account.
 
 ## 2026-11-26, the chat connector, C1 (plan: docs/plans/2026-11-26-002-feat-connector-c1-plan.md)

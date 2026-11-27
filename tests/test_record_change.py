@@ -1693,7 +1693,13 @@ class TestTheLocksAreTheOneSystem(LocalCase):
 
 
 class TestABaseWithASharedCopy(unittest.TestCase):
-    def test_every_step_refuses_with_one_sentence_and_writes_nothing(self):
+    """Since P3 the steps run on a base a team shares, and the yes proposes.
+
+    tests/test_shared_base.py follows the yes to the proposal it sends. Here
+    the steps before it are run, and nothing at all is written into the base.
+    """
+
+    def test_the_steps_before_the_yes_run_and_write_nothing(self):
         with support.Sandbox() as sandbox:
             root, _base_id = sandbox.base()
             flow = Flow(self, root)
@@ -1701,16 +1707,28 @@ class TestABaseWithASharedCopy(unittest.TestCase):
             for argv in (
                 ["--record-change", "ask"],
                 ["--record-change", "documents"],
-                ["--record-change", "show", "--documents", "1"],
-                ["--record-change", "record", "--shown", "x"],
                 ["--record-change", "leave"],
-                ["--record-change", "answer", "--change", "x", "--document", ICP, "--answer", "yes"],
             ):
-                code, out, _err = flow.run(argv)
-                self.assertEqual(1, code, argv)
-                self.assertEqual(record_change.SHARED_COPY, out.strip(), argv)
+                code, out, err = flow.run(argv)
+                self.assertEqual(0, code, out + err)
+                self.assertNotIn("shared copy", out)
             self.assertEqual(before, head_of(root))
             self.assertEqual([], entry_files(root))
+
+    def test_a_base_nobody_can_tell_about_is_still_refused(self):
+        from unittest import mock
+
+        with support.Sandbox() as sandbox:
+            root, _base_id = sandbox.base()
+            flow = Flow(self, root)
+            with mock.patch.object(
+                record_change.compose_proposal,
+                "shared_copy_state",
+                return_value=record_change.compose_proposal.SHARED_COPY_UNKNOWN,
+            ):
+                code, out, err = flow.run(["--record-change", "ask"])
+            self.assertEqual(1, code, out + err)
+            self.assertIn(record_change.compose_proposal.CANNOT_TELL, out + err)
 
 
 # --- What stands in the way of a yes ----------------------------------------
@@ -1817,7 +1835,7 @@ class TestTheRuleAndTheWords(unittest.TestCase):
                 self.assertIn((module, name), registered)
         for name in (
             "EXPLAIN", "ASK", "ASK_SHORT", "PREVIEW_ASK", "RECORDED", "LEFT_FLAGGED",
-            "SHARED_COPY", "UNSAVED_NAMED",
+            "PROPOSED", "UNSAVED_NAMED",
         ):
             text = getattr(record_change, name)
             self.assertEqual([], plain_language.find_dashes(text), name)
