@@ -45,54 +45,60 @@ export default async function TeamPage({
   );
 
   return (
-    <div className="mx-auto max-w-3xl px-4 sm:px-6">
+    <div>
       <Header session={session} />
       <CleanUrl />
-      <main className="py-8">
-        <p className="font-mono text-xs text-ink-quiet">
-          <Link href={`/b/${base.owner}/${base.repo}`} className="hover:underline">
+      <main className="gb-page">
+        <p className="gb-label-mono break-all">
+          <Link href={`/b/${base.owner}/${base.repo}`} className="gb-link-quiet">
+            <span aria-hidden="true">← </span>
             {base.owner} / {base.repo}
           </Link>
         </p>
-        <h1 className="mt-1 text-3xl font-bold tracking-[-0.035em]">Team</h1>
-        <p className="mt-3 text-ink-mid">
+        <h1 className="gb-h2 mt-2">Team</h1>
+        <p className="gb-lede mt-4">
           Everyone here can read the base and propose changes from Claude Code. The owner of a document accepts or
           discards each proposal.
         </p>
 
         {notice && NOTICES[notice] && (
-          <p className="mt-6 rounded-lg border border-line bg-notice px-4 py-3 text-sm">{NOTICES[notice](shownWho)}</p>
+          <p
+            className={`gb-notice mt-8 ${["not-owner", "bad-username", "no-such-user", "refused", "failed"].includes(notice) ? "problem" : ""}`}
+            role="status"
+          >
+            {NOTICES[notice](shownWho)}
+          </p>
         )}
 
-        <h2 className="mt-10 font-mono text-xs font-bold uppercase tracking-wider text-ink-quiet">People</h2>
-        <ul className="mt-3 divide-y divide-line rounded-lg border border-line bg-surface">
+        <h2 className="gb-heading gb-section">People</h2>
+        <ul className="gb-docs">
           {team.members.map((m) => (
-            <li key={m.login} className="flex items-center gap-3 px-4 py-3">
+            <li key={m.login} className="flex flex-wrap items-center gap-x-3 gap-y-1">
               {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={m.avatarUrl} alt="" className="h-6 w-6 rounded-full" />
-              <span className="font-medium">{m.login}</span>
-              <span className="font-mono text-xs text-ink-quiet">{m.role === "admin" ? "admin" : "can propose"}</span>
+              <img src={m.avatarUrl} alt="" className="gb-avatar h-7 w-7" />
+              <span className="min-w-0 font-bold break-all">{m.login}</span>
+              <span className="gb-meta">{m.role === "admin" ? "admin" : "can propose"}</span>
             </li>
           ))}
         </ul>
 
         {team.invitations.length > 0 && (
           <>
-            <h2 className="mt-10 font-mono text-xs font-bold uppercase tracking-wider text-ink-quiet">Invited</h2>
-            <ul className="mt-3 divide-y divide-line rounded-lg border border-line bg-surface">
+            <h2 className="gb-heading gb-section">Invited</h2>
+            <ul className="gb-docs">
               {team.invitations.map((i) => (
-                <li key={i.id} className="flex items-center justify-between gap-3 px-4 py-3">
-                  <span className="flex items-center gap-3">
+                <li key={i.id} className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
+                  <span className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1">
                     {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img src={i.avatarUrl} alt="" className="h-6 w-6 rounded-full" />
-                    <span className="font-medium">{i.login}</span>
-                    <span className="font-mono text-xs text-ink-quiet">invited {i.createdAt}</span>
+                    <img src={i.avatarUrl} alt="" className="gb-avatar h-7 w-7" />
+                    <span className="font-bold break-all">{i.login}</span>
+                    <span className="gb-meta">invited {i.createdAt}</span>
                   </span>
                   {owner_ && (
                     <form action={cancelAction}>
                       {hidden}
                       <input type="hidden" name="invitation" value={i.id} />
-                      <button className="text-sm text-ink-quiet underline-offset-4 hover:underline">Cancel</button>
+                      <button className="gb-btn small">Cancel</button>
                     </form>
                   )}
                 </li>
@@ -102,51 +108,51 @@ export default async function TeamPage({
         )}
 
         {owner_ ? (
-          <form action={inviteAction} className="mt-10 rounded-lg border border-line bg-surface p-4">
+          <form action={inviteAction} className="gb-card p-4 sm:p-6 mt-12">
             {hidden}
-            <label className="block text-sm font-medium" htmlFor="username">
+            <label className="gb-field-label" htmlFor="username">
               Invite a teammate by their GitHub username
             </label>
-            <div className="mt-2 flex flex-col gap-2 sm:flex-row">
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-end">
               <input
                 id="username"
                 name="username"
                 required
                 maxLength={40}
                 placeholder="their-github-username"
-                className="w-full rounded-lg border border-line bg-ground px-3 py-2"
+                className="gb-input"
               />
-              <button className="shrink-0 rounded-lg bg-ink px-5 py-2 text-sm font-medium text-ground">Invite</button>
+              <button className="gb-btn primary min-h-[48px] shrink-0 sm:min-w-[120px]">Invite</button>
             </div>
-            <p className="mt-2 text-sm text-ink-quiet">
+            <p className="gb-help">
               They can read the base and propose changes. On GitHub&apos;s free plan they could also push a change
               straight to the base without a proposal; GTM Base will flag any change that skipped approval so it can be
               kept or undone.
             </p>
           </form>
         ) : (
-          <p className="mt-10 text-sm text-ink-quiet">Only the owner of this base can invite people.</p>
+          <p className="gb-empty mt-12">Only the owner of this base can invite people.</p>
         )}
 
-        <h2 className="mt-10 font-mono text-xs font-bold uppercase tracking-wider text-ink-quiet">How a teammate joins</h2>
-        <ol className="mt-3 list-decimal space-y-2 pl-5 text-sm text-ink-mid">
+        <h2 className="gb-heading gb-section">How a teammate joins</h2>
+        <ol className="gb-numbered text-ink-mid">
           <li>
             Accept GitHub&apos;s invitation, from the email or at{" "}
-            <a href={`https://github.com/${base.owner}/${base.repo}/invitations`} className="text-source hover:underline">
+            <a href={`https://github.com/${base.owner}/${base.repo}/invitations`} className="gb-link break-all">
               github.com/{base.owner}/{base.repo}/invitations
             </a>
             .
           </li>
           <li>
             Sign in to GTM Base at{" "}
-            <a href={appUrl()} className="text-source hover:underline">
+            <a href={appUrl()} className="gb-link break-all">
               {appUrl().replace(/^https?:\/\//, "")}
             </a>{" "}
             with that GitHub account. The base appears on their home page.
           </li>
           <li>
             To work on it from Claude Code, with the GTM Base plugin installed, say:{" "}
-            <span className="font-mono text-xs text-ink">join a base from a link https://github.com/{base.owner}/{base.repo}</span>.
+            <span className="font-mono text-[14px] break-words text-ink">join a base from a link https://github.com/{base.owner}/{base.repo}</span>.
             Joining from Claude Code arrives with the next plugin release; until then the base is readable here.
           </li>
         </ol>

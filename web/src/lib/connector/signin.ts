@@ -48,9 +48,11 @@ export function backToProduct(
 
 // A plain page for a sign-in that cannot go back to a product.
 export function stoppedPage(message: string, status = 400): Response {
-  const html = `<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>GTM Base</title><body style="font-family:system-ui,sans-serif;max-width:36rem;margin:4rem auto;padding:0 1rem;line-height:1.5"><p>${message
+  // Styled inline from the design tokens in src/app/globals.css: the page's
+  // Content-Security-Policy allows inline styles and nothing else.
+  const html = `<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>GTM Base</title><body style="margin:0;background:#faf9f6;color:#151515;font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;font-size:17px;line-height:1.6"><div style="height:60px;display:flex;align-items:center;gap:10px;padding:0 16px;border-bottom:1.5px solid #151515;font-weight:800;letter-spacing:-0.03em"><svg width="30" height="30" viewBox="0 0 120 120" aria-hidden="true"><rect x="34" y="6" width="80" height="80" fill="#dfe6fb" stroke="#151515" stroke-width="7"/><rect x="20" y="20" width="80" height="80" fill="#9db0ee" stroke="#151515" stroke-width="7"/><rect x="6" y="34" width="80" height="80" fill="#3d63dd" stroke="#151515" stroke-width="7"/></svg>GTM Base</div><main style="max-width:560px;margin:48px auto;padding:0 16px"><p style="margin:0;padding:24px;background:#fff;border:1.5px solid #151515;box-shadow:4px 4px 0 #151515">${message
     .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")}</p></body>`;
+    .replace(/</g, "&lt;")}</p></main></body>`;
   return new Response(html, {
     status,
     headers: {

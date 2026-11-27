@@ -58,42 +58,44 @@ export default async function ProposalPage({
   );
 
   return (
-    <div className="mx-auto max-w-3xl px-4 sm:px-6">
+    <div>
       <Header session={session} />
-      <main className="py-8">
-        <p className="font-mono text-xs text-ink-quiet">
-          <Link href={`/b/${owner}/${repo}`} className="hover:underline">
+      <main className="gb-page">
+        <p className="gb-label-mono break-all">
+          <Link href={`/b/${owner}/${repo}`} className="gb-link-quiet">
             {owner} / {repo}
           </Link>{" "}
           ·{" "}
-          <Link href={`/b/${owner}/${repo}/proposals`} className="hover:underline">
-            Proposals
+          <Link href={`/b/${owner}/${repo}/proposals`} className="gb-link-quiet">
+            <span aria-hidden="true">← </span>Proposals
           </Link>
         </p>
-        <h1 className="mt-1 text-2xl font-bold tracking-[-0.03em]">{proposal.title}</h1>
-        <p className="mt-2 font-mono text-xs text-ink-quiet">
+        <h1 className="gb-h2 mt-2 break-words">{proposal.title}</h1>
+        <p className="gb-meta mt-3">
           #{proposal.number} · proposed by {proposal.author} on {proposal.createdAt} ·{" "}
-          <a href={proposal.htmlUrl} className="hover:underline">
+          <a href={proposal.htmlUrl} className="gb-link-quiet">
             on GitHub
           </a>
         </p>
 
         {problem && PROBLEMS[problem] && (
-          <p className="mt-6 rounded-lg border border-line bg-notice px-4 py-3 text-sm">{PROBLEMS[problem]}</p>
+          <p className="gb-notice problem mt-8" role="alert">
+            {PROBLEMS[problem]}
+          </p>
         )}
 
-        <h2 className="mt-8 font-mono text-xs font-bold uppercase tracking-wider text-ink-quiet">Changes</h2>
-        <ul className="mt-3 divide-y divide-line rounded-lg border border-line bg-surface">
+        <h2 className="gb-heading gb-section">Changes</h2>
+        <ul className="gb-docs">
           {proposal.files.map((file) => (
-            <li key={file.path} className="flex flex-col gap-1 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+            <li key={file.path} className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
               {file.ownedDocument && file.status !== "added" ? (
-                <Link href={docHref(owner, repo, file.path)} className="font-mono text-sm hover:underline">
+                <Link href={docHref(owner, repo, file.path)} className="gb-link-quiet min-w-0 font-mono text-[14px] font-bold break-all">
                   {file.path}
                 </Link>
               ) : (
-                <span className="font-mono text-sm">{file.path}</span>
+                <span className="min-w-0 font-mono text-[14px] font-bold break-all">{file.path}</span>
               )}
-              <span className="font-mono text-xs text-ink-quiet">
+              <span className="gb-meta">
                 {file.status}
                 {file.ownedDocument && (
                   <>
@@ -102,35 +104,37 @@ export default async function ProposalPage({
                     {file.owners.length ? file.owners.join(", ") : "not stated"}
                   </>
                 )}
-                {!file.allowed && <span className="text-resolved"> · cannot come in through an accept</span>}
+                {!file.allowed && <span className="font-bold text-due"> · cannot come in through an accept</span>}
               </span>
             </li>
           ))}
         </ul>
 
-        <h2 className="mt-10 font-mono text-xs font-bold uppercase tracking-wider text-ink-quiet">What the proposal says</h2>
-        <article className="doc mt-3">
+        <h2 className="gb-heading gb-section">What the proposal says</h2>
+        <article className="doc">
           <ReactMarkdown remarkPlugins={[remarkGfm]} disallowedElements={["img"]} unwrapDisallowed>
             {proposal.body}
           </ReactMarkdown>
         </article>
 
         {/* The description is written by the proposer; this is what would actually change. */}
-        <h2 className="mt-10 font-mono text-xs font-bold uppercase tracking-wider text-ink-quiet">
-          What would actually change
-        </h2>
+        <h2 className="gb-heading gb-section">What would actually change</h2>
         {proposal.files
           .filter((f) => f.status !== "renamed away" && f.status !== "copied from")
           .map((file) => (
-            <div key={file.path} className="mt-3 overflow-hidden rounded-lg border border-line">
-              <p className="border-b border-line bg-surface px-3 py-2 font-mono text-xs">{file.path}</p>
+            <div key={file.path} className="gb-card mt-6 overflow-hidden">
+              <p className="border-b-[1.5px] border-ink bg-ground px-3 py-2 font-mono text-[13px] font-bold break-all">{file.path}</p>
               {file.patch ? (
-                <pre className="overflow-x-auto bg-ground p-3 font-mono text-xs leading-5">
+                <pre className="grid grid-cols-[minmax(100%,max-content)] overflow-x-auto bg-surface py-2 font-mono text-[13px] leading-6">
                   {file.patch.split("\n").map((line, i) => (
                     <span
                       key={i}
                       className={
-                        line.startsWith("+") ? "block text-source" : line.startsWith("-") ? "block text-resolved" : "block text-ink-quiet"
+                        line.startsWith("+")
+                          ? "block bg-ok-tint px-3 text-ink"
+                          : line.startsWith("-")
+                            ? "block bg-due-tint px-3 text-ink"
+                            : "block px-3 text-ink-quiet"
                       }
                     >
                       {line || " "}
@@ -138,9 +142,9 @@ export default async function ProposalPage({
                   ))}
                 </pre>
               ) : (
-                <p className="px-3 py-2 text-sm text-ink-quiet">
+                <p className="px-3 py-3 text-[15px] text-ink-mid">
                   GitHub does not show this change inline (too large or not text).{" "}
-                  <a href={`${proposal.htmlUrl}/files`} className="text-source hover:underline">
+                  <a href={`${proposal.htmlUrl}/files`} className="gb-link">
                     Read it on GitHub
                   </a>{" "}
                   before accepting.
@@ -149,60 +153,60 @@ export default async function ProposalPage({
             </div>
           ))}
 
-        <section className="mt-10 rounded-lg border border-line bg-surface p-4">
+        <section className="gb-card gb-card-body mt-12 sm:p-6">
           {blocked === "other-files" ? (
-            <p className="text-sm text-ink-mid">
+            <p className="text-ink-mid">
               This proposal changes files that are not base documents or records (marked above). Those can change how
               GTM Base or Claude Code runs on every teammate&apos;s computer, so they cannot come in through an accept
               here. Review it on GitHub instead.
             </p>
           ) : blocked === "too-large" ? (
-            <p className="text-sm text-ink-mid">
+            <p className="text-ink-mid">
               This proposal changes too many files to check here. Review it on GitHub instead.
             </p>
           ) : email ? (
             <>
-              <p className="text-sm text-ink-mid">
+              <p className="text-ink-mid">
                 You own {owned.length === 1 ? "the document" : "every document"} this proposal changes. Accepting puts
                 the change into the base and records it as your confirmation, as {email}.
               </p>
               <form action={acceptAction} className="mt-4">
                 {hidden}
-                <SubmitButton pendingText="Accepting…" className="rounded-lg bg-ink px-5 py-3 text-sm font-medium text-ground">
+                <SubmitButton pendingText="Accepting…" className="gb-chip go min-w-[120px]">
                   Accept
                 </SubmitButton>
               </form>
             </>
           ) : session.emails.length === 0 ? (
-            <p className="text-sm text-ink-mid">
+            <p className="text-ink-mid">
               To accept, GTM Base needs to see your verified email addresses.{" "}
-              <a href="/api/auth/login" className="font-medium text-source underline-offset-4 hover:underline">
+              <a href="/api/auth/login" className="gb-link">
                 Sign in again
               </a>{" "}
               and allow it.
             </p>
           ) : owned.length === 0 ? (
-            <p className="text-sm text-ink-mid">This proposal changes no document with an owner, so nobody can accept it here.</p>
+            <p className="text-ink-mid">This proposal changes no document with an owner, so nobody can accept it here.</p>
           ) : (
-            <p className="text-sm text-ink-mid">
+            <p className="text-ink-mid">
               Only the owner of {owned.length === 1 ? "this document" : "these documents"} can accept this proposal
               {owners.length > 0 && <> ({owners.join(", ")})</>}. None of your verified GitHub email addresses matches.
             </p>
           )}
 
           {canDiscard && (
-          <form action={discardAction} className="mt-6 border-t border-line pt-4">
+          <form action={discardAction} className="mt-6 border-t border-rule pt-6">
             {hidden}
-            <label className="block text-sm font-medium" htmlFor="reason">
+            <label className="gb-field-label" htmlFor="reason">
               Discard it instead (optional reason, posted on the pull request)
             </label>
             <input
               id="reason"
               name="reason"
               maxLength={500}
-              className="mt-2 w-full rounded-lg border border-line bg-ground px-3 py-2 text-sm"
+              className="gb-input"
             />
-            <SubmitButton pendingText="Discarding…" className="mt-3 rounded-lg border border-line px-4 py-2 text-sm">
+            <SubmitButton pendingText="Discarding…" className="gb-chip mt-4">
               Discard
             </SubmitButton>
           </form>

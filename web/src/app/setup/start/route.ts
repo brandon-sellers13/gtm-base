@@ -30,11 +30,11 @@ export async function POST(request: NextRequest) {
   const action = `https://github.com/settings/apps/new?state=${encodeURIComponent(state)}`;
 
   const html = `<!doctype html><html><head><meta charset="utf-8"><title>Continue to GitHub</title></head>
-<body style="font-family:system-ui;padding:40px">
+<body style="margin:0;padding:48px 16px;background:#faf9f6;color:#151515;font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;font-size:17px;line-height:1.6">
 <form id="f" method="post" action="${action}">
 <input type="hidden" name="manifest" value="${escapeAttribute(manifest)}">
 <p>Taking you to GitHub to create the app.</p>
-<button type="submit">Continue to GitHub</button>
+<button type="submit" style="min-height:44px;padding:12px 18px;border:1.5px solid #151515;background:#3d63dd;color:#fff;font:inherit;font-weight:800;box-shadow:4px 4px 0 #151515;cursor:pointer">Continue to GitHub</button>
 </form>
 <script>document.getElementById("f").submit()</script>
 </body></html>`;

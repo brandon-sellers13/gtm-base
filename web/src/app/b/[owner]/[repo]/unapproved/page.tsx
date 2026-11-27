@@ -38,44 +38,50 @@ export default async function UnapprovedPage({
   const isOwner = await readForPage(() => isBaseOwner(session.token, base.owner, base.repo, session.emails));
 
   return (
-    <div className="mx-auto max-w-3xl px-4 sm:px-6">
+    <div>
       <Header session={session} />
       <CleanUrl />
-      <main className="py-8">
-        <p className="font-mono text-xs text-ink-quiet">
-          <Link href={`/b/${base.owner}/${base.repo}`} className="hover:underline">
+      <main className="gb-page">
+        <p className="gb-label-mono break-all">
+          <Link href={`/b/${base.owner}/${base.repo}`} className="gb-link-quiet">
+            <span aria-hidden="true">← </span>
             {base.owner} / {base.repo}
           </Link>
         </p>
-        <h1 className="mt-1 text-3xl font-bold tracking-[-0.035em]">Changes that skipped approval</h1>
-        <p className="mt-3 text-ink-mid">
+        <h1 className="gb-h2 mt-2">Changes that skipped approval</h1>
+        <p className="gb-lede mt-4">
           These changes went straight into the base instead of coming in as a proposal the owner accepted. Keep each one
           if it is right, or undo it.
         </p>
 
         {notice && NOTICES[notice] && (
-          <p className="mt-6 rounded-lg border border-line bg-notice px-4 py-3 text-sm">{NOTICES[notice]}</p>
+          <p
+            className={`gb-notice mt-8 ${["not-owner", "changed-since", "not-undoable", "base-moved", "failed"].includes(notice) ? "problem" : ""}`}
+            role="status"
+          >
+            {NOTICES[notice]}
+          </p>
         )}
 
         {items.length === 0 ? (
-          <p className="mt-10 rounded-lg border border-dashed border-line px-4 py-3 text-sm text-ink-quiet">
+          <p className="gb-empty mt-10">
             Nothing here. Every recent change to this base came in through an approval.
           </p>
         ) : (
-          <ul className="mt-10 space-y-4">
+          <ul className="mt-10 space-y-6">
             {items.map((item) => (
-              <li key={item.sha} className="rounded-lg border border-line bg-surface p-4">
-                <p className="font-medium">{item.message}</p>
-                <p className="mt-1 font-mono text-xs text-ink-quiet">
+              <li key={item.sha} className="gb-card p-4 sm:p-6">
+                <p className="gb-heading-sm break-words">{item.message}</p>
+                <p className="gb-meta mt-2">
                   {item.author} · {item.date} ·{" "}
                   <a
                     href={`https://github.com/${base.owner}/${base.repo}/commit/${item.sha}`}
-                    className="hover:underline"
+                    className="gb-link-quiet"
                   >
                     {item.sha.slice(0, 7)} on GitHub
                   </a>
                 </p>
-                <ul className="mt-3 space-y-1 font-mono text-xs">
+                <ul className="mt-4 space-y-1 border-t border-rule pt-3 font-mono text-[13px] break-all">
                   {item.files.map((f) => (
                     <li key={f.path}>
                       <span className="text-ink-quiet">{f.status}</span> {f.path}
@@ -83,12 +89,12 @@ export default async function UnapprovedPage({
                   ))}
                 </ul>
                 {isOwner && (
-                  <div className="mt-4 flex flex-wrap gap-2">
+                  <div className="gb-choices mt-5">
                     <form action={keepAction}>
                       <input type="hidden" name="owner" value={base.owner} />
                       <input type="hidden" name="repo" value={base.repo} />
                       <input type="hidden" name="sha" value={item.sha} />
-                      <SubmitButton pendingText="Keeping…" className="rounded-lg border border-line px-4 py-2 text-sm">
+                      <SubmitButton pendingText="Keeping…" className="gb-chip min-w-[96px]">
                         Keep
                       </SubmitButton>
                     </form>
@@ -97,12 +103,12 @@ export default async function UnapprovedPage({
                         <input type="hidden" name="owner" value={base.owner} />
                         <input type="hidden" name="repo" value={base.repo} />
                         <input type="hidden" name="sha" value={item.sha} />
-                        <SubmitButton pendingText="Undoing…" className="rounded-lg bg-ink px-4 py-2 text-sm font-medium text-ground">
+                        <SubmitButton pendingText="Undoing…" className="gb-chip go min-w-[96px]">
                           Undo
                         </SubmitButton>
                       </form>
                     ) : (
-                      <span className="self-center text-sm text-ink-quiet">Undo this one on GitHub.</span>
+                      <span className="self-center text-[15px] text-ink-mid">Undo this one on GitHub.</span>
                     )}
                   </div>
                 )}
@@ -111,7 +117,7 @@ export default async function UnapprovedPage({
           </ul>
         )}
         {!isOwner && items.length > 0 && (
-          <p className="mt-6 text-sm text-ink-quiet">Only the owner of this base can keep or undo these.</p>
+          <p className="gb-empty mt-8">Only the owner of this base can keep or undo these.</p>
         )}
       </main>
     </div>

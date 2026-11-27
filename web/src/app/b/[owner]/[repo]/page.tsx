@@ -22,14 +22,14 @@ export default async function BasePage({ params }: { params: Promise<{ owner: st
   const showGuide = connectorEnabled();
 
   return (
-    <div className="mx-auto max-w-3xl px-4 sm:px-6">
+    <div>
       <Header session={session} />
-      <main className="py-8">
-        <p className="font-mono text-xs text-ink-quiet">
+      <main className="gb-page">
+        <p className="gb-label-mono break-all">
           {base.owner} / {base.repo}
         </p>
-        <h1 className="mt-1 text-3xl font-bold tracking-[-0.035em]">Company base</h1>
-        <p className="mt-3 text-ink-mid">
+        <h1 className="gb-h2 mt-2">Company base</h1>
+        <p className="mt-4 leading-[1.9] text-ink-mid">
           {base.docs.length} documents
           {openChanges.length > 0 && (
             <>
@@ -38,24 +38,24 @@ export default async function BasePage({ params }: { params: Promise<{ owner: st
             </>
           )}{" "}
           ·{" "}
-          <Link href={`/b/${base.owner}/${base.repo}/proposals`} className="font-medium text-source underline-offset-4 hover:underline">
+          <Link href={`/b/${base.owner}/${base.repo}/proposals`} className="gb-link">
             {proposals.length === 0
               ? "No proposals waiting"
               : `${proposals.length} ${proposals.length === 1 ? "proposal" : "proposals"} waiting`}
           </Link>{" "}
           ·{" "}
-          <Link href={`/b/${base.owner}/${base.repo}/team`} className="underline-offset-4 hover:underline">
+          <Link href={`/b/${base.owner}/${base.repo}/team`} className="gb-link-quiet text-ink">
             Team
           </Link>{" "}
           ·{" "}
-          <a href={base.htmlUrl} className="underline-offset-4 hover:underline">
+          <a href={base.htmlUrl} className="gb-link-quiet text-ink">
             Open on GitHub
           </a>
           {showGuide && (
             <>
               {" "}
               ·{" "}
-              <a href="#use-in-chat" className="underline-offset-4 hover:underline">
+              <a href="#use-in-chat" className="gb-link-quiet text-ink">
                 Use in Claude or ChatGPT
               </a>
             </>
@@ -63,31 +63,31 @@ export default async function BasePage({ params }: { params: Promise<{ owner: st
         </p>
 
         {unapproved.length > 0 && (
-          <p className="mt-6 rounded-lg border border-line bg-notice px-4 py-3 text-sm">
+          <p className="gb-notice attention mt-8">
             {unapproved.length === 1 ? "One change" : `${unapproved.length} changes`} went into this base without an
             approval.{" "}
-            <Link href={`/b/${base.owner}/${base.repo}/unapproved`} className="font-medium underline-offset-4 hover:underline">
+            <Link href={`/b/${base.owner}/${base.repo}/unapproved`} className="gb-link">
               Keep or undo {unapproved.length === 1 ? "it" : "them"}
             </Link>
           </p>
         )}
 
         {base.truncated && (
-          <p className="mt-6 rounded-lg border border-line bg-notice px-4 py-3 text-sm">
+          <p className="gb-notice mt-8">
             This repository is too large for GitHub to list in one go, so some documents may be missing below.
           </p>
         )}
 
         {openChanges.length > 0 && (
-          <section className="mt-10">
-            <h2 className="font-mono text-xs font-bold uppercase tracking-wider text-ink-quiet">Open context changes</h2>
-            <ul className="mt-3 divide-y divide-line rounded-lg border border-line bg-surface">
+          <section>
+            <h2 className="gb-heading gb-section">Open context changes</h2>
+            <ul className="gb-docs">
               {openChanges.map((change) => (
-                <li key={change.path} className="px-4 py-3">
-                  <Link href={docHref(base.owner, base.repo, change.path)} className="hover:underline">
+                <li key={change.path}>
+                  <Link href={docHref(base.owner, base.repo, change.path)} className="gb-link-quiet font-bold break-words">
                     {change.summary || change.id}
                   </Link>
-                  <p className="mt-1 font-mono text-xs text-ink-quiet">
+                  <p className="gb-meta mt-1">
                     {change.happenedOn ?? "date not given"} · affects {change.affects.length || "no"}{" "}
                     {change.affects.length === 1 ? "document" : "documents"}
                   </p>
@@ -102,15 +102,13 @@ export default async function BasePage({ params }: { params: Promise<{ owner: st
           // The five CLASS parts always show, so the shape of a base is visible from day one.
           if (docs.length === 0 && (part.key === "other" || part.key === "work")) return null;
           return (
-            <section key={part.key} className="mt-10">
-              <h2 className="font-mono text-xs font-bold uppercase tracking-wider text-ink-quiet">{part.title}</h2>
-              {part.blurb && <p className="mt-1 text-sm text-ink-quiet">{part.blurb}</p>}
+            <section key={part.key}>
+              <h2 className="gb-heading gb-section !mb-0">{part.title}</h2>
+              {part.blurb && <p className="mt-2 text-[15px] text-ink-mid">{part.blurb}</p>}
               {docs.length === 0 ? (
-                <p className="mt-3 rounded-lg border border-dashed border-line px-4 py-3 text-sm text-ink-quiet">
-                  Nothing here yet.
-                </p>
+                <p className="gb-empty mt-4">Nothing here yet.</p>
               ) : (
-              <ul className="mt-3 divide-y divide-line rounded-lg border border-line bg-surface">
+              <ul className="gb-docs mt-4">
                 {docs.map((doc) => (
                   <DocRow key={doc.path} doc={doc} owner={base.owner} repo={base.repo} />
                 ))}
@@ -131,16 +129,16 @@ const CONFIRMED_PARTS = new Set(["context", "access", "skills", "standards"]);
 
 function DocRow({ doc, owner, repo }: { doc: Doc; owner: string; repo: string }) {
   return (
-    <li className="flex flex-col gap-1 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
-      <span className="min-w-0">
-        <Link href={docHref(owner, repo, doc.path)} className="font-medium hover:underline">
+    <li className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
+      <span className="min-w-0 break-words">
+        <Link href={docHref(owner, repo, doc.path)} className="gb-link-quiet font-bold">
           {doc.title}
         </Link>
-        <span className="ml-2 font-mono text-xs text-ink-quiet">{doc.path}</span>
+        <span className="gb-meta ml-2 break-all">{doc.path}</span>
       </span>
-      <span className="flex shrink-0 flex-wrap items-center gap-x-3 gap-y-1 font-mono text-xs text-ink-quiet">
+      <span className="gb-meta flex shrink-0 flex-wrap items-center gap-x-3 gap-y-1">
         {doc.openChanges.length > 0 && (
-          <span className="text-resolved">
+          <span className="gb-tag over">
             {doc.openChanges.length} open {doc.openChanges.length === 1 ? "change" : "changes"}
           </span>
         )}

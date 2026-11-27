@@ -1,63 +1,311 @@
 @import "tailwindcss";
 
-/* GTM Base tokens, from brandkit/approve-palette.json and the one-ink ramp. */
+/*
+ * GTM Base design system: tokens first, then the gb- components, then the
+ * few pieces the app needs that the design system does not define yet.
+ * Source: the GTM Base design system (tokens.json and components/bundle.css).
+ * Every colour, line and shadow is defined once here; change a value here and
+ * every page follows. The system defines a light theme only.
+ */
 :root {
-  --ground: #fafaf8;
+  /* Colour */
+  --ground: #faf9f6;
   --surface: #ffffff;
-  --line: #e8e6e1;
-  --ink: #1a1a1a;
-  --ink-mid: #4a4a4a;
-  --ink-quiet: #6a6a6a;
-  --signal-source: #3d63dd;
-  --signal-resolved: #7c3aed;
-  --notice: #f3f1ec;
-}
+  --band-cool: #e9edf8;
+  --band-warm: #efece5;
+  --ink: #151515;
+  --ink-mid: #45443f;
+  --ink-quiet: #6b6a64;
+  --rule: #d9d6ce;
+  --source: #3d63dd;
+  --source-mid: #9db0ee;
+  --source-tint: #dfe6fb;
+  --resolved: #7c3aed;
+  --resolved-tint: #eee6fd;
+  --ok: #24733a;
+  --ok-tint: #e3f1e6;
+  --due: #8a5a00;
+  --due-tint: #f6ecd6;
+  --on-ink-mid: #c9c6bd;
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --ground: #141414;
-    --surface: #1c1c1c;
-    --line: #2e2d2a;
-    --ink: #edebe6;
-    --ink-mid: #bdb9b1;
-    --ink-quiet: #8a8780;
-    --signal-source: #6f8ff0;
-    --signal-resolved: #a07bf5;
-    --notice: #23221f;
-  }
+  /* Spacing */
+  --space-6: 6px;
+  --space-8: 8px;
+  --space-10: 10px;
+  --space-12: 12px;
+  --space-16: 16px;
+  --space-18: 18px;
+  --space-22: 22px;
+  --space-28: 28px;
+  --space-40: 40px;
+  --space-44: 44px;
+  --space-72: 72px;
+  --band-min: 56px;
+  --band-max: 104px;
+  --content-max: 1200px;
+
+  /* Shape, depth and strokes */
+  --radius-none: 0;
+  --shadow: 4px 4px 0 var(--ink);
+  --shadow-lift: 6px 6px 0 var(--ink);
+  --shadow-press: 1px 1px 0 var(--ink);
+  --shadow-sm: 3px 3px 0 var(--ink);
+  --shadow-xs: 2px 2px 0 var(--ink);
+  --shadow-source: 4px 4px 0 var(--source);
+  --line: 1.5px solid var(--ink);
+  --hairline: 1px solid var(--rule);
+  --hairline-dashed: 1px dashed var(--rule);
+  --focus-ring: 3px solid var(--source);
+
+  /* Type */
+  --font-display: var(--font-dm-sans), "Helvetica Neue", Helvetica, Arial, sans-serif;
+  --font-body: var(--font-dm-sans), "Helvetica Neue", Helvetica, Arial, sans-serif;
+  --font-mono: var(--font-jetbrains-mono), ui-monospace, "SF Mono", Menlo, monospace;
+
+  /*
+   * Derived for the app, not in the design system yet (each is listed as a gap
+   * in the hand-over notes). They are built only from the tokens above.
+   */
+  --page-max: 820px; /* reading width of an app page inside the 1200px wrapper */
+  --gutter: var(--space-16);
+  --target-min: 44px; /* smallest control a finger can hit */
+  --problem: var(--due); /* a failed action: there is no error colour */
+  --problem-tint: var(--due-tint);
+  --control-off-edge: var(--ink-quiet); /* a disabled or busy control */
+  --control-off-fill: var(--band-warm);
+}
+@media (min-width: 760px) {
+  :root { --gutter: var(--space-40); }
 }
 
 @theme inline {
   --color-ground: var(--ground);
   --color-surface: var(--surface);
-  --color-line: var(--line);
+  --color-band-cool: var(--band-cool);
+  --color-band-warm: var(--band-warm);
+  --color-rule: var(--rule);
   --color-ink: var(--ink);
   --color-ink-mid: var(--ink-mid);
   --color-ink-quiet: var(--ink-quiet);
-  --color-source: var(--signal-source);
-  --color-resolved: var(--signal-resolved);
-  --color-notice: var(--notice);
-  --font-sans: var(--font-dm-sans), "Helvetica Neue", Helvetica, Arial, sans-serif;
-  --font-mono: var(--font-jetbrains-mono), ui-monospace, monospace;
+  --color-source: var(--source);
+  --color-source-tint: var(--source-tint);
+  --color-resolved: var(--resolved);
+  --color-resolved-tint: var(--resolved-tint);
+  --color-ok: var(--ok);
+  --color-ok-tint: var(--ok-tint);
+  --color-due: var(--due);
+  --color-due-tint: var(--due-tint);
+  --font-sans: var(--font-body);
+  --font-mono: var(--font-jetbrains-mono), ui-monospace, "SF Mono", Menlo, monospace;
 }
 
 body {
   background: var(--ground);
   color: var(--ink);
+  font-family: var(--font-body);
+  font-size: 17px;
+  line-height: 1.6;
+}
+h1, h2, h3 { text-wrap: balance; }
+
+/* Every control shows the focus ring on keyboard focus. */
+a:focus-visible,
+button:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible,
+summary:focus-visible {
+  outline: var(--focus-ring);
+  outline-offset: 3px;
 }
 
-/* Rendered base documents: plain, readable, no plugin. */
-.doc { line-height: 1.7; }
-.doc h1 { font-size: 1.9rem; font-weight: 700; letter-spacing: -0.035em; line-height: 1.2; margin: 0 0 1rem; }
-.doc h2 { font-size: 1.3rem; font-weight: 700; letter-spacing: -0.02em; margin: 2.2rem 0 0.6rem; }
-.doc h3 { font-size: 1.05rem; font-weight: 700; margin: 1.6rem 0 0.4rem; }
-.doc p, .doc ul, .doc ol, .doc table, .doc blockquote, .doc pre { margin: 0 0 1rem; }
-.doc ul { list-style: disc; padding-left: 1.4rem; }
-.doc ol { list-style: decimal; padding-left: 1.4rem; }
-.doc a { color: var(--signal-source); text-decoration: underline; text-underline-offset: 3px; }
-.doc code { font-family: var(--font-mono); font-size: 0.85em; background: var(--notice); padding: 0.1em 0.3em; border-radius: 4px; }
-.doc pre { background: var(--notice); padding: 0.8rem 1rem; border-radius: 8px; overflow-x: auto; }
-.doc pre code { background: none; padding: 0; }
-.doc blockquote { border-left: 3px solid var(--line); padding-left: 1rem; color: var(--ink-mid); }
-.doc table { border-collapse: collapse; display: block; overflow-x: auto; }
-.doc th, .doc td { border: 1px solid var(--line); padding: 0.35rem 0.6rem; text-align: left; }
+@media (prefers-reduced-motion: reduce) {
+  .gb-btn, .gb-btn:hover, .gb-btn:active, .gb-chip, .gb-chip:hover, .gb-chip:active { transition: none; transform: none; }
+}
+
+@layer components {
+  /* ---- From the design system ---- */
+
+  .gb-mono { font-family: var(--font-mono); font-size: 12.5px; }
+
+  /* Button: plain is surface and ink; primary is the one main action. */
+  .gb-btn {
+    display: inline-flex; align-items: center; justify-content: center; gap: var(--space-28);
+    min-height: var(--target-min); padding: 13px 18px;
+    font-family: var(--font-body); font-weight: 800; font-size: 16px; line-height: 1.2; text-align: center; text-decoration: none;
+    border: var(--line); border-radius: var(--radius-none); background: var(--surface); color: var(--ink);
+    box-shadow: var(--shadow); cursor: pointer;
+    transition: transform .12s ease, box-shadow .12s ease;
+  }
+  .gb-btn:hover:not(:disabled) { transform: translate(-2px, -2px); box-shadow: var(--shadow-lift); }
+  .gb-btn:active:not(:disabled) { transform: translate(2px, 2px); box-shadow: var(--shadow-press); }
+  .gb-btn.primary { background: var(--source); color: var(--surface); }
+  .gb-btn.small { padding: 8px 14px; font-size: 14px; gap: var(--space-10); box-shadow: var(--shadow-sm); }
+
+  /* Tag: one fact about a document's state, carried by its word. */
+  .gb-tag {
+    display: inline-block; padding: 2px 8px; border: 1.5px solid currentColor; white-space: nowrap;
+    font-family: var(--font-mono); font-size: 11.5px; font-weight: 700; line-height: 1.5;
+  }
+  .gb-tag.over { color: var(--resolved); background: var(--resolved-tint); }
+  .gb-tag.ok { color: var(--ok); background: var(--ok-tint); }
+  .gb-tag.due { color: var(--due); background: var(--due-tint); }
+
+  /* Card */
+  .gb-card { background: var(--surface); border: var(--line); box-shadow: var(--shadow); border-radius: var(--radius-none); }
+  .gb-card-head {
+    display: flex; align-items: center; justify-content: space-between; gap: var(--space-12);
+    padding: 10px 14px; border-bottom: var(--line); background: var(--ground);
+    font-weight: 800; font-size: 14px; line-height: 1.4;
+  }
+  .gb-card-head .gb-mono { color: var(--ink-quiet); font-weight: 500; }
+  .gb-card-body { padding: var(--space-16); display: flex; flex-direction: column; gap: var(--space-12); font-size: 15px; line-height: 1.5; }
+  .gb-ask { color: var(--ink-mid); }
+  .gb-ask b { color: var(--ink); font-weight: 700; }
+  .gb-ledger {
+    font-family: var(--font-mono); font-size: 11.5px; color: var(--ink-quiet);
+    border-top: var(--hairline-dashed); padding-top: var(--space-10); overflow-wrap: anywhere;
+  }
+
+  /* Decision flag: only for something a recorded decision has overtaken. */
+  .gb-flag { border: var(--line); background: var(--resolved-tint); padding: 12px 14px; display: flex; flex-direction: column; gap: var(--space-8); }
+  .gb-flag .t { font-weight: 800; color: var(--resolved); }
+  .gb-flag p { color: var(--ink-mid); }
+  .gb-choices { display: flex; flex-wrap: wrap; gap: var(--space-8); }
+  .gb-chip {
+    font-family: var(--font-body); border: var(--line); background: var(--surface); color: var(--ink);
+    padding: 5px 10px; font-weight: 700; font-size: 13px; line-height: 1.3; box-shadow: var(--shadow-xs); cursor: pointer;
+  }
+  .gb-chip.go { background: var(--ink); color: var(--ground); }
+
+  /* Document list */
+  .gb-docs { display: flex; flex-direction: column; border: var(--line); background: var(--surface); }
+  .gb-docs > * { padding: 9px 12px; font-size: 15px; }
+  .gb-docs > * + * { border-top: var(--hairline); }
+  .gb-docs .who { color: var(--ink-quiet); font-size: 13px; }
+
+  /* Proposal fields */
+  .gb-field { display: grid; grid-template-columns: 92px minmax(0, 1fr); gap: var(--space-10); }
+  .gb-field .k {
+    font-family: var(--font-mono); font-size: 11.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em;
+    color: var(--ink-quiet); padding-top: 2px;
+  }
+  .gb-quote { border-left: 3px solid var(--ink); padding-left: var(--space-12); font-style: italic; color: var(--ink-mid); }
+
+  /* Number label: only for a real sequence. */
+  .gb-num {
+    display: inline-grid; place-items: center; width: 28px; height: 28px; border: var(--line); background: var(--surface);
+    box-shadow: var(--shadow-xs); font-family: var(--font-body); font-size: 13px; font-weight: 800; letter-spacing: 0; color: var(--ink);
+  }
+
+  /* Band and text stack */
+  .gb-band { padding: clamp(56px, 8vw, 104px) var(--gutter); border-bottom: var(--line); background: var(--ground); }
+  .gb-band.cool { background: var(--band-cool); }
+  .gb-band.warm { background: var(--band-warm); }
+  .gb-stack { display: flex; flex-direction: column; align-items: flex-start; gap: var(--space-22); max-width: 880px; }
+  .gb-eyebrow { font-weight: 800; font-size: 15px; letter-spacing: -0.01em; }
+  .gb-h1 { font-size: clamp(40px, 6.5vw, 70px); font-weight: 900; letter-spacing: -0.045em; line-height: 1.02; }
+  .gb-h2 { font-size: clamp(32px, 4vw, 50px); font-weight: 850; letter-spacing: -0.04em; line-height: 1.05; }
+  .gb-heading { font-size: 28px; font-weight: 800; letter-spacing: -0.03em; line-height: 1.15; }
+  .gb-heading-sm { font-size: 20px; font-weight: 800; letter-spacing: -0.03em; line-height: 1.15; }
+  .gb-lede { font-size: clamp(18px, 1.6vw, 21px); line-height: 1.6; color: var(--ink-mid); max-width: 36em; }
+  .gb-label-mono {
+    font-family: var(--font-mono); font-size: 11.5px; font-weight: 700; line-height: 1.4;
+    letter-spacing: 0.05em; text-transform: uppercase; color: var(--ink-quiet);
+  }
+  .gb-meta { font-family: var(--font-mono); font-size: 12.5px; font-weight: 500; line-height: 1.5; color: var(--ink-quiet); }
+  .gb-doc-mono { font-family: var(--font-mono); font-size: 13px; font-weight: 700; line-height: 1.4; }
+  .gb-dot { display: inline-block; width: 12px; height: 12px; border: var(--line); background: var(--source); transform: rotate(45deg); flex: none; }
+
+  /* ---- Derived for the app; not in the design system yet ---- */
+
+  /* The page frame and the header bar. */
+  .gb-page { width: min(100% - 2 * var(--gutter), var(--page-max)); margin: 0 auto; padding: var(--space-44) 0 64px; }
+  .gb-header {
+    position: sticky; top: 0; z-index: 10;
+    display: flex; align-items: center; justify-content: space-between; gap: var(--space-16);
+    min-height: 60px; padding: 0 var(--gutter); background: var(--ground); border-bottom: var(--line);
+  }
+
+  /* Text links. */
+  .gb-link {
+    color: var(--source); font-weight: 700;
+    text-decoration: underline; text-decoration-thickness: 1.5px; text-underline-offset: 0.18em;
+  }
+  .gb-link:hover { color: var(--ink); }
+  .gb-link-quiet { text-decoration: underline; text-decoration-color: var(--rule); text-decoration-thickness: 1.5px; text-underline-offset: 0.18em; }
+  .gb-link-quiet:hover { text-decoration-color: currentColor; }
+
+  /* Chips that do something on a page keep a finger-sized target. */
+  .gb-chip { min-height: var(--target-min); padding: 8px 14px; font-size: 14px; transition: transform .12s ease, box-shadow .12s ease; }
+  .gb-chip:hover:not(:disabled) { transform: translate(-2px, -2px); box-shadow: var(--shadow-sm); }
+  .gb-chip:active:not(:disabled) { transform: translate(1px, 1px); box-shadow: none; }
+
+  /* A disabled or busy control drops its shadow. */
+  .gb-btn:disabled, .gb-chip:disabled {
+    border-color: var(--control-off-edge); background: var(--control-off-fill); color: var(--ink-mid);
+    box-shadow: none; cursor: wait;
+  }
+
+  /* Form fields. */
+  .gb-field-label { display: block; font-size: 15px; font-weight: 700; line-height: 1.5; }
+  .gb-input {
+    display: block; width: 100%; min-height: 48px; margin-top: var(--space-8); padding: 10px 14px;
+    border: var(--line); border-radius: var(--radius-none); background: var(--surface); color: var(--ink); font: inherit;
+  }
+  .gb-help { margin-top: var(--space-8); font-size: 13px; line-height: 1.6; color: var(--ink-mid); }
+
+  /* Notices: what happened. A problem: what failed and what to do next. */
+  .gb-notice { border: var(--line); background: var(--surface); padding: 12px 14px; font-size: 15px; line-height: 1.5; }
+  .gb-notice.problem { background: var(--problem-tint); color: var(--ink); font-weight: 700; }
+  .gb-notice.attention { background: var(--due-tint); }
+  /* Source on a tint falls below 4.5:1, so links on tints stay ink. */
+  .gb-notice.attention .gb-link, .gb-notice.problem .gb-link, .gb-flag .gb-link { color: var(--ink); }
+
+  /* Empty states: one sentence on a dashed hairline. */
+  .gb-empty { border-top: var(--hairline-dashed); padding-top: var(--space-12); font-size: 15px; color: var(--ink-mid); }
+
+  /* Square avatars. */
+  .gb-avatar { flex: none; border: var(--line); background: var(--band-warm); }
+
+  .gb-section { margin-top: 56px; margin-bottom: var(--space-16); }
+
+  /* Ordered steps marked with number boxes. */
+  .gb-numbered { counter-reset: gb-step; display: flex; flex-direction: column; gap: var(--space-16); }
+  .gb-numbered > li { counter-increment: gb-step; position: relative; min-height: 28px; padding-left: 40px; }
+  .gb-numbered > li::before {
+    content: counter(gb-step); position: absolute; left: 0; top: 0;
+    display: inline-grid; place-items: center; width: 28px; height: 28px;
+    border: var(--line); background: var(--surface); box-shadow: var(--shadow-xs);
+    font-size: 13px; font-weight: 800; color: var(--ink);
+  }
+}
+
+/* Rendered base documents and proposal descriptions. */
+.doc { max-width: 680px; font-size: 17px; line-height: 1.7; overflow-wrap: break-word; }
+.doc > :first-child { margin-top: 0; }
+.doc h1 { font-size: clamp(26px, 3vw, 34px); font-weight: 850; letter-spacing: -0.035em; line-height: 1.1; margin: 44px 0 14px; }
+.doc h2 { font-size: clamp(22px, 2.6vw, 28px); font-weight: 800; letter-spacing: -0.03em; line-height: 1.15; margin: 40px 0 12px; }
+.doc h3 { font-size: 20px; font-weight: 800; letter-spacing: -0.03em; line-height: 1.15; margin: 28px 0 8px; }
+.doc h4 { font-size: 17px; font-weight: 800; margin: 22px 0 8px; }
+.doc p, .doc ul, .doc ol, .doc table, .doc blockquote, .doc pre { margin: 0 0 18px; }
+.doc ul { list-style: square; padding-left: 1.4em; }
+.doc ol { list-style: decimal; padding-left: 1.4em; }
+.doc li + li { margin-top: 6px; }
+.doc a { color: var(--source); font-weight: 700; text-decoration: underline; text-decoration-thickness: 1.5px; text-underline-offset: 0.18em; }
+.doc a:hover { color: var(--ink); }
+.doc strong { font-weight: 700; }
+.doc hr { border: 0; border-top: var(--hairline); margin: 32px 0; }
+.doc code { font-family: var(--font-mono); font-size: 0.82em; background: var(--band-warm); padding: 0.1em 0.3em; }
+.doc pre { background: var(--ground); border: var(--line); padding: 12px 14px; overflow-x: auto; font-size: 13px; line-height: 1.6; }
+.doc pre code { background: none; padding: 0; font-size: 13px; }
+.doc blockquote { border-left: 3px solid var(--ink); padding-left: var(--space-12); font-style: italic; color: var(--ink-mid); }
+.doc table {
+  display: block; max-width: 100%; overflow-x: auto; border-collapse: collapse;
+  border: var(--line); box-shadow: var(--shadow); background: var(--surface); font-size: 15px; line-height: 1.5;
+}
+.doc th {
+  background: var(--ground); border-bottom: var(--line); padding: 10px 14px; text-align: left; white-space: nowrap;
+  font-family: var(--font-mono); font-size: 11.5px; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase; color: var(--ink-quiet);
+}
+.doc td { padding: 10px 14px; border-top: var(--hairline); vertical-align: top; }
