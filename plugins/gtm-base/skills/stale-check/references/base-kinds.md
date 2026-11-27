@@ -146,6 +146,13 @@ company, and the inventory counts them rather than naming them.
 ## Skills (`skill`)
 
 The written instructions for one job that uses the base. Kept at
-`skills/<job>/SKILL.md`. The skills folder stays closed until the
-company-skills brainstorm is signed and Plan 1's Unit 4.2b opens it, so for
-now the inventory only counts what is there.
+`skills/<job>/SKILL.md`. A skill reaches the base only through GTM Base's own
+install, which needs the creator's yes and the base owner's or an
+administrator's, and the inventory counts what is there.
+
+GTM Base comes with one skill, drift grade, which checks a piece of marketing
+work against the customer profile, the positioning and, when the base holds
+them, the messaging, the voice guide, the competitors and the buyer
+personas. The inventory offers it once a base holds a customer profile and a
+positioning and does not have it yet. It is installed with its standard,
+`standards/drift-grade.md`, and the base owns both from then on.

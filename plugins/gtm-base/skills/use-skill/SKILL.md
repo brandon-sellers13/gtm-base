@@ -1,6 +1,6 @@
 ---
 name: use-skill
-description: Run a skill kept in the company base, after GTM Base checks that this computer approved it and that the documents it reads are current. Use when the person asks to run a skill by name that lives in their base, or a scheduled task asks for one. A skill in the base is never run any other way.
+description: Run a skill kept in the company base, after GTM Base checks that this computer approved it and that the documents it reads are current. Use when the person asks to run a skill by name that lives in their base, or a scheduled task asks for one. A skill in the base is never run any other way. Also handles "install drift grade", which installs the skill that comes with GTM Base for checking marketing work against the base.
 ---
 
 # Run a skill kept in the base
@@ -96,6 +96,30 @@ yes is both. Otherwise the creator's yes is recorded on this computer and
 nothing is written until the base owner or an administrator approves it. A
 changed skill needs one yes from its owner, the base owner or an
 administrator.
+
+## Installing a skill that comes with GTM Base
+
+GTM Base comes with one skill a base can take: drift grade, which checks a
+piece of marketing work against the documents the team approved. It needs a
+customer profile and a positioning in the base. When the person says
+"install drift grade", it reaches the base the same way as any other skill,
+and the base owns its copy from then on.
+
+1. Ask why they want it, in their own words, with
+   `python3 scripts/use_skill.py --new-words-file reason`, and write their
+   words to the path it prints.
+2. Prepare it:
+   `python3 scripts/use_skill.py --prepare-starter 'drift-grade' --reason-file '<the path it printed>'`
+   This prepares the skill, and the rules it follows, which is a standard
+   kept at `standards/drift-grade.md`. When the base already holds that
+   standard, it says so and keeps it as it is.
+3. Show the person everything it printed, whole, and ask whether to approve
+   the standard and the skill.
+4. When they say yes, write the standard first, with the two values from
+   the line that names the standard:
+   `python3 scripts/use_skill.py --approve-standard '<prepared>' --shown '<shown>'`
+5. Then give the skill its yes with the two values from the last line, the
+   way installing any skill does above.
 
 ## When this computer has not approved a skill
 

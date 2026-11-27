@@ -1903,7 +1903,7 @@ All ten decisions made on 2026-11-27. No review per unit; the end-to-end run in 
 - [x] T4.2. Messaging and voice, adopted or drafted.
 - [x] T4.3. Buyer personas and product.
 - [x] T4.6. The source map for any company.
-- [ ] T4.8. Drift grade, the first skill on a base. (waits on Plan 1's 3.1 and 4.2b)
+- [x] T4.8. Drift grade, the first skill on a base. (waits on Plan 1's 3.1 and 4.2b)
 - [ ] T4.4. Competitors.
 - [ ] T4.5. Design.
 - [ ] T4.7. Update GTM Base.

@@ -45,7 +45,7 @@ if _lib not in sys.path:
 
 import argparse  # noqa: E402
 
-from gtmbase import machine, moment, paths, runner, skill_install, wordsfile  # noqa: E402
+from gtmbase import machine, moment, operations, paths, runner, skill_install, starter, wordsfile  # noqa: E402
 from gtmbase.errors import GtmBaseError  # noqa: E402
 
 EXIT_DONE = 0
@@ -82,6 +82,14 @@ def build_parser():
         "--approve-install", metavar="PREPARED", help="give one yes to a prepared skill"
     )
     actions.add_argument(
+        "--prepare-starter",
+        metavar="SKILL",
+        help="prepare a skill GTM Base ships, and its standard when the base has none, to be shown",
+    )
+    actions.add_argument(
+        "--approve-standard", metavar="PREPARED", help="write the standard that was shown with a shipped skill"
+    )
+    actions.add_argument(
         "--show", metavar="SKILL", help="show who approved a skill this computer does not trust yet"
     )
     actions.add_argument(
@@ -91,9 +99,13 @@ def build_parser():
         "--from", dest="source_folder", help="with --prepare-install: the folder the skill is written in"
     )
     parser.add_argument(
-        "--reason-file", help="with --prepare-install: a file this script handed out, holding why"
+        "--reason-file",
+        help="with --prepare-install or --prepare-starter: a file this script handed out, holding why",
     )
-    parser.add_argument("--shown", help="with --approve-install or --accept: the value the showing printed")
+    parser.add_argument(
+        "--shown",
+        help="with --approve-install, --approve-standard or --accept: the value the showing printed",
+    )
     parser.add_argument(
         runner.UNATTENDED_WORD,
         dest="unattended",
@@ -121,6 +133,7 @@ def main(argv=None):
     if not (
         options.start or options.finish or options.check or options.incomplete
         or options.new_words_file or options.prepare_install or options.approve_install
+        or options.prepare_starter or options.approve_standard
         or options.show or options.accept
     ):
         build_parser().print_help()
@@ -191,6 +204,44 @@ def main(argv=None):
             "[for the assistant] prepared=%s shown=%s\n" % (prepared.prepared_id, prepared.shown)
         )
         return EXIT_DONE
+
+    if options.prepare_starter:
+        if not options.reason_file:
+            build_parser().print_help()
+            return EXIT_ERROR
+        claim = wordsfile.claim_words(options.reason_file, base_id)
+        if claim is None:
+            sys.stdout.write(wordsfile.NOT_OURS + "\n")
+            return EXIT_REFUSED
+        try:
+            prepared = starter.prepare(root, base_id, options.prepare_starter, claim.text)
+        except GtmBaseError as failure:
+            wordsfile.release_words(claim)
+            sys.stdout.write(str(failure) + "\n")
+            return EXIT_REFUSED
+        wordsfile.consume_claim(claim)
+        if prepared.standard is None:
+            sys.stdout.write(starter.STANDARD_KEPT + "\n")
+        else:
+            sys.stdout.write(moment.fenced(prepared.standard.artifact) + "\n")
+            sys.stdout.write(
+                "[for the assistant] standard-prepared=%s standard-shown=%s\n"
+                % (prepared.standard.prepared_id, prepared.standard.shown)
+            )
+        sys.stdout.write(moment.fenced(prepared.skill.artifact) + "\n")
+        sys.stdout.write(
+            "[for the assistant] prepared=%s shown=%s\n"
+            % (prepared.skill.prepared_id, prepared.skill.shown)
+        )
+        return EXIT_DONE
+
+    if options.approve_standard:
+        done = operations.approve(
+            root, base_id, options.approve_standard, options.shown or "",
+            kind=operations.KIND_CREATE,
+        )
+        sys.stdout.write(done.sentence + "\n")
+        return EXIT_DONE if done.done else EXIT_REFUSED
 
     if options.approve_install:
         done = skill_install.approve(root, base_id, options.approve_install, options.shown or "")
