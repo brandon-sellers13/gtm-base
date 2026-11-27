@@ -16,6 +16,8 @@ from unittest import mock
 
 import support
 
+from gtmbase.errors import ValidationError
+
 from gtmbase import (
     approve_local,
     compose_proposal,
@@ -126,16 +128,15 @@ class TestWhoOwnsTheDocumentIsReadFromTheSavedVersion(unittest.TestCase):
                 .replace("owner: %s" % OWNER, "owner: %s" % TEAMMATE)
                 .replace("Companies of any size.", "Companies the teammate likes."),
             )
-            staged = compose_proposal.stage_local_edit(
-                root, base_id, HAND_EDIT_SOURCE, runner=runner, now=TODAY
-            )
-
-            shown = approve_local.show(
-                staged, root, base_id, runner=runner, now=TODAY
-            )
-
-            self.assertEqual(approve_local.STATUS_REFUSED, shown.status)
-            self.assertIn(approve_local.CODE_NOT_AN_OWNER, shown.codes)
+            # Since Plan 1's Unit 4.2a an owner line changes only through its
+            # own operation (CS15), so the edit is refused before anything is
+            # prepared, which is earlier than the approval that refused it
+            # before and makes nobody an owner either.
+            with self.assertRaises(ValidationError) as refused:
+                compose_proposal.stage_local_edit(
+                    root, base_id, HAND_EDIT_SOURCE, runner=runner, now=TODAY
+                )
+            self.assertEqual(compose_proposal.CODE_LOCAL_SETTINGS, refused.exception.code)
 
     def test_the_real_owner_can_still_approve_their_own_hand_edit(self):
         with support.Sandbox() as sandbox:

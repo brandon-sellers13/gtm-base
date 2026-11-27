@@ -47,6 +47,7 @@ import argparse  # noqa: E402
 
 from gtmbase import (  # noqa: E402
     changes,
+    inventory,
     machine,
     moment,
     paths,
@@ -121,6 +122,11 @@ def build_parser():
         "--report",
         action="store_true",
         help="show the four numbers for the last four weeks",
+    )
+    parser.add_argument(
+        "--inventory",
+        action="store_true",
+        help="say what the base holds and what it is missing, for each business",
     )
     parser.add_argument(
         "--review",
@@ -389,6 +395,31 @@ def record_a_change(options, resolution):
     return EXIT_DONE
 
 
+def print_inventory(resolution):
+    """What the base holds against the list of kinds, read only (Plan 1, Unit 2.1).
+
+    The table carries the names the map gives each business, which somebody
+    typed, so the whole table is held apart as data. Every sentence around it
+    is fixed and filled only with counts.
+    """
+    try:
+        found = inventory.take(resolution.root, resolution.base_id)
+    except GtmBaseError as failure:
+        sys.stderr.write(str(failure) + "\n")
+        return EXIT_REFUSED
+    except Exception:
+        sys.stderr.write(WENT_WRONG + "\n")
+        return EXIT_ERROR
+    sys.stdout.write(inventory.PURPOSE + "\n")
+    sys.stdout.write(moment.fenced(found.table()) + "\n")
+    for sentence in found.sentences():
+        sys.stdout.write(sentence + "\n")
+    asked = found.ask()
+    if asked:
+        sys.stdout.write(asked + "\n")
+    return EXIT_DONE
+
+
 def _item_for(result, sentence):
     """The item one sentence of the review came from, when it came from one."""
     for item in result.review:
@@ -473,6 +504,9 @@ def main(argv=None):
             return EXIT_REFUSED
         sys.stdout.write(report.render_summary(summary) + "\n")
         return EXIT_DONE
+
+    if options.inventory:
+        return print_inventory(resolution)
 
     if options.check_move:
         # Read only. It opens files and writes none, so it is the one thing

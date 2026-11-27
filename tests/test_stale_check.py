@@ -432,10 +432,22 @@ class TestADecisionWrittenDownLate(unittest.TestCase):
             self.assertEqual([], staged_for(result))
 
     def test_the_confirmation_only_counts_from_the_person_who_owns_the_file(self):
+        """Since Plan 1's Unit 4.2a: from someone in its authority set (CS3).
+
+        The base owner may confirm any document, so here the map names
+        somebody else as the base owner, and the address that confirms holds
+        no role in this document at all.
+        """
         with support.Sandbox() as sandbox:
             base = BaseFixture(sandbox)
             base.add_entry()
             base.write(ICP, context_text("icp", owner="someone@example.com"))
+            base.write(
+                constants.MAP_PATH,
+                support.read(os.path.join(base.root, constants.MAP_PATH)).replace(
+                    "owner: owner@example.com", "owner: boss@example.com", 1
+                ),
+            )
             base.save("a new owner", push=True)
             base.confirm(ICP, FRIDAY)
 
