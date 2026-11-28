@@ -12,6 +12,7 @@ import { acceptAction, discardAction } from "./actions";
 
 const PROBLEMS: Record<string, string> = {
   "not-owner": "Only the owner of every document this proposal changes can accept it.",
+  "not-owner-confirmation": "Only the base's owner can accept a teammate's confirmation.",
   "not-mergeable":
     "GitHub cannot merge this proposal as it stands, usually because the base changed in the same place. Ask for the change to be proposed again.",
   "base-moved": "The base changed a moment ago. Reload the page and accept again.",
@@ -48,6 +49,8 @@ export default async function ProposalPage({
   const canDiscard = mayDiscard(proposal, session.login, session.emails);
   const owned = proposal.files.filter((f) => f.ownedDocument);
   const owners = [...new Set(owned.flatMap((f) => f.owners))];
+  const confirmation = proposal.kind === "confirmation";
+  const shownProblem = problem === "not-owner" && confirmation ? "not-owner-confirmation" : problem;
   const hidden = (
     <>
       <input type="hidden" name="owner" value={owner} />
@@ -78,9 +81,17 @@ export default async function ProposalPage({
           </a>
         </p>
 
-        {problem && PROBLEMS[problem] && (
+        {shownProblem && PROBLEMS[shownProblem] && (
           <p className="gb-notice problem mt-8" role="alert">
-            {PROBLEMS[problem]}
+            {PROBLEMS[shownProblem]}
+          </p>
+        )}
+
+        {confirmation && (
+          <p className="gb-ask mt-8">
+            This is {proposal.author}&apos;s confirmation that a document is still right, sent for review because only
+            the base&apos;s owner adds changes to the shared copy. It counts as their confirmation only if they own that
+            document.
           </p>
         )}
 
@@ -170,6 +181,19 @@ export default async function ProposalPage({
             <p className="text-ink-mid">
               This proposal changes too many files to check here. Review it on GitHub instead.
             </p>
+          ) : email && confirmation ? (
+            <>
+              <p className="text-ink-mid">
+                You are the base&apos;s owner, so you can accept it, as {email}. Accepting adds the confirmation to the
+                base as {proposal.author}&apos;s, not yours.
+              </p>
+              <form action={acceptAction} className="mt-4">
+                {hidden}
+                <SubmitButton pendingText="Accepting…" className="gb-chip go min-w-[120px]">
+                  Accept
+                </SubmitButton>
+              </form>
+            </>
           ) : email ? (
             <>
               <p className="text-ink-mid">
@@ -190,6 +214,11 @@ export default async function ProposalPage({
                 Sign in again
               </a>{" "}
               and allow it.
+            </p>
+          ) : confirmation ? (
+            <p className="text-ink-mid">
+              Only the base&apos;s owner can accept a teammate&apos;s confirmation. None of your verified GitHub email
+              addresses is the base owner&apos;s.
             </p>
           ) : owned.length === 0 ? (
             <p className="text-ink-mid">This proposal changes no document with an owner, so nobody can accept it here.</p>

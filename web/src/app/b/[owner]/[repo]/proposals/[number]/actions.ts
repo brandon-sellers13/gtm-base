@@ -23,8 +23,9 @@ export async function acceptAction(formData: FormData) {
   const { owner, repo, number } = target(formData);
   const page = `/b/${owner}/${repo}/proposals/${number}`;
   let problem: string | null = null;
+  let kind = "proposal";
   try {
-    await acceptProposal({
+    kind = await acceptProposal({
       token: session.token,
       owner,
       repo,
@@ -42,7 +43,8 @@ export async function acceptAction(formData: FormData) {
   // A closed proposal has no page of its own any more, so say so on the list.
   if (problem === "gone") redirect(`/b/${owner}/${repo}/proposals?notice=gone&number=${number}`);
   if (problem) redirect(`${page}?problem=${problem}`);
-  redirect(`/b/${owner}/${repo}/proposals?notice=accepted&number=${number}`);
+  const notice = kind === "confirmation" ? "accepted-confirmation" : "accepted";
+  redirect(`/b/${owner}/${repo}/proposals?notice=${notice}&number=${number}`);
 }
 
 export async function discardAction(formData: FormData) {

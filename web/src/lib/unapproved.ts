@@ -1,5 +1,6 @@
 import "server-only";
 import { api, GitHubError } from "./github";
+import { CONFIRMATION_BRANCH } from "./proposals";
 import { frontMatter, validRepo } from "./reader";
 import { baseOwnerEmails } from "./team";
 
@@ -18,6 +19,8 @@ import { baseOwnerEmails } from "./team";
 //   the repository existed, or in its first two minutes, which covers GitHub's
 //   first commit and the app's template commit);
 // - confirmation lines only, written by the owner of the document they confirm;
+// - the merge of a teammate's confirmation review, confirmation lines only,
+//   accepted by the base's owner;
 // - a keep or undo: a commit updating the review record, written by the base's
 //   owner as the base stood just before it;
 // - already answered (kept or undone) in that record.
@@ -136,7 +139,7 @@ export async function listUnapproved(token: string, owner: string, repo: string)
 
   const [listed, closed, review] = await Promise.all([
     api<ListedCommit[]>(`/repos/${owner}/${repo}/commits?sha=${encodeURIComponent(branch)}&per_page=100`, { token }),
-    api<{ merged_at: string | null; merge_commit_sha: string | null; body: string | null }[]>(
+    api<{ merged_at: string | null; merge_commit_sha: string | null; body: string | null; head: { ref: string } }[]>(
       `/repos/${owner}/${repo}/pulls?state=closed&per_page=100`,
       { token },
     ),
@@ -145,6 +148,13 @@ export async function listUnapproved(token: string, owner: string, repo: string)
 
   const accepted = new Set(
     closed.filter((p) => p.merged_at && p.merge_commit_sha && MARKER.test(p.body ?? "")).map((p) => p.merge_commit_sha!),
+  );
+  // A teammate's confirmation, raised for review on a branch of its own and
+  // accepted by the base's owner, who need not own the document it confirms.
+  const acceptedConfirmations = new Set(
+    closed
+      .filter((p) => p.merged_at && p.merge_commit_sha && CONFIRMATION_BRANCH.test(p.head?.ref ?? ""))
+      .map((p) => p.merge_commit_sha!),
   );
   const done = answered(review.text);
 
@@ -169,12 +179,17 @@ export async function listUnapproved(token: string, owner: string, repo: string)
     const files = commit.files ?? [];
     if (files.length === 0) continue;
     const proposalMerge = accepted.has(commit.sha);
+    const confirmationMerge = acceptedConfirmations.has(commit.sha);
     const bookkeeping = files.every((f) => BOOKKEEPING(f.filename));
     // A keep or an undo: it updates the review record and the base's owner wrote it.
     const reviewAction = files.some((f) => f.filename === REVIEW_FILE);
     if (reviewAction && (await authoredByBaseOwner(token, owner, repo, commit))) continue;
     // An accepted proposal or bookkeeping counts only when an owner wrote it.
     if ((proposalMerge || bookkeeping) && (await authoredByOwner(token, owner, repo, commit))) continue;
+    // An accepted confirmation review brings in confirmation lines only, and the
+    // base's owner accepted it. Each line still counts only for the teammate
+    // whose commit added it, and only if they own that document.
+    if (confirmationMerge && bookkeeping && (await authoredByBaseOwner(token, owner, repo, commit))) continue;
     flagged.push(commit);
   }
 
