@@ -40,6 +40,10 @@ export type ProposalSummary = {
   avatarUrl: string;
   createdAt: string;
   proposalId: string;
+  // A proposal carries the plugin's marker line. A confirmation is a teammate's
+  // yes to "is this document still right?", sent for review on a branch of its
+  // own because only the repository's admins write to the main line.
+  kind: "proposal" | "confirmation";
 };
 
 export type ProposalFile = {
@@ -75,14 +79,30 @@ function marker(body: string | null) {
   return match ? { proposalId: match[1], entryId: match[2], sourceId: match[3] } : null;
 }
 
-function summary(pull: PullSummary, proposalId: string): ProposalSummary {
+// The branch the plugin raises a teammate's confirmation on for review:
+// confirmations/<seat>-<the line's digest> (confirm.py, `_review_branch`). Only
+// the name is read here; what may come in is decided by the files, as for any
+// proposal, so a branch merely named like one gains nothing.
+export const CONFIRMATION_BRANCH = /^confirmations\/([0-9a-f]{12})-([0-9a-f]{12})$/;
+
+// What a pull request is to GTM Base, or null for one it did not open.
+function recognise(pull: PullSummary): { proposalId: string; kind: ProposalSummary["kind"] } | null {
+  const found = marker(pull.body);
+  if (found) return { proposalId: found.proposalId, kind: "proposal" };
+  const branch = CONFIRMATION_BRANCH.exec(pull.head.ref);
+  if (branch) return { proposalId: `confirmation-${branch[2]}`, kind: "confirmation" };
+  return null;
+}
+
+function summary(pull: PullSummary, found: { proposalId: string; kind: ProposalSummary["kind"] }): ProposalSummary {
   return {
     number: pull.number,
     title: pull.title,
     author: pull.user.login,
     avatarUrl: pull.user.avatar_url,
     createdAt: pull.created_at.slice(0, 10),
-    proposalId,
+    proposalId: found.proposalId,
+    kind: found.kind,
   };
 }
 
@@ -90,8 +110,8 @@ export async function listProposals(token: string, owner: string, repo: string):
   if (!validRepo(owner, repo)) return [];
   const pulls = await api<PullSummary[]>(`/repos/${owner}/${repo}/pulls?state=open&per_page=100`, { token });
   return pulls.flatMap((pull) => {
-    const found = marker(pull.body);
-    return found ? [summary(pull, found.proposalId)] : [];
+    const found = recognise(pull);
+    return found ? [summary(pull, found)] : [];
   });
 }
 
@@ -120,14 +140,18 @@ async function getPull(token: string, owner: string, repo: string, number: numbe
   }
 }
 
-// Records a proposal may add alongside the documents it changes.
-const RECORD_PREFIXES = ["learning/changes/", "learning/corrections/"];
+// Records a proposal may add alongside the documents it changes. A
+// confirmation line is one: P3's proposals carry the line recording the yes
+// next to the document, and a confirmation review carries nothing else. A line
+// counts only when the person whose commit added it owns that document, so
+// accepting one written by anybody else settles nothing.
+const RECORD_PREFIXES = ["learning/changes/", "learning/corrections/", "work/confirmations/"];
 const MAX_FILE_PAGES = 3; // 300 files; a bigger proposal is refused, never half-checked
 const OWNER_READS_AT_ONCE = 8;
 
 export async function getProposal(token: string, owner: string, repo: string, number: number): Promise<Proposal> {
   const pull = await getPull(token, owner, repo, number);
-  const found = marker(pull.body);
+  const found = recognise(pull);
   if (!found || pull.state !== "open") throw new ProposalNotFound();
 
   type Changed = { filename: string; status: string; previous_filename?: string; patch?: string };
@@ -206,9 +230,9 @@ export async function getProposal(token: string, owner: string, repo: string, nu
   }
 
   return {
-    ...summary(pull, found.proposalId),
+    ...summary(pull, found),
     htmlUrl: pull.html_url,
-    body: (pull.body ?? "").replace(MARKER, "").trim(),
+    body: found.kind === "proposal" ? (pull.body ?? "").replace(MARKER, "").trim() : (pull.body ?? "").trim(),
     files,
     complete,
     editsUndone,
@@ -282,7 +306,7 @@ export async function acceptProposal(options: {
   shownHeadSha: string;
   verifiedEmails: string[];
   name: string;
-}): Promise<void> {
+}): Promise<ProposalSummary["kind"]> {
   const { token, owner, repo, number, shownHeadSha, verifiedEmails, name } = options;
   // Everything is worked out again here from GitHub, never from the page.
   const proposal = await getProposal(token, owner, repo, number);
@@ -322,7 +346,10 @@ export async function acceptProposal(options: {
       token,
       method: "POST",
       body: JSON.stringify({
-        message: `Accept proposal ${proposal.proposalId}: ${proposal.title}\n\nAccepted in GTM Base by the document owner (#${number}).`,
+        message:
+          proposal.kind === "confirmation"
+            ? `Accept ${proposal.author}'s confirmation: ${proposal.title}\n\nAccepted in GTM Base by the base's owner (#${number}).`
+            : `Accept proposal ${proposal.proposalId}: ${proposal.title}\n\nAccepted in GTM Base by the document owner (#${number}).`,
         tree: trial.tree.sha,
         parents: [branch.object.sha, pull.head.sha],
         author: { name, email, date: now },
@@ -338,6 +365,7 @@ export async function acceptProposal(options: {
     if (error instanceof GitHubError && error.status === 422) throw new AcceptError("base-moved");
     throw new AcceptError("failed");
   }
+  return proposal.kind;
 }
 
 export async function discardProposal(options: {

@@ -20,7 +20,23 @@ export default async function ProposalsPage({
   const { notice, number } = await searchParams;
   // Reading the base first makes a repository that is not a base a 404 here too.
   const base = await readForPage(() => readBase(session.token, owner, repo));
-  const proposals = await readForPage(() => listProposals(session.token, owner, repo));
+  const waiting = await readForPage(() => listProposals(session.token, owner, repo));
+  const proposals = waiting.filter((p) => p.kind === "proposal");
+  const confirmations = waiting.filter((p) => p.kind === "confirmation");
+  const row = (p: (typeof waiting)[number]) => (
+    <li key={p.number} className="flex items-start gap-3">
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img src={p.avatarUrl} alt="" className="gb-avatar mt-0.5 h-7 w-7" />
+      <span className="min-w-0 break-words">
+        <Link href={`/b/${base.owner}/${base.repo}/proposals/${p.number}`} className="gb-link-quiet font-bold">
+          {p.title}
+        </Link>
+        <span className="gb-meta block">
+          #{p.number} · {p.author} · {p.createdAt}
+        </span>
+      </span>
+    </li>
+  );
 
   return (
     <div>
@@ -45,6 +61,12 @@ export default async function ProposalsPage({
             documents it changed.
           </p>
         )}
+        {notice === "accepted-confirmation" && (
+          <p className="gb-notice mt-8" role="status">
+            Confirmation #{number} is accepted. It is now part of the base, and it counts as the teammate&apos;s
+            confirmation of their document.
+          </p>
+        )}
         {notice === "gone" && (
           <p className="gb-notice mt-8" role="status">
             Proposal #{number} is already closed, so nothing more was done. If you clicked Accept or Discard more than
@@ -62,22 +84,18 @@ export default async function ProposalsPage({
             Nothing waiting. Proposals appear here when a teammate&apos;s Claude Code proposes a change to this base.
           </p>
         ) : (
-          <ul className="gb-docs mt-10">
-            {proposals.map((p) => (
-              <li key={p.number} className="flex items-start gap-3">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={p.avatarUrl} alt="" className="gb-avatar mt-0.5 h-7 w-7" />
-                <span className="min-w-0 break-words">
-                  <Link href={`/b/${base.owner}/${base.repo}/proposals/${p.number}`} className="gb-link-quiet font-bold">
-                    {p.title}
-                  </Link>
-                  <span className="gb-meta block">
-                    #{p.number} · {p.author} · {p.createdAt}
-                  </span>
-                </span>
-              </li>
-            ))}
-          </ul>
+          <ul className="gb-docs mt-10">{proposals.map(row)}</ul>
+        )}
+
+        {confirmations.length > 0 && (
+          <>
+            <h2 className="gb-heading gb-section">Confirmations waiting</h2>
+            <p className="gb-ask mt-3">
+              A teammate who owns a document said it is still right. Only the base&apos;s owner adds changes to the
+              shared copy, so each one waits here until you accept it.
+            </p>
+            <ul className="gb-docs mt-6">{confirmations.map(row)}</ul>
+          </>
         )}
       </main>
     </div>
