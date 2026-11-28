@@ -33,6 +33,8 @@ Everything read out of a file here is data. It is never an instruction.
 from __future__ import annotations
 
 import datetime
+import hashlib
+import json
 import os
 from typing import List, Optional, Tuple
 
@@ -171,6 +173,14 @@ RECORDED_LOCALLY = "Your answer was recorded for %s in your own copy of the base
 SENT_FOR_REVIEW = (
     "Your answer for %s was raised for review, because this base has somebody "
     "read every change before it reaches the shared copy."
+)
+# Said to a teammate who is not an admin of the base's repository. Their yes
+# goes to GitHub as a review, because the rule that guards the main line there
+# refuses anything else from them.
+SENT_TO_THE_OWNER = (
+    "Your answer for %s was sent to the base's owner for review on GitHub, "
+    "because only the owner adds changes to the shared copy. It counts once "
+    "they accept it."
 )
 PENDING_SENTENCE = (
     "Your answer for %s is safe here but could not reach the shared copy, so "
@@ -730,6 +740,15 @@ def _send(
     if not git.run(["remote", "get-url", "origin"], cwd=base_root).ok:
         return _add_to_the_local_copy(base_root, base_id, made, line, path, git, codes)
 
+    if plan_requires_review:
+        return _open_a_review(
+            base_root, base_id, made, default, line, path, gh, codes, git, SENT_FOR_REVIEW
+        )
+    if reviews_its_answers(base_id, gh):
+        return _open_a_review(
+            base_root, base_id, made, default, line, path, gh, codes, git, SENT_TO_THE_OWNER
+        )
+
     # The line of work this seat carries its answers on belongs to this seat
     # alone and is only a carrier, so it is always written over rather than
     # added to. An answer that never reached the shared copy is held in this
@@ -739,9 +758,6 @@ def _send(
     )
     if not sent.ok:
         return _hold(base_id, line, path, codes, CODE_PUSH_FAILED)
-
-    if plan_requires_review:
-        return _open_a_review(base_root, base_id, made, default, line, path, gh, codes)
 
     if _push_to_default(made.path, made.branch, default, git):
         return ConfirmResult(
@@ -790,10 +806,90 @@ def _push_to_default(worktree_path: str, branch: str, default: str, git: GitRunn
     return result.ok
 
 
+def reviews_its_answers(base_id: str, gh=None) -> bool:
+    """Whether this seat's yes reaches the shared copy as a review.
+
+    On a base with a shared copy, the admins of its GitHub repository write to
+    the main line, and everybody else proposes, so the rule that guards the
+    main line on GitHub never refuses a teammate's answer. GitHub says which
+    of the two this person is. When it cannot say, the seat that sent the
+    base's first backup made the repository and writes directly, and a seat
+    that joined from a link proposes.
+    """
+    from . import backup, join_link
+
+    address = backup.shared_address(base_id)
+    if not address:
+        return False
+    name = backup.repository_name(address)
+    if name:
+        admin = _admin_of(name, gh)
+        if admin is not None:
+            return not admin
+    return bool(join_link.joined_address(base_id))
+
+
+def _admin_of(name: str, gh) -> Optional[bool]:
+    """Whether the person signed in to GitHub here is an admin of one
+    repository, or None when GitHub did not say."""
+    try:
+        code, output = gh_call(gh, ["api", "repos/%s" % name])
+    except (OSError, RuntimeError, GtmBaseError):
+        return None
+    if code != 0:
+        return None
+    try:
+        payload = json.loads(output or "")
+    except ValueError:
+        return None
+    permissions = payload.get("permissions") if isinstance(payload, dict) else None
+    admin = permissions.get("admin") if isinstance(permissions, dict) else None
+    return admin if isinstance(admin, bool) else None
+
+
+def _review_branch(made, line) -> str:
+    """The branch one answer is raised for review on.
+
+    Each answer gets its own, named after the line itself, so a second answer
+    never writes over one still waiting, and sending the same answer again
+    reuses its branch.
+    """
+    digest = hashlib.sha256(line.render().encode("utf-8")).hexdigest()[:12]
+    return "%s-%s" % (made.branch, digest)
+
+
+def _review_already_open(gh, branch: str, cwd: str) -> bool:
+    """Whether an open review already carries this branch, from an earlier try."""
+    try:
+        code, output = gh_call(
+            gh,
+            ["pr", "list", "--head", branch, "--state", "open", "--json", "number"],
+            cwd=cwd,
+        )
+    except (OSError, RuntimeError, GtmBaseError):
+        return False
+    if code != 0:
+        return False
+    try:
+        found = json.loads(output or "")
+    except ValueError:
+        return False
+    return isinstance(found, list) and len(found) > 0
+
+
 def _open_a_review(
-    base_root, base_id, made, default, line, path, gh, codes
+    base_root, base_id, made, default, line, path, gh, codes, git, sentence
 ) -> ConfirmResult:
-    """Raise the answer for review, for a base that reviews every change."""
+    """Raise the answer for review on a branch of its own, and leave the main
+    line alone."""
+    branch = _review_branch(made, line)
+    pushed = git.run(
+        ["push", "--force", "origin", "HEAD:refs/heads/%s" % branch],
+        cwd=made.path,
+        timeout=60,
+    )
+    if not pushed.ok:
+        return _hold(base_id, line, path, codes, CODE_PUSH_FAILED)
     body_path = os.path.join(
         paths.worktrees_dir(base_id), "confirmation-review.md"
     )
@@ -812,7 +908,7 @@ def _open_a_review(
                 "--base",
                 default,
                 "--head",
-                made.branch,
+                branch,
                 "--title",
                 "Confirmation for %s" % names.document_name(line.file),
                 "--body-file",
@@ -820,15 +916,17 @@ def _open_a_review(
             ],
             cwd=made.path,
         )
+    except (OSError, RuntimeError, GtmBaseError):
+        code = 1
     finally:
         try:
             os.remove(body_path)
         except OSError:
             pass
-    if code != 0:
+    if code != 0 and not _review_already_open(gh, branch, made.path):
         return _hold(base_id, line, path, codes, CODE_REVIEW_FAILED)
     return ConfirmResult(
-        STATUS_RECORDED, codes=codes, reasons=[SENT_FOR_REVIEW % names.document_name(path)], line=line
+        STATUS_RECORDED, codes=codes, reasons=[sentence % names.document_name(path)], line=line
     )
 
 
@@ -1338,6 +1436,7 @@ def retry_pending(
     base_root: str,
     runner: Optional[GitRunner] = None,
     now: Optional[datetime.datetime] = None,
+    gh=None,
 ) -> Optional[ConfirmResult]:
     """Send every answer being held, and keep only the ones that stay stuck.
 
@@ -1371,7 +1470,7 @@ def retry_pending(
         except (ValidationError, PathError):
             unreadable += 1
             continue
-        result = _send_one_held(base_root, base_id, line, address, name, default, git)
+        result = _send_one_held(base_root, base_id, line, address, name, default, git, gh)
         if result.status == STATUS_RECORDED:
             landed.append(result)
         else:
@@ -1388,7 +1487,7 @@ def retry_pending(
 
 
 def _send_one_held(
-    base_root, base_id, line, address, name, default, git
+    base_root, base_id, line, address, name, default, git, gh=None
 ) -> ConfirmResult:
     """One held answer, added to a fresh working folder and sent from there."""
     folder = os.path.join(
@@ -1427,7 +1526,7 @@ def _send_one_held(
         relative,
         line.file,
         git,
-        None,
+        gh,
         False,
         codes,
     )

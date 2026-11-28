@@ -204,22 +204,23 @@ function reviewLine(fields: Record<string, string>) {
     .join(" ")}\n`;
 }
 
-async function commitOnTop(
+type TreeItem = { path: string; mode: string; type: string; sha?: string | null; content?: string };
+
+async function makeCommit(
   token: string,
   owner: string,
   repo: string,
-  branch: string,
-  tipSha: string,
-  tree: { path: string; mode: string; type: string; sha?: string | null; content?: string }[],
+  parentSha: string,
+  tree: TreeItem[],
   message: string,
   author: { name: string; email: string },
 ): Promise<string> {
   const path = `/repos/${owner}/${repo}`;
-  const tip = await api<{ tree: { sha: string } }>(`${path}/git/commits/${tipSha}`, { token });
+  const parent = await api<{ tree: { sha: string } }>(`${path}/git/commits/${parentSha}`, { token });
   const newTree = await api<{ sha: string }>(`${path}/git/trees`, {
     token,
     method: "POST",
-    body: JSON.stringify({ base_tree: tip.tree.sha, tree }),
+    body: JSON.stringify({ base_tree: parent.tree.sha, tree }),
   });
   const commit = await api<{ sha: string }>(`${path}/git/commits`, {
     token,
@@ -227,24 +228,94 @@ async function commitOnTop(
     body: JSON.stringify({
       message,
       tree: newTree.sha,
-      parents: [tipSha],
+      parents: [parentSha],
       // Signed with the owner's own address, so the record holds up under the
       // same rule as everything else: bookkeeping counts when an owner wrote it.
       author: { ...author, date: new Date().toISOString() },
     }),
   });
+  return commit.sha;
+}
+
+async function moveBranch(token: string, owner: string, repo: string, branch: string, sha: string) {
   try {
     // Not forced: if the branch moved in the meantime, nothing lands.
-    await api(`${path}/git/refs/heads/${encodeURIComponent(branch)}`, {
+    await api(`/repos/${owner}/${repo}/git/refs/heads/${encodeURIComponent(branch)}`, {
       token,
       method: "PATCH",
-      body: JSON.stringify({ sha: commit.sha, force: false }),
+      body: JSON.stringify({ sha, force: false }),
     });
   } catch (error) {
     if (error instanceof GitHubError && error.status === 422) throw new ReviewError("base-moved");
     throw error;
   }
-  return commit.sha;
+}
+
+async function commitOnTop(
+  token: string,
+  owner: string,
+  repo: string,
+  branch: string,
+  tipSha: string,
+  tree: TreeItem[],
+  message: string,
+  author: { name: string; email: string },
+): Promise<string> {
+  const sha = await makeCommit(token, owner, repo, tipSha, tree, message, author);
+  await moveBranch(token, owner, repo, branch, sha);
+  return sha;
+}
+
+// A change the base's owner makes from the app itself, kept at once: the change,
+// then the line in the review record that keeps it, landed together. So it is
+// never listed as a change that skipped approval. Only the base's owner may, as
+// for keep and undo, worked out again from GitHub here.
+export async function commitKeptByOwner(options: {
+  token: string;
+  owner: string;
+  repo: string;
+  files: { path: string; content: string }[];
+  message: string;
+  login: string;
+  emails: string[];
+}) {
+  const { token, owner, repo, files, message, login, emails } = options;
+  const owners = await baseOwnerEmails(token, owner, repo);
+  const email = emails.map((e) => e.toLowerCase()).find((e) => owners.includes(e));
+  if (!email) throw new ReviewError("not-owner");
+  const info = await api<{ default_branch: string }>(`/repos/${owner}/${repo}`, { token });
+  const branch = info.default_branch;
+  const tip = await api<{ object: { sha: string } }>(`/repos/${owner}/${repo}/git/ref/heads/${encodeURIComponent(branch)}`, {
+    token,
+  });
+  const review = await readReviewFile(token, owner, repo, tip.object.sha);
+  const author = { name: login, email };
+  const change = await makeCommit(
+    token,
+    owner,
+    repo,
+    tip.object.sha,
+    files.map((f) => ({ path: f.path, mode: "100644", type: "blob", content: f.content })),
+    message,
+    author,
+  );
+  const kept = await makeCommit(
+    token,
+    owner,
+    repo,
+    change,
+    [
+      {
+        path: REVIEW_FILE,
+        mode: "100644",
+        type: "blob",
+        content: (review.text || REVIEW_HEADER) + reviewLine({ sha: change, answer: "kept", by: login }),
+      },
+    ],
+    `Keep the owner's own change: ${message.split("\n")[0].slice(0, 60)}\n\nKept in GTM Base by ${login}.`,
+    author,
+  );
+  await moveBranch(token, owner, repo, branch, kept);
 }
 
 async function prepare(token: string, owner: string, repo: string, sha: string, emails: string[]) {

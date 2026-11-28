@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- On a base a team shares, a teammate's yes to "is this document still right?" now goes to the base's owner as a review on GitHub, on a branch of its own, instead of straight to the shared copy's main line, which GitHub refuses from anyone but the repository's admins once the main line is protected. GTM Base asks GitHub whether the person is an admin of the base's repository; when GitHub cannot say, a seat that joined from a link sends a review and the seat that sent the base's first backup writes directly, as before. A second answer never writes over one still waiting, and an answer held for later is sent the same way. The owner's own answers still go straight to the main line.
+
 ## 0.6.0 (2026-11-27)
 
 ### who may approve a company skill

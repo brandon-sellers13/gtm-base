@@ -2,6 +2,7 @@
 
 import { redirect } from "next/navigation";
 import { GitHubError } from "@/lib/github";
+import { nameOwnerInCodeOwners } from "@/lib/codeOwners";
 import { applyMainRule } from "@/lib/mainRule";
 import { cancelInvitation, invite, isBaseOwner, TeamError } from "@/lib/team";
 import { currentSession } from "@/lib/session";
@@ -49,6 +50,23 @@ export async function protectAction(formData: FormData) {
     } else {
       const state = await applyMainRule(session.token, owner, repo);
       outcome = state === "on" ? "protected" : `rule-${state}`;
+      // With the rule on, a proposal needs a code owner's approval, so the
+      // owner is named in CODEOWNERS wherever the template's placeholder is.
+      if (state === "on") {
+        try {
+          const named = await nameOwnerInCodeOwners({
+            token: session.token,
+            owner,
+            repo,
+            login: session.login,
+            emails: session.emails,
+          });
+          if (named === "named") outcome = "protected-owner-named";
+        } catch (error) {
+          if (error instanceof GitHubError && error.status === 401) throw error;
+          outcome = "protected-owner-not-named";
+        }
+      }
     }
   } catch (error) {
     if (error instanceof GitHubError && error.status === 401) redirect("/api/auth/expired");
