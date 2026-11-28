@@ -1,8 +1,14 @@
 # Changelog
 
-## Unreleased
+## 0.6.1 (2026-11-27)
+
+### a teammate's confirmations on a shared base
 
 - On a base a team shares, a teammate's yes to "is this document still right?" now goes to the base's owner as a review on GitHub, on a branch of its own, instead of straight to the shared copy's main line, which GitHub refuses from anyone but the repository's admins once the main line is protected. GTM Base asks GitHub whether the person is an admin of the base's repository; when GitHub cannot say, a seat that joined from a link sends a review and the seat that sent the base's first backup writes directly, as before. A second answer never writes over one still waiting, and an answer held for later is sent the same way. The owner's own answers still go straight to the main line.
+
+### the check on GitHub commands
+
+- A GitHub command that accepts a proposal or writes to a repository is now read against the folder it really runs in. 0.6.0 read the repository it was aimed at from the folder the session was in and ignored a `cd` in front of it. So `cd <an ordinary repository> && gh pr merge` typed from a folder that is no repository was refused as though it reached a base everyone shares, and the same line typed from an ordinary repository and moving into a base was let through. Now a leading `cd` moves a GitHub command exactly as it moves git: the command is read against that folder's own remotes, an ordinary repository is left alone, and a base's shared copy is still refused. A command whose repository cannot be worked out from `-R`, an API path or that folder is still refused. A file a GitHub command takes its text from is looked for in that folder too.
 
 ## 0.6.0 (2026-11-27)
 

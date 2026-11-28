@@ -14,6 +14,7 @@ repositories, and the stand-in GitHub tool in tests/fakes records every call.
 
 import json
 import os
+import shlex
 import subprocess
 import sys
 import unittest
@@ -493,6 +494,43 @@ class TestTheSecondSecurityReview(ReviewCase):
             "gh api -X POST some/other/path -f q='mutation { mergePullRequest(input: {}) { x } }'",
         ):
             self.assertEqual(refused, self.check(command, cwd=self.elsewhere), command)
+
+
+class TestTheFolderAGitHubCommandRunsIn(ReviewCase):
+    """A leading `cd` moves a GitHub command as it moves git (the 0.6.1 fix).
+
+    0.6.0 read the repository a `gh` write was aimed at from the folder the
+    session was in, so `cd <an ordinary repository> && gh pr merge` typed from
+    a folder that is no repository was refused as aimed at a shared base.
+    """
+
+    def setUp(self):
+        super(TestTheFolderAGitHubCommandRunsIn, self).setUp()
+        self.elsewhere = os.path.join(self.box.path, "not-a-repository")
+        os.makedirs(self.elsewhere)
+        self.project = os.path.join(self.box.path, "other-project")
+        os.makedirs(self.project)
+        git(["init", "-q", "-b", "main"], cwd=self.project)
+        git(["remote", "add", "origin", "https://github.com/someone/other-project"], cwd=self.project)
+        self.refused = self.said(self.gate.REASON_SHARED_LINE)
+
+    def test_an_ordinary_repository_through_a_leading_cd_is_allowed(self):
+        moved = "cd %s && gh pr merge 44 --squash" % shlex.quote(self.project)
+        self.assertIsNone(self.check(moved, cwd=self.elsewhere))
+        self.assertIsNone(self.check("cd other-project && gh pr merge 44 --squash", cwd=self.box.path))
+
+    def test_an_ordinary_repository_in_the_sessions_own_folder_is_allowed(self):
+        self.assertIsNone(self.check("gh pr merge 44 --squash", cwd=self.project))
+
+    def test_a_base_through_a_leading_cd_is_still_refused(self):
+        moved = "cd %s && gh pr merge 12 --merge" % shlex.quote(self.root)
+        self.assertEqual(self.refused, self.check(moved, cwd=self.elsewhere))
+        self.assertEqual(self.refused, self.check(moved, cwd=self.project))
+
+    def test_a_folder_that_is_no_repository_with_no_repository_named_is_still_refused(self):
+        self.assertEqual(self.refused, self.check("gh pr merge 12", cwd=self.elsewhere))
+        moved = "cd %s && gh pr merge 12" % shlex.quote(self.elsewhere)
+        self.assertEqual(self.refused, self.check(moved, cwd=self.project))
 
 
 if __name__ == "__main__":
