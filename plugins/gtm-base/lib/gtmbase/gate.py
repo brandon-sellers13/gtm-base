@@ -612,8 +612,8 @@ class Classification(object):
     """What one command line turned out to be."""
 
     __slots__ = (
-        "deny_reason", "deny_word", "pushes", "gh_writes", "has_gh", "has_git",
-        "config_edits",
+        "deny_reason", "deny_word", "pushes", "gh_writes", "gh_folders", "has_gh",
+        "has_git", "config_edits",
     )
 
     def __init__(self):
@@ -622,6 +622,11 @@ class Classification(object):
         self.deny_word: Optional[str] = None
         self.pushes: List[PushSpec] = []
         self.gh_writes: List[List[str]] = []
+        # The folder each GitHub write runs in, in the same order: where the
+        # command line had moved to by then, or None for the folder it was
+        # typed in. The GitHub tool reads the repository from that folder's
+        # own remotes, so the check does too (the 0.6.1 fix).
+        self.gh_folders: List[Optional[str]] = []
         self.has_gh = False
         self.has_git = False
         # The folders a `git config --edit` would open the settings of. Only a
@@ -1415,8 +1420,15 @@ def _gh_targets_a_shared_copy(tokens: Sequence[str], cwd: str, git: GitRunner) -
     return bool(remotes & recorded) or shared_line_is_held(cwd, git)
 
 
-def _classify_gh(tokens: List[str], result: Classification) -> None:
+def _classify_gh(
+    tokens: List[str], result: Classification, folder: Optional[str] = None
+) -> None:
     result.has_gh = True
+
+    def write():
+        result.gh_writes.append(list(tokens))
+        result.gh_folders.append(folder)
+
     words = _gh_words(tokens)
     if not words:
         return
@@ -1427,16 +1439,16 @@ def _classify_gh(tokens: List[str], result: Classification) -> None:
             result.deny(REASON_DENIED_COMMAND)
             return
     if pair in constants.GH_GATED_WRITES or pair == constants.GH_MERGE:
-        result.gh_writes.append(list(tokens))
+        write()
         return
     if words[0] == "api" and _gh_api_is_a_write(tokens[1:]):
-        result.gh_writes.append(list(tokens))
+        write()
         return
     if pair == ("repo", "create") and (
         "--push" in tokens or "--source" in tokens
         or any(token.startswith("--source=") for token in tokens)
     ):
-        result.gh_writes.append(list(tokens))
+        write()
         result.pushes.append(PushSpec(source="gh-repo-create"))
         return
 
@@ -1510,7 +1522,7 @@ def _classify_segment(
         if word == "git":
             _classify_git(tokens, result, directory, folder)
         else:
-            _classify_gh(tokens, result)
+            _classify_gh(tokens, result, folder.path)
         return
     if strict and not _is_inert(tokens):
         result.deny(REASON_STRICT_UNKNOWN, word)
@@ -1521,6 +1533,7 @@ def _merge(result: Classification, other: Classification) -> None:
         result.deny(other.deny_reason, other.deny_word)
     result.pushes.extend(other.pushes)
     result.gh_writes.extend(other.gh_writes)
+    result.gh_folders.extend(other.gh_folders)
     result.has_gh = result.has_gh or other.has_gh
     result.has_git = result.has_git or other.has_git
     result.config_edits.extend(other.config_edits)
@@ -2352,20 +2365,40 @@ def folder_is_in_scope(folder: str, runner: Optional[GitRunner] = None) -> bool:
     return False
 
 
+def gh_write_folders(result: Classification, cwd: str) -> List[str]:
+    """The folder each GitHub write runs in, as a whole path.
+
+    A leading `cd` moves a GitHub command exactly as it moves git, so a write
+    is read against the folder the command line had moved to, and the folder
+    it was typed in otherwise.
+    """
+    folders = list(result.gh_folders)
+    folders += [None] * (len(result.gh_writes) - len(folders))
+    found = []
+    for folder in folders[: len(result.gh_writes)]:
+        if not folder:
+            found.append(cwd)
+        elif os.path.isabs(folder) or not cwd:
+            found.append(os.path.normpath(folder))
+        else:
+            found.append(os.path.normpath(os.path.join(cwd, folder)))
+    return found
+
+
 def _scope_by_folder(result: Classification, cwd: str, runner: Optional[GitRunner]):
     """For every folder this command would send from, whether the gate reads it.
 
-    A GitHub command names no folder of its own, so it is read against the
-    folder the command was typed in, which is also the folder the file holding
-    its text is looked for in.
+    A GitHub command is read against the folder it runs in, which is also
+    the folder the file holding its text is looked for in.
     """
     answers = {}
     for push in result.pushes:
         folder = push.directory or push.folder or cwd
         if folder not in answers:
             answers[folder] = folder_is_in_scope(folder, runner)
-    if result.gh_writes and cwd not in answers:
-        answers[cwd] = folder_is_in_scope(cwd, runner)
+    for folder in gh_write_folders(result, cwd):
+        if folder not in answers:
+            answers[folder] = folder_is_in_scope(folder, runner)
     return answers
 
 
@@ -2463,9 +2496,9 @@ def check_command(
     # checks on a push never see it (the security review of P2 and P3,
     # finding 1). Refused when it is aimed at a base's shared copy, wherever it
     # is typed (the second review, finding 2).
-    for tokens in result.gh_writes:
+    for tokens, folder in zip(result.gh_writes, gh_write_folders(result, cwd)):
         if _gh_reaches_the_shared_copy(tokens) and _gh_targets_a_shared_copy(
-            tokens, cwd, runner
+            tokens, folder, runner
         ):
             return sentence_for(REASON_SHARED_LINE)
 
@@ -2515,12 +2548,12 @@ def check_command(
         if hits:
             return hits[0].sentence()
 
-        for tokens in result.gh_writes:
+        for tokens, folder in zip(result.gh_writes, gh_write_folders(result, cwd)):
             files, from_stdin = body_files(tokens)
             if from_stdin:
                 return sentence_for(REASON_STDIN_BODY)
             for name in files:
-                path = name if os.path.isabs(name) else os.path.join(cwd, name)
+                path = name if os.path.isabs(name) else os.path.join(folder, name)
                 text = None
                 try:
                     with open(path, encoding="utf-8", errors="replace") as handle:
