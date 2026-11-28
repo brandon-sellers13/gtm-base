@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.6.2 (2026-11-27)
 
 ### the check on GitHub commands
 
