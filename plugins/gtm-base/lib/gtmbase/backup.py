@@ -123,6 +123,15 @@ def parse_address(text: str) -> str:
     return "https://github.com/%s/%s.git" % (match.group("owner"), match.group("repo"))
 
 
+def repository_name(address: str) -> Optional[str]:
+    """The owner and name of the GitHub repository at one address, as
+    "owner/name", or None for anything that is not one."""
+    match = _ADDRESS_RE.match((address or "").strip())
+    if not match:
+        return None
+    return "%s/%s" % (match.group("owner"), match.group("repo"))
+
+
 def _same_place(one: Optional[str], other: Optional[str]) -> bool:
     try:
         return bool(one and other) and ids.canonical_remote_address(one) == ids.canonical_remote_address(other)

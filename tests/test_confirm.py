@@ -22,6 +22,7 @@ from gtmbase import (
     formats,
     ids,
     install_git_hook,
+    names,
     stale,
     state,
     worktree,
@@ -981,10 +982,204 @@ class TestABaseThatReviewsEveryChange(unittest.TestCase):
             self.assertEqual(before, support.show(base.remote, "main", constants.MAP_PATH))
             with self.assertRaises(AssertionError):
                 support.show(base.remote, "main", confirmations_file())
-            branch = constants.CONFIRMATIONS_BRANCH_PREFIX + worktree.seat_short_id(
-                base.root, base.base_id, runner=git_runner()
-            )
+            branch = review_branch_of(gh)
+            self.assertTrue(branch.startswith(carrier_branch(base)))
             self.assertIn(ICP, support.show(base.remote, branch, confirmations_file()))
+
+
+# --- A teammate's answer on a base with a shared copy ------------------------
+
+SHARED = "https://github.com/example/base.git"
+
+
+def carrier_branch(base):
+    return constants.CONFIRMATIONS_BRANCH_PREFIX + worktree.seat_short_id(
+        base.root, base.base_id, runner=git_runner()
+    )
+
+
+def review_branch_of(gh, which=-1):
+    created = gh.created()[which]
+    return created[created.index("--head") + 1]
+
+
+class GitHubSays(support.RecordingGh):
+    """A stand-in for GitHub that also says whether this person is an admin of
+    the base's repository: True, False, or None for an answer that says
+    nothing."""
+
+    def __init__(self, admin=None, fail_create=False, **options):
+        super(GitHubSays, self).__init__(**options)
+        self.admin = admin
+        self.fail_create = fail_create
+
+    def __call__(self, args, cwd=None, stdin=None):
+        arguments = [str(argument) for argument in args]
+        if arguments[:1] == ["api"]:
+            self.calls.append(arguments)
+            if self.admin is None:
+                return 1, ""
+            return 0, '{"permissions": {"admin": %s, "push": true}}' % (
+                "true" if self.admin else "false"
+            )
+        if arguments[:2] == ["pr", "create"] and self.fail_create:
+            self.calls.append(arguments)
+            return 1, ""
+        return super(GitHubSays, self).__call__(args, cwd, stdin)
+
+
+def joined(base):
+    state.update_seat(
+        base.base_id,
+        joined_from={"address": SHARED, "joined_at": "2026-06-01T00:00:00Z"},
+    )
+
+
+def backed_up_from_here(base):
+    state.update_seat(
+        base.base_id,
+        first_backup={"address": SHARED, "sent_at": "2026-06-01T00:00:00Z"},
+    )
+
+
+class TestATeammatesAnswer(unittest.TestCase):
+    """Only the repository's admins write to the main line; a teammate's yes is
+    a review, so the rule that guards the main line on GitHub never refuses it.
+    """
+
+    def assert_main_untouched(self, base):
+        with self.assertRaises(AssertionError):
+            support.show(base.remote, "main", confirmations_file())
+
+    def test_a_teammate_who_is_not_an_admin_sends_a_review(self):
+        with support.Sandbox() as sandbox:
+            base = builders.BaseFixture(sandbox)
+            base.add_entry()
+            joined(base)
+            question = ask(base)
+            gh = GitHubSays(admin=False)
+
+            result = answer(base, question, "yes", gh=gh)
+
+            self.assertEqual(confirm.STATUS_RECORDED, result.status, result.reasons)
+            self.assertEqual(
+                confirm.SENT_TO_THE_OWNER % names.document_name(ICP),
+                result.reasons[0],
+            )
+            self.assertIn(["api", "repos/example/base"], gh.calls)
+            self.assertEqual(1, len(gh.created()))
+            self.assert_main_untouched(base)
+            branch = review_branch_of(gh)
+            self.assertIn(ICP, support.show(base.remote, branch, confirmations_file()))
+
+    def test_the_owner_on_a_second_computer_still_writes_to_the_main_line(self):
+        with support.Sandbox() as sandbox:
+            base = builders.BaseFixture(sandbox)
+            base.add_entry()
+            joined(base)
+            question = ask(base)
+            gh = GitHubSays(admin=True)
+
+            result = answer(base, question, "yes", gh=gh)
+
+            self.assertEqual(confirm.RECORDED % names.document_name(ICP), result.reasons[0])
+            self.assertEqual([], gh.created())
+            self.assertIn(ICP, shared_file(base))
+
+    def test_the_seat_that_sent_the_first_backup_writes_directly_when_github_is_silent(self):
+        with support.Sandbox() as sandbox:
+            base = builders.BaseFixture(sandbox)
+            base.add_entry()
+            backed_up_from_here(base)
+            question = ask(base)
+            gh = GitHubSays(admin=None)
+
+            result = answer(base, question, "yes", gh=gh)
+
+            self.assertEqual(confirm.RECORDED % names.document_name(ICP), result.reasons[0])
+            self.assertEqual([], gh.created())
+            self.assertIn(ICP, shared_file(base))
+
+    def test_a_joined_seat_sends_a_review_when_github_is_silent(self):
+        with support.Sandbox() as sandbox:
+            base = builders.BaseFixture(sandbox)
+            base.add_entry()
+            joined(base)
+            question = ask(base)
+            gh = GitHubSays(admin=None)
+
+            result = answer(base, question, "yes", gh=gh)
+
+            self.assertEqual(confirm.STATUS_RECORDED, result.status, result.reasons)
+            self.assertEqual(1, len(gh.created()))
+            self.assert_main_untouched(base)
+
+    def test_a_base_with_no_shared_copy_recorded_never_asks_github(self):
+        with support.Sandbox() as sandbox:
+            base = builders.BaseFixture(sandbox)
+            base.add_entry()
+            question = ask(base)
+            gh = GitHubSays(admin=False)
+
+            result = answer(base, question, "yes", gh=gh)
+
+            self.assertEqual(confirm.RECORDED % names.document_name(ICP), result.reasons[0])
+            self.assertEqual([], gh.calls)
+
+    def test_a_second_answer_never_writes_over_one_still_waiting(self):
+        with support.Sandbox() as sandbox:
+            base = builders.BaseFixture(sandbox)
+            base.add_entry()
+            joined(base)
+            gh = GitHubSays(admin=False)
+
+            first = answer(base, ask(base), "yes", gh=gh)
+            second = answer(base, ask(base, path=POSITIONING), "yes", gh=gh)
+
+            self.assertEqual(confirm.STATUS_RECORDED, first.status, first.reasons)
+            self.assertEqual(confirm.STATUS_RECORDED, second.status, second.reasons)
+            one, two = review_branch_of(gh, 0), review_branch_of(gh, 1)
+            self.assertNotEqual(one, two)
+            self.assertIn(ICP, support.show(base.remote, one, confirmations_file()))
+            self.assertIn(
+                POSITIONING,
+                support.show(base.remote, two, confirmations_file(POSITIONING)),
+            )
+
+    def test_a_review_github_already_has_counts_as_sent(self):
+        with support.Sandbox() as sandbox:
+            base = builders.BaseFixture(sandbox)
+            base.add_entry()
+            joined(base)
+            question = ask(base)
+            gh = GitHubSays(admin=False, fail_create=True, head=[{"number": 7}])
+
+            result = answer(base, question, "yes", gh=gh)
+
+            self.assertEqual(confirm.STATUS_RECORDED, result.status, result.reasons)
+            seat, _problems = state.load_seat(base.base_id)
+            self.assertFalse(seat.get("pending_confirmations"))
+
+    def test_a_held_answer_from_a_teammate_is_sent_as_a_review_later(self):
+        with support.Sandbox() as sandbox:
+            base = builders.BaseFixture(sandbox)
+            base.add_entry()
+            joined(base)
+            question = ask(base)
+            failing = GitHubSays(admin=False, fail_create=True)
+
+            held = answer(base, question, "yes", gh=failing)
+
+            self.assertEqual(confirm.STATUS_PENDING, held.status, held.reasons)
+            self.assertIn(confirm.CODE_REVIEW_FAILED, held.codes)
+            gh = GitHubSays(admin=False)
+            sent = confirm.retry_pending(base.base_id, base.root, runner=git_runner(), gh=gh)
+
+            self.assertEqual(confirm.STATUS_RECORDED, sent.status, sent.reasons)
+            self.assertEqual(1, len(gh.created()))
+            self.assert_main_untouched(base)
+            seat, _problems = state.load_seat(base.base_id)
+            self.assertFalse(seat.get("pending_confirmations"))
 
 
 # --- The pointer for somebody who asked without being shown a question -------

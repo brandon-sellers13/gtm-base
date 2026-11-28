@@ -742,6 +742,7 @@ PYTHON_SENTENCES = (
     ("confirm", "RECORDED"),
     ("confirm", "RECORDED_LOCALLY"),
     ("confirm", "SENT_FOR_REVIEW"),
+    ("confirm", "SENT_TO_THE_OWNER"),
     ("confirm", "PENDING_SENTENCE"),
     ("confirm", "UNSAVED_EDITS"),
     ("confirm", "NOT_NOW_SENTENCE"),

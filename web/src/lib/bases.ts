@@ -1,5 +1,6 @@
 import "server-only";
 import template from "./base-template.generated.json";
+import { CODEOWNERS_PATH, withOwnerHandle } from "./codeOwnersText";
 import { api, GitHubError, type Installation } from "./github";
 
 // A base is any repository GTM Base can reach that holds context/map.md. Nothing
@@ -83,12 +84,8 @@ export function fillTemplate(email: string, login: string): { path: string; cont
       text = text.replaceAll(`owner: ${OWNER_PLACEHOLDER_EMAIL}`, `owner: ${email}`);
     } else if (path === "gate-allowlist.txt") {
       text = text.replaceAll(OWNER_PLACEHOLDER_EMAIL, email);
-    } else if (path === "CODEOWNERS") {
-      // Rules only; the comment that explains the placeholder stays as written.
-      text = text
-        .split("\n")
-        .map((line) => (line.startsWith("#") ? line : line.replaceAll("@owner-handle", `@${login}`)))
-        .join("\n");
+    } else if (path === CODEOWNERS_PATH) {
+      text = withOwnerHandle(text, login);
     }
     return { path, content: text };
   });

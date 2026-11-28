@@ -6,6 +6,7 @@ import { appUrl } from "@/lib/config";
 import { readForPage } from "@/lib/pageData";
 import { readBase } from "@/lib/reader";
 import { currentSession } from "@/lib/session";
+import { codeOwnersNamePlaceholder } from "@/lib/codeOwners";
 import { MAIN_RULE_SENTENCES, mainRuleState } from "@/lib/mainRule";
 import { isBaseOwner, listTeam, validUsername } from "@/lib/team";
 import { cancelAction, inviteAction, protectAction } from "./actions";
@@ -22,6 +23,10 @@ const NOTICES: Record<string, (who: string) => string> = {
     "GitHub refused the invitation. Only an admin of the repository can invite, and GitHub limits how many invitations a repository can have open.",
   failed: () => "GitHub did not finish that. Nothing was changed; please try again.",
   protected: () => MAIN_RULE_SENTENCES.on,
+  "protected-owner-named": () =>
+    `${MAIN_RULE_SENTENCES.on} GTM Base also put your GitHub username in this base's CODEOWNERS file, in place of the template's placeholder, so yours is the approval GitHub asks for on a proposal. It is recorded as a change you made and kept.`,
+  "protected-owner-not-named": () =>
+    `${MAIN_RULE_SENTENCES.on} GTM Base could not put your GitHub username in this base's CODEOWNERS file, so GitHub still does not know whose approval a proposal needs. Nothing else was changed; please try again.`,
   "rule-off": () => "GitHub did not put the protection in place. Nothing was changed; please try again.",
   "rule-needs-paid-plan": () => MAIN_RULE_SENTENCES["needs-paid-plan"],
   "rule-no-permission": () => MAIN_RULE_SENTENCES["no-permission"],
@@ -33,6 +38,7 @@ const PROBLEM_NOTICES = [
   "no-such-user",
   "refused",
   "failed",
+  "protected-owner-not-named",
   "rule-off",
   "rule-needs-paid-plan",
   "rule-no-permission",
@@ -54,6 +60,10 @@ export default async function TeamPage({
   const team = await readForPage(() => listTeam(session.token, base.owner, base.repo));
   const owner_ = await readForPage(() => isBaseOwner(session.token, base.owner, base.repo, session.emails));
   const rule = await mainRuleState(session.token, base.owner, base.repo);
+  // A base set up in Claude Code and backed up keeps the template's placeholder
+  // in CODEOWNERS, even once the rule is on (it goes on the empty repository).
+  const placeholder =
+    owner_ && rule === "on" && (await readForPage(() => codeOwnersNamePlaceholder(session.token, base.owner, base.repo)));
   const shownWho = who && validUsername(who) ? who : "They";
   const hidden = (
     <>
@@ -162,7 +172,24 @@ export default async function TeamPage({
             <p className="gb-help">
               GitHub will then refuse a teammate&apos;s change to the main line unless it is an accepted proposal, and
               refuse overwriting or deleting it. GTM Base and the repository&apos;s admins, which includes you as its
-              owner, can still write to it, which is how accepting, keeping and undoing work.
+              owner, can still write to it, which is how accepting, keeping and undoing work. If this base&apos;s
+              CODEOWNERS file still names the template&apos;s placeholder, GTM Base also puts your GitHub username,{" "}
+              {session.login}, in its place, so yours is the approval GitHub asks for on a proposal.
+            </p>
+          </form>
+        )}
+        {placeholder && (
+          <form action={protectAction} className="mt-4">
+            {hidden}
+            <p className="gb-ask">
+              This base&apos;s CODEOWNERS file still names the template&apos;s placeholder instead of you, so GitHub does not
+              know whose approval a proposal needs.
+            </p>
+            <button className="gb-btn primary mt-4">Name me as the code owner</button>
+            <p className="gb-help">
+              GTM Base puts your GitHub username, {session.login}, in place of the placeholder, as a change you make and
+              keep. The folders everyone adds to, context changes and confirmations, stay open to any teammate&apos;s
+              approval.
             </p>
           </form>
         )}
