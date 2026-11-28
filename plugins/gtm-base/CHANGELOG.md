@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.6.2 (2026-11-27)
+
+### the check on GitHub commands
+
+- A `GH_REPO` setting now names the repository a GitHub command is aimed at, the way `-R` does, whether it stands in front of the command (`GH_REPO=owner/name gh pr merge 12`, also after `env`) or was set or exported earlier on the same line. Before, it was ignored, so a merge into a base's shared copy named that way was read against the folder's own remotes and let through from an ordinary repository. `-R` still wins over it, and a value built from a variable counts as a repository that cannot be worked out, which is refused. `export GH_REPO=...` is read; exporting anything else is still refused.
+- A `gh api` path written with GitHub's `{owner}` and `{repo}` placeholders is no longer read as naming a repository of that name. The tool fills them in from `GH_REPO` or the folder, so the check does too, and a write through them inside a base is refused.
+
 ## 0.6.1 (2026-11-27)
 
 ### a teammate's confirmations on a shared base

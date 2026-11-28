@@ -612,8 +612,8 @@ class Classification(object):
     """What one command line turned out to be."""
 
     __slots__ = (
-        "deny_reason", "deny_word", "pushes", "gh_writes", "gh_folders", "has_gh",
-        "has_git", "config_edits",
+        "deny_reason", "deny_word", "pushes", "gh_writes", "gh_folders",
+        "gh_repo_settings", "has_gh", "has_git", "config_edits",
     )
 
     def __init__(self):
@@ -627,6 +627,9 @@ class Classification(object):
         # typed in. The GitHub tool reads the repository from that folder's
         # own remotes, so the check does too (the 0.6.1 fix).
         self.gh_folders: List[Optional[str]] = []
+        # The `GH_REPO` setting each GitHub write runs with, in the same order:
+        # its value, "" for one this check cannot read, or None for none.
+        self.gh_repo_settings: List[Optional[str]] = []
         self.has_gh = False
         self.has_git = False
         # The folders a `git config --edit` would open the settings of. Only a
@@ -666,14 +669,19 @@ class _Folder(object):
     written with a variable or one that goes back to wherever the last change
     came from, leaves the folder unknown, and a send from an unknown folder is
     refused rather than read against the wrong folder.
+
+    It also carries the `GH_REPO` setting the line has made so far, because
+    a GitHub command reads its repository from that setting before it reads
+    the folder's remotes.
     """
 
-    __slots__ = ("path", "start", "unknown")
+    __slots__ = ("path", "start", "unknown", "gh_repo")
 
-    def __init__(self, path: Optional[str] = None):
+    def __init__(self, path: Optional[str] = None, gh_repo: Optional[str] = None):
         self.path = path
         self.start = path
         self.unknown = False
+        self.gh_repo = gh_repo
 
     @property
     def moved(self) -> bool:
@@ -860,6 +868,32 @@ def _assignment_codes(assignments: Sequence[str], result: "Classification") -> O
         if name.startswith("GIT_") and name not in _ALLOWED_GIT_ASSIGNMENTS:
             result.deny(REASON_DENIED_COMMAND)
     return directory
+
+
+_GH_REPO_SETTING = "GH_REPO"
+
+
+def _gh_repo_setting(assignments: Sequence[str]) -> Optional[str]:
+    """The `GH_REPO` value among some settings, the last one winning.
+
+    "" for a value this check cannot read (one built from a variable or a
+    command), and None when there is no such setting.
+    """
+    found: Optional[str] = None
+    for token in assignments:
+        name, _equals, value = str(token).partition("=")
+        if name != _GH_REPO_SETTING:
+            continue
+        found = "" if ("$" in value or "`" in value) else value
+    return found
+
+
+def _exports_gh_repo_only(tokens: Sequence[str]) -> bool:
+    """Whether an `export` sets `GH_REPO` and nothing else."""
+    arguments = [str(token) for token in tokens[1:]]
+    return bool(arguments) and all(
+        argument.startswith(_GH_REPO_SETTING + "=") for argument in arguments
+    )
 
 
 def _shell_script_argument(tokens: List[str]) -> Optional[str]:
@@ -1331,8 +1365,29 @@ def _gh_reaches_the_shared_copy(tokens: Sequence[str]) -> bool:
 _GH_API_REPO_RE = re.compile(r"^/?repos/([^/\s?]+)/([^/\s?]+)", re.IGNORECASE)
 
 
-def _gh_repository_named(tokens: Sequence[str]) -> Optional[str]:
-    """The repository a GitHub command names itself, as `host/owner/name`, or None."""
+def _canonical_gh_repository(named: str) -> str:
+    """A repository as `-R` or `GH_REPO` writes it, as `host/owner/name`, or ""."""
+    text = named.strip()
+    if "://" not in text and ":" not in text:
+        text = "https://%s" % (text if text.count("/") >= 2 else "github.com/" + text)
+    try:
+        return ids.canonical_remote_address(text)
+    except ValueError:
+        return ""
+
+
+def _gh_repository_named(
+    tokens: Sequence[str], gh_repo: Optional[str] = None
+) -> Optional[str]:
+    """The repository a GitHub command is aimed at by its own words or its
+    `GH_REPO` setting, as `host/owner/name`; "" when that cannot be read; None
+    when neither names one, so the folder's remotes decide.
+
+    `-R` wins over `GH_REPO`, as it does for GitHub's tool. A `gh api` path
+    naming a repository decides for itself, except where it is written with
+    the `{owner}` and `{repo}` placeholders, which the tool fills in from
+    `GH_REPO` or the folder.
+    """
     words = [str(token) for token in tokens]
     named: Optional[str] = None
     index = 1
@@ -1348,18 +1403,19 @@ def _gh_repository_named(tokens: Sequence[str]) -> Optional[str]:
             named = token[2:]
         index += 1
     if named is not None:
-        text = named.strip()
-        if "://" not in text and ":" not in text:
-            text = "https://%s" % (text if text.count("/") >= 2 else "github.com/" + text)
-        try:
-            return ids.canonical_remote_address(text)
-        except ValueError:
-            return ""
+        return _canonical_gh_repository(named)
     if _gh_words(words)[:1] == ["api"]:
         for token in words[1:]:
             match = _GH_API_REPO_RE.match(token)
-            if match:
-                return "github.com/%s/%s" % (match.group(1).lower(), match.group(2).lower())
+            if not match:
+                continue
+            if "{" in match.group(1) or "{" in match.group(2):
+                break
+            return "github.com/%s/%s" % (match.group(1).lower(), match.group(2).lower())
+        else:
+            return None
+    if gh_repo is not None:
+        return _canonical_gh_repository(gh_repo)
     return None
 
 
@@ -1380,21 +1436,32 @@ def _recorded_shared_copies() -> set:
     return found
 
 
-def _gh_targets_a_shared_copy(tokens: Sequence[str], cwd: str, git: GitRunner) -> bool:
+def _gh_api_path_has_placeholders(words: Sequence[str]) -> bool:
+    """Whether a `gh api` path names its repository as `{owner}/{repo}`."""
+    for token in words[1:]:
+        match = _GH_API_REPO_RE.match(token)
+        if match:
+            return "{" in match.group(1) or "{" in match.group(2)
+    return False
+
+
+def _gh_targets_a_shared_copy(
+    tokens: Sequence[str], cwd: str, git: GitRunner, gh_repo: Optional[str] = None
+) -> bool:
     """Whether a GitHub write that lands a change is aimed at a base's shared copy.
 
     Decided by the repository the command is aimed at, not by the folder it is
     typed in (the second security review of P2 and P3, finding 2): the one it
-    names with `-R` or in an API path, or else the one the folder's own
-    settings point at, as the GitHub tool itself works it out. A command whose
-    repository cannot be worked out counts as aimed at one.
+    names with `-R` or in an API path, or its `GH_REPO` setting, or else the
+    one the folder's own settings point at, as the GitHub tool itself works it
+    out. A command whose repository cannot be worked out counts as aimed at one.
     """
     recorded = _recorded_shared_copies()
-    named = _gh_repository_named(tokens)
+    named = _gh_repository_named(tokens, gh_repo)
     if named is not None:
         return not named or named in recorded
     words = [str(token) for token in tokens]
-    if _gh_words(words)[:1] == ["api"]:
+    if _gh_words(words)[:1] == ["api"] and not _gh_api_path_has_placeholders(words):
         # A GraphQL request, or a path that names no repository: GitHub reads
         # the repository out of the request, and this check cannot.
         return True
@@ -1421,13 +1488,17 @@ def _gh_targets_a_shared_copy(tokens: Sequence[str], cwd: str, git: GitRunner) -
 
 
 def _classify_gh(
-    tokens: List[str], result: Classification, folder: Optional[str] = None
+    tokens: List[str],
+    result: Classification,
+    folder: Optional[str] = None,
+    gh_repo: Optional[str] = None,
 ) -> None:
     result.has_gh = True
 
     def write():
         result.gh_writes.append(list(tokens))
         result.gh_folders.append(folder)
+        result.gh_repo_settings.append(gh_repo)
 
     words = _gh_words(tokens)
     if not words:
@@ -1454,7 +1525,10 @@ def _classify_gh(
 
 
 def classify(
-    command: str, depth: int = 0, cwd: Optional[str] = None
+    command: str,
+    depth: int = 0,
+    cwd: Optional[str] = None,
+    gh_repo: Optional[str] = None,
 ) -> Classification:
     """Work out what a command line would send, or refuse to guess.
 
@@ -1471,7 +1545,7 @@ def classify(
         result.deny(REASON_UNTOKENIZABLE)
         return result
     strict = mentions_git_or_gh(command)
-    folder = _Folder(cwd)
+    folder = _Folder(cwd, gh_repo)
     for segment in split_segments(command):
         _classify_segment(segment, result, depth, strict, folder)
     return result
@@ -1489,7 +1563,7 @@ def _classify_segment(
         folder = _Folder(None)
     bodies, remainder = _substitution_bodies(segment)
     for body in bodies:
-        _merge(result, classify(body, depth + 1, cwd=folder.path))
+        _merge(result, classify(body, depth + 1, cwd=folder.path, gh_repo=folder.gh_repo))
     try:
         tokens = shlex.split(remainder, posix=True)
     except ValueError:
@@ -1498,13 +1572,26 @@ def _classify_segment(
     tokens = _strip_redirections(tokens)
     tokens, assignments = _strip_prefixes(tokens)
     directory = _assignment_codes(assignments, result)
+    setting = _gh_repo_setting(assignments)
     if not tokens:
+        # A setting standing on its own changes it for what follows, and for
+        # GitHub's tool too when it was exported before this line.
+        if setting is not None:
+            folder.gh_repo = setting
         return
     script = _shell_script_argument(tokens)
     if script is not None:
         # A shell of its own starts where this part does and ends there too,
         # so a folder change inside it is not carried out to what follows.
-        _merge(result, classify(script, depth + 1, cwd=folder.path))
+        _merge(
+            result,
+            classify(
+                script,
+                depth + 1,
+                cwd=folder.path,
+                gh_repo=setting if setting is not None else folder.gh_repo,
+            ),
+        )
         return
     tokens = _strip_xargs(tokens)
     if not tokens:
@@ -1512,6 +1599,11 @@ def _classify_segment(
     word = os.path.basename(tokens[0])
     if word in _FOLDER_WORDS:
         folder.follow(tokens, bool(bodies))
+        return
+    if word == "export" and _exports_gh_repo_only(tokens):
+        # Only `export GH_REPO=...` is read; exporting anything else is still
+        # refused below, because a setting can hand git another program.
+        folder.gh_repo = _gh_repo_setting(tokens[1:])
         return
     if word in ("git", "gh"):
         if folder.unknown:
@@ -1522,7 +1614,12 @@ def _classify_segment(
         if word == "git":
             _classify_git(tokens, result, directory, folder)
         else:
-            _classify_gh(tokens, result, folder.path)
+            _classify_gh(
+                tokens,
+                result,
+                folder.path,
+                setting if setting is not None else folder.gh_repo,
+            )
         return
     if strict and not _is_inert(tokens):
         result.deny(REASON_STRICT_UNKNOWN, word)
@@ -1534,6 +1631,7 @@ def _merge(result: Classification, other: Classification) -> None:
     result.pushes.extend(other.pushes)
     result.gh_writes.extend(other.gh_writes)
     result.gh_folders.extend(other.gh_folders)
+    result.gh_repo_settings.extend(other.gh_repo_settings)
     result.has_gh = result.has_gh or other.has_gh
     result.has_git = result.has_git or other.has_git
     result.config_edits.extend(other.config_edits)
@@ -2496,9 +2594,13 @@ def check_command(
     # checks on a push never see it (the security review of P2 and P3,
     # finding 1). Refused when it is aimed at a base's shared copy, wherever it
     # is typed (the second review, finding 2).
-    for tokens, folder in zip(result.gh_writes, gh_write_folders(result, cwd)):
+    settings = list(result.gh_repo_settings)
+    settings += [None] * (len(result.gh_writes) - len(settings))
+    for tokens, folder, gh_repo in zip(
+        result.gh_writes, gh_write_folders(result, cwd), settings
+    ):
         if _gh_reaches_the_shared_copy(tokens) and _gh_targets_a_shared_copy(
-            tokens, folder, runner
+            tokens, folder, runner, gh_repo
         ):
             return sentence_for(REASON_SHARED_LINE)
 

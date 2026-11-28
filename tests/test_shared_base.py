@@ -533,5 +533,66 @@ class TestTheFolderAGitHubCommandRunsIn(ReviewCase):
         self.assertEqual(self.refused, self.check(moved, cwd=self.project))
 
 
+class TestTheRepositoryAGHRepoSettingNames(TestTheFolderAGitHubCommandRunsIn):
+    """`GH_REPO`, set in front of a GitHub command or earlier on the line, names
+    its repository the way `-R` does, and the `{owner}/{repo}` placeholders in
+    a `gh api` path are filled from it or the folder, never read as a name."""
+
+    # The parent's own tests are not run again here.
+    test_an_ordinary_repository_through_a_leading_cd_is_allowed = None
+    test_an_ordinary_repository_in_the_sessions_own_folder_is_allowed = None
+    test_a_base_through_a_leading_cd_is_still_refused = None
+    test_a_folder_that_is_no_repository_with_no_repository_named_is_still_refused = None
+
+    PUT = "gh api -X PUT 'repos/{owner}/{repo}/contents/x.md' -f content=aGk= -f message=x"
+
+    def test_a_base_named_by_gh_repo_is_refused(self):
+        for command in (
+            "GH_REPO=acme-co/acme-base gh pr merge 12",
+            "env GH_REPO=acme-co/acme-base gh pr merge 12",
+            "GH_REPO=https://github.com/acme-co/acme-base gh pr merge 12",
+            "export GH_REPO=acme-co/acme-base && gh pr merge 12",
+            "export GH_REPO=acme-co/acme-base; cd %s && gh pr merge 12" % shlex.quote(self.project),
+            "GH_REPO=acme-co/acme-base; gh pr merge 12",
+            "export GH_REPO=acme-co/acme-base && sh -c 'gh pr merge 12'",
+            "GH_REPO=acme-co/acme-base " + self.PUT,
+        ):
+            self.assertEqual(self.refused, self.check(command, cwd=self.project), command)
+            self.assertEqual(self.refused, self.check(command, cwd=self.elsewhere), command)
+
+    def test_an_ordinary_repository_named_by_gh_repo_is_allowed(self):
+        for command in (
+            "GH_REPO=someone/other-project gh pr merge 44 --squash",
+            "export GH_REPO=someone/other-project && gh pr merge 44 --squash",
+            "GH_REPO=someone/other-project; gh pr merge 44 --squash",
+        ):
+            # Typed from a folder that is no repository, where without the
+            # setting the repository could not be worked out at all.
+            self.assertIsNone(self.check(command, cwd=self.elsewhere), command)
+            self.assertIsNone(self.check(command, cwd=self.project), command)
+
+    def test_dash_r_wins_over_gh_repo_and_an_unreadable_one_is_refused(self):
+        self.assertEqual(
+            self.refused,
+            self.check("GH_REPO=someone/other-project gh pr merge 12 -R acme-co/acme-base", cwd=self.project),
+        )
+        self.assertIsNone(
+            self.check("GH_REPO=acme-co/acme-base gh pr merge 44 -R someone/other-project", cwd=self.project)
+        )
+        self.assertEqual(self.refused, self.check("GH_REPO=$SOMEWHERE gh pr merge 12", cwd=self.project))
+
+    def test_the_placeholders_in_an_api_path_are_filled_from_the_folder(self):
+        self.assertEqual(self.refused, self.check(self.PUT, cwd=self.root))
+        self.assertIsNone(self.check(self.PUT, cwd=self.project))
+
+    def test_exporting_anything_else_is_still_refused(self):
+        refused = self.gate.sentence_for(self.gate.REASON_STRICT_UNKNOWN, "export")
+        self.assertEqual(refused, self.check("export GIT_DIR=/tmp/x && gh pr merge 12", cwd=self.project))
+        self.assertEqual(
+            refused,
+            self.check("export GH_REPO=someone/other-project GIT_DIR=/tmp/x && gh pr merge 12", cwd=self.project),
+        )
+
+
 if __name__ == "__main__":
     unittest.main()
